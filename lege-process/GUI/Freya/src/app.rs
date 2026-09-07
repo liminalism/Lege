@@ -1513,66 +1513,72 @@ fn output_settings_card(
         ]),
     );
 
+    // Each button carries its own tooltip so hovering one never shows (or
+    // leaves stuck) the other's text, and the tooltip box never overflows
+    // with all three modes' worth of description at once.
     let mut image_processing_choices = vec![
-        compact_choice_button(
-            image_processing_button_label(ImageProcessingType::Original),
-            matches!(options.image_processing_type, ImageProcessingType::Original),
-            {
-                let mut state = state;
-                move |_| {
-                    state
-                        .write()
-                        .options
-                        .set_image_processing_type(ImageProcessingType::Original);
-                }
-            },
+        tooltip_wrap_at(
+            state,
+            TooltipArea::OutputCard,
+            GUI_TEXT.interactive.tooltips.image_output_original.clone(),
+            AttachedPosition::Right,
+            compact_choice_button(
+                image_processing_button_label(ImageProcessingType::Original),
+                matches!(options.image_processing_type, ImageProcessingType::Original),
+                {
+                    let mut state = state;
+                    move |_| {
+                        state
+                            .write()
+                            .options
+                            .set_image_processing_type(ImageProcessingType::Original);
+                    }
+                },
+            ),
         ),
-        compact_choice_button(
-            image_processing_button_label(ImageProcessingType::Dithered),
-            matches!(options.image_processing_type, ImageProcessingType::Dithered)
-                && !options.uses_jbig2_halftone_images(),
-            {
-                let mut state = state;
-                move |_| {
-                    state
-                        .write()
-                        .options
-                        .set_image_processing_type(ImageProcessingType::Dithered);
-                }
-            },
+        tooltip_wrap_at(
+            state,
+            TooltipArea::OutputCard,
+            GUI_TEXT.interactive.tooltips.image_output_dithered.clone(),
+            AttachedPosition::Right,
+            compact_choice_button(
+                image_processing_button_label(ImageProcessingType::Dithered),
+                matches!(options.image_processing_type, ImageProcessingType::Dithered)
+                    && !options.uses_jbig2_halftone_images(),
+                {
+                    let mut state = state;
+                    move |_| {
+                        state
+                            .write()
+                            .options
+                            .set_image_processing_type(ImageProcessingType::Dithered);
+                    }
+                },
+            ),
         ),
     ];
     if options.can_select_jbig2_halftone_images() {
-        image_processing_choices.push(compact_choice_button(
-            GUI_TEXT.interactive.labels.jbig2_halftone.clone(),
-            options.uses_jbig2_halftone_images(),
-            {
-                let mut state = state;
-                move |_| {
-                    state.write().options.set_jbig2_halftone_images();
-                }
-            },
+        image_processing_choices.push(tooltip_wrap_at(
+            state,
+            TooltipArea::OutputCard,
+            GUI_TEXT.interactive.tooltips.jbig2_halftone.clone(),
+            AttachedPosition::Right,
+            compact_choice_button(
+                GUI_TEXT.interactive.labels.jbig2_halftone.clone(),
+                options.uses_jbig2_halftone_images(),
+                {
+                    let mut state = state;
+                    move |_| {
+                        state.write().options.set_jbig2_halftone_images();
+                    }
+                },
+            ),
         ));
     }
 
-    let image_processing_tooltip = if options.can_select_jbig2_halftone_images() {
-        format!(
-            "{} {}",
-            GUI_TEXT.interactive.tooltips.image_output_type,
-            GUI_TEXT.interactive.tooltips.jbig2_halftone
-        )
-    } else {
-        GUI_TEXT.interactive.tooltips.image_output_type.clone()
-    };
-    let image_control = tooltip_wrap_at(
-        state,
-        TooltipArea::OutputCard,
-        image_processing_tooltip,
-        AttachedPosition::Right,
-        settings_row(
-            GUI_TEXT.interactive.labels.image_output_type.clone(),
-            compact_choice_row(image_processing_choices),
-        ),
+    let image_control = settings_row(
+        GUI_TEXT.interactive.labels.image_output_type.clone(),
+        compact_choice_row(image_processing_choices),
     );
 
     let layout_control = tooltip_wrap_at(
