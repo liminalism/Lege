@@ -186,7 +186,7 @@ fn call_text_with_ocr_reports_provenance() {
     let data = &result["structuredContent"]["pages"][0]["data"];
     assert_eq!(data["provenance"]["source"], "ocr");
     // Which engine backs OCR is a platform decision — WinRT on Windows,
-    // Tesseract elsewhere — so assert the reported engine is the one this
+    // PP-OCR on Linux/macOS — so assert the reported engine is the one this
     // build actually resolves rather than hard-coding either name.
     assert_eq!(
         data["provenance"]["ocr_engine"],
