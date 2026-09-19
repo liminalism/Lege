@@ -83,6 +83,7 @@ sources/oracle-sweep-*/
 # AKR: a rebuildable cache and disposable agent notes.
 .akr/cache/
 .agent/scratch/
+.agent/handoffs/
 # The pattern above contains a slash, so git anchors it to this directory and
 # it misses nested crates (e.g. lege-codecs/jp2lam/.agent/scratch/).
 **/.agent/scratch/
