@@ -1,6 +1,7 @@
 //! Evidence-preserving PDF text intake with OCR fallback.
 
 pub mod correction;
+pub mod layout;
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -42,6 +43,19 @@ pub struct PipelineConfig {
     pub brokered_tensorrt: Option<BrokeredTensorRtConfig>,
     pub correction_mode: correction::CorrectionMode,
     pub correction_dictionary: Option<std::path::PathBuf>,
+    /// PP-DocLayout-M page layout. Enabled by default using the embedded
+    /// weights; `--no-layout` disables it, `--layout-model` overrides the
+    /// weights with an external prepared ONNX file.
+    #[serde(default = "default_layout_enabled")]
+    pub layout_enabled: bool,
+    /// External prepared PP-DocLayout ONNX weights. `None` uses the embedded
+    /// model. Part of the resumable configuration hash via file contents.
+    #[serde(default)]
+    pub layout_model: Option<std::path::PathBuf>,
+}
+
+fn default_layout_enabled() -> bool {
+    true
 }
 
 impl Default for PipelineConfig {
@@ -60,6 +74,8 @@ impl Default for PipelineConfig {
             brokered_tensorrt: None,
             correction_mode: correction::CorrectionMode::Conservative,
             correction_dictionary: None,
+            layout_enabled: true,
+            layout_model: None,
         }
     }
 }
@@ -73,6 +89,11 @@ impl PipelineConfig {
         }
         if let Some(model_pack) = &self.paddle_model_pack {
             hasher.update(&std::fs::read(model_pack.join("manifest.json"))?);
+        }
+        if self.layout_enabled {
+            let layout_hash = layout::LayoutEngine::model_hash(self.layout_model.as_deref())
+                .map_err(|error| PipelineError::ModelPack(format!("layout model: {error:#}")))?;
+            hasher.update(layout_hash.as_bytes());
         }
         if let Some(runtime) = &self.tensorrt_paddle {
             for path in [
@@ -109,7 +130,10 @@ pub struct DocumentProcessor {
     backend: Box<dyn PageOcrBackend>,
     corrector: Option<correction::EnglishCorrector>,
     model_identity: Option<lege_docir::ModelIdentity>,
+    layout_identity: Option<lege_docir::ModelIdentity>,
+    layout: Option<layout::LayoutEngine>,
     backend_selection_warning: Option<String>,
+    layout_warning: Option<String>,
 }
 
 impl std::fmt::Debug for DocumentProcessor {
@@ -169,12 +193,16 @@ impl DocumentProcessor {
             None
         }
         .or_else(|| builtin_model_identity(&config));
+        let (layout, layout_identity, layout_warning) = initialize_layout(&config);
         Ok(Self {
             config,
             backend,
             corrector,
             model_identity,
+            layout_identity,
+            layout,
             backend_selection_warning,
+            layout_warning,
         })
     }
 
@@ -192,6 +220,10 @@ impl DocumentProcessor {
 
     pub fn backend_selection_warning(&self) -> Option<&str> {
         self.backend_selection_warning.as_deref()
+    }
+
+    pub fn layout_warning(&self) -> Option<&str> {
+        self.layout_warning.as_deref()
     }
 
     pub fn configuration_hash(&self) -> Result<String, PipelineError> {
@@ -263,8 +295,18 @@ impl DocumentProcessor {
                 profile: self.config.profile,
                 quality: self.config.quality,
                 configuration_hash,
-                models: self.model_identity.clone().into_iter().collect(),
-                warnings: self.backend_selection_warning.clone().into_iter().collect(),
+                models: self
+                    .model_identity
+                    .clone()
+                    .into_iter()
+                    .chain(self.layout_identity.clone())
+                    .collect(),
+                warnings: self
+                    .backend_selection_warning
+                    .clone()
+                    .into_iter()
+                    .chain(self.layout_warning.clone())
+                    .collect(),
             },
         );
         document.metadata.title = path
@@ -290,6 +332,11 @@ impl DocumentProcessor {
             .into_iter()
             .map(map_outline)
             .collect();
+        if self.layout.is_some() {
+            if let Some(warning) = layout::resolve_furniture(&mut document) {
+                document.processing.warnings.push(warning);
+            }
+        }
         if self.config.profile != lege_docir::ProcessingProfile::Search {
             apply_lightweight_layout(&mut document);
             document.processing.warnings.push(
@@ -315,6 +362,55 @@ impl DocumentProcessor {
         Ok(document)
     }
 
+    /// Group native words into layout boxes when layout is active. Returns
+    /// `None` when layout is disabled or has nothing to split, so the caller
+    /// keeps the single-region fast path. A detection failure also falls back
+    /// with a recorded warning instead of failing the page.
+    fn layout_native_regions(
+        &self,
+        session: &RenderSession,
+        page_index: u32,
+        width: u32,
+        height: u32,
+        evidence: &lege_pdf_read::PageTextEvidence,
+        warnings: &mut Vec<String>,
+    ) -> Result<Option<(Vec<Region>, Option<Vec<String>>)>, PipelineError> {
+        let Some(layout) = &self.layout else {
+            return Ok(None);
+        };
+        if evidence.words.is_empty() {
+            return Ok(None);
+        }
+        // Layout needs a raster even though native text needs none; render at
+        // the same bounded resolution the OCR path uses so word bboxes (which
+        // `page_text_evidence` produced in this space) align with detections.
+        let gray = if let Some(scan) = evidence.direct_scan.as_ref() {
+            let decoded = image::load_from_memory(&scan.jpeg)
+                .map_err(|error| PipelineError::DirectScan(error.to_string()))?
+                .to_luma8();
+            limit_gray_pixels(decoded, self.config.max_page_pixels)
+        } else {
+            let compiled = session.compile(page_index)?;
+            let plane = session.render(&compiled, &RasterProduct::gray8(width, height))?;
+            gray_image(plane)?
+        };
+        match layout.group_native_words(&gray, page_index, &evidence.words, &self.config.language)
+        {
+            Ok((regions, order, stats)) => {
+                if let Some(warning) = stats.warning() {
+                    warnings.push(warning);
+                }
+                Ok(Some((regions, Some(order))))
+            }
+            Err(error) => {
+                warnings.push(format!(
+                    "page layout detection failed; kept unstructured native text: {error:#}"
+                ));
+                Ok(None)
+            }
+        }
+    }
+
     fn process_page(
         &self,
         session: &RenderSession,
@@ -328,21 +424,39 @@ impl DocumentProcessor {
             self.config.max_page_pixels,
         )?;
         let evidence = lege_pdf_read::page_text_evidence(session, page_index, width, height)?;
-        let (source_kind, regions, warnings) = if evidence.trustworthy && !self.config.force_ocr {
+        let (source_kind, regions, reading_order, warnings) = if evidence.trustworthy
+            && !self.config.force_ocr
+        {
+            let mut warnings = Vec::new();
+            let (regions, reading_order) = match self.layout_native_regions(
+                session,
+                page_index,
+                width,
+                height,
+                &evidence,
+                &mut warnings,
+            )? {
+                Some(grouped) => grouped,
+                None => (
+                    native_regions(
+                        page_index,
+                        width,
+                        height,
+                        &evidence.text,
+                        &evidence.words,
+                        &self.config.language,
+                    ),
+                    None,
+                ),
+            };
             (
                 match evidence.kind {
                     lege_pdf_read::PageContentKind::Hybrid => PageSourceKind::Hybrid,
                     _ => PageSourceKind::NativeText,
                 },
-                native_regions(
-                    page_index,
-                    width,
-                    height,
-                    &evidence.text,
-                    &evidence.words,
-                    &self.config.language,
-                ),
-                Vec::new(),
+                regions,
+                reading_order,
+                warnings,
             )
         } else {
             let (gray, direct_scan) = if let Some(scan) = evidence.direct_scan.as_ref() {
@@ -385,14 +499,34 @@ impl DocumentProcessor {
                     "Selective alternate preprocessing replaced {retry_count} low-confidence OCR line(s)"
                 ));
             }
-            let mut regions = ocr_regions(
-                page_index,
-                width,
-                height,
-                lines,
-                backend.name(),
-                &self.config.language,
-            );
+            let (mut regions, mut reading_order) = match &self.layout {
+                Some(layout) => {
+                    let boxes = layout.detect(&gray).map_err(PipelineError::Backend)?;
+                    let (grouped, order, stats) = layout::group_ocr_lines(
+                        page_index,
+                        width,
+                        lines,
+                        &boxes,
+                        backend.name(),
+                        &self.config.language,
+                    );
+                    if let Some(warning) = stats.warning() {
+                        warnings.push(warning);
+                    }
+                    (grouped, Some(order))
+                }
+                None => (
+                    ocr_regions(
+                        page_index,
+                        width,
+                        height,
+                        lines,
+                        backend.name(),
+                        &self.config.language,
+                    ),
+                    None,
+                ),
+            };
             if self.config.profile != lege_docir::ProcessingProfile::Search {
                 let specialists = backend
                     .specialize_page(&gray, &self.config.language)
@@ -410,6 +544,11 @@ impl DocumentProcessor {
                     warnings.push(format!(
                         "Applied {specialist_count} table/formula specialist region(s)"
                     ));
+                    // The merge re-sorts regions; recompute the layout order
+                    // over the final set when layout is active.
+                    if self.layout.is_some() {
+                        reading_order = Some(layout::reading_order(&regions, width));
+                    }
                 }
             }
             (
@@ -419,10 +558,12 @@ impl DocumentProcessor {
                     PageSourceKind::Rendered
                 },
                 regions,
+                reading_order,
                 warnings,
             )
         };
-        let reading_order = regions.iter().map(|region| region.id.clone()).collect();
+        let reading_order =
+            reading_order.unwrap_or_else(|| regions.iter().map(|region| region.id.clone()).collect());
         Ok(Page {
             index: page_index,
             source_size: Size { width, height },
@@ -462,6 +603,17 @@ fn apply_lightweight_layout(document: &mut Document) {
     let mut edge_text = HashMap::<(bool, String), usize>::new();
     for page in &document.pages {
         for region in &page.regions {
+            // Layout detection already classified these; the heuristic must
+            // not relabel titles it found or mistake repeated "[image]"
+            // placeholders for running heads.
+            if layout::is_layout_classified(region)
+                || matches!(
+                    region.kind,
+                    RegionKind::Figure | RegionKind::Table | RegionKind::Formula
+                )
+            {
+                continue;
+            }
             let Some((_, top, _, bottom)) = docir_polygon_bounds(&region.polygon) else {
                 continue;
             };
@@ -495,6 +647,14 @@ fn apply_lightweight_layout(document: &mut Document) {
         sorted.sort_by(f32::total_cmp);
         let median = sorted.get(sorted.len() / 2).copied().unwrap_or(1.0);
         for region in &mut page.regions {
+            if layout::is_layout_classified(region)
+                || matches!(
+                    region.kind,
+                    RegionKind::Figure | RegionKind::Table | RegionKind::Formula
+                )
+            {
+                continue;
+            }
             let Some((_, top, _, bottom)) = docir_polygon_bounds(&region.polygon) else {
                 continue;
             };
@@ -999,97 +1159,122 @@ type InitializedBackend = (
     Option<String>,
 );
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg(any(test, target_os = "windows"))]
-enum AutoTensorRtFailureAction {
-    FailClosed,
-    UseWinOcrFallback,
+fn initialize_layout(
+    config: &PipelineConfig,
+) -> (
+    Option<layout::LayoutEngine>,
+    Option<lege_docir::ModelIdentity>,
+    Option<String>,
+) {
+    if !config.layout_enabled {
+        return (None, None, None);
+    }
+    let engine = match config.layout_model.as_deref() {
+        Some(path) => layout::LayoutEngine::from_file(path),
+        None => layout::LayoutEngine::embedded(),
+    };
+    match engine {
+        Ok(engine) => {
+            let identity = layout::LayoutEngine::model_hash(config.layout_model.as_deref())
+                .ok()
+                .map(|content_hash| lege_docir::ModelIdentity {
+                    provider: layout::LAYOUT_MODEL_PROVIDER.to_string(),
+                    name: layout::LAYOUT_MODEL_NAME.to_string(),
+                    version: layout::LAYOUT_MODEL_VERSION.to_string(),
+                    content_hash: Some(content_hash),
+                    license: Some("Apache-2.0".to_string()),
+                    source: Some(layout::LAYOUT_MODEL_SOURCE.to_string()),
+                });
+            (Some(engine), identity, None)
+        }
+        // Layout is advisory: a page still yields OCR evidence without it, so
+        // a missing GPU or corrupt override degrades to the heuristic path
+        // with a recorded warning instead of failing the batch.
+        Err(error) => (
+            None,
+            None,
+            Some(format!("page layout detection is disabled: {error:#}")),
+        ),
+    }
 }
 
-#[cfg(any(test, target_os = "windows"))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AutoTensorRtFailureAction {
+    FailClosed,
+    UsePlatformFallback,
+}
+
 fn auto_tensorrt_failure_action(nvidia_hardware_present: bool) -> AutoTensorRtFailureAction {
     if nvidia_hardware_present {
         AutoTensorRtFailureAction::FailClosed
     } else {
-        AutoTensorRtFailureAction::UseWinOcrFallback
+        AutoTensorRtFailureAction::UsePlatformFallback
     }
 }
 
 fn initialize_backend(config: &PipelineConfig) -> Result<InitializedBackend, PipelineError> {
     match config.backend {
         BackendChoice::Auto => {
-            #[cfg(target_os = "windows")]
-            {
-                let nvidia_hardware_present = lege_ocr::engine_tensorrt::nvidia_hardware_present();
-                let candidate = match config.tensorrt_paddle.clone() {
-                    Some(runtime) => Some(runtime),
-                    None => TensorRtPaddleConfig::discover_result(
-                        config.scheduler.max_batch_lines.min(8),
-                    )
-                    .map_err(|error| {
+            let nvidia_hardware_present = lege_ocr::engine_tensorrt::nvidia_hardware_present();
+            let candidate = match config.tensorrt_paddle.clone() {
+                Some(runtime) => Some(runtime),
+                None => {
+                    TensorRtPaddleConfig::discover_result(config.scheduler.max_batch_lines.min(8))
+                        .map_err(|error| {
                         PipelineError::BackendInitialization(format!(
                             "TensorRT runtime discovery failed: {error:#}"
                         ))
-                    })?,
-                };
-                if let Some(runtime) = candidate {
-                    match lege_ocr::engine_tensorrt::TensorRtPaddleEngine::start(&runtime) {
-                        Ok(engine) => {
-                            return Ok((
-                                Box::new(engine),
-                                BackendChoice::TensorRtPaddle,
-                                Some(runtime),
-                                None,
-                            ));
-                        }
-                        Err(tensorrt_error) => {
-                            match auto_tensorrt_failure_action(nvidia_hardware_present) {
-                                AutoTensorRtFailureAction::FailClosed => {
-                                    return Err(PipelineError::BackendInitialization(format!(
-                                        "an NVIDIA driver is present, so TensorRT OCR is required; TensorRT preflight failed: {tensorrt_error:#}"
-                                    )));
-                                }
-                                AutoTensorRtFailureAction::UseWinOcrFallback => {
-                                    return Ok((
-                                        initialize_winocr(&config.language)?,
-                                        BackendChoice::WinOcrLegacy,
-                                        None,
-                                        Some(format!(
-                                            "TensorRT preflight failed on a system without an NVIDIA driver; selected Windows Runtime OCR for the complete job: {tensorrt_error:#}"
-                                        )),
-                                    ));
-                                }
+                    })?
+                }
+            };
+            if let Some(runtime) = candidate {
+                match lege_ocr::engine_tensorrt::TensorRtPaddleEngine::start(&runtime) {
+                    Ok(engine) => {
+                        return Ok((
+                            Box::new(engine),
+                            BackendChoice::TensorRtPaddle,
+                            Some(runtime),
+                            None,
+                        ));
+                    }
+                    Err(tensorrt_error) => {
+                        match auto_tensorrt_failure_action(nvidia_hardware_present) {
+                            AutoTensorRtFailureAction::FailClosed => {
+                                return Err(PipelineError::BackendInitialization(format!(
+                                    "an NVIDIA driver is present, so TensorRT OCR is required; TensorRT preflight failed: {tensorrt_error:#}"
+                                )));
+                            }
+                            AutoTensorRtFailureAction::UsePlatformFallback => {
+                                return initialize_auto_platform_fallback(
+                                    config,
+                                    Some(format!(
+                                        "TensorRT preflight failed on a system without an NVIDIA driver; selected {} for the complete job: {tensorrt_error:#}",
+                                        auto_platform_fallback_name()
+                                    )),
+                                );
                             }
                         }
                     }
                 }
-                match auto_tensorrt_failure_action(nvidia_hardware_present) {
-                    AutoTensorRtFailureAction::FailClosed => {
-                        Err(PipelineError::BackendInitialization(
-                            "an NVIDIA driver is present, but the packaged TensorRT OCR runtime was not found; reinstall the application or pass --tensorrt-ocr-root"
-                                .to_string(),
-                        ))
-                    }
-                    AutoTensorRtFailureAction::UseWinOcrFallback => Ok((
-                        initialize_winocr(&config.language)?,
-                        BackendChoice::WinOcrLegacy,
-                        None,
-                        Some(
-                            "No NVIDIA driver was detected; selected Windows Runtime OCR for the complete job"
-                                .to_string(),
-                        ),
-                    )),
-                }
             }
-            #[cfg(not(target_os = "windows"))]
-            {
-                Ok((
-                    initialize_paddle(config)?,
-                    BackendChoice::Paddle,
-                    None,
-                    None,
+            if nvidia_hardware_present && cfg!(target_os = "windows") {
+                return Err(PipelineError::BackendInitialization(
+                    "an NVIDIA driver is present, but the packaged TensorRT OCR runtime was not found; reinstall the application or pass --tensorrt-ocr-root"
+                        .to_string(),
+                ));
+            }
+            let warning = if nvidia_hardware_present {
+                Some(format!(
+                    "NVIDIA GPU present, but the TensorRT OCR worker was not found; selected {} for the complete job. Build turboocr-text or pass --tensorrt-ocr-root",
+                    auto_platform_fallback_name()
                 ))
-            }
+            } else {
+                Some(format!(
+                    "No NVIDIA driver was detected; selected {} for the complete job",
+                    auto_platform_fallback_name()
+                ))
+            };
+            initialize_auto_platform_fallback(config, warning)
         }
         BackendChoice::TensorRtPaddle => {
             let runtime = match config.tensorrt_paddle.clone() {

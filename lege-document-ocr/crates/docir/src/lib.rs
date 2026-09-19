@@ -157,10 +157,19 @@ pub struct Page {
 }
 
 impl Page {
+    /// Reading text of the page in `reading_order` (then any unordered
+    /// regions). Page furniture (`Header`/`Footer`, e.g. running heads and
+    /// page numbers found by layout detection) is excluded; positional
+    /// exporters (ALTO, PageXML, hOCR) and the searchable-PDF text layer keep
+    /// their own region loops and are unaffected.
     pub fn plain_text(&self, view: TextView) -> String {
         let mut chunks = Vec::new();
         for id in &self.reading_order {
             if let Some(region) = self.regions.iter().find(|region| &region.id == id)
+                && !matches!(
+                    region.kind,
+                    RegionKind::Header | RegionKind::Footer
+                )
                 && let Some(text) = region.content.plain_text(view)
             {
                 chunks.push(text);
@@ -168,6 +177,10 @@ impl Page {
         }
         for region in &self.regions {
             if !self.reading_order.iter().any(|id| id == &region.id)
+                && !matches!(
+                    region.kind,
+                    RegionKind::Header | RegionKind::Footer
+                )
                 && let Some(text) = region.content.plain_text(view)
             {
                 chunks.push(text);

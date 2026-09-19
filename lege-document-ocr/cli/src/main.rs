@@ -114,9 +114,14 @@ struct BatchArgs {
     /// Directory containing a checksum-pinned Paddle `manifest.json` model pack.
     #[arg(long)]
     model_pack: Option<PathBuf>,
+    /// Prepared PP-DocLayout ONNX weights overriding the embedded layout
+    /// model. Layout detection is on by default; see `--no-layout`.
     #[arg(long)]
+    layout_model: Option<PathBuf>,
+    /// Disable PP-DocLayout-M page layout (keep all text, no title kinds or
     /// image placeholders).
     #[arg(long)]
+    no_layout: bool,
     /// TurboOCR root containing the native worker and PP-OCRv6 TensorRT models.
     #[arg(long)]
     tensorrt_ocr_root: Option<PathBuf>,
@@ -267,6 +272,8 @@ fn run_batch(args: BatchArgs) -> Result<(), String> {
         },
         correction_dictionary: args.dictionary.clone(),
         paddle_model_pack: args.model_pack.clone(),
+        layout_enabled: !args.no_layout,
+        layout_model: args.layout_model.clone(),
         tensorrt_paddle,
         brokered_tensorrt,
         scheduler: OcrSchedulerConfig {
@@ -290,6 +297,7 @@ fn run_batch(args: BatchArgs) -> Result<(), String> {
     if let Some(warning) = processor.backend_selection_warning() {
         eprintln!("lege-ocr: {warning}");
     }
+    if let Some(warning) = processor.layout_warning() {
         eprintln!("lege-ocr: {warning}");
     }
     let database_path = args.output.join(".lege-ocr/jobs.sqlite");
@@ -802,6 +810,8 @@ mod tests {
             render_dpi: 300,
             max_page_pixels: 40_000_000,
             model_pack: None,
+            layout_model: None,
+            no_layout: false,
             tensorrt_ocr_root: None,
             tensorrt_dll_dir: Vec::new(),
             tensorrt_rec_batch: 8,

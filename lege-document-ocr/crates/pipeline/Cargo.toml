@@ -11,6 +11,7 @@ anyhow = { workspace = true }
 blake3 = { workspace = true }
 image = { workspace = true }
 lege-docir = { path = "../docir" }
+lege-gpu = { path = "../../../lege-gpu", features = ["layout-detection"] }
 lege-ocr = { path = "../../../lege-ocr" }
 lege-pdf-read = { path = "../../../lege-pdf/read" }
 serde = { workspace = true }

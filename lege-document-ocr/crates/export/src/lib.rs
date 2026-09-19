@@ -269,6 +269,12 @@ impl DocumentExporter for HtmlExporter {
             ));
             for region_id in &page.reading_order {
                 if let Some(region) = page.regions.iter().find(|region| &region.id == region_id) {
+                    if matches!(
+                        region.kind,
+                        lege_docir::RegionKind::Header | lege_docir::RegionKind::Footer
+                    ) {
+                        continue;
+                    }
                     render_region(&mut html, &region.content, request.text_view);
                 }
             }
@@ -504,6 +510,9 @@ fn render_markdown(request: &ExportRequest<'_>) -> String {
             match region.kind {
                 lege_docir::RegionKind::Title => output.push_str(&format!("# {text}\n\n")),
                 lege_docir::RegionKind::Heading => output.push_str(&format!("## {text}\n\n")),
+                // Page furniture never reaches reading exports; figures render
+                // their placeholder caption via the fallthrough below.
+                lege_docir::RegionKind::Header | lege_docir::RegionKind::Footer => {}
                 _ => output.push_str(&format!("{text}\n\n")),
             }
         }
@@ -690,6 +699,12 @@ impl DocumentExporter for DocxExporter {
                 else {
                     continue;
                 };
+                if matches!(
+                    region.kind,
+                    lege_docir::RegionKind::Header | lege_docir::RegionKind::Footer
+                ) {
+                    continue;
+                }
                 match &region.content {
                     RegionContent::Text(block) => {
                         let style = match region.kind {
@@ -1115,9 +1130,125 @@ mod tests {
         );
     }
 
+    fn text_region(id: &str, kind: RegionKind, text: &str) -> Region {
+        let provenance = Provenance {
+            provider: "test".into(),
+            model: None,
+            preprocessing: None,
+            language: Some("eng".into()),
+        };
+        Region {
+            id: id.into(),
+            kind,
+            polygon: rect_polygon(10.0, 10.0, 60.0, 30.0),
+            confidence: RegionConfidence::default(),
+            content: RegionContent::Text(TextBlock {
+                lines: vec![TextLine {
+                    text: TextEvidence::raw(text),
+                    polygon: rect_polygon(10.0, 10.0, 60.0, 30.0),
+                    confidence: RecognitionConfidence::default(),
+                    words: Vec::new(),
+                    provenance: provenance.clone(),
+                }],
+            }),
+            provenance,
+        }
+    }
+
+    fn figure_region(id: &str, caption: &str) -> Region {
+        let provenance = Provenance {
+            provider: "pp-doclayout-m".into(),
+            model: Some("PP-DocLayout-M".into()),
+            preprocessing: None,
+            language: Some("eng".into()),
+        };
+        let polygon = rect_polygon(10.0, 40.0, 90.0, 90.0);
+        Region {
+            id: id.into(),
+            kind: RegionKind::Figure,
+            polygon: polygon.clone(),
+            confidence: RegionConfidence::default(),
+            content: RegionContent::Figure(lege_docir::Figure {
+                source_crop: None,
+                caption: Some(TextBlock {
+                    lines: vec![TextLine {
+                        text: TextEvidence::raw(caption),
+                        polygon,
+                        confidence: RecognitionConfidence::default(),
+                        words: Vec::new(),
+                        provenance: provenance.clone(),
+                    }],
+                }),
+            }),
+            provenance,
+        }
+    }
+
     #[test]
-    fn rasterized_searchable_pdf_contains_a_text_layer() {
+    fn markdown_skips_furniture_and_marks_titles_and_figures() {
         let directory = tempfile::tempdir().unwrap();
+        let mut document = empty_document();
+        document.metadata.title = Some("Book".to_string());
+        document.pages.push(Page {
+            index: 0,
+            source_size: Size {
+                width: 100,
+                height: 100,
+            },
+            page_size_points: SizeF {
+                width: 100.0,
+                height: 100.0,
+            },
+            source_to_page: Transform::IDENTITY,
+            source_kind: PageSourceKind::NativeText,
+            image: None,
+            regions: vec![
+                text_region("p0-r0", RegionKind::Header, "Running Head"),
+                text_region("p0-r1", RegionKind::Title, "Doc Title"),
+                text_region("p0-r2", RegionKind::Heading, "Chapter One"),
+                text_region("p0-r3", RegionKind::Paragraph, "Body text."),
+                figure_region("p0-r4", "[image]"),
+                text_region("p0-r5", RegionKind::Footer, "12"),
+            ],
+            reading_order: vec![
+                "p0-r0".into(),
+                "p0-r1".into(),
+                "p0-r2".into(),
+                "p0-r3".into(),
+                "p0-r4".into(),
+                "p0-r5".into(),
+            ],
+            warnings: Vec::new(),
+        });
+        let request = ExportRequest {
+            document: &document,
+            output_dir: directory.path(),
+            stem: "book",
+            text_view: TextView::Raw,
+            overwrite: false,
+            searchable_pdf_policy: SearchablePdfPolicy::PreserveSource,
+        };
+        exporter(ExportFormat::Markdown)
+            .unwrap()
+            .export(&request)
+            .unwrap();
+        let markdown = std::fs::read_to_string(directory.path().join("book.md")).unwrap();
+        assert!(markdown.contains("# Doc Title"), "{markdown}");
+        assert!(markdown.contains("## Chapter One"), "{markdown}");
+        assert!(markdown.contains("Body text."), "{markdown}");
+        assert!(markdown.contains("[image]"), "{markdown}");
+        assert!(!markdown.contains("Running Head"), "{markdown}");
+        assert!(!markdown.contains("\n12\n"), "{markdown}");
+
+        exporter(ExportFormat::Text).unwrap().export(&request).unwrap();
+        let text = std::fs::read_to_string(directory.path().join("book.txt")).unwrap();
+        assert!(text.contains("Body text."), "{text}");
+        assert!(text.contains("[image]"), "{text}");
+        assert!(!text.contains("Running Head"), "{text}");
+    }
+
+    #[test]
+    fn rasterized_searchable_pdf_contains_a_text_layer() {        let directory = tempfile::tempdir().unwrap();
         let source_path = directory.path().join("source.pdf");
         let mut pdf = PdfBuilder::new();
         pdf.add_object(1, "<</Type/Catalog/Pages 2 0 R>>");

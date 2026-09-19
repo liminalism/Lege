@@ -54,6 +54,24 @@ only applies decisive, frequency-supported missing-space repairs; riskier
 edit-distance spelling changes require an explicit opt-in. Proper nouns,
 uppercase tokens, exact dictionary words, and an API allowlist are protected.
 
+## Page layout
+
+Every page runs PP-DocLayout-M layout detection (embedded weights, no
+download needed) before text regions are finalized:
+
+- running heads, footers, and page numbers are ignored and never reach text,
+  Markdown, HTML, or DOCX exports;
+- document titles become `#` headings and chapter/section titles `##` in
+  Markdown (`Title`/`Heading` regions everywhere else);
+- content illustrations become `[image]` / `[chart]` / `[seal]` placeholder
+  figures, so they stay visible in reading exports instead of vanishing;
+- captions, tables, footnotes, references, abstracts, and body text keep
+  their OCR or native evidence, grouped per layout box in column-aware
+  reading order. Lines outside every box are kept as plain paragraphs.
+
+Override the weights with `--layout-model layout.onnx`, or disable layout
+with `--no-layout` to keep every detected line as a plain paragraph.
+
 ## Build and run
 
 ```bash

@@ -164,6 +164,8 @@ pub fn run_interactive() -> Result<(), String> {
         render_dpi: 300,
         max_page_pixels: 40_000_000,
         model_pack: None,
+        layout_model: None,
+        no_layout: false,
         tensorrt_ocr_root: None,
         tensorrt_dll_dir: Vec::new(),
         tensorrt_rec_batch: 8,
