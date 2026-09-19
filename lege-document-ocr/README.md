@@ -81,8 +81,34 @@ never switches that job to a different OCR engine.
 Use `--backend tensorrt-paddle` to test or require the GPU path. This selection
 fails closed instead of falling back. `--backend winocr-legacy` selects the CPU
 fallback explicitly. The future Windows AI/NPU adapter has a reserved
-`windows-ai` selection, but unsupported builds reject it. On Linux,
-`--backend paddle` selects the Paddle/Lege WGPU backend.
+`windows-ai` selection, but unsupported builds reject it.
+
+On Linux, `--backend auto` uses the same TensorRT worker when it can be
+discovered (`turboocr-text` under the TurboOCR root, `bin/`, or
+`build-linux-trt-text/`). A successful probe selects `tensorrt-paddle` for the
+whole job. Linux does not ship that worker in a package, so a missing runtime
+falls back to the Paddle/Lege WGPU backend even on an NVIDIA GPU, with a
+warning. A found worker that fails its probe on an NVIDIA host fails closed,
+matching Windows. `--backend paddle` selects Paddle/WGPU explicitly.
+
+Build the lean Linux worker with CUDA 13.x, TensorRT 10/11, and OpenCV:
+
+```bash
+./lege-document-ocr/scripts/build_linux_tensorrt.sh
+```
+
+The script prefers `/usr/local/cuda/bin/nvcc` over a stale `CUDA_HOME`. Then:
+
+```bash
+cargo build --profile debug-fast -p lege-document-ocr-cli
+target/debug-fast/lege-ocr doctor --backend auto --json
+target/debug-fast/lege-ocr batch a.pdf b.pdf c.pdf d.pdf \
+  --output /tmp/lege-ocr-out \
+  --format text,markdown \
+  --backend auto
+```
+
+`doctor --backend tensorrt-paddle` requires the worker; it does not fall back.
 
 The Windows TensorRT test script builds the worker, performs an actual CUDA
 inference preflight, builds the release CLI, and runs a fail-closed PDF job:

@@ -78,6 +78,7 @@ impl TensorRtPaddleConfig {
         let executable = [
             root.join(executable_name),
             root.join("bin").join(executable_name),
+            root.join("build-linux-trt-text").join(executable_name),
             root.join("build-windows-trt-text-ninja")
                 .join(executable_name),
         ]
@@ -85,8 +86,9 @@ impl TensorRtPaddleConfig {
         .find(|path| path.is_file())
         .ok_or_else(|| {
             anyhow!(
-                "TensorRT OCR executable not found under {}; expected {}, bin/{}, or build-windows-trt-text-ninja/{}",
+                "TensorRT OCR executable not found under {}; expected {}, bin/{}, build-linux-trt-text/{}, or build-windows-trt-text-ninja/{}",
                 root.display(),
+                executable_name,
                 executable_name,
                 executable_name,
                 executable_name
@@ -188,9 +190,11 @@ impl TensorRtPaddleConfig {
     }
 }
 
-/// Return whether Windows has an NVIDIA GPU or driver footprint. Auto routing
-/// uses this as a fail-closed boundary: NVIDIA hardware makes TensorRT
-/// mandatory even when its driver installation is currently broken.
+/// Return whether the host has an NVIDIA GPU or driver footprint. Auto routing
+/// uses this as a fail-closed boundary when a TensorRT worker is present:
+/// NVIDIA hardware makes TensorRT mandatory even when its driver installation
+/// is currently broken. Linux does not ship the worker, so a missing runtime
+/// still falls back to Paddle/WGPU.
 pub fn nvidia_hardware_present() -> bool {
     #[cfg(target_os = "windows")]
     {
@@ -231,7 +235,23 @@ pub fn nvidia_hardware_present() -> bool {
     }
 
     #[cfg(not(target_os = "windows"))]
-    false
+    {
+        if Path::new("/proc/driver/nvidia/version").is_file()
+            || Path::new("/dev/nvidia0").exists()
+            || Path::new("/usr/lib/x86_64-linux-gnu/libcuda.so.1").is_file()
+            || Path::new("/usr/lib/libcuda.so.1").is_file()
+        {
+            return true;
+        }
+        Command::new("nvidia-smi")
+            .arg("-L")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map(|status| status.success())
+            .unwrap_or(false)
+    }
 }
 
 pub struct TensorRtPaddleEngine {
@@ -398,9 +418,7 @@ impl TensorRtWorker {
         if std::env::var_os("TRT_OPT_LEVEL").is_none() {
             command.env("TRT_OPT_LEVEL", "3");
         }
-        if !config.dll_directories.is_empty() {
-            command.env("PATH", augmented_path(&config.dll_directories)?);
-        }
+        apply_worker_library_search(&mut command, &config.dll_directories)?;
         Self::start_command(
             command,
             format!("TensorRT OCR worker {}", config.executable.display()),
@@ -553,12 +571,40 @@ impl Drop for TensorRtWorker {
     }
 }
 
-fn augmented_path(additions: &[PathBuf]) -> Result<OsString> {
+fn apply_worker_library_search(command: &mut Command, directories: &[PathBuf]) -> Result<()> {
+    #[cfg(windows)]
+    {
+        if !directories.is_empty() {
+            command.env("PATH", prepend_search_path("PATH", directories)?);
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let mut dirs = directories.to_vec();
+        for extra in [
+            PathBuf::from("/usr/local/cuda/lib64"),
+            PathBuf::from("/usr/local/cuda/targets/x86_64-linux/lib"),
+        ] {
+            if extra.is_dir() && !dirs.contains(&extra) {
+                dirs.push(extra);
+            }
+        }
+        if !dirs.is_empty() {
+            command.env(
+                "LD_LIBRARY_PATH",
+                prepend_search_path("LD_LIBRARY_PATH", &dirs)?,
+            );
+        }
+    }
+    Ok(())
+}
+
+fn prepend_search_path(variable: &str, additions: &[PathBuf]) -> Result<OsString> {
     let mut paths = additions.to_vec();
-    if let Some(existing) = std::env::var_os("PATH") {
+    if let Some(existing) = std::env::var_os(variable) {
         paths.extend(std::env::split_paths(&existing));
     }
-    std::env::join_paths(paths).context("construct TensorRT OCR child PATH")
+    std::env::join_paths(paths).with_context(|| format!("construct TensorRT OCR child {variable}"))
 }
 
 #[derive(Debug, Deserialize)]
@@ -645,6 +691,29 @@ mod tests {
         assert_eq!(config.detector, models.join("det_tiny.onnx"));
         assert!(config.dll_directories.contains(&runtime));
         assert!(config.dll_directories.contains(&bin));
+    }
+
+    #[test]
+    fn linux_build_dir_is_discovered_when_bin_is_absent() {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path();
+        let build = root.join("build-linux-trt-text");
+        let models = root.join("models");
+        std::fs::create_dir_all(&build).unwrap();
+        std::fs::create_dir_all(&models).unwrap();
+        let executable_name = if cfg!(windows) {
+            "turboocr-text.exe"
+        } else {
+            "turboocr-text"
+        };
+        std::fs::write(build.join(executable_name), b"worker").unwrap();
+        std::fs::write(models.join("det_tiny.onnx"), b"detector").unwrap();
+        std::fs::write(models.join("rec_tiny.onnx"), b"recognizer").unwrap();
+        std::fs::write(models.join("keys_tiny.txt"), b"dictionary").unwrap();
+
+        let config = TensorRtPaddleConfig::from_root(root, 8).unwrap();
+        assert_eq!(config.executable, build.join(executable_name));
+        assert!(config.dll_directories.contains(&build));
     }
 
     #[test]

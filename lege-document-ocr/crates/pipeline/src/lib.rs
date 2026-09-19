@@ -1194,6 +1194,38 @@ fn initialize_winocr(_language: &str) -> Result<Box<dyn PageOcrBackend>, Pipelin
     Err(PipelineError::UnavailableBackend("winocr-legacy"))
 }
 
+fn auto_platform_fallback_name() -> &'static str {
+    if cfg!(target_os = "windows") {
+        "Windows Runtime OCR"
+    } else {
+        "Paddle/WGPU"
+    }
+}
+
+fn initialize_auto_platform_fallback(
+    config: &PipelineConfig,
+    warning: Option<String>,
+) -> Result<InitializedBackend, PipelineError> {
+    #[cfg(target_os = "windows")]
+    {
+        Ok((
+            initialize_winocr(&config.language)?,
+            BackendChoice::WinOcrLegacy,
+            None,
+            warning,
+        ))
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Ok((
+            initialize_paddle(config)?,
+            BackendChoice::Paddle,
+            None,
+            warning,
+        ))
+    }
+}
+
 fn builtin_model_identity(config: &PipelineConfig) -> Option<lege_docir::ModelIdentity> {
     if config.backend == BackendChoice::BrokeredTensorRt {
         let broker = config.brokered_tensorrt.as_ref()?;
@@ -1289,10 +1321,10 @@ mod tests {
     }
 
     #[test]
-    fn auto_allows_winocr_only_without_an_nvidia_driver() {
+    fn auto_allows_platform_fallback_without_an_nvidia_driver() {
         assert_eq!(
             auto_tensorrt_failure_action(false),
-            AutoTensorRtFailureAction::UseWinOcrFallback
+            AutoTensorRtFailureAction::UsePlatformFallback
         );
     }
 
