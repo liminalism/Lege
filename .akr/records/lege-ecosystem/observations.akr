@@ -87,7 +87,7 @@ record lege-ecosystem.observation.doclayout-m-underdetects-text-and-images/1 : o
 
 record lege-ecosystem.observation.doclayout-m-underdetects-text-and-images/2 : observation {
     title "DocLayout-M underdetects text and some images"
-    state verified
+    state superseded
     statement """
         PP-DocLayout-M on Structures.pdf (Braudel scan) systematically underdetects: whole body paragraphs are omitted (pages 191, 194, 200), captions and run-on last lines are clipped horizontally (pages 195, 198, 200), and image boxes are occasionally tight but never oversized. The default Linux Paddle OCR path (`perform_page_rgb_ocr`) already runs DBNet on the full page and does not crop to DocLayout boxes. DocLayout still drives image overlays/premask, crop/margins, reflow, slow OCR regions, and the Tesseract region path.
         """
@@ -102,9 +102,27 @@ record lege-ecosystem.observation.doclayout-m-underdetects-text-and-images/2 : o
     supersedes [ @lege-ecosystem.observation.doclayout-m-underdetects-text-and-images/1 ]
 }
 
+record lege-ecosystem.observation.doclayout-m-underdetects-text-and-images/3 : observation {
+    title "DocLayout-M underdetects text and some images"
+    state verified
+    statement """
+        PP-DocLayout-M on Structures.pdf (Braudel scan) systematically underdetects: whole body paragraphs are omitted (pages 191, 194, 200), captions and run-on last lines are clipped horizontally (pages 195, 198, 200), and image boxes are occasionally tight but never oversized. The default Linux Paddle OCR path (`perform_page_rgb_ocr`) already runs DBNet on the full page and does not crop to DocLayout boxes. DocLayout still drives image overlays/premask, crop/margins, reflow, slow OCR regions, and the Tesseract region path.
+        """
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    method manual
+    watches [
+        "lege-process/ocr/fast.rs",
+        "lege-process/pipeline/pdf_tokio_pipeline.rs",
+        "lege-process/core/types.rs"
+    ]
+    review_after 2026-11-13
+    supersedes [ @lege-ecosystem.observation.doclayout-m-underdetects-text-and-images/2 ]
+    verified_by [ @lege-ecosystem.evidence.stale-observation-requeue-20260908/1 ]
+}
+
 record lege-ecosystem.observation.grayscale-mode-makes-truetyping-smaller-and-cleaner/1 : observation {
     title "Grayscale/MRC mode makes truetyping 3.3x smaller and cleaner on the crusades scan; the win is the MRC despeckle, not antialiasing"
-    state verified
+    state superseded
     scope [ path "lege-process/core/clean_gray.rs", path "lege-process/encoding/glyphfont.rs" ]
     statement """
         crusadeswholesto0000lamb_1.pdf pages 1-41 (RGB JPEG scan), same debug-fast build on 2026-09-06: truetyping bilevel 2.56 MB in 18.2 s with 13087 distinct shapes of which 9792 were used once; truetyping plus --grayscale 0.77 MB in 13.9 s with 1347 distinct shapes; jbig2 plus --grayscale 1.62 MB in 7.7 s; bilevel jbig2 about 1.0 MB. The bilevel Sauvola mask keeps paper grain as thousands of small components that the font stores as one-off outlines, while clean_page_for_mrc thresholds a cleaned page and drops small components, so the grayscale run's glyph text is crisp on a faint JP2 background. Truetyping does not conflict with grayscale mode: the ink mask feeds the glyph session and the JP2 background sits under the vector text.
@@ -119,9 +137,30 @@ record lege-ecosystem.observation.grayscale-mode-makes-truetyping-smaller-and-cl
     author "GitHub Uploader"
 }
 
+record lege-ecosystem.observation.grayscale-mode-makes-truetyping-smaller-and-cleaner/2 : observation {
+    title "Grayscale/MRC mode makes truetyping 3.3x smaller and cleaner on the crusades scan; the win is the MRC despeckle, not antialiasing"
+    state verified
+    scope [ path "lege-process/core/clean_gray.rs", path "lege-process/encoding/glyphfont.rs" ]
+    statement """
+        crusadeswholesto0000lamb_1.pdf pages 1-41 (RGB JPEG scan), same debug-fast build on 2026-09-06: truetyping bilevel 2.56 MB in 18.2 s with 13087 distinct shapes of which 9792 were used once; truetyping plus --grayscale 0.77 MB in 13.9 s with 1347 distinct shapes; jbig2 plus --grayscale 1.62 MB in 7.7 s; bilevel jbig2 about 1.0 MB. The bilevel Sauvola mask keeps paper grain as thousands of small components that the font stores as one-off outlines, while clean_page_for_mrc thresholds a cleaned page and drops small components, so the grayscale run's glyph text is crisp on a faint JP2 background. Truetyping does not conflict with grayscale mode: the ink mask feeds the glyph session and the JP2 background sits under the vector text.
+        """
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    method command
+    watches [
+        "lege-process/encoding/glyphfont.rs",
+        "lege-process/core/clean_gray.rs",
+        "lege-process/pipeline/pdf_tokio_pipeline.rs"
+    ]
+    supersedes [
+        @lege-ecosystem.observation.grayscale-mode-makes-truetyping-smaller-and-cleaner/1
+    ]
+    verified_by [ @lege-ecosystem.evidence.stale-observation-requeue-20260908/1 ]
+    author "GitHub Uploader"
+}
+
 record lege-ecosystem.observation.jbig2-symbol-mode-is-lossy/1 : observation {
     title "JBIG2 symbol substitution is lossy, and its size win depends on content"
-    state verified
+    state superseded
     scope [ path "lege-codecs/jbig2enc-rust/**", path "lege-process/**" ]
     statement """
         Symbol substitution does not round-trip bit-exactly, and no configuration makes it do so. On tests/fixtures/test_image1.pbm (956x1557, 185395 ink px) symbol mode changed 175 pixels and produced 13211 bytes against the generic region's 12941 bytes and 0 changed pixels -- lossy AND larger. Enabling refine, text_refine, is_lossless, or disabling auto_thresh left the count at exactly 175 in every combination, so refinement does not close the gap as ISO/IEC 14492 refinement is supposed to. text_symbol_unify() is far lossier at 1215 pixels. The win is real on genuine text: a 4-page scanned paper through the full lege pipeline gave 225527 bytes with symbol mode against 234513 with --no-symbol (3.8% smaller), and a synthetic page of exactly repeated glyphs gave 1027 against 2876. Symbol mode is now the default in Jbig2Config, the lege CLI and the Python wheel; Jbig2Config::generic(), --no-symbol, the option-string 'g' modifier and the GUI's No symbol mode toggle are the bit-exact opt-out. The unclosed refinement gap is the follow-up worth taking: it is what would make symbol mode safe for archival masters.
@@ -131,9 +170,23 @@ record lege-ecosystem.observation.jbig2-symbol-mode-is-lossy/1 : observation {
     watches [ "lege-codecs/jbig2enc-rust/src/encode/**" ]
 }
 
+record lege-ecosystem.observation.jbig2-symbol-mode-is-lossy/2 : observation {
+    title "JBIG2 symbol substitution is lossy, and its size win depends on content"
+    state verified
+    scope [ path "lege-codecs/jbig2enc-rust/**", path "lege-process/**" ]
+    statement """
+        Symbol substitution does not round-trip bit-exactly, and no configuration makes it do so. On tests/fixtures/test_image1.pbm (956x1557, 185395 ink px) symbol mode changed 175 pixels and produced 13211 bytes against the generic region's 12941 bytes and 0 changed pixels -- lossy AND larger. Enabling refine, text_refine, is_lossless, or disabling auto_thresh left the count at exactly 175 in every combination, so refinement does not close the gap as ISO/IEC 14492 refinement is supposed to. text_symbol_unify() is far lossier at 1215 pixels. The win is real on genuine text: a 4-page scanned paper through the full lege pipeline gave 225527 bytes with symbol mode against 234513 with --no-symbol (3.8% smaller), and a synthetic page of exactly repeated glyphs gave 1027 against 2876. Symbol mode is now the default in Jbig2Config, the lege CLI and the Python wheel; Jbig2Config::generic(), --no-symbol, the option-string 'g' modifier and the GUI's No symbol mode toggle are the bit-exact opt-out. The unclosed refinement gap is the follow-up worth taking: it is what would make symbol mode safe for archival masters.
+        """
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    method command
+    watches [ "lege-codecs/jbig2enc-rust/src/encode/**" ]
+    supersedes [ @lege-ecosystem.observation.jbig2-symbol-mode-is-lossy/1 ]
+    verified_by [ @lege-ecosystem.evidence.stale-observation-requeue-20260908/1 ]
+}
+
 record lege-ecosystem.observation.jbig2enc-inert-config-fields/1 : observation {
     title "Three jbig2enc-rust config fields are inert in the encoder"
-    state verified
+    state superseded
     scope [ path "lege-codecs/jbig2enc-rust/**" ]
     statement """
         Jbig2Config::{dpi, duplicate_line_removal, match_tolerance} do not change encoder output. Measured on a 480x320 glyph page via encode_single_image_with_config: default 2876 bytes, and dpi=600, duplicate_line_removal=false and match_tolerance in {4,7,10} all produced 2876 bytes byte-for-byte. match_tolerance is only read when config.text_refine is set (encode/document.rs:451), and produced identical output (1046 bytes) at every tolerance even with text_refine enabled. By contrast symbol_mode=true works as documented (2876 -> 1027 bytes) and is required for a shared /JBIG2Globals dictionary. Consequence: the jbig2enc Python binding deliberately exposes only symbol_mode, refine and the lossless preset, and rejects the three inert names as unknown options rather than accepting them silently.
@@ -143,9 +196,23 @@ record lege-ecosystem.observation.jbig2enc-inert-config-fields/1 : observation {
     watches [ "lege-codecs/jbig2enc-rust/src/encode/**" ]
 }
 
+record lege-ecosystem.observation.jbig2enc-inert-config-fields/2 : observation {
+    title "Three jbig2enc-rust config fields are inert in the encoder"
+    state verified
+    scope [ path "lege-codecs/jbig2enc-rust/**" ]
+    statement """
+        Jbig2Config::{dpi, duplicate_line_removal, match_tolerance} do not change encoder output. Measured on a 480x320 glyph page via encode_single_image_with_config: default 2876 bytes, and dpi=600, duplicate_line_removal=false and match_tolerance in {4,7,10} all produced 2876 bytes byte-for-byte. match_tolerance is only read when config.text_refine is set (encode/document.rs:451), and produced identical output (1046 bytes) at every tolerance even with text_refine enabled. By contrast symbol_mode=true works as documented (2876 -> 1027 bytes) and is required for a shared /JBIG2Globals dictionary. Consequence: the jbig2enc Python binding deliberately exposes only symbol_mode, refine and the lossless preset, and rejects the three inert names as unknown options rather than accepting them silently.
+        """
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    method command
+    watches [ "lege-codecs/jbig2enc-rust/src/encode/**" ]
+    supersedes [ @lege-ecosystem.observation.jbig2enc-inert-config-fields/1 ]
+    verified_by [ @lege-ecosystem.evidence.stale-observation-requeue-20260908/1 ]
+}
+
 record lege-ecosystem.observation.jbig2enc-py-round-trip-verified/1 : observation {
     title "jbig2enc Python binding round-trips pixel-exactly in every mode"
-    state verified
+    state superseded
     scope [ path "lege-misc/bindings/jbig2enc-py/**" ]
     statement """
         The jbig2enc pyo3 binding encodes and decodes back byte-identical pixels on a 480x320 glyph page in all exercised modes: standalone generic region (2876 B), standalone symbol mode (1027 B), PDF fragment without globals, PDF fragment with a 64-byte shared dictionary, and a three-page document sharing one dictionary. Zero differing pixels in every case, so both encoder modes are lossless at the exposed settings and the multi-page shared-dictionary symbol indices line up. Verified through the installed wheel (jbig2enc-0.5.4-cp311-abi3-manylinux_2_34_x86_64) in a clean virtualenv, 20 pytest tests green; cargo clippy --release clean.
@@ -155,9 +222,23 @@ record lege-ecosystem.observation.jbig2enc-py-round-trip-verified/1 : observatio
     watches [ "lege-misc/bindings/jbig2enc-py/**", "lege-codecs/jbig2enc-rust/src/**" ]
 }
 
+record lege-ecosystem.observation.jbig2enc-py-round-trip-verified/2 : observation {
+    title "jbig2enc Python binding round-trips pixel-exactly in every mode"
+    state verified
+    scope [ path "lege-misc/bindings/jbig2enc-py/**" ]
+    statement """
+        The jbig2enc pyo3 binding encodes and decodes back byte-identical pixels on a 480x320 glyph page in all exercised modes: standalone generic region (2876 B), standalone symbol mode (1027 B), PDF fragment without globals, PDF fragment with a 64-byte shared dictionary, and a three-page document sharing one dictionary. Zero differing pixels in every case, so both encoder modes are lossless at the exposed settings and the multi-page shared-dictionary symbol indices line up. Verified through the installed wheel (jbig2enc-0.5.4-cp311-abi3-manylinux_2_34_x86_64) in a clean virtualenv, 20 pytest tests green; cargo clippy --release clean.
+        """
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    method command
+    watches [ "lege-misc/bindings/jbig2enc-py/**", "lege-codecs/jbig2enc-rust/src/**" ]
+    supersedes [ @lege-ecosystem.observation.jbig2enc-py-round-trip-verified/1 ]
+    verified_by [ @lege-ecosystem.evidence.stale-observation-requeue-20260908/1 ]
+}
+
 record lege-ecosystem.observation.ocr-v5-v6-recipe-20260820/1 : observation {
     title "PP-OCRv6 TensorRT improved the recipe-PDF proxy over embedded v5"
-    state verified
+    state superseded
     scope [ path "lege-document-ocr/**", path "lege-ocr/**" ]
     statement """
         On the two-page D:\to-sort\5-Minute Hummus Recipe - NYT Cooking.pdf at 300 DPI capped to 12 MP and forced OCR, embedded PP-OCRv5/WGPU scored 17.88% CER and 19.16% WER against the pipeline's native text extraction, while PP-OCRv6-tiny/TensorRT scored 12.00% CER and 14.17% WER. The native v6 worker passed detector and recognizer inference after cold engine compilation. A generic Paddle/WGPU v6 model pack passed checksum validation but failed detector construction, so it is not a viable v6 replacement yet.
@@ -170,9 +251,25 @@ record lege-ecosystem.observation.ocr-v5-v6-recipe-20260820/1 : observation {
     author "GitHub Uploader"
 }
 
+record lege-ecosystem.observation.ocr-v5-v6-recipe-20260820/2 : observation {
+    title "PP-OCRv6 TensorRT improved the recipe-PDF proxy over embedded v5"
+    state superseded
+    scope [ path "lege-document-ocr/**", path "lege-ocr/**" ]
+    statement """
+        On the two-page D:\to-sort\5-Minute Hummus Recipe - NYT Cooking.pdf at 300 DPI capped to 12 MP and forced OCR, embedded PP-OCRv5/WGPU scored 17.88% CER and 19.16% WER against the pipeline's native text extraction, while PP-OCRv6-tiny/TensorRT scored 12.00% CER and 14.17% WER. The native v6 worker passed detector and recognizer inference after cold engine compilation. A generic Paddle/WGPU v6 model pack passed checksum validation but failed detector construction, so it is not a viable v6 replacement yet.
+        """
+    observed_at git:3f520cc03211e48adaa77c1da9bc639c53d2d351
+    method command
+    watches [ "lege-document-ocr/**", "lege-ocr/**", "lege-gpu/**" ]
+    derived_from [ @lege-ecosystem.work.ocr-backend-scheduler/4 ]
+    supersedes [ @lege-ecosystem.observation.ocr-v5-v6-recipe-20260820/1 ]
+    verified_by [ @lege-ecosystem.evidence.stale-observation-requeue-20260908/1 ]
+    author "GitHub Uploader"
+}
+
 record lege-ecosystem.observation.ppocrv6-wgpu-blockers-resolved-20260822/1 : observation {
     title "PP-OCRv6 on wgpu was blocked by four concrete gaps, all now closed"
-    state verified
+    state superseded
     scope [ path "lege-gpu/**", path "lege-ocr/**", path "lege-process/scripts/**" ]
     statement """
         The earlier finding that a Paddle/WGPU v6 model pack "failed detector construction" had four independent causes, each now fixed. (1) Stock Paddle exports name the graph input `x`, which match_target in lege-gpu/src/vision/onnx/load.rs bound to the paddle-rotate target's fixed 224x224 contract; the v5 assets had been renamed to pp_det_image/pp_rec_image out of band and that recipe was never committed. (2) lege-gpu had no Erf kernel (v6 builds GELU from it, 13x in det, 10-13x in rec); added as UnaryKind::Erf with an Abramowitz-Stegun 7.1.26 WGSL shader and a matching CPU reference. (3) v6 det uses ConvTranspose 2x2/stride-2 and v6 rec keeps BatchNormalization behind a Squeeze; both are rewritten at prep time, ConvTranspose into Conv1x1+DepthToSpace (exact for kernel==stride, zero pad) and BN into Mul+Add. (4) MaxPool/AveragePool rejected auto_pad!=NOTSET and ignored it during shape inference, so PP-OCRv6's stride-1 SAME_UPPER 2x2 windows shrank the feature map by one pixel and surfaced as a Concat axis-2 mismatch; both now resolve auto_pad exactly as Conv already did. Whole-spatial ReduceMean(axes=[2,3]) is also rewritten to GlobalAveragePool at prep. The v6 small dictionary (18708 glyphs) is a near-superset of v5's 18383 - 35 dropped, 360 added - and repairs v5's Latin-1 coverage, which held only 70 of 192 codepoints in U+00C0..U+017F.
@@ -189,9 +286,28 @@ record lege-ecosystem.observation.ppocrv6-wgpu-blockers-resolved-20260822/1 : ob
     verified_by [ @lege-ecosystem.evidence.ppocrv6-wgpu-embedded-20260822/1 ]
 }
 
+record lege-ecosystem.observation.ppocrv6-wgpu-blockers-resolved-20260822/2 : observation {
+    title "PP-OCRv6 on wgpu was blocked by four concrete gaps, all now closed"
+    state verified
+    scope [ path "lege-gpu/**", path "lege-ocr/**", path "lege-process/scripts/**" ]
+    statement """
+        The earlier finding that a Paddle/WGPU v6 model pack "failed detector construction" had four independent causes, each now fixed. (1) Stock Paddle exports name the graph input `x`, which match_target in lege-gpu/src/vision/onnx/load.rs bound to the paddle-rotate target's fixed 224x224 contract; the v5 assets had been renamed to pp_det_image/pp_rec_image out of band and that recipe was never committed. (2) lege-gpu had no Erf kernel (v6 builds GELU from it, 13x in det, 10-13x in rec); added as UnaryKind::Erf with an Abramowitz-Stegun 7.1.26 WGSL shader and a matching CPU reference. (3) v6 det uses ConvTranspose 2x2/stride-2 and v6 rec keeps BatchNormalization behind a Squeeze; both are rewritten at prep time, ConvTranspose into Conv1x1+DepthToSpace (exact for kernel==stride, zero pad) and BN into Mul+Add. (4) MaxPool/AveragePool rejected auto_pad!=NOTSET and ignored it during shape inference, so PP-OCRv6's stride-1 SAME_UPPER 2x2 windows shrank the feature map by one pixel and surfaced as a Concat axis-2 mismatch; both now resolve auto_pad exactly as Conv already did. Whole-spatial ReduceMean(axes=[2,3]) is also rewritten to GlobalAveragePool at prep. The v6 small dictionary (18708 glyphs) is a near-superset of v5's 18383 - 35 dropped, 360 added - and repairs v5's Latin-1 coverage, which held only 70 of 192 codepoints in U+00C0..U+017F.
+        """
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    method command
+    watches [
+        "lege-gpu/src/vision/onnx/**",
+        "lege-gpu/src/vision/decode/db.rs",
+        "lege-ocr/assets/**",
+        "lege-process/scripts/prepare_ppocr_models.py"
+    ]
+    supersedes [ @lege-ecosystem.observation.ppocrv6-wgpu-blockers-resolved-20260822/1 ]
+    verified_by [ @lege-ecosystem.evidence.stale-observation-requeue-20260908/1 ]
+}
+
 record lege-ecosystem.observation.truetyping-dictionary-lock-serialized-every-page/1 : observation {
     title "Truetyping's shared glyph dictionary serialized every page's matching behind one mutex, and that lock was the whole critical path"
-    state verified
+    state superseded
     scope [ path "lege-process/encoding/glyphfont.rs" ]
     statement """
         On the 886-page archive.org scan crusadeswholesto0000lamb_1.pdf (RGB JPEG pages, traced at 2400 px), truetyping took 17.4 s for 41 pages and 72.8 s for 201 pages where CCITT4 took 5.1 s for the same 41 pages and 35.3 s for the whole book. Rendering (1.7 s total) and binarization were not the cost. GlyphFontSession::process_page_pixels matched a page's 5000 components against the document dictionary while holding the dictionary mutex, single-threaded; the strict search alone was 38 s of the 73 s wall on 201 pages, and the per-instance cost grew with the dictionary (273 candidates per instance at 41 pages, 400 at 200). The four page workers spent most of their time waiting for the lock. Fix: the per-component search is a read-only parallel probe (rayon, one Comparator per thread) and only folding the answers (votes, refreshes, inserts) runs in sequence; a miss is re-searched only among the prototypes the page changed; the end-of-document alias passes probe in parallel the same way; banks finalize concurrently; the bucket index uses a multiplicative hasher. After: 41 pages 8.5 s, 201 pages 25.9 s, the whole book 2 min 0 s, with per-page glyph extraction flat at 143 to 168 ms across the book (98 s of pages, 19 s of finalize, font build and write for 22 font banks). A 65533-id bank fills in roughly 40 pages of this book: 41 pages made 13691 distinct shapes but 41794 glyph ids (13471 position variants, 4307 compounds, 8529 text variants), so the full book carries 22 fonts totalling 41 MB of a 45 MB output; glyph-id consumption by variants, not matching speed, is now the format's largest cost on long books.
@@ -206,9 +322,30 @@ record lege-ecosystem.observation.truetyping-dictionary-lock-serialized-every-pa
     author "GitHub Uploader"
 }
 
+record lege-ecosystem.observation.truetyping-dictionary-lock-serialized-every-page/2 : observation {
+    title "Truetyping's shared glyph dictionary serialized every page's matching behind one mutex, and that lock was the whole critical path"
+    state verified
+    scope [ path "lege-process/encoding/glyphfont.rs" ]
+    statement """
+        On the 886-page archive.org scan crusadeswholesto0000lamb_1.pdf (RGB JPEG pages, traced at 2400 px), truetyping took 17.4 s for 41 pages and 72.8 s for 201 pages where CCITT4 took 5.1 s for the same 41 pages and 35.3 s for the whole book. Rendering (1.7 s total) and binarization were not the cost. GlyphFontSession::process_page_pixels matched a page's 5000 components against the document dictionary while holding the dictionary mutex, single-threaded; the strict search alone was 38 s of the 73 s wall on 201 pages, and the per-instance cost grew with the dictionary (273 candidates per instance at 41 pages, 400 at 200). The four page workers spent most of their time waiting for the lock. Fix: the per-component search is a read-only parallel probe (rayon, one Comparator per thread) and only folding the answers (votes, refreshes, inserts) runs in sequence; a miss is re-searched only among the prototypes the page changed; the end-of-document alias passes probe in parallel the same way; banks finalize concurrently; the bucket index uses a multiplicative hasher. After: 41 pages 8.5 s, 201 pages 25.9 s, the whole book 2 min 0 s, with per-page glyph extraction flat at 143 to 168 ms across the book (98 s of pages, 19 s of finalize, font build and write for 22 font banks). A 65533-id bank fills in roughly 40 pages of this book: 41 pages made 13691 distinct shapes but 41794 glyph ids (13471 position variants, 4307 compounds, 8529 text variants), so the full book carries 22 fonts totalling 41 MB of a 45 MB output; glyph-id consumption by variants, not matching speed, is now the format's largest cost on long books.
+        """
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    method instrumented
+    watches [
+        "lege-process/encoding/glyphfont.rs",
+        "lege-process/pipeline/pdf_tokio_pipeline.rs"
+    ]
+    review_after 2026-12-01
+    supersedes [
+        @lege-ecosystem.observation.truetyping-dictionary-lock-serialized-every-page/1
+    ]
+    verified_by [ @lege-ecosystem.evidence.stale-observation-requeue-20260908/1 ]
+    author "GitHub Uploader"
+}
+
 record lege-ecosystem.observation.truetyping-halftone-review-20260905/1 : observation {
     title "TrueTyping and JBIG2 halftone review with diagnostic reproductions"
-    state verified
+    state superseded
     statement """
         Reviewed TrueTyping and JBIG2 halftoning at 4a7349f9. Reproduced low-range halftone corruption in native and jbig2dec decoders, partial-cell ink loss, default dictionary tone bias, oversized TrueTyping component loss, malformed contour counts from a 380px connected grid, O/0 semantic collision, and GUI reflow/halftone incompatibility. Additional code findings concern blanket OCR fallback suppression, highlight clipping, and inert/misleading halftone controls. Full findings, priorities, evidence, limitations and quality experiments: docs/reviews/truetyping-halftone-20260905.md. Existing tests passed: 26 glyphfont tests and 7 halftone decoder tests. No application fixes made.
         """
@@ -226,9 +363,31 @@ record lege-ecosystem.observation.truetyping-halftone-review-20260905/1 : observ
     derived_from [ @lege-ecosystem.work.glyph-font-text-output/1 ]
 }
 
+record lege-ecosystem.observation.truetyping-halftone-review-20260905/2 : observation {
+    title "TrueTyping and JBIG2 halftone review with diagnostic reproductions"
+    state superseded
+    statement """
+        Reviewed TrueTyping and JBIG2 halftoning at 4a7349f9. Reproduced low-range halftone corruption in native and jbig2dec decoders, partial-cell ink loss, default dictionary tone bias, oversized TrueTyping component loss, malformed contour counts from a 380px connected grid, O/0 semantic collision, and GUI reflow/halftone incompatibility. Additional code findings concern blanket OCR fallback suppression, highlight clipping, and inert/misleading halftone controls. Full findings, priorities, evidence, limitations and quality experiments: docs/reviews/truetyping-halftone-20260905.md. Existing tests passed: 26 glyphfont tests and 7 halftone decoder tests. No application fixes made.
+        """
+    observed_at git:4a7349f94b1fb6f6f90b871be5dbb9b5736062de
+    method instrumented
+    watches [
+        "lege-process/encoding/glyphfont.rs",
+        "lege-process/core/truetype_writer.rs",
+        "lege-process/core/pdf_artifact.rs",
+        "lege-process/pipeline/pdf_tokio_pipeline.rs",
+        "lege-process/GUI/Freya/src/models.rs",
+        "lege-process/GUI/Freya/src/worker_process.rs",
+        "lege-codecs/jbig2enc-rust/src/encode/halftone.rs"
+    ]
+    derived_from [ @lege-ecosystem.work.glyph-font-text-output/1 ]
+    supersedes [ @lege-ecosystem.observation.truetyping-halftone-review-20260905/1 ]
+    verified_by [ @lege-ecosystem.evidence.stale-observation-requeue-20260908/1 ]
+}
+
 record lege-ecosystem.observation.truetyping-halftone-review-fixes-20260905/1 : observation {
     title "All ten findings of the 2026-09-05 TrueTyping/halftone review are fixed and corpus-validated"
-    state verified
+    state superseded
     scope [ path "lege-codecs/jbig2enc-rust/**", path "lege-process/**" ]
     statement """
         Implemented at working tree on 2325cfd6 (uncommitted): jbig2enc halftone emits ceil(log2(patterns)) gray-code planes, edge cells are edge-replicated, quantizer and dictionary agree on round(i*M*M/(N-1)) populations, sharpening_l is a real unsharp mask (default 0.0 keeps prior output), lossless doc is honest; paper whitening rolls off smoothly above PAPER_WHITE_FLOOR (color_processing::halftone_ink_from_gray). TrueTyping: components that cannot be valid simple glyphs (size, contour or point budget) go to a per-page lossless JBIG2 residual drawn under the text; truetype_writer returns errors instead of narrowing counts; one outline recognised as two strings gets two CIDs; the OCR layer keeps words no glyph covers; Freya gates halftone on the effective encoder and clears it when reflow is entered. Tests: jbig2enc 211 pass (1 pre-existing failure decode_refine_templates::grtemplate1_tpgron), lege lib 338 pass. Corpus: 20-page subsets of the three largest to-sort books (globalhistory, crusades, wheels) with --text-format truetyping --halftone decode cleanly in mutool, every page has normal ink coverage, line-art map pages survive via the residual, halftoned photos have correct tone. Validation first exposed the fixed-threshold CLI default (see decision simple-cli-default-binarization-is-adaptive).
@@ -244,9 +403,29 @@ record lege-ecosystem.observation.truetyping-halftone-review-fixes-20260905/1 : 
     derived_from [ @lege-ecosystem.observation.truetyping-halftone-review-20260905 ]
 }
 
+record lege-ecosystem.observation.truetyping-halftone-review-fixes-20260905/2 : observation {
+    title "All ten findings of the 2026-09-05 TrueTyping/halftone review are fixed and corpus-validated"
+    state verified
+    scope [ path "lege-codecs/jbig2enc-rust/**", path "lege-process/**" ]
+    statement """
+        Implemented at working tree on 2325cfd6 (uncommitted): jbig2enc halftone emits ceil(log2(patterns)) gray-code planes, edge cells are edge-replicated, quantizer and dictionary agree on round(i*M*M/(N-1)) populations, sharpening_l is a real unsharp mask (default 0.0 keeps prior output), lossless doc is honest; paper whitening rolls off smoothly above PAPER_WHITE_FLOOR (color_processing::halftone_ink_from_gray). TrueTyping: components that cannot be valid simple glyphs (size, contour or point budget) go to a per-page lossless JBIG2 residual drawn under the text; truetype_writer returns errors instead of narrowing counts; one outline recognised as two strings gets two CIDs; the OCR layer keeps words no glyph covers; Freya gates halftone on the effective encoder and clears it when reflow is entered. Tests: jbig2enc 211 pass (1 pre-existing failure decode_refine_templates::grtemplate1_tpgron), lege lib 338 pass. Corpus: 20-page subsets of the three largest to-sort books (globalhistory, crusades, wheels) with --text-format truetyping --halftone decode cleanly in mutool, every page has normal ink coverage, line-art map pages survive via the residual, halftoned photos have correct tone. Validation first exposed the fixed-threshold CLI default (see decision simple-cli-default-binarization-is-adaptive).
+        """
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    method command
+    watches [
+        "lege-codecs/jbig2enc-rust/src/encode/halftone.rs",
+        "lege-process/encoding/glyphfont.rs",
+        "lege-process/core/pdf_artifact.rs",
+        "lege-process/core/truetype_writer.rs"
+    ]
+    derived_from [ @lege-ecosystem.observation.truetyping-halftone-review-20260905 ]
+    supersedes [ @lege-ecosystem.observation.truetyping-halftone-review-fixes-20260905/1 ]
+    verified_by [ @lege-ecosystem.evidence.stale-observation-requeue-20260908/1 ]
+}
+
 record lege-ecosystem.observation.truetyping-letters-ride-off-their-baseline/1 : observation {
     title "Truetyping letters sit a pixel or two off the baseline, and identical shapes make it obvious"
-    state verified
+    state superseded
     scope [
         path "lege-process/core/pdf_artifact.rs",
         path "lege-process/encoding/glyphfont.rs"
@@ -279,9 +458,46 @@ record lege-ecosystem.observation.truetyping-letters-ride-off-their-baseline/1 :
     }
 }
 
+record lege-ecosystem.observation.truetyping-letters-ride-off-their-baseline/2 : observation {
+    title "Truetyping letters sit a pixel or two off the baseline, and identical shapes make it obvious"
+    state superseded
+    scope [
+        path "lege-process/core/pdf_artifact.rs",
+        path "lege-process/encoding/glyphfont.rs"
+    ]
+    statement """
+        In truetyping output, individual letters within a word sit a pixel or two above where they belong — `this` with its `is` riding high, `doomed in any` with the `in` lifted — while the line as a whole is level. The user reported it after the substitution fixes landed, and it is visible on page 500 of the 836-page Gernet run (`~/Downloads/lege-review-2026-09-03/truetyping-vertical-wobble-p500.png`, rendered at 1400 px working height). The effect is amplified by how completely the dictionary deduplicates: every `e` on the page is the same outline, so the only variation left between them is their height, and the eye reads that as letters out of place. JBIG2 symbol mode, which shares the same shapes through the same clustering, does not show it; sym-unify is not the comparison, plain symbol mode is.
+        """
+    observed_at git:9925fb523be7d23bdf664b1aa66dd9ae44ecc1ee
+    method observation
+    watches [ "lege-process/encoding/glyphfont.rs", "lege-process/core/pdf_artifact.rs" ]
+    claim a-pixel-is-a-tenth-of-a-letter-at-this-height {
+        text """
+            The snap is one pixel of the *working* raster, so its visual weight depends on the render height: at the 1400 px this book was traced at, body type is about ten pixels, and a pixel is a tenth of the x-height.
+            """
+    }
+    claim jbig2-shares-the-shape-but-not-the-position {
+        text """
+            JBIG2 symbol mode carries each occurrence's own top-left on the page (`TextRegionSymbolInstance { x, y }`, jbig2enc-rust dictionary.rs:645) beside the shared symbol id, so a shared bitmap costs nothing in placement. Truetyping shares the shape *and* the position: an occurrence is drawn at its prototype's descent, not its own.
+            """
+    }
+    claim the-prototypes-descent-comes-from-one-page {
+        text """
+            `fix_new_prototype_metrics` fixes a prototype's descent once, as the lower median of its occurrences on the page that created it; every later page is measured against that page's estimate, and nothing revises it.
+            """
+    }
+    claim the-vertical-residual-is-thrown-away-or-turned-into-a-glyph {
+        text """
+            `GlyphDictionary::process_analysis` replaces an occurrence's measured bottom with its prototype's `descent`: a residual within `RISE_SNAP_PX` (1 px of the working raster) is snapped to zero, and a larger one becomes a *position variant*, a second glyph whose own descent was fixed by its first instance and which then absorbs later occurrences within `VARIANT_JOIN_PX` (also 1 px).
+            """
+    }
+    supersedes [ @lege-ecosystem.observation.truetyping-letters-ride-off-their-baseline/1 ]
+    verified_by [ @lege-ecosystem.evidence.stale-observation-requeue-20260908/1 ]
+}
+
 record lege-ecosystem.observation.truetyping-text-identity-moved-letters-off-their-baseline/1 : observation {
     title "Truetyping letters off their baseline came from rises measured against a tilted fit but drawn level, and from OCR text identities handing an occurrence another position variant's id"
-    state verified
+    state superseded
     scope [
         path "lege-process/core/pdf_artifact.rs",
         path "lege-process/encoding/glyphfont.rs"
@@ -297,6 +513,31 @@ record lege-ecosystem.observation.truetyping-text-identity-moved-letters-off-the
         @lege-ecosystem.observation.truetyping-letters-ride-off-their-baseline,
         @lege-ecosystem.work.truetyping-vertical-placement
     ]
+    author "GitHub Uploader"
+}
+
+record lege-ecosystem.observation.truetyping-text-identity-moved-letters-off-their-baseline/2 : observation {
+    title "Truetyping letters off their baseline came from rises measured against a tilted fit but drawn level, and from OCR text identities handing an occurrence another position variant's id"
+    state verified
+    scope [
+        path "lege-process/core/pdf_artifact.rs",
+        path "lege-process/encoding/glyphfont.rs"
+    ]
+    statement """
+        Two separate causes, both found on page 51 of crusadeswholesto0000lamb_1.pdf and both fixed in glyphfont.rs. (1) group_lines measured each glyph's rise against the Theil-Sen baseline under that glyph while pdf_artifact draws the whole line level at the fit's midpoint value, so on a tilted line, or any line whose fit a stray shape had tilted, glyphs at the ends were drawn off their ink by slope times distance from the midpoint: the runs of letters at line ends riding high or low. Rises are now measured from the one level height the line is drawn at, so position variants are exact by construction. (2) GlyphDictionary::text_identity kept, per shape, the glyph id that first carried a recognized text, and record_text remapped every later occurrence read as that text onto that id, even when the occurrence was a different position variant of the shape at a different baseline offset. Which variant claimed the text first depended on page order, so the same book showed different letters displaced from run to run (the o in every of three pixels low in one run, mont in Clermont raised in another). Primary-text occurrences now keep their own ids and a secondary text gets a text variant of exactly the occurrence's glyph; the regression test text_identities_keep_each_occurrence_at_its_own_baseline_offset covers both readings.
+        """
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    method instrumented
+    watches [ "lege-process/encoding/glyphfont.rs", "lege-process/core/pdf_artifact.rs" ]
+    review_after 2026-12-01
+    derived_from [
+        @lege-ecosystem.observation.truetyping-letters-ride-off-their-baseline,
+        @lege-ecosystem.work.truetyping-vertical-placement
+    ]
+    supersedes [
+        @lege-ecosystem.observation.truetyping-text-identity-moved-letters-off-their-baseline/1
+    ]
+    verified_by [ @lege-ecosystem.evidence.stale-observation-requeue-20260908/1 ]
     author "GitHub Uploader"
 }
 
@@ -341,7 +582,7 @@ record lege-ecosystem.observation.windows-ocr-200-page-benchmark-20260814/1 : ob
 
 record lege-ecosystem.observation.windows-ocr-200-page-benchmark-20260814/2 : observation {
     title "Windows OCR first-pass benchmark on a 200-page scanned book"
-    state verified
+    state superseded
     scope [
         path "lege-document-ocr/**",
         path "lege-gpu/**",
@@ -357,4 +598,24 @@ record lege-ecosystem.observation.windows-ocr-200-page-benchmark-20260814/2 : ob
     derived_from [ @lege-ecosystem.work.ocr-backend-scheduler/4 ]
     supersedes [ @lege-ecosystem.observation.windows-ocr-200-page-benchmark-20260814/1 ]
     verified_by [ @lege-ecosystem.evidence.windows-ocr-200-page-benchmark-20260814/1 ]
+}
+
+record lege-ecosystem.observation.windows-ocr-200-page-benchmark-20260814/3 : observation {
+    title "Windows OCR first-pass benchmark on a 200-page scanned book"
+    state verified
+    scope [
+        path "lege-document-ocr/**",
+        path "lege-gpu/**",
+        path "lege-ocr/**",
+        path "lege-pdf/read/**"
+    ]
+    statement """
+        On the Windows i7-13700H/RTX 4060 host, four Windows Runtime OCR document workers at a 12 MP page cap processed the 200-page sample in 42.161 seconds (4.744 pages/s), versus 184.148 seconds for one document worker and 727.013 seconds for four Paddle/WGPU workers. The integrated PP-OCRv6-tiny TensorRT path later processed the 10-page sample in 2.731 seconds during post-commit validation; conservative spacing correction improved normalized WER from 9.934% to 9.335% and CER from 2.024% to 1.964%, with a warm 2.225-second corrected run versus 2.134 seconds without correction.
+        """
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    method command
+    watches [ "lege-document-ocr/**", "lege-ocr/**", "lege-gpu/**", "lege-pdf/read/**" ]
+    derived_from [ @lege-ecosystem.work.ocr-backend-scheduler/4 ]
+    supersedes [ @lege-ecosystem.observation.windows-ocr-200-page-benchmark-20260814/2 ]
+    verified_by [ @lege-ecosystem.evidence.stale-observation-requeue-20260908/1 ]
 }

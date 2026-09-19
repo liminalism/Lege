@@ -3,7 +3,7 @@ project lege-ecosystem
 
 record lege-ecosystem.milestone.business-pdf-ocr-cli/1 : milestone {
     title "Business-grade PDF OCR CLI"
-    state active
+    state superseded
     scope [
         path "Cargo.toml",
         path "lege-document-ocr/**",
@@ -55,6 +55,80 @@ record lege-ecosystem.milestone.business-pdf-ocr-cli/1 : milestone {
             command "cargo check --workspace"
         }
     }
+    source {
+        kind internal
+        role origin
+        document "dedicated-ocr-plan-2026-08"
+        use """
+            Adopted architecture, backend policy, output stages, quality routing, and benchmark gates.
+            """
+    }
+}
+
+record lege-ecosystem.milestone.business-pdf-ocr-cli/2 : milestone {
+    title "Business-grade PDF OCR CLI"
+    state active
+    scope [
+        path "Cargo.toml",
+        path "lege-document-ocr/**",
+        path "lege-gpu/**",
+        path "lege-ocr/**",
+        path "lege-pdf/read/**",
+        path "lege-pdf/write/**"
+    ]
+    intent """
+        Deliver the approved local, resumable, backend-neutral PDF OCR pipeline and its staged searchable and structured outputs.
+        """
+    note """
+        Implement the approved dedicated OCR plan in production-sized milestones, preserving raw OCR
+        evidence and existing Lege product compatibility. As of 2026-09-08 all three work items are
+        completed and four of the five acceptance commands pass on Linux at HEAD 823d46dd. The one
+        failing check is core-cli, and it is a test defect rather than a product gap: see
+        lege-ecosystem.work.document-ocr-cli-native-text-backend-init for what has to be decided.
+        """
+    acceptance {
+        check backend-routing {
+            statement """
+                OCR backend routing and compatibility tests pass.
+                """
+            method command
+            command "cargo test -p lege-ocr"
+            verified_by [ @lege-ecosystem.evidence.ocr-backend-suite-20260908/1 ]
+        }
+        check core-cli {
+            statement """
+                The batch CLI and core pipeline tests pass.
+                """
+            method command
+            command "cargo test -p lege-document-ocr-cli"
+            verified_by [ @lege-ecosystem.evidence.document-ocr-cli-suite-20260908/1 ]
+        }
+        check core-exports {
+            statement """
+                Canonical JSON, text, HTML, and searchable-PDF export tests pass.
+                """
+            method command
+            command "cargo test -p lege-document-export"
+            verified_by [ @lege-ecosystem.evidence.document-export-tests-20260908/1 ]
+        }
+        check docir {
+            statement """
+                Versioned canonical document IR tests pass.
+                """
+            method command
+            command "cargo test -p lege-docir"
+            verified_by [ @lege-ecosystem.evidence.docir-suite-20260908/1 ]
+        }
+        check workspace-validation {
+            statement """
+                The workspace compiles on the implementation host.
+                """
+            method command
+            command "cargo check --workspace"
+            verified_by [ @lege-ecosystem.evidence.workspace-check-20260908/1 ]
+        }
+    }
+    supersedes [ @lege-ecosystem.milestone.business-pdf-ocr-cli/1 ]
     source {
         kind internal
         role origin

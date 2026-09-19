@@ -105,6 +105,55 @@ record lege-ecosystem.papercut.after-validating-the-exact-workspace-scratch/1 : 
     created_at 2026-08-14
 }
 
+record lege-ecosystem.papercut.akr-import-ingest-of-a-long-planning-document/1 : papercut {
+    title "akr import/ingest of a long planning document promotes essentially…"
+    state superseded
+    statement """
+        akr import/ingest of a long planning document promotes essentially every markdown heading to its own live work record, and attaches the wrong body text to it. The 2026-08 import of the five lege-codecs/jp2lam/decode-fix-plan documents produced 125 proposed work records, including pure report prose ('Executive verdict', 'Wall times (median of 5 runs)', 'Peak RSS, single representative run', 'Reproduce', 'Audit limitations', '1. Objective', '6. Quick reference') and negative guidance ('Do not start with', 'Two traps - do NOT fix these by loosening a check'). Many carried an unrelated adjacent paragraph as their intent: work.add-jp2decodestats, titled '3. Add Jp2DecodeStats', had the intent 'Do not start by optimizing MqDecoder merely because entropy decoding is normally expensive.' The result rendered a 1291-line ACTIVE-WORK.md that no one could use, and cleaning it up on 2026-09-08 took 125 separate akr abandon calls. Import should default to a review queue rather than live work records, should not promote a heading whose section body it cannot attribute, and should offer a bulk disposition (abandon/decline a list of keys with one reason) for undoing a bad import.
+        """
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    about "akr"
+    author "opus"
+    created_at 2026-09-08
+}
+
+record lege-ecosystem.papercut.akr-import-ingest-of-a-long-planning-document/2 : papercut {
+    title "akr import/ingest of a long planning document promotes essentially…"
+    state verified
+    statement """
+        CORRECTED 2026-09-08 after reading the importer's source at AKR 0dd6057. The original text of
+        this papercut said `akr import` "attached an unrelated adjacent paragraph as the intent". That
+        is wrong and is withdrawn: decode-optimize.md's section "## 3. Add `Jp2DecodeStats`" genuinely
+        begins with the paragraph "Do not start by optimizing `MqDecoder`...", and
+        import::extract_markdown takes the section body's first paragraph verbatim, exactly as
+        documented and as its tests pin. The importer was faithful; a discursive document's first
+        paragraph is simply a poor summary of its own heading.
+
+        What remains, and it is real: `akr import` drafts one record per heading with no threshold and
+        no review gate, and import::classify defaults every heading that matches none of its five
+        keyword rules to `work`. Its own comment gives the rationale — "a `proposed` work record asserts
+        nothing normative" — which is true about normativity and false about the work queue, because a
+        proposed work record is rendered in ACTIVE-WORK.md and reads as a live commitment. Importing the
+        five lege-codecs/jp2lam/decode-fix-plan documents in 2026-08 therefore minted 125 live proposed
+        work records, including pure report prose ("Executive verdict", "Wall times (median of 5 runs)",
+        "Peak RSS, single representative run", "Reproduce", "Audit limitations", "1. Objective",
+        "6. Quick reference") and negative guidance ("Do not start with", "Two traps - do NOT fix these
+        by loosening a check"). The result was a 1291-line ACTIVE-WORK.md nobody could use, and clearing
+        it took 125 separate `akr abandon` calls.
+
+        The sharp part is that AKR already ships the fix and `import` does not mention it: `akr ingest`
+        is a review-gated path with preview, per-candidate dispositions and apply. Nothing in
+        `akr import --help` points at it or warns what a discursive document will produce. Also worth
+        noting: the importer sets neither `watches` nor `scope` on anything it drafts, so it is not the
+        source of the mis-shaped watch globs seen in other bulk-ported ledgers.
+        """
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    about "akr"
+    supersedes [ @lege-ecosystem.papercut.akr-import-ingest-of-a-long-planning-document/1 ]
+    author "opus"
+    created_at 2026-09-08
+}
+
 record lege-ecosystem.papercut.akr-mcp-failed-to-connect-and-codegraph-mcp/1 : papercut {
     title "AKR MCP failed to connect and codegraph MCP timed out this session; akr…"
     state superseded
@@ -197,6 +246,18 @@ record lege-ecosystem.papercut.akr-revise-from-body-on-a-completed-work-record/1
     created_at 2026-08-25
 }
 
+record lege-ecosystem.papercut.akr-supersede-old-with-new-refuses-with-akr/1 : papercut {
+    title "'akr supersede <old> --with <new>' refuses with AKR-C032 when the…"
+    state verified
+    statement """
+        'akr supersede <old> --with <new>' refuses with AKR-C032 when the successor already exists and is sealed, even when that record genuinely is the successor: three stale observations here were superseded by existing verified observations and the tool insisted on 'propose a new replacement key first'. The workaround is 'akr revise <old> --state superseded', which retires the old head but records no edge to the successor, so the successor relationship is lost. Separately, that same revise silently returned an active milestone to 'proposed' (it printed the hint, but sealed verified observations keep their state under the identical operation, so the behaviour differs by record class).
+        """
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    about "akr"
+    author "opus"
+    created_at 2026-09-08
+}
+
 record lege-ecosystem.papercut.android-emulator-verification-initially-failed/1 : papercut {
     title "Android emulator verification initially failed because adb is installed…"
     state verified
@@ -229,6 +290,17 @@ record lege-ecosystem.papercut.both-fff-fixture-discovery-and-text-ocr/1 : paper
     about "FFF"
     author "codex"
     created_at 2026-08-13
+}
+
+record lege-ecosystem.papercut.build-linux-tensorrt-sh-first-used-cuda-home/1 : papercut {
+    title "build_linux_tensorrt.sh first used CUDA_HOME=/usr/local/cuda-12.9,…"
+    state verified
+    statement """
+        build_linux_tensorrt.sh first used CUDA_HOME=/usr/local/cuda-12.9, which is unset on this host; nvcc lives at /usr/local/cuda -> cuda-13.3. The script now prefers /usr/local/cuda/bin/nvcc over a stale CUDA_HOME.
+        """
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    author "grok-4.6"
+    created_at 2026-09-19
 }
 
 record lege-ecosystem.papercut.building-the-focused-lege-freya-gui-emitted/1 : papercut {
@@ -1131,6 +1203,17 @@ record lege-ecosystem.papercut.collated-208-papercuts-from-akr-evidence-intake/1
     created_at 2026-08-16
 }
 
+record lege-ecosystem.papercut.configuring-the-lean-turboocr-tensorrt-text/1 : papercut {
+    title "Configuring the lean TurboOCR TensorRT text worker on this Linux host…"
+    state verified
+    statement """
+        Configuring the lean TurboOCR TensorRT text worker on this Linux host failed until CUDACXX/CMAKE_CUDA_COMPILER pointed at /usr/local/cuda/bin/nvcc; nvcc is installed (CUDA 13.3) but not on the default PATH.
+        """
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    author "grok-4.6"
+    created_at 2026-09-19
+}
+
 record lege-ecosystem.papercut.creating-the-publication-work-record-first/1 : papercut {
     title "Creating the publication work record first failed because work requires…"
     state verified
@@ -1342,6 +1425,18 @@ record lege-ecosystem.papercut.knowledge-get-did-not-display-a-work-record-s/1 :
     created_at 2026-08-11
 }
 
+record lege-ecosystem.papercut.knowledge-get-requires-ref-not-id-passing-the/1 : papercut {
+    title "knowledge.get requires `ref`, not `id`. Passing the record key as `id`…"
+    state verified
+    statement """
+        knowledge.get requires `ref`, not `id`. Passing the record key as `id` fails with AKR-C003 even though search_tool's description talks about retrieving a record by reference.
+        """
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    about "akr"
+    author "grok-4.6"
+    created_at 2026-09-19
+}
+
 record lege-ecosystem.papercut.knowledge-papercut-failed-on-first-use-because/1 : papercut {
     title "knowledge.papercut failed on first use because this multi-namespace…"
     state verified
@@ -1400,6 +1495,30 @@ record lege-ecosystem.papercut.knowledge-start-returned-a-truncated-preview/1 : 
     about "akr"
     author "gpt-5.6"
     created_at 2026-08-15
+}
+
+record lege-ecosystem.papercut.lege-ecosystem-confirms-the-stale-by-tool/1 : papercut {
+    title "Lege-ecosystem confirms the stale-by-tool-version view gap: at the…"
+    state verified
+    statement """
+        Lege-ecosystem confirms the stale-by-tool-version view gap: at the start of the 2026-09-08 cleanup all seven docs/generated views carried 'tool: akr 0.4.0' while the installed binary was 0.5.0, and plain 'akr check' reported 'no diagnostics' throughout. Only rebuilding brought them current. A default check that never notices its own renderer is two versions behind undermines the guarantee that the generated docs are a faithful projection of the ledger.
+        """
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    about "akr"
+    author "opus"
+    created_at 2026-09-08
+}
+
+record lege-ecosystem.papercut.nothing-warns-when-a-scope-or-watch-glob/1 : papercut {
+    title "Nothing warns when a scope or watch glob matches no tracked file, so…"
+    state verified
+    statement """
+        Nothing warns when a scope or watch glob matches no tracked file, so the record it guards can never go stale. Nine of 302 distinct live scope/watch globs in this workspace match zero tracked files, including six pointing into lege-document-ocr/turboocr, a directory that exists on disk but is gitignored, so freshness for the TensorRT/WinSafe installer work records can never trip. Two more name files that were deleted or never existed (lege-process/**/tests/**, to-do-plans/auto-toc-plan.md). git ls-files -- ':(glob)<pattern>' finds all of them in under a second, so akr build could warn cheaply.
+        """
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    about "akr"
+    author "opus"
+    created_at 2026-09-08
 }
 
 record lege-ecosystem.papercut.pdf-verification-attempted-qpdf-check-but-qpdf/1 : papercut {

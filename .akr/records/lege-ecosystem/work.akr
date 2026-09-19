@@ -3,7 +3,7 @@ project lege-ecosystem
 
 record lege-ecosystem.decode-optimization/1 : work {
     title "Import lege-codecs/jp2lam/decode-fix-plan/decode-optimize.md"
-    state proposed
+    state completed
     intent """
         Disposition every durable claim of lege-codecs/jp2lam/decode-fix-plan/decode-optimize.md (docs/12-migration.md).
         """
@@ -13,318 +13,477 @@ record lege-ecosystem.decode-optimization/1 : work {
                 "3. Add `Jp2DecodeStats`" is dispositioned: promoted as lege-ecosystem.work.add-jp2decodestats or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check add-region-of-interest-decode-only-after-claim {
             statement """
                 "32. Add region-of-interest decode only after resolution reduction" is dispositioned: promoted as lege-ecosystem.work.add-region-of-interest-decode-only-after or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check approach-a-strided-vertical-kernels-claim {
             statement """
                 "Approach A — Strided vertical kernels" is dispositioned: promoted as lege-ecosystem.work.approach-a-strided-vertical-kernels or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check approach-b-tiled-transpose-claim {
             statement """
                 "Approach B — Tiled transpose" is dispositioned: promoted as lege-ecosystem.work.approach-b-tiled-transpose or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check approach-c-column-gather-into-reusable-lines-claim {
             statement """
                 "Approach C — Column gather into reusable lines" is dispositioned: promoted as lege-ecosystem.work.approach-c-column-gather-into-reusable-lines or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check component-level-parallelism-claim {
             statement """
                 "26. Component-level parallelism" is dispositioned: promoted as lege-ecosystem.work.component-level-parallelism or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check core-recommendation-claim {
             statement """
                 "39. Core recommendation" is dispositioned: promoted as lege-ecosystem.work.core-recommendation or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check current-decoder-pipeline-claim {
             statement """
                 "2. Current decoder pipeline" is dispositioned: promoted as lege-ecosystem.work.current-decoder-pipeline or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check dwt-row-and-column-parallelism-claim {
             statement """
                 "27. DWT row and column parallelism" is dispositioned: promoted as lege-ecosystem.work.dwt-row-and-column-parallelism or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check eliminate-temporary-full-image-allocation-for-claim {
             statement """
                 "9. Eliminate temporary full-image allocation for single-tile images" is dispositioned: promoted as lege-ecosystem.work.eliminate-temporary-full-image-allocation-for or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check fixed-point-9-7-is-a-later-experiment-claim {
             statement """
                 "19. Fixed-point 9/7 is a later experiment" is dispositioned: promoted as lege-ecosystem.work.fixed-point-9-7-is-a-later-experiment or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check full-resolution-correctness-claim {
             statement """
                 "34. Full-resolution correctness" is dispositioned: promoted as lege-ecosystem.work.full-resolution-correctness or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check full-resolution-path-claim {
             statement """
                 "Full-resolution path" is dispositioned: promoted as lege-ecosystem.work.full-resolution-path or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check fuse-operations-where-useful-claim {
             statement """
                 "18. Fuse operations where useful" is dispositioned: promoted as lege-ecosystem.work.fuse-operations-where-useful or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check fuse-tier-1-output-and-dequantization-claim {
             statement """
                 "11. Fuse Tier-1 output and dequantization" is dispositioned: promoted as lege-ecosystem.work.fuse-tier-1-output-and-dequantization or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check horizontal-lifting-kernels-claim {
             statement """
                 "15. Horizontal lifting kernels" is dispositioned: promoted as lege-ecosystem.work.horizontal-lifting-kernels or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check initial-target-results-claim {
             statement """
                 "37. Initial target results" is dispositioned: promoted as lege-ecosystem.work.initial-target-results or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check jp2lam-jpeg-2000-decoder-optimization-plan-claim {
             statement """
                 "jp2lam JPEG 2000 Decoder Optimization Plan" is dispositioned: promoted as lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check level-local-operation-claim {
             statement """
                 "17. Level-local operation" is dispositioned: promoted as lege-ecosystem.work.level-local-operation or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check material-needed-by-the-implementing-agent-claim {
             statement """
                 "38. Material needed by the implementing agent" is dispositioned: promoted as lege-ecosystem.work.material-needed-by-the-implementing-agent or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check milestone-1-decoder-attribution-claim {
             statement """
                 "Milestone 1 — Decoder attribution" is dispositioned: promoted as lege-ecosystem.work.milestone-1-decoder-attribution or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check milestone-2-remove-obvious-duplication-claim {
             statement """
                 "Milestone 2 — Remove obvious duplication" is dispositioned: promoted as lege-ecosystem.work.milestone-2-remove-obvious-duplication or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check milestone-3-fused-tier-1-output-claim {
             statement """
                 "Milestone 3 — Fused Tier-1 output" is dispositioned: promoted as lege-ecosystem.work.milestone-3-fused-tier-1-output or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check milestone-4-reduced-resolution-decode-claim {
             statement """
                 "Milestone 4 — Reduced-resolution decode" is dispositioned: promoted as lege-ecosystem.work.milestone-4-reduced-resolution-decode or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check milestone-5-9-7-kernel-optimization-claim {
             statement """
                 "Milestone 5 — 9/7 kernel optimization" is dispositioned: promoted as lege-ecosystem.work.milestone-5-9-7-kernel-optimization or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check milestone-6-tier-1-mq-optimization-claim {
             statement """
                 "Milestone 6 — Tier-1/MQ optimization" is dispositioned: promoted as lege-ecosystem.work.milestone-6-tier-1-mq-optimization or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check milestone-7-packed-renderer-output-claim {
             statement """
                 "Milestone 7 — Packed renderer output" is dispositioned: promoted as lege-ecosystem.work.milestone-7-packed-renderer-output or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check milestone-8-roi-decode-claim {
             statement """
                 "Milestone 8 — ROI decode" is dispositioned: promoted as lege-ecosystem.work.milestone-8-roi-decode or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check objective-claim {
             statement """
                 "1. Objective" is dispositioned: promoted as lege-ecosystem.work.objective or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check optimize-flaggrid-claim {
             statement """
                 "23. Optimize `FlagGrid`" is dispositioned: promoted as lege-ecosystem.work.optimize-flaggrid or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check optimize-mqdecoder-only-after-direct-attribution-claim {
             statement """
                 "24. Optimize `MqDecoder` only after direct attribution" is dispositioned: promoted as lege-ecosystem.work.optimize-mqdecoder-only-after-direct-attribution or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check performance-scoreboard-claim {
             statement """
                 "36. Performance scoreboard" is dispositioned: promoted as lege-ecosystem.work.performance-scoreboard or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check permanent-decoder-corpus-claim {
             statement """
                 "33. Permanent decoder corpus" is dispositioned: promoted as lege-ecosystem.work.permanent-decoder-corpus or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check produce-packed-output-directly-claim {
             statement """
                 "12. Produce packed output directly" is dispositioned: promoted as lege-ecosystem.work.produce-packed-output-directly or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check reduced-reconstruction-geometry-claim {
             statement """
                 "8. Reduced reconstruction geometry" is dispositioned: promoted as lege-ecosystem.requirement.reduced-reconstruction-geometry or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check reduced-resolution-correctness-claim {
             statement """
                 "35. Reduced-resolution correctness" is dispositioned: promoted as lege-ecosystem.work.reduced-resolution-correctness or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check remove-redundant-state-and-traversals-claim {
             statement """
                 "21. Remove redundant state and traversals" is dispositioned: promoted as lege-ecosystem.work.remove-redundant-state-and-traversals or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check renderer-integration-policy-claim {
             statement """
                 "28. Renderer integration policy" is dispositioned: promoted as lege-ecosystem.policy.renderer-integration-policy or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check replace-eager-packet-position-sorting-where-claim {
             statement """
                 "29. Replace eager packet-position sorting where worthwhile" is dispositioned: promoted as lege-ecosystem.policy.replace-eager-packet-position-sorting-where or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check replace-per-code-block-result-allocation-claim {
             statement """
                 "10. Replace per-code-block result allocation" is dispositioned: promoted as lege-ecosystem.work.replace-per-code-block-result-allocation or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check replace-the-merged-block-hashmap-claim {
             statement """
                 "30. Replace the merged-block `HashMap`" is dispositioned: promoted as lege-ecosystem.work.replace-the-merged-block-hashmap or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check replace-the-single-fixed-output-entry-point-claim {
             statement """
                 "5. Replace the single fixed-output entry point internally" is dispositioned: promoted as lege-ecosystem.work.replace-the-single-fixed-output-entry-point or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check required-profiles-claim {
             statement """
                 "4. Required profiles" is dispositioned: promoted as lege-ecosystem.work.required-profiles or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check resolution-aware-renderer-path-claim {
             statement """
                 "Resolution-aware renderer path" is dispositioned: promoted as lege-ecosystem.work.resolution-aware-renderer-path or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check resolution-selection-in-the-pdf-renderer-claim {
             statement """
                 "6. Resolution selection in the PDF renderer" is dispositioned: promoted as lege-ecosystem.work.resolution-selection-in-the-pdf-renderer or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check reusable-bounded-scratch-claim {
             statement """
                 "13. Reusable bounded scratch" is dispositioned: promoted as lege-ecosystem.work.reusable-bounded-scratch or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check reuse-per-packet-contribution-storage-claim {
             statement """
                 "31. Reuse per-packet contribution storage" is dispositioned: promoted as lege-ecosystem.policy.reuse-per-packet-contribution-storage or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check specialize-the-common-code-block-style-claim {
             statement """
                 "20. Specialize the common code-block style" is dispositioned: promoted as lege-ecosystem.work.specialize-the-common-code-block-style or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check tier-1-code-block-parallelism-claim {
             statement """
                 "25. Tier-1 code-block parallelism" is dispositioned: promoted as lege-ecosystem.work.tier-1-code-block-parallelism or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check tier-2-behavior-claim {
             statement """
                 "7. Tier-2 behavior" is dispositioned: promoted as lege-ecosystem.work.tier-2-behavior or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check treat-9-7-as-the-first-arithmetic-kernel-target-claim {
             statement """
                 "14. Treat 9/7 as the first arithmetic kernel target" is dispositioned: promoted as lege-ecosystem.work.treat-9-7-as-the-first-arithmetic-kernel-target or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check use-a-stripe-oriented-scratch-layout-claim {
             statement """
                 "22. Use a stripe-oriented scratch layout" is dispositioned: promoted as lege-ecosystem.work.use-a-stripe-oriented-scratch-layout or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check vertical-lifting-layout-claim {
             statement """
                 "16. Vertical lifting layout" is dispositioned: promoted as lege-ecosystem.work.vertical-lifting-layout or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
     }
     source {
@@ -335,7 +494,7 @@ record lege-ecosystem.decode-optimization/1 : work {
 
 record lege-ecosystem.decode-optimization-audit/1 : work {
     title "Import lege-codecs/jp2lam/decode-fix-plan/NEXT-audit-phases.md"
-    state proposed
+    state completed
     intent """
         Disposition every durable claim of lege-codecs/jp2lam/decode-fix-plan/NEXT-audit-phases.md (docs/12-migration.md).
         """
@@ -345,42 +504,63 @@ record lege-ecosystem.decode-optimization-audit/1 : work {
                 "Do not start with" is dispositioned: promoted as lege-ecosystem.work.do-not-start-with or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check next-audit-phases-after-structural-dwt-openjpeg-claim {
             statement """
                 "Next audit phases (after structural DWT + OpenJPEG baseline)" is dispositioned: promoted as lege-ecosystem.work.next-audit-phases-after-structural-dwt-openjpeg or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check pdf-renderer-follow-ups-outside-pure-codec-claim {
             statement """
                 "PDF renderer follow-ups (outside pure codec)" is dispositioned: promoted as lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check phase-3-fused-packed-finalization-done-2026-08-claim {
             statement """
                 "Phase 3 — Fused packed finalization — DONE (2026-08-05)" is dispositioned: promoted as lege-ecosystem.work.phase-3-fused-packed-finalization-done-2026-08 or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check phase-4-tier-1-tier-2-refinement-claim {
             statement """
                 "Phase 4 — Tier-1 / Tier-2 refinement" is dispositioned: promoted as lege-ecosystem.work.phase-4-tier-1-tier-2-refinement or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check phase-5-true-windowed-line-based-roi-claim {
             statement """
                 "Phase 5 — True windowed / line-based ROI" is dispositioned: promoted as lege-ecosystem.work.phase-5-true-windowed-line-based-roi or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check phase-6-isa-pgo-optional-gpu-claim {
             statement """
                 "Phase 6 — ISA / PGO / optional GPU" is dispositioned: promoted as lege-ecosystem.work.phase-6-isa-pgo-optional-gpu or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
     }
     source {
@@ -391,7 +571,7 @@ record lege-ecosystem.decode-optimization-audit/1 : work {
 
 record lege-ecosystem.decode-optimization-handoff/1 : work {
     title "Import lege-codecs/jp2lam/decode-fix-plan/HANDOFF-remaining-jpx-decode.md"
-    state proposed
+    state completed
     intent """
         Disposition every durable claim of lege-codecs/jp2lam/decode-fix-plan/HANDOFF-remaining-jpx-decode.md (docs/12-migration.md).
         """
@@ -401,96 +581,144 @@ record lege-ecosystem.decode-optimization-handoff/1 : work {
                 "2. Degenerate 1-sample DWT split — ~8 files  [RESOLVED 2026-07-22 — root cause was a K/INV_K scaling on a one-row resolution in the *vertical* pass; see the update near the top. The "relaxing the bound drifts" note below is accurate but the cause is now fixed.]" is dispositioned: promoted as lege-ecosystem.requirement.degenerate-1-sample-dwt-split-8-files-resolved or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check end-to-end-oracle-whole-page-vs-pdfium-claim {
             statement """
                 "End-to-end oracle (whole page vs PDFium)" is dispositioned: promoted as lege-ecosystem.work.end-to-end-oracle-whole-page-vs-pdfium or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check handoff-remaining-jp2lam-jpeg-2000-decode-gaps-claim {
             statement """
                 "Handoff: remaining `jp2lam` JPEG 2000 decode gaps" is dispositioned: promoted as lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check implementation-update-claim {
             statement """
                 "2026-07-19 implementation update" is dispositioned: promoted as lege-ecosystem.policy.implementation-update or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check later-update-section-2-resolved-and-sub-8-bit-claim {
             statement """
                 "2026-07-22 (later) update — Section 2 RESOLVED, and sub-8-bit precision added" is dispositioned: promoted as lege-ecosystem.policy.later-update-section-2-resolved-and-sub-8-bit or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check orientation-environment-claim {
             statement """
                 "0. Orientation & environment" is dispositioned: promoted as lege-ecosystem.requirement.orientation-environment or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check post-precinct-census-2026-07-19-from-pdf-claim {
             statement """
                 "7. Post-precinct census (2026-07-19, from pdf-renderer) — new residuals" is dispositioned: promoted as lege-ecosystem.work.post-precinct-census-2026-07-19-from-pdf or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check precincts-sop-eph-10-files-largest-remaining-claim {
             statement """
                 "1. Precincts / SOP / EPH — ~10 files (LARGEST remaining class)" is dispositioned: promoted as lege-ecosystem.requirement.precincts-sop-eph-10-files-largest-remaining or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check quick-reference-claim {
             statement """
                 "6. Quick reference" is dispositioned: promoted as lege-ecosystem.work.quick-reference or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check run-the-census-2nd-arg-max-files-omit-for-all-claim {
             statement """
                 "2. Run the census (2nd arg = max files; omit for all 424). ~250s per ~34 files." is dispositioned: promoted as lege-ecosystem.work.run-the-census-2nd-arg-max-files-omit-for-all or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check the-census-extraction-tool-your-main-instrument-claim {
             statement """
                 "The census / extraction tool (your main instrument)" is dispositioned: promoted as lege-ecosystem.policy.the-census-extraction-tool-your-main-instrument or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check tpsot-tnsot-non-conformant-tile-parts-2-files-claim {
             statement """
                 "4. `TPsot==TNsot` non-conformant tile-parts — ~2 files  [RESOLVED 2026-07-22 — the assembly-bug diagnosis in this section is WRONG; real cause was a missing `inalign` byte-realignment. See the 2026-07-22 update near the top.]" is dispositioned: promoted as lege-ecosystem.policy.tpsot-tnsot-non-conformant-tile-parts-2-files or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check two-traps-do-not-fix-these-by-loosening-a-check-claim {
             statement """
                 "5. Two traps — do NOT "fix" these by loosening a check" is dispositioned: promoted as lege-ecosystem.work.two-traps-do-not-fix-these-by-loosening-a-check or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check update-sections-3-and-4-resolved-the-4-claim {
             statement """
                 "2026-07-22 update — Sections 3 and 4 RESOLVED (the §4 diagnosis below was WRONG)" is dispositioned: promoted as lege-ecosystem.requirement.update-sections-3-and-4-resolved-the-4 or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check what-was-already-fixed-do-not-redo-claim {
             statement """
                 "What was already fixed (do not redo)" is dispositioned: promoted as lege-ecosystem.work.what-was-already-fixed-do-not-redo or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
         check zero-length-code-block-contribution-truncated-claim {
             statement """
                 "3. Zero-length code-block contribution (truncated streams) — ~6 files" is dispositioned: promoted as lege-ecosystem.work.zero-length-code-block-contribution-truncated or declined with evidence
                 """
             method manual
+            verified_by [
+                @lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1
+            ]
         }
     }
     source {
@@ -717,9 +945,12 @@ record lege-ecosystem.work.about-image-pdf-agent-tool/1 : work {
 
 record lege-ecosystem.work.add-jp2decodestats/1 : work {
     title "3. Add `Jp2DecodeStats`"
-    state proposed
+    state abandoned
     intent """
         Do not start by optimizing `MqDecoder` merely because entropy decoding is normally expensive. The current profile identifies irreversible reconstruction, but Tier-1, dequantization, DWT, finalization, and copying are still combined too broadly.
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -732,9 +963,12 @@ record lege-ecosystem.work.add-jp2decodestats/1 : work {
 
 record lege-ecosystem.work.add-region-of-interest-decode-only-after/1 : work {
     title "32. Add region-of-interest decode only after resolution reduction"
-    state proposed
+    state abandoned
     intent """
         A PDF image is often clipped or only partly visible. JPEG 2000 precincts and code-blocks make partial spatial decode possible, but inverse DWT requires support samples beyond the exact output rectangle.
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -747,9 +981,12 @@ record lege-ecosystem.work.add-region-of-interest-decode-only-after/1 : work {
 
 record lege-ecosystem.work.approach-a-strided-vertical-kernels/1 : work {
     title "Approach A — Strided vertical kernels"
-    state proposed
+    state abandoned
     intent """
         Process several adjacent columns together so each cache line supplies useful samples for multiple independent columns.
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -762,9 +999,12 @@ record lege-ecosystem.work.approach-a-strided-vertical-kernels/1 : work {
 
 record lege-ecosystem.work.approach-b-tiled-transpose/1 : work {
     title "Approach B — Tiled transpose"
-    state proposed
+    state abandoned
     intent """
         For each working-resolution rectangle:
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -777,9 +1017,12 @@ record lege-ecosystem.work.approach-b-tiled-transpose/1 : work {
 
 record lege-ecosystem.work.approach-c-column-gather-into-reusable-lines/1 : work {
     title "Approach C — Column gather into reusable lines"
-    state proposed
+    state abandoned
     intent """
         Copy one or several columns into aligned line buffers, transform contiguously, then scatter them back.
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -869,9 +1112,12 @@ record lege-ecosystem.work.auto-width-about-dialog/1 : work {
 
 record lege-ecosystem.work.component-level-parallelism/1 : work {
     title "26. Component-level parallelism"
-    state proposed
+    state abandoned
     intent """
         Before inverse MCT, grayscale/RGB/CMYK component reconstruction is independent.
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -884,9 +1130,12 @@ record lege-ecosystem.work.component-level-parallelism/1 : work {
 
 record lege-ecosystem.work.core-recommendation/1 : work {
     title "39. Core recommendation"
-    state proposed
+    state abandoned
     intent """
         The optimization should not begin as “add SIMD to the decoder.”
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -899,9 +1148,12 @@ record lege-ecosystem.work.core-recommendation/1 : work {
 
 record lege-ecosystem.work.current-decoder-pipeline/1 : work {
     title "2. Current decoder pipeline"
-    state proposed
+    state abandoned
     intent """
         The current top-level path is:
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -914,12 +1166,15 @@ record lege-ecosystem.work.current-decoder-pipeline/1 : work {
 
 record lege-ecosystem.work.do-not-start-with/1 : work {
     title "Do not start with"
-    state proposed
+    state abandoned
     intent """
         - MQ symbol micro-opts
         - Nested Rayon inside page-parallel renders without a global permit
         - ROI as “decode full, crop”
         - Changing 9/7 rounding for speed without OpenJPEG differential tests
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -933,11 +1188,86 @@ record lege-ecosystem.work.do-not-start-with/1 : work {
     }
 }
 
+record lege-ecosystem.work.document-ocr-cli-native-text-backend-init/1 : work {
+    title "Decide whether a native-text-only OCR job may run without an available OCR backend"
+    state proposed
+    scope [
+        path "lege-document-ocr/cli/src/main.rs",
+        path "lege-document-ocr/crates/pipeline/src/lib.rs"
+    ]
+    intent """
+        cargo test -p lege-document-ocr-cli fails on any non-Windows host, and it is the one unsatisfied
+        acceptance check on the Business-grade PDF OCR CLI milestone.
+
+        WHAT HAPPENS: tests::native_text_batch_exports_and_resumes_without_invoking_ocr builds a PDF with
+        a real text layer and runs the batch with BackendArg::WinocrLegacy, deliberately choosing a
+        backend that is unavailable so that reaching OCR at all would fail loudly. But
+        DocumentProcessor::new initializes the backend eagerly
+        (lege-document-ocr/crates/pipeline/src/lib.rs:129-133, initialize_backend at line 1018), so
+        construction returns UnavailableBackend("winocr-legacy") before any page is classified and
+        run_batch panics at lege-document-ocr/cli/src/main.rs:849. The test was added in 27900f0e, after
+        b6c6ae48 made initialization eager, so it has never passed off Windows.
+
+        WHY THIS IS NOT A ONE-LINE FIX, AND WHAT THE NEXT SESSION MUST DECIDE. There is a product
+        question underneath the failing test: should a document whose pages all carry a native text layer
+        require a working OCR backend at all? Three answers, and they are not equivalent:
+
+        (a) Keep eager initialization and mark the test #[cfg(target_os = "windows")]. Smallest diff.
+        Costs the assertion on Linux, where it becomes vacuous, and leaves the underlying behaviour
+        (a text-only job refusing to start on a host with no OCR backend) in place.
+
+        (b) Make backend initialization lazy, so the error surfaces only when a page actually needs OCR.
+        This is what the test's name asserts and what the vestigial DocumentProcessor::backend() ->
+        Result signature at lib.rs:180 was shaped for. The obstacle is that new() also uses the resolved
+        backend to rewrite config.backend, config.tensorrt_paddle, the model identity and the selection
+        warning; config.backend then feeds configuration_hash(), which is the resume/checkpoint identity.
+        Deferring initialization means the recorded backend is the requested one rather than the resolved
+        one, which silently changes when a resumed job is considered to have the same configuration. That
+        seam has to be designed, not patched.
+
+        (c) Keep eager initialization but let it degrade: construct successfully with no backend, record
+        the reason, and fail only at the point of use. Same checkpoint-identity question as (b), plus
+        selected_backend_name() and the Debug impl need a defined answer when there is no backend.
+
+        Nothing here is urgent -- the shipped Windows path is unaffected -- but the milestone cannot be
+        completed until it is settled, and the check is left deliberately unsatisfied rather than
+        weakened.
+        """
+}
+
+record lege-ecosystem.work.document-ocr-layout-detection/1 : work {
+    title "Layout detection (PP-DocLayout-M) in the standalone document OCR tool"
+    state completed
+    intent """
+        Integrate PP-DocLayout-M layout detection into the standalone lege-ocr document pipeline (embedded model, --layout-model override, --no-layout opt-out): drop page furniture (header/footer/number), map doc/paragraph titles to Title/Heading regions, emit placeholder text for content images, and keep the mapping open to every other layout class. Verify end to end on a real PDF from ~/Downloads.
+        """
+    acceptance {
+        check layout-e2e {
+            statement """
+                Batch OCR on a ~/Downloads PDF produces text/markdown with page furniture removed, chapter titles as headings, and image placeholders
+                """
+            method command
+            verified_by [ @lege-ecosystem.evidence.document-ocr-layout-e2e-2026-09-19/1 ]
+        }
+        check layout-unit-tests {
+            statement """
+                Pipeline, export, and docir unit tests pass, including layout mapping tests
+                """
+            method command
+            verified_by [ @lege-ecosystem.evidence.document-ocr-layout-unit-tests/1 ]
+        }
+    }
+    part_of [ @lege-ecosystem.milestone.business-pdf-ocr-cli ]
+}
+
 record lege-ecosystem.work.dwt-row-and-column-parallelism/1 : work {
     title "27. DWT row and column parallelism"
-    state proposed
+    state abandoned
     intent """
         Within one large component:
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -950,9 +1280,12 @@ record lege-ecosystem.work.dwt-row-and-column-parallelism/1 : work {
 
 record lege-ecosystem.work.eliminate-temporary-full-image-allocation-for/1 : work {
     title "9. Eliminate temporary full-image allocation for single-tile images"
-    state proposed
+    state abandoned
     intent """
         The current `decode_jp2()` allocates the final image before decoding and then creates a complete temporary tile image, which is copied into it.
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -1037,7 +1370,7 @@ record lege-ecosystem.work.embed-freya-about-documents/1 : work {
 
 record lege-ecosystem.work.end-to-end-oracle-whole-page-vs-pdfium/1 : work {
     title "End-to-end oracle (whole page vs PDFium)"
-    state proposed
+    state abandoned
     intent """
         `pdf-renderer/tools/pdfium-diff` (a separate crate, needs `libpdfium`;
         `D:\Rust-projects\pdfium-port-plan\pdfium.dll` is present):
@@ -1049,6 +1382,9 @@ record lege-ecosystem.work.end-to-end-oracle-whole-page-vs-pdfium/1 : work {
         Use this to confirm a decode fix actually clears the page against PDFium. **Do
         not run the full corpus sweep** (11k files, ~2 h) — the owner runs that; single
         files are seconds.
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -1091,9 +1427,12 @@ record lege-ecosystem.work.evidence-broker-ocr-provider/1 : work {
 
 record lege-ecosystem.work.fixed-point-9-7-is-a-later-experiment/1 : work {
     title "19. Fixed-point 9/7 is a later experiment"
-    state proposed
+    state abandoned
     intent """
         A fixed-point inverse 9/7 implementation may improve speed and reproducibility, but it will probably change some output samples.
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -1203,9 +1542,12 @@ record lege-ecosystem.work.fold-automatic-toc-into-ocr/2 : work {
 
 record lege-ecosystem.work.full-resolution-correctness/1 : work {
     title "34. Full-resolution correctness"
-    state proposed
+    state abandoned
     intent """
         For the legacy `decode_jp2()` path require:
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -1218,12 +1560,15 @@ record lege-ecosystem.work.full-resolution-correctness/1 : work {
 
 record lege-ecosystem.work.full-resolution-path/1 : work {
     title "Full-resolution path"
-    state proposed
+    state abandoned
     intent """
         * JPX decode below 220 ms without internal parallelism.
         * JPX decode below 150–180 ms with a modest thread budget.
         * At least 40–50% reduction in decoder-owned peak intermediate memory.
         * Byte-identical legacy output.
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -1239,9 +1584,12 @@ record lege-ecosystem.work.full-resolution-path/1 : work {
 
 record lege-ecosystem.work.fuse-operations-where-useful/1 : work {
     title "18. Fuse operations where useful"
-    state proposed
+    state abandoned
     intent """
         Potential fusions to benchmark:
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -1254,9 +1602,12 @@ record lege-ecosystem.work.fuse-operations-where-useful/1 : work {
 
 record lege-ecosystem.work.fuse-tier-1-output-and-dequantization/1 : work {
     title "11. Fuse Tier-1 output and dequantization"
-    state proposed
+    state abandoned
     intent """
         The current irreversible flow is:
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -1303,12 +1654,7 @@ record lege-ecosystem.work.glyph-font-text-output/1 : work {
             """
     }
     depends_on [ @lege-ecosystem-perf.renderer.gray8-draws-take-the-rgb8-fast-paths ]
-    implements [
-        @lege-ecosystem.decision.a-fold-may-not-change-a-letters-counters,
-        @lege-ecosystem.decision.sideways-pages-are-turned-upright-with-rotate,
-        @lege-ecosystem.decision.truetyping-banks-fonts-and-respects-a-bilevel-source,
-        @lege-ecosystem.decision.truetyping-is-the-default-pdf-text-format
-    ]
+    implements [ @lege-ecosystem.decision.jbig2-is-the-default-pdf-text-format-again ]
 }
 
 record lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps/1 : work {
@@ -1338,9 +1684,12 @@ record lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps/1 : wo
 
 record lege-ecosystem.work.horizontal-lifting-kernels/1 : work {
     title "15. Horizontal lifting kernels"
-    state proposed
+    state abandoned
     intent """
         Horizontal rows are naturally contiguous. Implement specialized kernels for:
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -1353,9 +1702,12 @@ record lege-ecosystem.work.horizontal-lifting-kernels/1 : work {
 
 record lege-ecosystem.work.initial-target-results/1 : work {
     title "37. Initial target results"
-    state proposed
+    state abandoned
     intent """
         Use the current measured values as the first scoreboard:
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -1367,33 +1719,80 @@ record lege-ecosystem.work.initial-target-results/1 : work {
 }
 
 record lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan/1 : work {
-    title "jp2lam JPEG 2000 Decoder Optimization Plan"
+    title "jp2lam decoder optimisation: the remaining tail"
     state proposed
+    scope [
+        path "lege-codecs/jp2lam/src/**",
+        path "lege-pdf/render/crates/pdf-image/src/jpx.rs"
+    ]
     intent """
-        > Implementation update (2026-07-20): stage profiling, encoder-SIMD reuse,
-        > single-tile copy removal, Tier-1 scratch reuse, native reduced-resolution
-        > decode, direct packed renderer output, reusable decoder sessions, and
-        > request-scoped worker budgets are implemented. See
-        > `llm-docs/decode-optimization-results-2026-07-20.md`.
-        >
-        > Implementation update (2026-08-06): the 2026-08-05 audit's Phase 0-3 items
-        > are already landed in code and the imported lege-ecosystem-perf audit
-        > records are stale relative to it: packed Rgbx8/Bgra8 output formats,
-        > lattice-aligned nonzero tile origins routed through the optimized inverse
-        > DWT (reconstruct::lattice_aligned_origin), banded 9/7 inverse vertical
-        > reconstruction (VERTICAL_BAND_COLS), Tier-1-fused irreversible dequant
-        > with no separate full coefficient plane, multi-tile reduced-resolution
-        > decode, thread-local Jp2Decoder sessions in the PDF renderer, and ROI
-        > packet retention above the selected resolution. Phase 4 partially landed
-        > this session: Tier-1 code-block decode now uses weighted
-        > largest-processing-time (LPT) scheduling over a shared atomic work cursor,
-        > with one persistent Tier1Scratch per pool worker via rayon::broadcast
-        > (src/decode/t1.rs::decode_codeblocks_parallel). Output is bit-exact vs the
-        > serial path (decode::tests::serial_and_budgeted_tier1_are_byte_identical;
-        > full lib suite 339 passed). Genuinely remaining and profiling-gated: SIMD
-        > dequant/store and final-sign-sweep elimination (Phase 4), true
-        > windowed-ROI subband IDWT that avoids full-plane decode+crop (Phase 5),
-        > and AVX2/NEON + PGO + optional GPU (Phase 6).
+        The single live record for the jp2lam JPEG 2000 decoder optimisation effort. It
+        replaces the ~125 work records the 2026-08 bulk import created from the five
+        planning documents in lege-codecs/jp2lam/decode-fix-plan/; those were abandoned on
+        2026-09-08 as mis-imported markdown headings. The documents themselves stay on disk
+        and remain the detailed authority.
+
+        Status re-verified against lege-codecs/jp2lam/src on 2026-09-08 (repo HEAD 823d46dd).
+
+        LANDED, confirmed in current source:
+        - Jp2DecodeStats stage attribution (src/decode/stats.rs).
+        - Renderer-oriented decode API: DecodeRequest / DecodeResolution / DecodeOutputFormat /
+          Jp2Decoder, plus decode_into() writing straight into caller memory (src/decode/mod.rs).
+        - Reduced-resolution decode, including multi-tile (select_reduce_levels,
+          reduced_axis_bounds in src/decode/mod.rs).
+        - Tier-1-fused dequantization with no separate full coefficient plane
+          (src/decode/reconstruct.rs, src/decode/t1.rs).
+        - Fused packed output with byte-identity tests, and a direct sYCC 4:2:0 kernel
+          (reconstruct_fused_packed_into in src/decode/reconstruct.rs).
+        - Banded vertical 9/7 reconstruction at VERTICAL_BAND_COLS = 128 and coarse-chunk
+          horizontal scratch (src/dwt/irrev97.rs).
+        - Lattice-aligned nonzero tile-origin routing into the optimized inverse DWT
+          (lattice_aligned_origin in src/decode/reconstruct.rs).
+        - Weighted largest-processing-time Tier-1 scheduling over a shared work cursor with
+          one persistent Tier1Scratch per pool worker (decode_codeblocks_parallel in
+          src/decode/t1.rs), bit-exact against the serial path.
+        - Tier-2 allocation hygiene: range-based precinct block membership, streaming
+          PacketStats instead of retained packet records, try_reserve from header-derived
+          counts (src/decode/t2.rs).
+        - Renderer integration: thread-local persistent Jp2Decoder, DecodeConcurrency::Budgeted,
+          DecodeResolution::AtLeast from the device footprint
+          (lege-pdf/render/crates/pdf-image/src/jpx.rs).
+        - All four correctness classes of HANDOFF-remaining-jpx-decode.md (precincts/SOP/EPH,
+          degenerate 1-sample DWT, zero-length contribution for the named repros, TPsot==TNsot
+          tail) were resolved before the 2026-08-05 audit was written.
+
+        NEGATIVE RESULT, do not re-land as-is: the wide f32x8 fused ICT/clamp/interleave SIMD
+        experiment (commit c2c8dbf1) was performance-neutral and byte-identical because fat-LTO
+        LLVM already vectorizes the scalar loop; the stage is memory-bandwidth-bound.
+
+        GENUINELY OPEN, in the order the plan itself recommends:
+        1. True windowed / line-based ROI decode (plan Milestone 8, audit section 10,
+           NEXT-audit-phases Phase 5). Today ROI runs the full inverse DWT per tile and clips
+           while packing; see the comment at src/decode/mod.rs around line 421. The interim
+           region-sized destination allocation landed, the windowed subband IDWT with halo did
+           not.
+        2. Tier-2 cleanups: the merged-block HashMap<(usize,usize), MergedBlock> at
+           src/decode/t2.rs:268 is still a HashMap rather than a dense index, and
+           build_packet_positions still eagerly sorts packet positions instead of iterating a
+           progression order.
+        3. Tier-1 style specialization, compact FlagGrid words and stripe-major coefficient
+           layout (plan sections 20-24). Only the stripe_is_clean fast path exists
+           (src/tier1/flags.rs).
+        4. Architecture-specific SIMD and PGO (plan Milestone 5 remainder,
+           NEXT-audit-phases Phase 6). src/simd/x86/mod.rs still carries an empty AVX2 shell:
+           "No AVX2 overrides are installed." No PGO build configuration and no GPU backend.
+        5. Small renderer follow-ups: Rgbx8/Bgra8 exist in the codec but jpx.rs maps only
+           Gray8/GrayA8/Rgb8/Rgba8/Cmyk8, so a 4-byte-pixel GPU compositing path still swizzles.
+        6. sYCC 4:2:2 and 4:4:4 direct kernels (only 4:2:0 landed).
+        7. Tile-part QCC component quantization override is still rejected outright
+           (MARKER_QCC in src/j2k/decode_markers.rs), one of the post-precinct census residuals.
+
+        WHAT THE NEXT SESSION MUST DECIDE FIRST: item 1 and item 4 are the two the plan itself
+        called the hardest and deferred, and both are profiling-gated. The detailed
+        DWT/Tier-1/final-pack flamegraph predates the 128-column vertical band and the
+        direct-output change, so refresh stage attribution with the current decode_benchmark
+        before picking any hot-loop target. Items 2, 3, 5, 6 and 7 are independently landable
+        without that.
         """
     source {
         kind legacy
@@ -1425,9 +1824,12 @@ record lege-ecosystem.work.layout-vertical-bands-ocr-horizontal/1 : work {
 
 record lege-ecosystem.work.level-local-operation/1 : work {
     title "17. Level-local operation"
-    state proposed
+    state abandoned
     intent """
         Do not run kernels over unused full-image regions.
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -1550,9 +1952,12 @@ record lege-ecosystem.work.make-automatic-toc-explicit/1 : work {
 
 record lege-ecosystem.work.material-needed-by-the-implementing-agent/1 : work {
     title "38. Material needed by the implementing agent"
-    state proposed
+    state abandoned
     intent """
         The supplied files expose the decoder orchestration, Tier-1 loops, Tier-2 packet handling, and reconstruction pipeline. The exact low-level optimization work also requires:
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -1565,9 +1970,12 @@ record lege-ecosystem.work.material-needed-by-the-implementing-agent/1 : work {
 
 record lege-ecosystem.work.milestone-1-decoder-attribution/1 : work {
     title "Milestone 1 — Decoder attribution"
-    state proposed
+    state abandoned
     intent """
         Implement:
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -1580,9 +1988,12 @@ record lege-ecosystem.work.milestone-1-decoder-attribution/1 : work {
 
 record lege-ecosystem.work.milestone-2-remove-obvious-duplication/1 : work {
     title "Milestone 2 — Remove obvious duplication"
-    state proposed
+    state abandoned
     intent """
         Implement:
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -1595,9 +2006,12 @@ record lege-ecosystem.work.milestone-2-remove-obvious-duplication/1 : work {
 
 record lege-ecosystem.work.milestone-3-fused-tier-1-output/1 : work {
     title "Milestone 3 — Fused Tier-1 output"
-    state proposed
+    state abandoned
     intent """
         Implement:
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -1610,9 +2024,12 @@ record lege-ecosystem.work.milestone-3-fused-tier-1-output/1 : work {
 
 record lege-ecosystem.work.milestone-4-reduced-resolution-decode/1 : work {
     title "Milestone 4 — Reduced-resolution decode"
-    state proposed
+    state abandoned
     intent """
         Implement:
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -1625,9 +2042,12 @@ record lege-ecosystem.work.milestone-4-reduced-resolution-decode/1 : work {
 
 record lege-ecosystem.work.milestone-5-9-7-kernel-optimization/1 : work {
     title "Milestone 5 — 9/7 kernel optimization"
-    state proposed
+    state abandoned
     intent """
         Implement:
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -1640,9 +2060,12 @@ record lege-ecosystem.work.milestone-5-9-7-kernel-optimization/1 : work {
 
 record lege-ecosystem.work.milestone-6-tier-1-mq-optimization/1 : work {
     title "Milestone 6 — Tier-1/MQ optimization"
-    state proposed
+    state abandoned
     intent """
         Implement:
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -1655,9 +2078,12 @@ record lege-ecosystem.work.milestone-6-tier-1-mq-optimization/1 : work {
 
 record lege-ecosystem.work.milestone-7-packed-renderer-output/1 : work {
     title "Milestone 7 — Packed renderer output"
-    state proposed
+    state abandoned
     intent """
         Implement:
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -1670,9 +2096,12 @@ record lege-ecosystem.work.milestone-7-packed-renderer-output/1 : work {
 
 record lege-ecosystem.work.milestone-8-roi-decode/1 : work {
     title "Milestone 8 — ROI decode"
-    state proposed
+    state abandoned
     intent """
         Implement only after reduced-resolution decode is stable and measured.
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -1721,9 +2150,12 @@ record lege-ecosystem.work.mit-license-readme-about/1 : work {
 
 record lege-ecosystem.work.next-audit-phases-after-structural-dwt-openjpeg/1 : work {
     title "Next audit phases (after structural DWT + OpenJPEG baseline)"
-    state proposed
+    state abandoned
     intent """
         Prerequisite reading:
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -1736,9 +2168,12 @@ record lege-ecosystem.work.next-audit-phases-after-structural-dwt-openjpeg/1 : w
 
 record lege-ecosystem.work.objective/1 : work {
     title "1. Objective"
-    state proposed
+    state abandoned
     intent """
         Optimize jp2lam’s decoder for two related but distinct uses:
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -1840,7 +2275,7 @@ record lege-ecosystem.work.ocr-backend-scheduler/3 : work {
 
 record lege-ecosystem.work.ocr-backend-scheduler/4 : work {
     title "Implement backend routing and cross-document OCR scheduling"
-    state active
+    state completed
     scope [ path "lege-document-ocr/**", path "lege-gpu/**", path "lege-ocr/**" ]
     intent """
         Add backend capability APIs, Windows AI and legacy routing, Paddle v6 model adapters, bounded ROI batching, and compact recognition output.
@@ -1947,7 +2382,7 @@ record lege-ecosystem.work.ocr-correction-exports/3 : work {
 
 record lege-ecosystem.work.ocr-correction-exports/4 : work {
     title "Implement correction and staged document exports"
-    state active
+    state completed
     scope [ path "lege-document-ocr/**" ]
     intent """
         Add evidence-preserving English OCR correction and production exporters for the approved staged formats.
@@ -1962,6 +2397,7 @@ record lege-ecosystem.work.ocr-correction-exports/4 : work {
                 """
             method command
             command "cargo test -p lege-document-export"
+            verified_by [ @lege-ecosystem.evidence.document-export-tests-20260908/1 ]
         }
     }
     part_of [ @lege-ecosystem.milestone.business-pdf-ocr-cli/1 ]
@@ -2037,7 +2473,7 @@ record lege-ecosystem.work.ocr-pdf-intake/1 : work {
 
 record lege-ecosystem.work.ocr-pdf-intake/2 : work {
     title "Add OCR-aware PDF intake and preservation"
-    state active
+    state completed
     scope [ path "lege-pdf/read/**", path "lege-pdf/write/**" ]
     intent """
         Classify native, scanned, hybrid, and render-required pages; expose direct scan extraction and source-preserving searchable-PDF overlay behavior.
@@ -2052,6 +2488,7 @@ record lege-ecosystem.work.ocr-pdf-intake/2 : work {
                 """
             method command
             command "cargo test -p lege-pdf-read -p lege-pdf-write"
+            verified_by [ @lege-ecosystem.evidence.pdf-intake-writer-tests-20260908/1 ]
         }
     }
     part_of [ @lege-ecosystem.milestone.business-pdf-ocr-cli/1 ]
@@ -2254,9 +2691,12 @@ record lege-ecosystem.work.open-source-monorepo-relaunch/1 : work {
 
 record lege-ecosystem.work.optimize-flaggrid/1 : work {
     title "23. Optimize `FlagGrid`"
-    state proposed
+    state abandoned
     intent """
         The implementing agent needs the actual `FlagGrid` implementation before choosing changes. Measure:
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -2269,9 +2709,12 @@ record lege-ecosystem.work.optimize-flaggrid/1 : work {
 
 record lege-ecosystem.work.optimize-mqdecoder-only-after-direct-attribution/1 : work {
     title "24. Optimize `MqDecoder` only after direct attribution"
-    state proposed
+    state abandoned
     intent """
         The MQ arithmetic state is inherently serial within one codeword segment. SIMD is unlikely to help materially inside one MQ stream.
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -2379,9 +2822,12 @@ record lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec/1 : work {
 
 record lege-ecosystem.work.performance-scoreboard/1 : work {
     title "36. Performance scoreboard"
-    state proposed
+    state abandoned
     intent """
         Record, per image:
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -2394,9 +2840,12 @@ record lege-ecosystem.work.performance-scoreboard/1 : work {
 
 record lege-ecosystem.work.permanent-decoder-corpus/1 : work {
     title "33. Permanent decoder corpus"
-    state proposed
+    state abandoned
     intent """
         Create a jp2lam-specific corpus containing:
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -2409,9 +2858,12 @@ record lege-ecosystem.work.permanent-decoder-corpus/1 : work {
 
 record lege-ecosystem.work.phase-3-fused-packed-finalization-done-2026-08/1 : work {
     title "Phase 3 — Fused packed finalization — DONE (2026-08-05)"
-    state proposed
+    state abandoned
     intent """
         **Landed:**
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -2424,9 +2876,12 @@ record lege-ecosystem.work.phase-3-fused-packed-finalization-done-2026-08/1 : wo
 
 record lege-ecosystem.work.phase-4-tier-1-tier-2-refinement/1 : work {
     title "Phase 4 — Tier-1 / Tier-2 refinement"
-    state proposed
+    state abandoned
     intent """
         **Goal:** better core utilization once DWT memory traffic is no longer dominant.
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -2439,9 +2894,12 @@ record lege-ecosystem.work.phase-4-tier-1-tier-2-refinement/1 : work {
 
 record lege-ecosystem.work.phase-5-true-windowed-line-based-roi/1 : work {
     title "Phase 5 — True windowed / line-based ROI"
-    state proposed
+    state abandoned
     intent """
         **Goal:** single-tile ROI cost proportional to ROI + filter halo, not full tile.
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -2454,9 +2912,12 @@ record lege-ecosystem.work.phase-5-true-windowed-line-based-roi/1 : work {
 
 record lege-ecosystem.work.phase-6-isa-pgo-optional-gpu/1 : work {
     title "Phase 6 — ISA / PGO / optional GPU"
-    state proposed
+    state abandoned
     intent """
         Only after Phases 3–4:
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -2469,11 +2930,14 @@ record lege-ecosystem.work.phase-6-isa-pgo-optional-gpu/1 : work {
 
 record lege-ecosystem.work.post-precinct-census-2026-07-19-from-pdf/1 : work {
     title "7. Post-precinct census (2026-07-19, from pdf-renderer) — new residuals"
-    state proposed
+    state abandoned
     intent """
         After the precinct/SOP/EPH + degenerate-DWT round landed, a fresh full-corpus
         `jpxcensus` (451 blank docs, 1224 JPX streams) decodes **1207 (98.6%)**. The 17
         residuals, for this session:
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -2786,9 +3250,12 @@ record lege-ecosystem.work.preserve-jbig2-smask-text-plane/1 : work {
 
 record lege-ecosystem.work.produce-packed-output-directly/1 : work {
     title "12. Produce packed output directly"
-    state proposed
+    state abandoned
     intent """
         The PDF renderer ultimately needs 8-bit output. It should not receive three or four planar `Vec<i32>` components only to scale and interleave them later.
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -2801,7 +3268,7 @@ record lege-ecosystem.work.produce-packed-output-directly/1 : work {
 
 record lege-ecosystem.work.public-monorepo-reupload/1 : work {
     title "Prepare the public Lege monorepo reupload"
-    state active
+    state superseded
     intent """
         Prepare LegeApp/Lege for the approved public force cutover, with canonical in-tree codecs, redirect-only sister repositories, and release-ready metadata.
         """
@@ -2817,9 +3284,32 @@ record lege-ecosystem.work.public-monorepo-reupload/1 : work {
     }
 }
 
+record lege-ecosystem.work.public-monorepo-reupload/2 : work {
+    title "Prepare the public Lege monorepo reupload"
+    state completed
+    intent """
+        Prepare LegeApp/Lege for the approved public force cutover, with canonical in-tree codecs, redirect-only sister repositories, and release-ready metadata.
+        """
+    claim release {
+        text """
+            The reupload preparation is done and the release numbers have since moved on: the
+            application was 1.4.76 and jbig2enc-rust 0.5.4 when this record was written, and at
+            2026-09-08 they are 1.5.1 (lege-process/Cargo.toml) and 0.6.0
+            (lege-codecs/jbig2enc-rust/Cargo.toml). The repository-URL migration to
+            github.com/liminalism/lege landed in 3afb72a4 across Cargo.toml, the READMEs, the
+            AppStream metadata and the cutover script; AGPL-3.0 LICENSE and the per-subtree NOTICE
+            are at the repo root; and README's canonical-codec-source section states the in-tree
+            codec policy. The remaining public-cutover verification (clean-clone Linux and Windows
+            smoke tests, secret scanning of the publication clone, pinned model bootstrap) is not
+            part of this record; it is tracked by lege-ecosystem.work.open-source-monorepo-relaunch.
+            """
+    }
+    supersedes [ @lege-ecosystem.work.public-monorepo-reupload/1 ]
+}
+
 record lege-ecosystem.work.quick-reference/1 : work {
     title "6. Quick reference"
-    state proposed
+    state abandoned
     intent """
         | Class | ~N | Error signature (substring) | Reject site | Repro obj |
         |---|---:|---|---|---|
@@ -2827,6 +3317,9 @@ record lege-ecosystem.work.quick-reference/1 : work {
         | Degenerate DWT | 8 | `decomposition levels … exceed DWT limit` | `decode_markers.rs:~462` + `dwt/` | Neo-Confucianism obj9 |
         | Zero-length contribution | 6 | `zero byte length` | `t2.rs:~481` | (dump via census) |
         | TPsot==TNsot tail | 2 | `data after the tile's packet sequence` | `t2.rs:~171` + `mod.rs` assembly | Prussian obj15 |
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -2844,9 +3337,12 @@ record lege-ecosystem.work.quick-reference/1 : work {
 
 record lege-ecosystem.work.reduced-resolution-correctness/1 : work {
     title "35. Reduced-resolution correctness"
-    state proposed
+    state abandoned
     intent """
         Compare against an independent decoder invoked at the same JPEG 2000 reduction level.
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -2859,9 +3355,12 @@ record lege-ecosystem.work.reduced-resolution-correctness/1 : work {
 
 record lege-ecosystem.work.remove-redundant-state-and-traversals/1 : work {
     title "21. Remove redundant state and traversals"
-    state proposed
+    state abandoned
     intent """
         Validate the following experimentally:
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -2925,9 +3424,12 @@ record lege-ecosystem.work.renderer-efficiency-deferrals/1 : work {
 
 record lege-ecosystem.work.replace-per-code-block-result-allocation/1 : work {
     title "10. Replace per-code-block result allocation"
-    state proposed
+    state abandoned
     intent """
         The Tier-1 implementation currently allocates:
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -2940,9 +3442,12 @@ record lege-ecosystem.work.replace-per-code-block-result-allocation/1 : work {
 
 record lege-ecosystem.work.replace-the-merged-block-hashmap/1 : work {
     title "30. Replace the merged-block `HashMap`"
-    state proposed
+    state abandoned
     intent """
         The full band and code-block geometry is known when `TilePacketDecoder` is constructed.
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -2955,9 +3460,12 @@ record lege-ecosystem.work.replace-the-merged-block-hashmap/1 : work {
 
 record lege-ecosystem.work.replace-the-single-fixed-output-entry-point/1 : work {
     title "5. Replace the single fixed-output entry point internally"
-    state proposed
+    state abandoned
     intent """
         Keep:
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -2970,9 +3478,12 @@ record lege-ecosystem.work.replace-the-single-fixed-output-entry-point/1 : work 
 
 record lege-ecosystem.work.required-profiles/1 : work {
     title "4. Required profiles"
-    state proposed
+    state abandoned
     intent """
         Capture separate flamegraphs and hardware counters for:
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -2985,13 +3496,16 @@ record lege-ecosystem.work.required-profiles/1 : work {
 
 record lege-ecosystem.work.resolution-aware-renderer-path/1 : work {
     title "Resolution-aware renderer path"
-    state proposed
+    state abandoned
     intent """
         * JPX page compiled total below 150–200 ms initially.
         * Longer-term target near 100 ms when one-level reduction is available.
         * MRC compiled total below 180–220 ms.
         * No material deterioration in PDFium differential severity.
         * No whole-document throughput regression.
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -3008,9 +3522,12 @@ record lege-ecosystem.work.resolution-aware-renderer-path/1 : work {
 
 record lege-ecosystem.work.resolution-selection-in-the-pdf-renderer/1 : work {
     title "6. Resolution selection in the PDF renderer"
-    state proposed
+    state abandoned
     intent """
         The renderer should calculate the image’s destination footprint before JPX decode.
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -3023,9 +3540,12 @@ record lege-ecosystem.work.resolution-selection-in-the-pdf-renderer/1 : work {
 
 record lege-ecosystem.work.reusable-bounded-scratch/1 : work {
     title "13. Reusable bounded scratch"
-    state proposed
+    state abandoned
     intent """
         `Jp2Decoder` should retain:
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -3038,12 +3558,15 @@ record lege-ecosystem.work.reusable-bounded-scratch/1 : work {
 
 record lege-ecosystem.work.run-the-census-2nd-arg-max-files-omit-for-all/1 : work {
     title "2. Run the census (2nd arg = max files; omit for all 424). ~250s per ~34 files."
-    state proposed
+    state abandoned
     intent """
         DUMP="<some-writable-dir>"; mkdir -p "$DUMP"
         JPXDUMPDIR="$DUMP" cargo run -q -p pdf-cli --example jpxcensus -- /tmp/blankwin.txt 60
         # Dumped streams land in $DUMP/failjpx_<sig>.jp2 — opj_dump / opj_decompress them.
         ```
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -3059,9 +3582,12 @@ record lege-ecosystem.work.run-the-census-2nd-arg-max-files-omit-for-all/1 : wor
 
 record lege-ecosystem.work.specialize-the-common-code-block-style/1 : work {
     title "20. Specialize the common code-block style"
-    state proposed
+    state abandoned
     intent """
         The general Tier-1 loop carries runtime decisions for:
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -3074,7 +3600,7 @@ record lege-ecosystem.work.specialize-the-common-code-block-style/1 : work {
 
 record lege-ecosystem.work.thorough-ppocrv6-performance-and-output-preflight/1 : work {
     title "Audit thorough PP-OCRv6 throughput without sacrificing accuracy"
-    state completed
+    state superseded
     scope [
         path "lege-document-ocr/scripts/benchmarks/**",
         path "lege-gpu/src/vision/**",
@@ -3129,11 +3655,78 @@ record lege-ecosystem.work.thorough-ppocrv6-performance-and-output-preflight/1 :
     }
 }
 
+record lege-ecosystem.work.thorough-ppocrv6-performance-and-output-preflight/2 : work {
+    title "Audit thorough PP-OCRv6 throughput without sacrificing accuracy"
+    state completed
+    scope [
+        path "lege-document-ocr/scripts/benchmarks/**",
+        path "lege-gpu/src/vision/**",
+        path "lege-ocr/**",
+        path "lege-process/core/main.rs",
+        path "lege-process/pipeline/epub_pipeline.rs"
+    ]
+    intent """
+        Profile the current thorough EPUB OCR path after the embedded PP-OCRv6 upgrade, retain V6 detector quality policy and all thorough recognition/recovery behavior, land only optimizations whose structured OCR output is unchanged or whose accuracy is independently demonstrated, and prevent an unwritable destination from wasting a full OCR run.
+        """
+    note """
+        Scope corrected 2026-09-08: `lege-process/**/tests/**` matched no tracked file and never had —
+        lege-process keeps no `tests/` directory, only `lege-process/scripts/test-paddle-ocr-gpu.sh` —
+        so it was a scope that could not be verified against anything. Dropped rather than guessed at,
+        since the other five paths already name what this work touched. Surfaced by AKR 0.5.0's
+        extension of AKR-G023 to completed records; it had been invisible since the record was written.
+        """
+    acceptance {
+        check focused-tests {
+            statement """
+                Focused lege-ocr, lege-gpu vision, and EPUB pipeline tests pass.
+                """
+            method command
+            verified_by [ @lege-ecosystem.evidence.thorough-ppocrv6-focused-tests-20260822/1 ]
+        }
+        check generation-resolution-policy {
+            statement """
+                Tests retain detector limit_side 960 for PP-OCRv5 and 1280 for PP-OCRv6.
+                """
+            method command
+            verified_by [ @lege-ecosystem.evidence.thorough-ppocrv6-focused-tests-20260822/1 ]
+        }
+        check output-preflight {
+            statement """
+                An unwritable EPUB destination is rejected or safely redirected before page processing begins, with a focused regression test.
+                """
+            method command
+            verified_by [ @lege-ecosystem.evidence.epub-output-preflight-cli-20260822/1 ]
+        }
+        check quality-preserved {
+            statement """
+                Optimized thorough OCR emits identical structured text and geometry on the fixed benchmark inputs, or any intentional difference has ground-truth evidence that it is not a regression.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.thorough-ppocrv6-throughput-quality-20260822/1
+            ]
+        }
+        check throughput-measured {
+            statement """
+                A representative release-mode benchmark attributes stage time and records the before/after throughput result; performance code is changed only when the result is faster without a quality loss.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.thorough-ppocrv6-throughput-quality-20260822/1
+            ]
+        }
+    }
+    supersedes [ @lege-ecosystem.work.thorough-ppocrv6-performance-and-output-preflight/1 ]
+}
+
 record lege-ecosystem.work.tier-1-code-block-parallelism/1 : work {
     title "25. Tier-1 code-block parallelism"
-    state proposed
+    state abandoned
     intent """
         After reducing per-block allocation, decode independent code-blocks concurrently.
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -3146,9 +3739,12 @@ record lege-ecosystem.work.tier-1-code-block-parallelism/1 : work {
 
 record lege-ecosystem.work.tier-2-behavior/1 : work {
     title "7. Tier-2 behavior"
-    state proposed
+    state abandoned
     intent """
         A reduced-resolution decoder still needs to parse packet headers sufficiently to locate packet bodies and preserve tag-tree state, but it need not retain or Tier-1-decode high-resolution code-block data.
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -3161,9 +3757,12 @@ record lege-ecosystem.work.tier-2-behavior/1 : work {
 
 record lege-ecosystem.work.treat-9-7-as-the-first-arithmetic-kernel-target/1 : work {
     title "14. Treat 9/7 as the first arithmetic kernel target"
-    state proposed
+    state abandoned
     intent """
         The earlier flamegraph attributed about 34% of the original JPX page to irreversible 9/7 reconstruction. With renderer sampling reduced to approximately 35 ms, reconstruction is likely now the largest individual decoder stage.
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -3226,10 +3825,13 @@ record lege-ecosystem.work.truetyping-vertical-placement/1 : work {
 
 record lege-ecosystem.work.two-traps-do-not-fix-these-by-loosening-a-check/1 : work {
     title "5. Two traps — do NOT \"fix\" these by loosening a check"
-    state proposed
+    state abandoned
     intent """
         Both were tried this session and produce **silent mis-decodes**, which are
         worse than the current clean (B3-flagged) failures:
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -3243,9 +3845,12 @@ record lege-ecosystem.work.two-traps-do-not-fix-these-by-loosening-a-check/1 : w
 
 record lege-ecosystem.work.use-a-stripe-oriented-scratch-layout/1 : work {
     title "22. Use a stripe-oriented scratch layout"
-    state proposed
+    state abandoned
     intent """
         JPEG 2000 Tier-1 processes four-row stripes. The current coefficient vectors are row-major while the inner scan repeatedly visits the four vertical samples at each `x`.
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -3258,9 +3863,12 @@ record lege-ecosystem.work.use-a-stripe-oriented-scratch-layout/1 : work {
 
 record lege-ecosystem.work.vertical-lifting-layout/1 : work {
     title "16. Vertical lifting layout"
-    state proposed
+    state abandoned
     intent """
         Vertical DWT is likely less cache-friendly because samples are separated by the full image stride.
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy
@@ -3315,7 +3923,7 @@ record lege-ecosystem.work.viewer-movement-and-reliability/1 : work {
 
 record lege-ecosystem.work.what-was-already-fixed-do-not-redo/1 : work {
     title "What was already fixed (do not redo)"
-    state proposed
+    state abandoned
     intent """
         `ftyp` brand (`jpx ` major / `jp2 ` or `jpx ` compat), QCC per-component
         quantization, non-LRCP progression, TNsot-advisory multi-tile-part, raw J2K
@@ -3323,6 +3931,9 @@ record lege-ecosystem.work.what-was-already-fixed-do-not-redo/1 : work {
         `floor→ceil` decomposition bound, PLT/PLM/TLM length markers ignored, and
         `pclr`+`cmap` palette (added in parallel — verify it still holds if you touch
         color). See `pdf-renderer/DEFERRED.md` corpus item 1 for the full writeup.
+        """
+    note """
+        Mis-imported ledger noise, abandoning the record and not the work. The 2026-08 bulk import of lege-codecs/jp2lam/decode-fix-plan/*.md promoted every markdown heading to its own work record and frequently attached an unrelated adjacent paragraph as the intent (work.add-jp2decodestats carried the 'do not start by optimizing MqDecoder' paragraph), so these records were misleading as well as redundant, and together they made ACTIVE-WORK.md unreadable. The real, current status of the jp2lam decoder optimisation is kept in lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan (Phase 0-3 landed, Phase 4 partial, Phase 5-6 open) and lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09; the residual decode gaps are in lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps, lege-ecosystem.work.zero-length-code-block-contribution-truncated and lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec. The source plan documents remain on disk under lege-codecs/jp2lam/decode-fix-plan/ and are the authority.
         """
     source {
         kind legacy

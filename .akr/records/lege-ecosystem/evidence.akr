@@ -368,6 +368,29 @@ record lege-ecosystem.evidence.automatic-toc-workspace-regression/1 : evidence {
         """
 }
 
+record lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1 : evidence {
+    title "jp2lam decode-fix-plan import fully dispositioned"
+    state verified
+    result pass
+    method manual
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    summary """
+        Ledger-cleanup pass of 2026-09-08 dispositioned every claim imported from the five
+        lege-codecs/jp2lam/decode-fix-plan documents. Each claim had already been promoted to
+        its own work record by the 2026-08 bulk import. Each promoted record was then reviewed
+        against lege-codecs/jp2lam/src at HEAD and given a terminal disposition: the four still
+        actionable ones were kept live (lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps,
+        lege-ecosystem.work.zero-length-code-block-contribution-truncated,
+        lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec and
+        lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09); their real status was
+        consolidated into lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan, which now
+        names what landed, the fused-pack SIMD negative result, and the seven genuinely open items;
+        and the remaining 125 records, which the importer had produced from report prose and section
+        headings (often pairing a heading with an unrelated adjacent paragraph as its intent), were
+        abandoned with that reason recorded on each. No claim was left undispositioned.
+        """
+}
+
 record lege-ecosystem.evidence.det-limit-side-sweep-20260822/1 : evidence {
     title "Detector limit_side 1280 beats 960 and 1600 for PP-OCRv6 on wgpu"
     state verified
@@ -556,6 +579,54 @@ record lege-ecosystem.evidence.djvu-subprocess-license-surface-audit-20260822/1 
         """
 }
 
+record lege-ecosystem.evidence.docir-suite-20260908/1 : evidence {
+    title "lege-docir canonical IR suite passes at 823d46dd"
+    state verified
+    result pass
+    method command
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    command "cargo test -p lege-docir"
+    summary """
+        2 passed, 0 failed, on Linux at repo HEAD 823d46dd during the 2026-09-08 ledger-cleanup pass.
+        """
+}
+
+record lege-ecosystem.evidence.document-export-tests-20260908/1 : evidence {
+    title "Correction and staged exporter tests pass at 823d46dd"
+    state verified
+    result pass
+    method command
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    command "cargo test -p lege-document-export"
+    summary """
+        2 passed, 0 failed. exports_core_formats_atomically covers the eleven staged formats
+        (JSON, text, HTML, DOCX, ALTO, PageXML, Markdown, LaTeX, XLSX, CSV, hOCR) written
+        atomically, and rasterized_searchable_pdf_contains_a_text_layer round-trips a rasterized
+        searchable PDF's text layer back through lege_pdf_read. Evidence-preserving English
+        correction lives alongside them in lege-document-ocr/crates/pipeline/src/correction.rs.
+        Run on Linux at repo HEAD 823d46dd during the 2026-09-08 ledger-cleanup pass.
+        """
+}
+
+record lege-ecosystem.evidence.document-ocr-cli-suite-20260908/1 : evidence {
+    title "lege-document-ocr-cli suite fails on Linux at 823d46dd"
+    state verified
+    result fail
+    method command
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    command "cargo test -p lege-document-ocr-cli"
+    summary """
+        2 passed, 1 failed. tests::native_text_batch_exports_and_resumes_without_invoking_ocr
+        panics in run_batch with "backend `winocr-legacy` is not available in this build or on this
+        platform" (lege-document-ocr/cli/src/main.rs:849). The test deliberately selects an
+        unavailable backend to prove a native-text PDF never reaches OCR, but
+        DocumentProcessor::new initializes the backend eagerly
+        (lege-document-ocr/crates/pipeline/src/lib.rs:129-133), so construction fails before any
+        page is classified. The test was added in 27900f0e, after b6c6ae48 made initialization
+        eager, and has therefore never passed on a non-Windows host.
+        """
+}
+
 record lege-ecosystem.evidence.document-ocr-component-tests-20260815/1 : evidence {
     title "Document OCR component test suites passed during installer review"
     state verified
@@ -592,6 +663,30 @@ record lege-ecosystem.evidence.document-ocr-installer-smoke-20260815/2 : evidenc
         The single setup executable installed offline into a clean directory, passed the installed auto-backend doctor, and every payload file matched the packaged SHA-256 manifest.
         """
     supersedes [ @lege-ecosystem.evidence.document-ocr-installer-smoke-20260815/1 ]
+}
+
+record lege-ecosystem.evidence.document-ocr-layout-e2e-2026-09-19/1 : evidence {
+    title "Layout detection verified end to end on ~/Downloads PDFs"
+    state verified
+    result pass
+    method command
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    command "target/debug-fast/lege-ocr batch ~/Downloads/<pdf> --output /tmp/lege-layout-* --format text,markdown,json --backend auto"
+    summary """
+        lege-ocr batch on Quelles (46p native + --force-ocr) and Fabulous Feasts (256p): running heads/numbers removed, chapter titles as ## headings, 239 image placeholders; --no-layout baseline confirms the delta
+        """
+}
+
+record lege-ecosystem.evidence.document-ocr-layout-unit-tests/1 : evidence {
+    title "Layout detection unit tests pass"
+    state verified
+    result pass
+    method command
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    command "cargo test -p lege-document-pipeline -p lege-document-export -p lege-docir -p lege-document-batch"
+    summary """
+        24 pipeline + 3 export + 2 docir unit tests pass, including 7 new layout mapping/grouping/resolution tests
+        """
 }
 
 record lege-ecosystem.evidence.document-ocr-lzma2-installer-build-20260815/1 : evidence {
@@ -1147,6 +1242,18 @@ record lege-ecosystem.evidence.lege-process-about-gpu-focused-checks-2026-08-09/
         """
 }
 
+record lege-ecosystem.evidence.linux-document-ocr-auto-tensorrt-20260919/1 : evidence {
+    title "Linux lege-ocr auto uses TensorRT and exports text/markdown"
+    state verified
+    result pass
+    method command
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    command "target/debug-fast/lege-ocr doctor --backend auto --json && target/debug-fast/lege-ocr batch lege-pdf/render/crates/pdf-chaos-tests/tests/fixtures/hello_world.pdf --output /tmp/lege-ocr-linux-trt-smoke --format text,markdown --backend auto --force-ocr"
+    summary """
+        Linux lege-ocr auto selected tensorrt-paddle (nvidia_hardware_present true), completed a force-OCR PDF job, and wrote .txt and .md outputs.
+        """
+}
+
 record lege-ecosystem.evidence.linux-gui-backend-policy-tests/1 : evidence {
     title "Linux GUI backend policy tests"
     state verified
@@ -1185,6 +1292,30 @@ record lege-ecosystem.evidence.linux-gui-stale-wayland-fallback/1 : evidence {
         """
 }
 
+record lege-ecosystem.evidence.linux-ocr-medieval-list-txt-markdown-20260919/1 : evidence {
+    title "Medieval PDF list exported to text and markdown on Linux TensorRT"
+    state verified
+    result pass
+    method command
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    command "target/debug-fast/lege-ocr batch <5 PDFs from /home/dk/Downloads/list.txt> --output /home/dk/Downloads/lege-ocr-medieval --format text,markdown --backend auto --resume"
+    summary """
+        Five of six list.txt PDFs produced .txt and .md under /home/dk/Downloads/lege-ocr-medieval via TensorRT auto; the Miller/Hatcher file was 0 bytes and skipped.
+        """
+}
+
+record lege-ecosystem.evidence.linux-tensorrt-text-worker-build-20260919/1 : evidence {
+    title "Linux turboocr-text TensorRT 11 worker build and probe"
+    state verified
+    result pass
+    method command
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    command "./lege-document-ocr/scripts/build_linux_tensorrt.sh && lege-document-ocr/turboocr/build-linux-trt-text/turboocr-text --probe --det models/det_tiny.onnx --rec models/rec_tiny.onnx --dict models/keys_tiny.txt --rec-batch 8"
+    summary """
+        The lean TurboOCR text worker built on Linux against CUDA 13.3 and TensorRT 11, then passed a real CUDA detector+recognizer probe on the RTX 4060 Laptop GPU.
+        """
+}
+
 record lege-ecosystem.evidence.mit-license-notice-audit/1 : evidence {
     title "MIT main license and separate notices audited"
     state verified
@@ -1218,6 +1349,18 @@ record lege-ecosystem.evidence.native-pdf-agent-tool-plan/1 : evidence {
     artifact "lege-pdf/render/docs/agent-pdf-tool-plan.md"
     summary """
         The plan documents the existing crate foundation, measured baseline, agent protocol, bounded JSON/JSONL contract, phased implementation, limitations, and validation criteria.
+        """
+}
+
+record lege-ecosystem.evidence.ocr-backend-suite-20260908/1 : evidence {
+    title "lege-ocr backend and routing suite passes at 823d46dd"
+    state verified
+    result pass
+    method command
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    command "cargo test -p lege-ocr"
+    summary """
+        69 passed, 0 failed, on Linux at repo HEAD 823d46dd during the 2026-09-08 ledger-cleanup pass.
         """
 }
 
@@ -1427,6 +1570,26 @@ record lege-ecosystem.evidence.packaged-tensorrt-layout-discovery-20260815/1 : e
     artifact "lege-ocr/src/engine_tensorrt.rs"
     summary """
         Both TensorRT module tests passed, including discovery of bin, models, and runtime DLL directories in the packaged layout.
+        """
+}
+
+record lege-ecosystem.evidence.pdf-intake-writer-tests-20260908/1 : evidence {
+    title "PDF intake, classification and writer tests pass at 823d46dd"
+    state verified
+    result pass
+    method command
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    command "cargo test -p lege-pdf-read -p lege-pdf-write"
+    summary """
+        All lege-pdf-read and lege-pdf-write suites pass (61 in lege-pdf-write, plus the
+        lege-pdf-read unit and integration suites; cargo exited 0 with no failures). The intake
+        and classification tests the acceptance check names are present and passing:
+        intake_reports_clean_recovered_and_malformed_documents,
+        intake_distinguishes_empty_password_encryption_from_password_required and
+        simple_full_page_jpeg_is_exposed_for_direct_scan_intake in
+        lege-pdf/read/tests/document_read.rs. PageSourceKind, the native/rendered page
+        classification the record asks for, is in lege-document-ocr/crates/docir/src/lib.rs.
+        Run on Linux at repo HEAD 823d46dd during the 2026-09-08 ledger-cleanup pass.
         """
 }
 
@@ -1640,6 +1803,38 @@ record lege-ecosystem.evidence.smask-layout-regressions/1 : evidence {
     command "cargo test -q -p lege-pdf-read session::tests && cargo test -q -p lege --lib layout_correct::tests && cargo check -p lege --bin lege"
     summary """
         Five session mask-qualification tests and eight layout-correction tests passed; the Lege binary check completed.
+        """
+}
+
+record lege-ecosystem.evidence.stale-observation-requeue-20260908/1 : evidence {
+    title "2026-09-08 re-verification of the stale observation queue"
+    state verified
+    result pass
+    method manual
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    summary """
+        The ledger-cleanup pass of 2026-09-08 re-read every observation the review queue had
+        marked stale against the source at HEAD 823d46dd, and re-observed the ones that still
+        hold. Confirmed still true: symbol mode is still the Jbig2Config default with a bit-exact
+        generic opt-out (lege-codecs/jbig2enc-rust/src/encode/structs.rs:178,243); the three inert
+        jbig2enc config fields still have no reader outside structs.rs and match_tolerance is
+        still gated behind text_refine (encode/document.rs:451); the ten TrueTyping/halftone review
+        fixes landed in 32abd79d and 12e08f7a and are present (color_processing.rs:14,24,
+        glyphfont.rs:118,194, pdf_artifact.rs:388, truetype_writer.rs:222); all four PP-OCRv6 WGPU
+        blockers remain fixed (lege-gpu/src/vision/onnx/load.rs:65,255, lower.rs:93,126); the
+        jbig2enc-py round-trip tests still exist (tests/test_jbig2enc.py:320,330,352) though the
+        wheel moved 0.5.4 -> 0.6.0 in 1f0b36f9; the Windows OCR benchmark's measured code path
+        still exists; DocLayout is still bypassed by perform_page_rgb_ocr (lege-process/ocr/fast.rs:52);
+        clean_page_for_mrc is unchanged (lege-process/core/clean_gray.rs:364,412); the parallel
+        glyph-dictionary probe is intact (glyphfont.rs:387,1295,2372); and per-occurrence baseline
+        handling with its regression test is in place (glyphfont.rs:3007,1618,4087). The absolute
+        benchmark numbers inside those statements were not re-measured, only the mechanisms they
+        describe. Three observations did not survive and were superseded rather than re-observed:
+        truetyping-letters-ride-off-their-baseline (the RISE_SNAP_PX/VARIANT_JOIN_PX snap window it
+        describes no longer exists; glyphfont.rs:1390 is now an exact descent comparison),
+        truetyping-halftone-review-20260905 (its closing "no application fixes made" is no longer
+        true) and ocr-v5-v6-recipe-20260820 (its "not a viable v6 replacement yet" verdict was
+        already contradicted by the resolved-blockers observation that cites it).
         """
 }
 
@@ -2183,4 +2378,18 @@ record lege-ecosystem.evidence.windows-tensorrt-text-smoke-20260814/2 : evidence
         PP-OCRv6-tiny detection and recognition produced 39 ordered text lines from a restored 12 MP benchmark page.
         """
     supersedes [ @lege-ecosystem.evidence.windows-tensorrt-text-smoke-20260814/1 ]
+}
+
+record lege-ecosystem.evidence.workspace-check-20260908/1 : evidence {
+    title "cargo check --workspace succeeds on Linux at 823d46dd"
+    state verified
+    result pass
+    method command
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    command "cargo check --workspace"
+    summary """
+        Finished the dev profile in 1m11s with no errors, on Linux at repo HEAD 823d46dd during
+        the 2026-09-08 ledger-cleanup pass. The implementation host for this milestone's Windows
+        TensorRT work is a different machine; this run establishes the Linux half.
+        """
 }
