@@ -4,6 +4,36 @@
 Lege workspace. It is separate from the e-ink conversion application and reuses
 the Lege PDF renderer/writer and OCR runtime through typed APIs.
 
+## How to use
+
+The easy path is the OpenArc-style wizard. Run the binary with no arguments,
+or `lege-ocr interactive`. It asks for inputs, an output folder, and whether
+to OCR every page, then writes text and markdown.
+
+```bash
+cargo build --profile debug-fast -p lege-document-ocr-cli
+target/debug-fast/lege-ocr
+```
+
+You can drag-and-drop PDFs, a folder, or a `list.txt` of `file://` URLs (the
+browser download list format). Press Enter twice when the list is complete.
+
+The same intake works non-interactively. This is the clean command for a
+download list:
+
+```bash
+target/debug-fast/lege-ocr batch ~/Downloads/list.txt \
+  --output ~/Downloads/lege-ocr \
+  --format text,markdown \
+  --backend auto \
+  --resume
+```
+
+`--backend auto` uses TensorRT on an NVIDIA Linux/Windows host when
+`turboocr-text` is discoverable, otherwise Paddle/WGPU. Native text layers are
+kept; only pages that need OCR are rasterized. Add `--force-ocr` to OCR
+everything.
+
 ## Current pipeline
 
 The CLI fingerprints each source and configuration, classifies every page from

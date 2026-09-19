@@ -1,3 +1,6 @@
+mod interactive;
+mod paths;
+
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -16,15 +19,17 @@ use lege_document_pipeline::{
 #[command(
     name = "lege-ocr",
     version,
-    about = "Local, resumable batch PDF OCR and document conversion"
+    about = "Local, resumable batch PDF OCR and document conversion. Run with no arguments for the interactive wizard."
 )]
 struct Cli {
     #[command(subcommand)]
-    command: Command,
+    command: Option<Command>,
 }
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Guided drag-and-drop wizard (also the default if you just run `lege-ocr`)
+    Interactive,
     Batch(BatchArgs),
     /// Preflight the installed OCR backend without processing a document.
     Doctor(DoctorArgs),
@@ -59,6 +64,7 @@ struct DoctorArgs {
 
 #[derive(Debug, clap::Args)]
 struct BatchArgs {
+    /// PDFs, folders, or a .txt/.list file of paths / file:// URLs.
     #[arg(required = true)]
     inputs: Vec<PathBuf>,
     #[arg(short, long)]
@@ -108,6 +114,9 @@ struct BatchArgs {
     /// Directory containing a checksum-pinned Paddle `manifest.json` model pack.
     #[arg(long)]
     model_pack: Option<PathBuf>,
+    #[arg(long)]
+    /// image placeholders).
+    #[arg(long)]
     /// TurboOCR root containing the native worker and PP-OCRv6 TensorRT models.
     #[arg(long)]
     tensorrt_ocr_root: Option<PathBuf>,
@@ -196,8 +205,9 @@ struct BatchTask {
 
 fn main() {
     let code = match Cli::parse().command {
-        Command::Batch(args) => run_batch(args),
-        Command::Doctor(args) => run_doctor(args),
+        None | Some(Command::Interactive) => interactive::run_interactive(),
+        Some(Command::Batch(args)) => run_batch(args),
+        Some(Command::Doctor(args)) => run_doctor(args),
     };
     if let Err(error) = code {
         eprintln!("lege-ocr: {error}");
@@ -277,6 +287,11 @@ fn run_batch(args: BatchArgs) -> Result<(), String> {
         "lege-ocr: selected `{}` before starting the batch; this backend is fixed for every job",
         processor.selected_backend_name()
     );
+    if let Some(warning) = processor.backend_selection_warning() {
+        eprintln!("lege-ocr: {warning}");
+    }
+        eprintln!("lege-ocr: {warning}");
+    }
     let database_path = args.output.join(".lege-ocr/jobs.sqlite");
     let mut jobs = JobStore::open(&database_path).map_err(|error| error.to_string())?;
     let mut failures = 0_u32;
@@ -638,63 +653,18 @@ fn discover(
     excluded_root: Option<&Path>,
 ) -> Result<Vec<PathBuf>, String> {
     let mut found = BTreeSet::new();
-    let mut visited_directories = BTreeSet::new();
+    let mut visited = BTreeSet::new();
     let excluded_root = excluded_root.and_then(|path| path.canonicalize().ok());
     for input in inputs {
-        discover_one(
+        paths::expand_one(
             input,
             recursive,
             excluded_root.as_deref(),
-            &mut visited_directories,
+            &mut visited,
             &mut found,
         )?;
     }
     Ok(found.into_iter().collect())
-}
-
-fn discover_one(
-    path: &Path,
-    recursive: bool,
-    excluded_root: Option<&Path>,
-    visited_directories: &mut BTreeSet<PathBuf>,
-    found: &mut BTreeSet<PathBuf>,
-) -> Result<(), String> {
-    if path.is_file() {
-        if path
-            .extension()
-            .is_some_and(|extension| extension.eq_ignore_ascii_case("pdf"))
-        {
-            found.insert(path.to_path_buf());
-        }
-        return Ok(());
-    }
-    if !path.is_dir() {
-        return Err(format!("input does not exist: {}", path.display()));
-    }
-    let canonical = path.canonicalize().map_err(|error| error.to_string())?;
-    if excluded_root.is_some_and(|excluded| canonical.starts_with(excluded))
-        || !visited_directories.insert(canonical)
-    {
-        return Ok(());
-    }
-    for entry in std::fs::read_dir(path).map_err(|error| error.to_string())? {
-        let entry = entry.map_err(|error| error.to_string())?;
-        let child = entry.path();
-        let file_type = entry.file_type().map_err(|error| error.to_string())?;
-        if file_type.is_symlink() {
-            continue;
-        }
-        if file_type.is_dir() && recursive {
-            discover_one(&child, true, excluded_root, visited_directories, found)?;
-        } else if child.is_file()
-            && child
-                .extension()
-                .is_some_and(|extension| extension.eq_ignore_ascii_case("pdf"))
-        {
-            found.insert(child);
-        }
-    }
-    Ok(())
 }
 
 fn pdf_page_count(path: &Path) -> Option<u32> {
