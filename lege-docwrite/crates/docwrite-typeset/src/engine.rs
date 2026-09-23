@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use harfrust::{Feature, FontRef, GlyphBuffer, ShapeOptions, ShaperData, Tag, UnicodeBuffer};
 use hyphenation::{Hyphenator, Language, Load, Standard};
-use unicode_linebreak::{linebreaks, BreakOpportunity};
+use unicode_linebreak::{BreakOpportunity, linebreaks};
 
 use crate::error::TypesetError;
 
@@ -18,18 +18,27 @@ pub struct Face {
 impl Face {
     /// Parse `bytes` as a font collection index 0.
     pub fn parse(bytes: Vec<u8>) -> Result<Self, TypesetError> {
-        let font = FontRef::from_index(&bytes, 0)
-            .map_err(|err| TypesetError::Font(err.to_string()))?;
+        let font =
+            FontRef::from_index(&bytes, 0).map_err(|err| TypesetError::Font(err.to_string()))?;
         let shaper = ShaperData::new(&font);
         let upem = shaper.shaper(&font).build().units_per_em();
         if upem <= 0 {
             return Err(TypesetError::Font("units per em is zero".into()));
         }
-        Ok(Self { data: bytes, upem, shaper })
+        Ok(Self {
+            data: bytes,
+            upem,
+            shaper,
+        })
     }
 
     /// Shape `text` at `size_px`. `features` are OpenType tags such as `smcp`.
-    pub fn shape(&self, text: &str, size_px: f32, features: &[Feature]) -> Result<Vec<Glyph>, TypesetError> {
+    pub fn shape(
+        &self,
+        text: &str,
+        size_px: f32,
+        features: &[Feature],
+    ) -> Result<Vec<Glyph>, TypesetError> {
         if text.is_empty() {
             return Ok(Vec::new());
         }
@@ -41,6 +50,13 @@ impl Face {
         buffer.guess_segment_properties();
         let glyphs = shaper.shape(buffer, ShapeOptions::new().features(features));
         Ok(scale_glyphs(&glyphs, size_px, self.upem))
+    }
+
+    /// A second face over the same font bytes. Pagination owns one; the
+    /// window keeps the other so a frame can rasterize without rebuilding
+    /// the shaper from scratch on the next key.
+    pub fn duplicate(&self) -> Result<Self, TypesetError> {
+        Self::parse(self.data.clone())
     }
 
     pub(crate) fn bytes(&self) -> &[u8] {
@@ -65,6 +81,7 @@ fn scale_glyphs(glyphs: &GlyphBuffer, size_px: f32, upem: i32) -> Vec<Glyph> {
             x_advance: pos.x_advance as f32 * scale,
             x_offset: pos.x_offset as f32 * scale,
             y_offset: pos.y_offset as f32 * scale,
+            em: size_px,
         })
         .collect()
 }
@@ -77,6 +94,8 @@ pub struct Glyph {
     pub x_advance: f32,
     pub x_offset: f32,
     pub y_offset: f32,
+    /// Em size used to draw this glyph. A drop cap is larger than the body.
+    pub em: f32,
 }
 
 /// OpenType features requested by a paragraph style.
@@ -192,6 +211,7 @@ struct FlowLine {
     is_last: bool,
     keep_with_next: bool,
     keep_together: bool,
+    widow_orphan: bool,
     /// Glyph ids of this line, for the atlas and for PDF.
     glyphs: Vec<Glyph>,
     /// Advance width.
@@ -230,7 +250,11 @@ pub struct Document {
 }
 
 impl Document {
-    pub fn new(face: Face, geometry: Geometry, paragraphs: Vec<Paragraph>) -> Result<Self, TypesetError> {
+    pub fn new(
+        face: Face,
+        geometry: Geometry,
+        paragraphs: Vec<Paragraph>,
+    ) -> Result<Self, TypesetError> {
         let hyphenator = Standard::from_embedded(Language::EnglishUS).ok();
         let mut doc = Self {
             face,
@@ -281,6 +305,106 @@ impl Document {
             .unwrap_or_default()
     }
 
+    /// Shaped lines of 1-based `page`, in reading order.
+    pub fn page_line_glyphs(&self, page: u32) -> Vec<Vec<Glyph>> {
+        self.pages
+            .get(page.saturating_sub(1) as usize)
+            .map(|page| page.lines.iter().map(|line| line.glyphs.clone()).collect())
+            .unwrap_or_default()
+    }
+
+    /// Em size of the first drop-cap glyph, when a paragraph asked for one.
+    pub fn drop_cap_em(&self) -> Option<f32> {
+        self.pages
+            .iter()
+            .flat_map(|page| page.lines.iter())
+            .find_map(|line| {
+                if line.drop_cap {
+                    line.glyphs.first().map(|glyph| glyph.em)
+                } else {
+                    None
+                }
+            })
+    }
+
+    /// A page opens on the last line of a paragraph that started earlier.
+    pub fn opens_with_widow(&self) -> bool {
+        self.pages.iter().any(|page| {
+            page.lines
+                .first()
+                .is_some_and(|line| line.is_last && !line.is_first)
+        })
+    }
+
+    /// A page that is not the last ends on the first line of a paragraph
+    /// that still has more lines.
+    pub fn ends_with_orphan(&self) -> bool {
+        let last = self.pages.len().saturating_sub(1);
+        self.pages.iter().enumerate().any(|(index, page)| {
+            index < last
+                && page
+                    .lines
+                    .last()
+                    .is_some_and(|line| line.is_first && !line.is_last)
+        })
+    }
+
+    /// Widow, orphan, keep-with-next, and keep-lines breaks the styles asked for.
+    pub fn rule_violations(&self) -> Vec<String> {
+        let mut violations = Vec::new();
+        let last = self.pages.len().saturating_sub(1);
+        for (index, page) in self.pages.iter().enumerate() {
+            let page_no = index as u32 + 1;
+            if let Some(line) = page.lines.first() {
+                let asked = self
+                    .paragraphs
+                    .get(line.paragraph)
+                    .is_some_and(|paragraph| paragraph.style.widow_orphan);
+                if asked && line.is_last && !line.is_first {
+                    violations.push(format!("widow at the top of page {page_no}"));
+                }
+            }
+            if let Some(line) = page.lines.last() {
+                let asked = self
+                    .paragraphs
+                    .get(line.paragraph)
+                    .is_some_and(|paragraph| paragraph.style.widow_orphan);
+                if asked && line.is_first && !line.is_last && index < last {
+                    violations.push(format!("orphan at the bottom of page {page_no}"));
+                }
+                if line.keep_with_next && index < last {
+                    violations.push(format!(
+                        "keep-with-next stranded at the end of page {page_no}"
+                    ));
+                }
+            }
+        }
+        let mut home = vec![None; self.paragraphs.len()];
+        for (index, page) in self.pages.iter().enumerate() {
+            for line in &page.lines {
+                if !line.keep_together {
+                    continue;
+                }
+                let Some(slot) = home.get_mut(line.paragraph) else {
+                    continue;
+                };
+                if let Some(first) = *slot {
+                    if first != index {
+                        violations.push(format!(
+                            "keep-lines split paragraph {} across pages",
+                            line.paragraph
+                        ));
+                    }
+                } else {
+                    *slot = Some(index);
+                }
+            }
+        }
+        violations.sort();
+        violations.dedup();
+        violations
+    }
+
     pub fn first_line_is_drop_cap(&self, page: u32) -> bool {
         self.pages
             .get(page.saturating_sub(1) as usize)
@@ -306,12 +430,18 @@ impl Document {
 
     /// Replace every paragraph's style fields that tests name, then lay out
     /// from scratch. Returns the fresh page texts so a caller can compare.
-    pub fn restyle_body(&mut self, font_size: f32, leading: f32) -> Result<Vec<Vec<String>>, TypesetError> {
+    pub fn restyle_body(
+        &mut self,
+        font_size: f32,
+        leading: f32,
+    ) -> Result<Vec<Vec<String>>, TypesetError> {
         self.geometry.font_size = font_size;
         self.geometry.leading = leading;
         self.reshape_all()?;
         self.paginate_all();
-        Ok((1..=self.page_count()).map(|page| self.page_texts(page)).collect())
+        Ok((1..=self.page_count())
+            .map(|page| self.page_texts(page))
+            .collect())
     }
 
     pub fn paragraphs(&self) -> &[Paragraph] {
@@ -395,7 +525,9 @@ impl Document {
     fn shape_paragraph(&self, index: usize) -> Result<Vec<FlowLine>, TypesetError> {
         let paragraph = &self.paragraphs[index];
         let features = features_for(paragraph.style.small_caps, paragraph.style.oldstyle_figures);
-        let glyphs = self.face.shape(&paragraph.text, self.geometry.font_size, &features)?;
+        let glyphs = self
+            .face
+            .shape(&paragraph.text, self.geometry.font_size, &features)?;
         let mut broken = break_lines(
             &paragraph.text,
             &glyphs,
@@ -413,13 +545,12 @@ impl Document {
         let last = broken.len().saturating_sub(1) as u32;
         let keep_together = paragraph.style.keep_lines && broken.len() <= 3;
         let drop = paragraph.style.drop_cap_lines > 0;
+        let factor = (paragraph.style.drop_cap_lines as f32).max(1.0);
         Ok(broken
             .into_iter()
             .enumerate()
-            .map(|(line_index, line)| FlowLine {
-                paragraph: index,
-                line: line_index as u32,
-                height: self.geometry.leading
+            .map(|(line_index, mut line)| {
+                let mut height = self.geometry.leading
                     + if line_index == 0 {
                         paragraph.style.space_before
                     } else {
@@ -429,28 +560,46 @@ impl Document {
                         paragraph.style.space_after
                     } else {
                         0.0
-                    },
-                is_first: line_index == 0,
-                is_last: line_index as u32 == last,
-                keep_with_next: paragraph.style.keep_with_next && line_index as u32 == last,
-                keep_together,
-                drop_cap: drop && line_index == 0 && !line.glyphs.is_empty(),
-                glyphs: line.glyphs,
-                width: line.width,
-                text: line.text,
+                    };
+                let drop_cap = drop && line_index == 0 && !line.glyphs.is_empty();
+                if drop_cap {
+                    if let Some(glyph) = line.glyphs.first_mut() {
+                        glyph.x_advance *= factor;
+                        glyph.em *= factor;
+                    }
+                    height += self.geometry.leading * (factor - 1.0);
+                }
+                FlowLine {
+                    paragraph: index,
+                    line: line_index as u32,
+                    height,
+                    is_first: line_index == 0,
+                    is_last: line_index as u32 == last,
+                    keep_with_next: paragraph.style.keep_with_next && line_index as u32 == last,
+                    keep_together,
+                    widow_orphan: paragraph.style.widow_orphan,
+                    drop_cap,
+                    glyphs: line.glyphs,
+                    width: line.width,
+                    text: line.text,
+                }
             })
             .collect())
     }
 
     fn paginate_all(&mut self) {
         self.pages.clear();
-        let mut cursor = Cursor { paragraph: 0, line: 0 };
+        let mut cursor = Cursor {
+            paragraph: 0,
+            line: 0,
+        };
         let mut carry = None;
         if self.lines.is_empty() {
             return;
         }
         while !self.at_end(cursor) || carry.is_some() {
             let page = self.fill_page(cursor, carry.take());
+            let page = avoid_widow(&mut self.pages, page);
             carry = page.note_carry.clone();
             cursor = next_cursor(&page);
             self.pages.push(page);
@@ -479,10 +628,13 @@ impl Document {
             let page_number = (pages.len() + 1) as u32;
             rebuilt.push(page_number);
             let page = self.fill_page(cursor, None);
+            let page = avoid_widow(&mut pages, page);
             let following = next_cursor(&page);
             pages.push(page);
             let next_index = pages.len();
-            if cached.get(next_index) == Some(&following) && self.suffix_still_valid(next_index, &cached) {
+            if cached.get(next_index) == Some(&following)
+                && self.suffix_still_valid(next_index, &cached)
+            {
                 pages.extend(self.rebind_suffix(next_index));
                 break;
             }
@@ -500,7 +652,9 @@ impl Document {
     /// that changes a later paragraph's line count invalidates them.
     fn suffix_still_valid(&self, index: usize, cached: &[Cursor]) -> bool {
         cached.get(index).is_some_and(|cursor| {
-            self.lines.get(cursor.paragraph).is_some_and(|lines| cursor.line < lines.len() as u32)
+            self.lines
+                .get(cursor.paragraph)
+                .is_some_and(|lines| cursor.line < lines.len() as u32)
         })
     }
 
@@ -515,7 +669,12 @@ impl Document {
         let mut cursor = self.pages[index].start;
         // `self.pages` is still the old pagination here; the caller has not
         // assigned `self.pages` yet. Use the old starts.
-        let old_starts: Vec<Cursor> = self.pages.iter().skip(index).map(|page| page.start).collect();
+        let old_starts: Vec<Cursor> = self
+            .pages
+            .iter()
+            .skip(index)
+            .map(|page| page.start)
+            .collect();
         for start in old_starts {
             if start != cursor && pages.is_empty() {
                 cursor = start;
@@ -529,7 +688,12 @@ impl Document {
             let lines = old
                 .lines
                 .iter()
-                .filter_map(|line| self.lines.get(line.paragraph).and_then(|set| set.get(line.line as usize)).cloned())
+                .filter_map(|line| {
+                    self.lines
+                        .get(line.paragraph)
+                        .and_then(|set| set.get(line.line as usize))
+                        .cloned()
+                })
                 .collect();
             let page = Page {
                 start: cursor,
@@ -557,9 +721,15 @@ impl Document {
         let mut cursor = start;
         let limit = self.geometry.content_height();
         let reserve_note = self.note_on_paragraph(start.paragraph);
-        let note_reserve = if reserve_note { self.geometry.leading } else { 0.0 };
+        let note_reserve = if reserve_note {
+            self.geometry.leading
+        } else {
+            0.0
+        };
         while !self.at_end(cursor) {
-            let Some(line) = self.line_at(cursor) else { break };
+            let Some(line) = self.line_at(cursor) else {
+                break;
+            };
             let style = &self.paragraphs[line.paragraph].style;
             if used + line.height + note_reserve > limit && !lines.is_empty() {
                 break;
@@ -572,7 +742,21 @@ impl Document {
                     break;
                 }
             }
-            if line.keep_with_next && used + line.height + self.geometry.leading + note_reserve > limit && !lines.is_empty()
+            if style.widow_orphan && !lines.is_empty() && !line.is_last {
+                let next = step(cursor, &self.lines);
+                if let Some(next_line) = self.line_at(next) {
+                    if next_line.is_last
+                        && next_line.paragraph == line.paragraph
+                        && used + line.height + next_line.height + note_reserve > limit
+                    {
+                        // Widow: keep the last two lines together on the next page.
+                        break;
+                    }
+                }
+            }
+            if line.keep_with_next
+                && used + line.height + self.geometry.leading + note_reserve > limit
+                && !lines.is_empty()
             {
                 break;
             }
@@ -586,16 +770,6 @@ impl Document {
             let next = step(cursor, &self.lines);
             lines.push(line.clone());
             cursor = next;
-            if style.widow_orphan {
-                if let Some(last) = lines.last() {
-                    if last.is_last && lines.len() == 1 && !last.is_first {
-                        // A page that would open on the final line of a
-                        // paragraph is a widow; refuse it when the previous
-                        // page can take it. The previous page already closed,
-                        // so we keep the line rather than looping forever.
-                    }
-                }
-            }
         }
         if lines.is_empty() {
             if let Some(line) = self.line_at(start) {
@@ -648,7 +822,13 @@ impl Document {
     fn paragraph_rest_height(&self, cursor: Cursor) -> f32 {
         self.lines
             .get(cursor.paragraph)
-            .map(|lines| lines.iter().skip(cursor.line as usize).map(|line| line.height).sum())
+            .map(|lines| {
+                lines
+                    .iter()
+                    .skip(cursor.line as usize)
+                    .map(|line| line.height)
+                    .sum()
+            })
             .unwrap_or(0.0)
     }
 }
@@ -742,11 +922,14 @@ fn break_lines(
         let cluster = glyph.cluster as usize;
         if index > start {
             if let Some(opportunity) = breaks.get(&cluster) {
-                if matches!(opportunity, BreakOpportunity::Mandatory | BreakOpportunity::Allowed) {
+                if matches!(
+                    opportunity,
+                    BreakOpportunity::Mandatory | BreakOpportunity::Allowed
+                ) {
                     last_break = Some(index);
                 }
                 if matches!(opportunity, BreakOpportunity::Mandatory) {
-                    lines.push(slice_line(text, glyphs, start, index, width));
+                    lines.push(slice_line(text, glyphs, start, index, width, false));
                     start = index;
                     width = 0.0;
                     last_break = None;
@@ -754,11 +937,23 @@ fn break_lines(
             }
         }
         if width + glyph.x_advance > measure && index > start {
-            let at = last_break.unwrap_or_else(|| {
-                hyphen_point(text, glyphs, start, index, hyphenate, hyphenator).unwrap_or(index)
-            });
+            let (at, hyphen) = if let Some(at) = last_break.filter(|at| *at > start) {
+                (at, false)
+            } else if let Some(at) = hyphen_point(text, glyphs, start, index, hyphenate, hyphenator)
+            {
+                (at, true)
+            } else {
+                (index, false)
+            };
             let at = if at <= start { index } else { at };
-            lines.push(slice_line(text, glyphs, start, at, width_of(&glyphs[start..at])));
+            lines.push(slice_line(
+                text,
+                glyphs,
+                start,
+                at,
+                width_of(&glyphs[start..at]),
+                hyphen,
+            ));
             start = at;
             width = width_of(&glyphs[start..index]);
             last_break = None;
@@ -766,7 +961,7 @@ fn break_lines(
         width += glyph.x_advance;
     }
     if start < glyphs.len() {
-        lines.push(slice_line(text, glyphs, start, glyphs.len(), width));
+        lines.push(slice_line(text, glyphs, start, glyphs.len(), width, false));
     }
     lines
 }
@@ -775,17 +970,74 @@ fn width_of(glyphs: &[Glyph]) -> f32 {
     glyphs.iter().map(|glyph| glyph.x_advance).sum()
 }
 
-fn slice_line(text: &str, glyphs: &[Glyph], start: usize, end: usize, width: f32) -> Broken {
-    let byte_start = glyphs.get(start).map(|glyph| glyph.cluster as usize).unwrap_or(0);
+fn slice_line(
+    text: &str,
+    glyphs: &[Glyph],
+    start: usize,
+    end: usize,
+    width: f32,
+    hyphen: bool,
+) -> Broken {
+    let byte_start = glyphs
+        .get(start)
+        .map(|glyph| glyph.cluster as usize)
+        .unwrap_or(0);
     let byte_end = glyphs
         .get(end)
         .map(|glyph| glyph.cluster as usize)
         .unwrap_or(text.len());
     let slice = text.get(byte_start..byte_end).unwrap_or("").trim_end();
+    let mut text = slice.to_string();
+    if hyphen {
+        text.push('-');
+    }
     Broken {
         glyphs: glyphs[start..end].to_vec(),
         width,
-        text: slice.to_string(),
+        text,
+    }
+}
+
+/// When a page would open on a paragraph's last line, pull the previous
+/// line onto it if that line is still sitting at the bottom of the page
+/// we just closed.
+fn avoid_widow(pages: &mut Vec<Page>, mut page: Page) -> Page {
+    let widow = page
+        .lines
+        .first()
+        .is_some_and(|line| line.widow_orphan && line.is_last && !line.is_first);
+    if !widow {
+        return page;
+    }
+    let Some(prev) = pages.last_mut() else {
+        return page;
+    };
+    if prev.lines.len() < 2 {
+        return page;
+    }
+    let Some(stolen) = prev.lines.pop() else {
+        return page;
+    };
+    let adjacent = page
+        .lines
+        .first()
+        .is_some_and(|line| stolen.paragraph == line.paragraph && stolen.line + 1 == line.line);
+    if !adjacent {
+        prev.lines.push(stolen);
+        return page;
+    }
+    let mut lines = Vec::with_capacity(page.lines.len() + 1);
+    lines.push(stolen);
+    lines.append(&mut page.lines);
+    let start = Cursor {
+        paragraph: lines[0].paragraph,
+        line: lines[0].line,
+    };
+    Page {
+        start,
+        lines,
+        footnotes: page.footnotes,
+        note_carry: page.note_carry,
     }
 }
 
@@ -802,8 +1054,14 @@ fn hyphen_point(
     }
     let hyphenator = hyphenator?;
     let byte_start = glyphs.get(start)?.cluster as usize;
-    let byte_end = glyphs.get(end).map(|glyph| glyph.cluster as usize).unwrap_or(text.len());
-    let word = text.get(byte_start..byte_end)?.split_whitespace().next_back()?;
+    let byte_end = glyphs
+        .get(end)
+        .map(|glyph| glyph.cluster as usize)
+        .unwrap_or(text.len());
+    let word = text
+        .get(byte_start..byte_end)?
+        .split_whitespace()
+        .next_back()?;
     let hyphenated = hyphenator.hyphenate(word);
     let breaks = hyphenated.breaks;
     let last = breaks.last().copied()?;

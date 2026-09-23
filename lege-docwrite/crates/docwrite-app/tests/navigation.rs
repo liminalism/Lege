@@ -14,15 +14,27 @@ fn page_down_and_page_up_land_on_page_tops_from_any_scroll() {
     assert!((pager.scroll() - 2.4).abs() < 1e-9);
 
     pager.page_down();
-    assert_eq!(pager.scroll(), 3.0, "PageDown from 2.4 is the next page top");
+    assert_eq!(
+        pager.scroll(),
+        3.0,
+        "PageDown from 2.4 is the next page top"
+    );
     pager.page_up();
-    assert_eq!(pager.scroll(), 2.0, "PageUp from a page top is the previous top");
+    assert_eq!(
+        pager.scroll(),
+        2.0,
+        "PageUp from a page top is the previous top"
+    );
 
     pager.scroll_gesture(0.0, Phase::Started);
     pager.scroll_gesture(0.2, Phase::Moved);
     assert!((pager.scroll() - 2.2).abs() < 1e-9);
     pager.page_up();
-    assert_eq!(pager.scroll(), 2.0, "PageUp from mid-page lands on this page top");
+    assert_eq!(
+        pager.scroll(),
+        2.0,
+        "PageUp from mid-page lands on this page top"
+    );
 }
 
 #[test]
@@ -37,7 +49,10 @@ fn spread_mode_moves_by_spread_and_a_gesture_snaps() {
 
     pager.scroll_gesture(0.0, Phase::Started);
     pager.scroll_gesture(1.2, Phase::Moved);
-    assert!((pager.scroll() - 3.2).abs() < 1e-9, "the gesture stays continuous");
+    assert!(
+        (pager.scroll() - 3.2).abs() < 1e-9,
+        "the gesture stays continuous"
+    );
     pager.scroll_gesture(1.2, Phase::Ended);
     assert_eq!(pager.scroll(), 4.0, "3.2 snaps to the nearer spread");
 
@@ -61,4 +76,19 @@ fn the_window_editor_types_into_the_book_and_turns_pages() {
     assert_eq!(editor.pager().scroll(), 1.0);
     editor.page_up();
     assert_eq!(editor.pager().scroll(), 0.0);
+
+    let before = editor.book().plain_text().to_string();
+    editor.set_preedit("未");
+    assert_eq!(editor.book().plain_text(), before);
+    assert_eq!(editor.preedit(), "未");
+    editor.commit_ime("未");
+    assert!(editor.book().plain_text().contains('未'));
+    assert!(editor.preedit().is_empty());
+
+    let ink = editor.painted_ink(900, 700);
+    assert!(
+        ink > 80,
+        "the open page paints the manuscript, ink pixels {ink}"
+    );
+    assert!(editor.caret_area().is_some(), "the caret is on the page");
 }

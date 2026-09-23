@@ -47,19 +47,54 @@ impl GlyphAtlas {
 
     /// Rasterize `glyph` if it is not already cached. Returns whether any
     /// coverage was produced.
-    pub fn ensure(&mut self, face: &Face, glyph: u16, size_px: f32, subpixel: f32) -> Result<bool, TypesetError> {
+    pub fn ensure(
+        &mut self,
+        face: &Face,
+        glyph: u16,
+        size_px: f32,
+        subpixel: f32,
+    ) -> Result<bool, TypesetError> {
         let key = AtlasKey {
             glyph,
             size_px: size_px.round().max(1.0) as u16,
             subpixel: (subpixel.fract() * 4.0).round() as u8,
         };
         if self.entries.contains_key(&key) {
-            return Ok(self.entries.get(&key).is_some_and(|entry| entry.coverage.iter().any(|c| *c > 0)));
+            return Ok(self
+                .entries
+                .get(&key)
+                .is_some_and(|entry| entry.coverage.iter().any(|c| *c > 0)));
         }
         let entry = rasterize(face, glyph, size_px, subpixel)?;
         let ink = entry.coverage.iter().any(|sample| *sample > 0);
         self.entries.insert(key, entry);
         Ok(ink)
+    }
+
+    /// Rasterize `glyph` if needed, then hand the coverage bitmap to `draw`.
+    ///
+    /// `width` is the row stride. Coverage is row-major, one byte per pixel.
+    pub fn with_coverage<T>(
+        &mut self,
+        face: &Face,
+        glyph: u16,
+        size_px: f32,
+        subpixel: f32,
+        draw: impl FnOnce(&[u8], u32) -> T,
+    ) -> Result<T, TypesetError> {
+        let key = AtlasKey {
+            glyph,
+            size_px: size_px.round().max(1.0) as u16,
+            subpixel: (subpixel.fract() * 4.0).round() as u8,
+        };
+        if !self.entries.contains_key(&key) {
+            let entry = rasterize(face, glyph, size_px, subpixel)?;
+            self.entries.insert(key, entry);
+        }
+        match self.entries.get(&key) {
+            Some(entry) => Ok(draw(&entry.coverage, entry.width)),
+            None => Err(TypesetError::Font("glyph raster is missing".into())),
+        }
     }
 }
 
@@ -141,10 +176,15 @@ impl OutlinePen for Pen {
 }
 
 fn rasterize(face: &Face, glyph: u16, size_px: f32, subpixel: f32) -> Result<Entry, TypesetError> {
-    let font = FontRef::from_index(face.bytes(), 0).map_err(|err| TypesetError::Font(err.to_string()))?;
+    let font =
+        FontRef::from_index(face.bytes(), 0).map_err(|err| TypesetError::Font(err.to_string()))?;
     let outlines = font.outline_glyphs();
     let Some(outline) = outlines.get(GlyphId::new(glyph as u32)) else {
-        return Ok(Entry { width: 0, height: 0, coverage: Vec::new() });
+        return Ok(Entry {
+            width: 0,
+            height: 0,
+            coverage: Vec::new(),
+        });
     };
     let settings = DrawSettings::unhinted(Size::new(size_px), LocationRef::default());
     let mut pen = Pen::new(subpixel.fract());
@@ -170,5 +210,9 @@ fn rasterize(face: &Face, glyph: u16, size_px: f32, subpixel: f32) -> Result<Ent
             },
         );
     }
-    Ok(Entry { width: 64, height: 64, coverage })
+    Ok(Entry {
+        width: 64,
+        height: 64,
+        coverage,
+    })
 }
