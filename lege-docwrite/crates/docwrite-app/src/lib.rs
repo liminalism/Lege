@@ -2,12 +2,14 @@
 
 mod map;
 mod nav;
+mod trace;
 
 use std::path::PathBuf;
 use std::time::Duration;
 
 pub use map::{BookMap, MapKind, MapRow, SIDEBAR_W};
 pub use nav::{Pager, Phase};
+pub use trace::{FrameMetrics, InputTrace, ReplayStep, TraceCommand};
 
 use docwrite_model::{Book, Direction, Motion};
 use docwrite_typeset::{Document, Face, GlyphAtlas, from_book};

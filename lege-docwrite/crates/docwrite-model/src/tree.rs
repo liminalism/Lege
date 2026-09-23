@@ -416,6 +416,13 @@ impl Book {
     }
 
     /// Blocks joined by newlines. This is the paragraph sequence, not pages.
+    ///
+    /// ```
+    /// use docwrite_model::Book;
+    /// let mut book = Book::new("Essay");
+    /// assert!(book.insert("Hello.").is_ok());
+    /// assert_eq!(book.plain_text(), "Hello.");
+    /// ```
     pub fn plain_text(&self) -> String {
         self.blocks()
             .map(Block::text)

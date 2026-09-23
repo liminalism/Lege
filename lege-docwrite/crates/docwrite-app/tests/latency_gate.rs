@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 use std::time::Instant;
 
-use docwrite_app::{Pager, Phase, KEYPRESS_BUDGET};
+use docwrite_app::{InputTrace, Pager, Phase, TraceCommand, KEYPRESS_BUDGET};
 use docwrite_typeset::{book_of_repeated_line, Face};
 
 fn noto() -> Vec<u8> {
@@ -27,31 +27,54 @@ fn five_hundred_pages_page_and_type_inside_the_budget() {
     );
 
     let mut pager = Pager::new(document.page_count(), false);
+    let mut trace = InputTrace::default();
     for _ in 0..40 {
-        let frame = Instant::now();
-        pager.page_down();
-        let elapsed = frame.elapsed();
-        assert!(elapsed <= KEYPRESS_BUDGET, "page-down frame {elapsed:?}");
+        trace.push(TraceCommand::PageDown);
     }
-    let frame = Instant::now();
-    pager.scroll_gesture(0.0, Phase::Started);
-    pager.scroll_gesture(12.4, Phase::Moved);
-    pager.scroll_gesture(12.4, Phase::Ended);
-    assert!(frame.elapsed() <= KEYPRESS_BUDGET, "scroll snap frame");
-    assert_eq!(pager.scroll(), 52.0);
-
+    trace.push(TraceCommand::Scroll {
+        delta: 0.0,
+        phase: Phase::Started,
+    });
+    trace.push(TraceCommand::Scroll {
+        delta: 12.4,
+        phase: Phase::Moved,
+    });
+    trace.push(TraceCommand::Scroll {
+        delta: 12.4,
+        phase: Phase::Ended,
+    });
     for page in [1u32, 250, 500] {
-        let frame = Instant::now();
-        let report = document.edit_page(page, "k").expect("type");
-        let elapsed = frame.elapsed();
+        trace.push(TraceCommand::Type {
+            page,
+            text: "k".to_string(),
+        });
+    }
+    let steps = trace.replay(&mut document, &mut pager).expect("replay");
+    assert_eq!(steps.len(), 46);
+    assert_eq!(pager.scroll(), 52.0);
+    for step in &steps {
+        let latency = step.frame.input_to_present().expect("frame stamps");
         assert!(
-            report.pages_laid_out.iter().all(|laid| *laid < page + 2),
-            "typing on page {page} laid out {:?}",
-            report.pages_laid_out
-        );
-        assert!(
-            elapsed <= KEYPRESS_BUDGET,
-            "keypress on page {page} took {elapsed:?}, budget {KEYPRESS_BUDGET:?}"
+            latency <= KEYPRESS_BUDGET,
+            "replayed frame took {latency:?}, budget {KEYPRESS_BUDGET:?}"
         );
     }
+    let typed = &steps[steps.len() - 3..];
+    for (page, step) in [1u32, 250, 500].into_iter().zip(typed) {
+        assert!(
+            step.pages_laid_out.iter().all(|laid| *laid < page + 2),
+            "typing on page {page} laid out {:?}",
+            step.pages_laid_out
+        );
+        assert!(
+            document.page_texts(page)[0].starts_with('k'),
+            "page {page} text {:?}",
+            document.page_texts(page)
+        );
+    }
+    println!(
+        "typing trace {} frames inside {:?}",
+        steps.len(),
+        KEYPRESS_BUDGET
+    );
 }
