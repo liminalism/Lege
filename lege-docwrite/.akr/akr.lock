@@ -5,7 +5,7 @@ build {
     tool "akr 0.5.1"
     grammar "0.1"
     vocabulary "0.2"
-    source_graph "sha256:29a85542189300d318c4b073046c23faf5c9b2dbfd9b2323b72a68b8bf8f0c2c"
+    source_graph "sha256:8109a642f9a071d2103888ff08a2de6b18b2a2c3b60297f80972671c4592ca2f"
 }
 
 source ".akr/project.akr" {
@@ -29,8 +29,8 @@ source ".akr/records/docwrite/milestones.akr" {
 }
 
 source ".akr/records/docwrite/observations.akr" {
-    hash "sha256:25601b4d5c9b210c459f92290d0506d1286be95cf49fcbb6e821bd2d69f40ea9"
-    records 15
+    hash "sha256:9965a5f18736e99cd35e9ce159ed9ce6edd8bb2f528d98edf2887b6394b951a1"
+    records 16
 }
 
 source ".akr/records/docwrite/papercuts.akr" {
@@ -60,8 +60,8 @@ source ".akr/records/pixelkit/work.akr" {
 
 resolution @docwrite.decision.export-formats/1 {
     slot supported_by
-    to @docwrite.observation.pdf-write-gaps/2
-    hash "sha256:f6bf15ecaf5c6ff9c7bf7666747e0983c80335f1f762a1ce2de5d9b77c5ef0f7"
+    to @docwrite.observation.pdf-write-gaps/3
+    hash "sha256:f54d97c54395c43ebaa6156c47d2d79a557fd60bb49ee32c9b19ee111cc5ec57"
 }
 
 resolution @docwrite.decision.incremental-pagination/1 {
@@ -514,8 +514,13 @@ seal @docwrite.observation.pdf-write-gaps/1 {
 }
 
 seal @docwrite.observation.pdf-write-gaps/2 {
+    state superseded
+    hash "sha256:dcf081f7112684dafa71e80a180b17dcf677073606bc1847ae7da5251ac5247d"
+}
+
+seal @docwrite.observation.pdf-write-gaps/3 {
     state verified
-    hash "sha256:f6bf15ecaf5c6ff9c7bf7666747e0983c80335f1f762a1ce2de5d9b77c5ef0f7"
+    hash "sha256:f54d97c54395c43ebaa6156c47d2d79a557fd60bb49ee32c9b19ee111cc5ec57"
 }
 
 seal @docwrite.observation.pixelkit-shell-gaps/1 {

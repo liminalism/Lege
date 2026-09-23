@@ -106,7 +106,7 @@ record docwrite.observation.pdf-write-gaps/1 : observation {
 
 record docwrite.observation.pdf-write-gaps/2 : observation {
     title "lege-pdf-write lacks what typeset-book PDF output needs"
-    state verified
+    state superseded
     statement """
         lege-pdf-write is image-oriented and append-only; DocumentWriter needs the page count up
         front. It embeds Type0/Identity-H CIDFontType2 (FontFile2 only) with caller-supplied
@@ -120,6 +120,18 @@ record docwrite.observation.pdf-write-gaps/2 : observation {
     method manual
     watches [ "lege-pdf/write/src/**" ]
     supersedes [ @docwrite.observation.pdf-write-gaps/1 ]
+}
+
+record docwrite.observation.pdf-write-gaps/3 : observation {
+    title "lege-pdf-write lacks what typeset-book PDF output needs"
+    state verified
+    statement """
+        lege-pdf-write is still image-oriented and append-only: DocumentWriter needs the page count up front. Content operators are q, Q, g, cm, Do and the text set BT ET Tr Tc Tw Tz Tf Tm Tj TJ Ts; there are no path operators and fill is gray only. Fonts are Type0/Identity-H CIDFontType2 with FontFile2 only, no CFF/FontFile3. The writer embeds caller-supplied bytes and does not subset. ToUnicode is None, Identity, or a caller-supplied CMap. Several glyph fonts can be registered on the document. Image XObjects cover DCT, JPX, JBIG2, CCITT and indexed DeviceRGB; there is no Flate RGB image and no alpha channel. Outline bookmarks and metadata remain. The catalog can now carry /Lang, a /StructTreeRoot of element names, and /PageLabels. Link annotations and named destinations are still absent.
+        """
+    observed_at git:96bf831b69cadbdc71bb5e94d00f218e4d7e535d
+    method manual
+    watches [ "lege-pdf/write/src/**" ]
+    supersedes [ @docwrite.observation.pdf-write-gaps/2 ]
 }
 
 record docwrite.observation.pixelkit-shell-gaps/1 : observation {
