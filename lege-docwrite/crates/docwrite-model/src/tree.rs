@@ -54,14 +54,13 @@ pub enum BlockKind {
 /// Footnote or endnote.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NoteKind {
-    /// Placed on the page that references it. Placement is a later milestone.
+    /// Placed on the page that references it, and continued when it does not fit.
     Footnote,
-    /// Collected after the chapter or the book.
+    /// Placed on the page that references it, and continued when it does not fit.
     Endnote,
 }
 
-/// A note body. Pagination does not read this yet; the slot exists so later
-/// milestones do not have to reshape the manuscript.
+/// A note body. Pagination reads it through `from_book`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Note {
     id: NoteId,

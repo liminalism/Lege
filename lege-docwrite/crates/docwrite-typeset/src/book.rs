@@ -52,7 +52,6 @@ pub fn from_book(book: &Book, face: Face) -> Result<Document, TypesetError> {
             let head = chapter.title().to_string();
             let chapter_start = paragraphs.len();
             let mut first_body = true;
-            let mut endnotes = Vec::new();
             for section in chapter.sections() {
                 for block in section.blocks() {
                     let style_name = match block.kind() {
@@ -79,13 +78,11 @@ pub fn from_book(book: &Book, face: Face) -> Result<Document, TypesetError> {
                         style.name = "Caption".into();
                     }
                     let mut note = None;
+                    let mut note_is_endnote = false;
                     if let Some(id) = block.note() {
                         if let Ok(body) = book.note(id) {
-                            if body.kind() == NoteKind::Endnote {
-                                endnotes.push(body.text());
-                            } else {
-                                note = Some(body.text());
-                            }
+                            note_is_endnote = body.kind() == NoteKind::Endnote;
+                            note = Some(body.text());
                         }
                     }
                     paragraphs.push(Paragraph {
@@ -93,7 +90,7 @@ pub fn from_book(book: &Book, face: Face) -> Result<Document, TypesetError> {
                         text: block.text(),
                         style,
                         note,
-                        note_is_endnote: false,
+                        note_is_endnote,
                     });
                     recto_at.push(false);
                     heads.push(head.clone());
@@ -103,22 +100,6 @@ pub fn from_book(book: &Book, face: Face) -> Result<Document, TypesetError> {
                 if let Some(flag) = recto_at.get_mut(chapter_start) {
                     *flag = true;
                 }
-            }
-            for text in endnotes {
-                paragraphs.push(Paragraph {
-                    id: paragraphs.len() as u64 + 1,
-                    text,
-                    style: ParagraphStyle {
-                        name: "Endnote".into(),
-                        font_size: body.size_pt,
-                        leading: body.leading_pt,
-                        ..ParagraphStyle::default()
-                    },
-                    note: None,
-                    note_is_endnote: false,
-                });
-                recto_at.push(false);
-                heads.push(head.clone());
             }
         }
     }

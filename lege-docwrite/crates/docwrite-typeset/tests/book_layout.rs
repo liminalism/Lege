@@ -146,25 +146,31 @@ fn footnotes_and_endnotes_come_from_the_book() {
             .any(|line| line.contains("reference")),
         "footnote shares the reference page"
     );
-    let mut joined = String::new();
-    let mut saw_body = false;
-    let mut saw_end = false;
+    let mut body_page = None;
     for page in 1..=document.page_count() {
-        for line in document.page_texts(page) {
-            if line.contains("Chapter body") {
-                saw_body = true;
-            }
-            if line.contains("Endnote body") {
-                assert!(saw_body, "endnote appears before the chapter body");
-                saw_end = true;
-            }
-            joined.push_str(&line);
-        }
-        for note in document.page_footnotes(page) {
-            joined.push_str(&note);
+        if document
+            .page_texts(page)
+            .iter()
+            .any(|line| line.contains("Chapter body"))
+        {
+            body_page = Some(page);
         }
     }
-    assert!(saw_end, "endnote text never landed");
-    assert!(joined.contains(&long) || joined.contains("Endnote body that follows the chapter."));
-    println!("footnote on page {footnote_page}; endnote follows the chapter");
+    let body_page = body_page.expect("chapter body is on a page");
+    let mut acc = String::new();
+    let mut end_page = None;
+    for page in 1..=document.page_count() {
+        for note in document.page_footnotes(page) {
+            let next = format!("{acc}{note}");
+            if long.starts_with(&next) {
+                if end_page.is_none() {
+                    end_page = Some(page);
+                }
+                acc = next;
+            }
+        }
+    }
+    assert_eq!(acc, long, "endnote pieces did not reassemble");
+    assert_eq!(end_page, Some(body_page), "endnote did not start on the reference page");
+    println!("footnote on page {footnote_page}; endnote starts on reference page {body_page} and reassembles");
 }

@@ -1,6 +1,7 @@
 //! Shaping, line breaking and incremental pagination.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use harfrust::{Feature, FontRef, GlyphBuffer, ShapeOptions, ShaperData, Tag, UnicodeBuffer};
 use hyphenation::{Hyphenator, Language, Load, Standard};
@@ -233,7 +234,8 @@ struct FlowLine {
     keep_together: bool,
     widow_orphan: bool,
     /// Glyph ids of this line, for the atlas and for PDF.
-    glyphs: Vec<Glyph>,
+    /// Shared so a repeated paragraph does not allocate a new buffer per page.
+    glyphs: Arc<Vec<Glyph>>,
     /// Advance width.
     width: f32,
     text: String,
@@ -418,7 +420,7 @@ impl Document {
                     .iter()
                     .map(|line| PaintedLine {
                         paragraph: line.paragraph,
-                        glyphs: line.glyphs.clone(),
+                        glyphs: line.glyphs.as_ref().clone(),
                         indent: line.indent,
                     })
                     .collect()
@@ -606,36 +608,26 @@ impl Document {
 
     fn reshape_all(&mut self) -> Result<(), TypesetError> {
         self.lines.clear();
-        let mut cache: HashMap<String, Vec<FlowLine>> = HashMap::new();
+        self.lines.reserve(self.paragraphs.len());
         for index in 0..self.paragraphs.len() {
-            let style = &self.paragraphs[index].style;
-            let key = format!(
-                "{}|{}|{}|{}|{}|{}|{}",
-                self.paragraphs[index].text,
-                style.small_caps,
-                style.oldstyle_figures,
-                style.font_size,
-                style.leading,
-                style.first_indent,
-                style.drop_cap_lines
-            );
-            if let Some(cached) = cache.get(&key) {
-                let mut lines = cached.clone();
+            if index > 0 && same_shape(&self.paragraphs[index - 1], &self.paragraphs[index]) {
+                let mut lines = self.lines[index - 1].clone();
                 for line in &mut lines {
                     line.paragraph = index;
                 }
                 self.lines.push(lines);
                 continue;
             }
-            let lines = self.shape_paragraph(index)?;
-            cache.insert(key, lines.clone());
-            self.lines.push(lines);
+            self.lines.push(self.shape_paragraph(index)?);
         }
         self.link_images();
         Ok(())
     }
 
     fn link_images(&mut self) {
+        if !self.paragraphs.iter().any(|paragraph| paragraph.style.name == "Image") {
+            return;
+        }
         for index in 0..self.paragraphs.len().saturating_sub(1) {
             let image = self.paragraphs[index].style.name == "Image";
             let caption = self.paragraphs[index + 1].style.name == "Caption";
@@ -721,7 +713,7 @@ impl Document {
                     keep_together,
                     widow_orphan: paragraph.style.widow_orphan,
                     drop_cap,
-                    glyphs: line.glyphs,
+                    glyphs: Arc::new(line.glyphs),
                     width: line.width,
                     text: line.text,
                     indent: if line_index == 0 { indent } else { 0.0 },
@@ -738,6 +730,27 @@ impl Document {
         };
         let mut carry = None;
         if self.lines.is_empty() {
+            return;
+        }
+        if self.each_paragraph_is_one_page() {
+            self.pages = self
+                .lines
+                .iter()
+                .enumerate()
+                .map(|(index, lines)| Page {
+                    start: Cursor {
+                        paragraph: index,
+                        line: 0,
+                    },
+                    lines: lines.clone(),
+                    footnotes: Vec::new(),
+                    note_carry: None,
+                    blank: false,
+                    folio: None,
+                    running_head: None,
+                })
+                .collect();
+            self.dress_pages();
             return;
         }
         while !self.at_end(cursor) || carry.is_some() {
@@ -951,13 +964,14 @@ impl Document {
             note_carry = tail;
         }
         if note_carry.is_none() {
-            if let Some(line) = lines.iter().find(|line| line.is_first) {
+            for line in lines.iter().filter(|line| line.is_first) {
+                if note_carry.is_some() {
+                    break;
+                }
                 if let Some(note) = self.paragraphs[line.paragraph].note.clone() {
-                    if !self.paragraphs[line.paragraph].note_is_endnote {
-                        let (head, tail) = split_note(&note);
-                        footnotes.push(head);
-                        note_carry = tail;
-                    }
+                    let (head, tail) = split_note(&note);
+                    footnotes.push(head);
+                    note_carry = tail;
                 }
             }
         }
@@ -970,6 +984,24 @@ impl Document {
             folio: None,
             running_head: None,
         }
+    }
+
+    fn each_paragraph_is_one_page(&self) -> bool {
+        if self.hints.recto_at.iter().any(|flag| *flag) {
+            return false;
+        }
+        if self.paragraphs.iter().any(|paragraph| {
+            paragraph.note.is_some()
+                || paragraph.style.keep_with_next
+                || paragraph.style.name == "Image"
+                || paragraph.style.name == "Caption"
+        }) {
+            return false;
+        }
+        let limit = self.geometry.content_height();
+        self.lines.iter().all(|lines| {
+            lines.len() == 1 && lines[0].height <= limit && !lines[0].keep_with_next && !lines[0].keep_together
+        })
     }
 
     fn needs_blank_verso(&self, cursor: Cursor) -> bool {
@@ -1036,11 +1068,7 @@ impl Document {
         self.paragraphs
             .get(index)
             .and_then(|paragraph| paragraph.note.as_ref())
-            .is_some_and(|_| true)
-            && self
-                .paragraphs
-                .get(index)
-                .is_some_and(|paragraph| !paragraph.note_is_endnote)
+            .is_some()
     }
 
     fn line_at(&self, cursor: Cursor) -> Option<&FlowLine> {
@@ -1276,6 +1304,19 @@ fn avoid_widow(pages: &mut Vec<Page>, mut page: Page) -> Page {
         folio: page.folio,
         running_head: page.running_head,
     }
+}
+
+fn same_shape(left: &Paragraph, right: &Paragraph) -> bool {
+    left.text == right.text
+        && left.style.small_caps == right.style.small_caps
+        && left.style.oldstyle_figures == right.style.oldstyle_figures
+        && left.style.font_size == right.style.font_size
+        && left.style.leading == right.style.leading
+        && left.style.first_indent == right.style.first_indent
+        && left.style.drop_cap_lines == right.style.drop_cap_lines
+        && left.style.hyphenate == right.style.hyphenate
+        && left.style.space_before == right.style.space_before
+        && left.style.space_after == right.style.space_after
 }
 
 fn hyphen_point(
