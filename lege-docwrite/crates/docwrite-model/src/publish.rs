@@ -219,6 +219,21 @@ impl Book {
         &self.stylesheet.masters
     }
 
+    /// Replace the named page master. The next layout uses its geometry.
+    pub fn set_page_master(&mut self, master: PageMaster) -> Result<(), ModelError> {
+        let Some(slot) = self
+            .stylesheet
+            .masters
+            .iter_mut()
+            .find(|existing| existing.name == master.name)
+        else {
+            self.stylesheet.masters.push(master);
+            return Ok(());
+        };
+        *slot = master;
+        Ok(())
+    }
+
     pub fn chapter_templates(&self) -> &[ChapterTemplate] {
         &self.stylesheet.templates
     }
@@ -296,7 +311,10 @@ impl Book {
     }
 
     pub fn source(&self, id: &str) -> Option<&SourceNote> {
-        self.stylesheet.sources.iter().find(|source| source.id == id)
+        self.stylesheet
+            .sources
+            .iter()
+            .find(|source| source.id == id)
     }
 
     /// Insert the source's passage as a quotation and remember the citation key on the caret block.
@@ -415,7 +433,11 @@ impl Book {
         for entry in &self.stylesheet.bibliography {
             out.push_str(&format!(
                 "@{}{{{},\n  title = {},\n  author = {},\n  year = {}\n}}\n",
-                if entry.kind.is_empty() { "book" } else { &entry.kind },
+                if entry.kind.is_empty() {
+                    "book"
+                } else {
+                    &entry.kind
+                },
                 entry.key,
                 bib_brace(&entry.title),
                 bib_brace(&entry.author),
@@ -537,7 +559,10 @@ fn parse_bibtex(bibtex: &str) -> Vec<BibliographyEntry> {
                     if let Some(braced) = after.strip_prefix('{') {
                         braced.split('}').next().map(str::to_string)
                     } else {
-                        after.split([',', '\n']).next().map(|s| s.trim().to_string())
+                        after
+                            .split([',', '\n'])
+                            .next()
+                            .map(|s| s.trim().to_string())
                     }
                 })
                 .unwrap_or_default()

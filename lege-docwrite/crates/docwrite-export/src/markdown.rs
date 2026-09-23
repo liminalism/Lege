@@ -1,6 +1,6 @@
 //! Markdown that keeps structure and drops page geometry.
 
-use crate::{blocks_of, ExportBlock};
+use crate::{ExportBlock, blocks_of};
 use docwrite_model::Book;
 
 pub fn export_markdown(book: &Book) -> String {
@@ -12,28 +12,28 @@ pub fn export_markdown(book: &Book) -> String {
             "heading" => {
                 out.push_str("# ");
                 out.push_str(&inline(&block));
+                push_note(&block, &mut footnote, &mut notes, &mut out);
                 out.push_str("\n\n");
             }
             "quote" => {
                 out.push_str("> ");
                 out.push_str(&inline(&block));
+                push_note(&block, &mut footnote, &mut notes, &mut out);
                 out.push_str("\n\n");
             }
             "image" => {
                 out.push_str("![");
                 out.push_str(&block.text);
-                out.push_str("](assets/image)\n\n");
+                out.push_str("](assets/image)");
+                push_note(&block, &mut footnote, &mut notes, &mut out);
+                out.push_str("\n\n");
             }
             _ => {
                 if block.text.is_empty() && block.note.is_none() {
                     continue;
                 }
                 out.push_str(&inline(&block));
-                if block.note.is_some() {
-                    out.push_str(&format!("[^{footnote}]"));
-                    notes.push(format!("[^{footnote}]: note\n"));
-                    footnote += 1;
-                }
+                push_note(&block, &mut footnote, &mut notes, &mut out);
                 out.push_str("\n\n");
             }
         }
@@ -46,6 +46,14 @@ pub fn export_markdown(book: &Book) -> String {
         // beyond never having written it.
     }
     out
+}
+
+fn push_note(block: &ExportBlock, footnote: &mut u32, notes: &mut Vec<String>, out: &mut String) {
+    if let Some(note) = &block.note {
+        out.push_str(&format!("[^{footnote}]"));
+        notes.push(format!("[^{footnote}]: {note}\n"));
+        *footnote += 1;
+    }
 }
 
 fn inline(block: &ExportBlock) -> String {

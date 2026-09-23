@@ -93,6 +93,8 @@ pub struct PaintedLine {
     pub paragraph: usize,
     /// Glyphs in visual order.
     pub glyphs: Vec<Glyph>,
+    /// First-line indent in geometry units. Other lines are zero.
+    pub indent: f32,
 }
 
 /// One shaped glyph in pixels.
@@ -171,6 +173,12 @@ pub struct ParagraphStyle {
     pub oldstyle_figures: bool,
     pub space_before: f32,
     pub space_after: f32,
+    /// Zero uses the document geometry.
+    pub font_size: f32,
+    /// Zero uses the document geometry.
+    pub leading: f32,
+    /// First-line indent. Later lines use the full measure.
+    pub first_indent: f32,
     /// Stable name such as `Body` or `Chapter Title`. Empty uses the geometry's size.
     pub name: String,
 }
@@ -187,6 +195,9 @@ impl Default for ParagraphStyle {
             oldstyle_figures: false,
             space_before: 0.0,
             space_after: 0.0,
+            font_size: 0.0,
+            leading: 0.0,
+            first_indent: 0.0,
             name: "Body".into(),
         }
     }
@@ -228,6 +239,8 @@ struct FlowLine {
     text: String,
     /// Drop-cap glyph is larger than the body size when set.
     drop_cap: bool,
+    /// First-line indent in the same units as the geometry.
+    indent: f32,
 }
 
 #[derive(Clone, Debug)]
@@ -238,6 +251,31 @@ struct Page {
     footnotes: Vec<String>,
     /// Tail of a note that did not fit, carried onto the next page.
     note_carry: Option<String>,
+    /// A verso left empty so the next chapter can open on a recto.
+    blank: bool,
+    folio: Option<String>,
+    running_head: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct LayoutHints {
+    pub recto_at: Vec<bool>,
+    pub heads: Vec<String>,
+    pub folio: bool,
+    pub hide_opener_folio: bool,
+    pub running_head: bool,
+}
+
+impl Default for LayoutHints {
+    fn default() -> Self {
+        Self {
+            recto_at: Vec::new(),
+            heads: Vec::new(),
+            folio: false,
+            hide_opener_folio: false,
+            running_head: false,
+        }
+    }
 }
 
 /// What an edit did to pagination. Page numbers are 1-based.
@@ -256,6 +294,7 @@ pub struct Document {
     lines: Vec<Vec<FlowLine>>,
     pages: Vec<Page>,
     hyphenator: Option<Standard>,
+    hints: LayoutHints,
 }
 
 impl Document {
@@ -265,6 +304,16 @@ impl Document {
         paragraphs: Vec<Paragraph>,
     ) -> Result<Self, TypesetError> {
         let hyphenator = Standard::from_embedded(Language::EnglishUS).ok();
+        Self::new_with(face, geometry, paragraphs, LayoutHints::default())
+    }
+
+    pub(crate) fn new_with(
+        face: Face,
+        geometry: Geometry,
+        paragraphs: Vec<Paragraph>,
+        hints: LayoutHints,
+    ) -> Result<Self, TypesetError> {
+        let hyphenator = Standard::from_embedded(Language::EnglishUS).ok();
         let mut doc = Self {
             face,
             geometry,
@@ -272,10 +321,48 @@ impl Document {
             lines: Vec::new(),
             pages: Vec::new(),
             hyphenator,
+            hints,
         };
         doc.reshape_all()?;
         doc.paginate_all();
         Ok(doc)
+    }
+
+    /// Page number printed when the master asks for a folio. 1-based `page`.
+    pub fn page_folio(&self, page: u32) -> Option<String> {
+        self.pages
+            .get(page.saturating_sub(1) as usize)
+            .and_then(|page| page.folio.clone())
+    }
+
+    /// Running head printed when the master asks for one.
+    pub fn page_running_head(&self, page: u32) -> Option<String> {
+        self.pages
+            .get(page.saturating_sub(1) as usize)
+            .and_then(|page| page.running_head.clone())
+    }
+
+    /// True when `page` was inserted so the next chapter could open on a recto.
+    pub fn is_blank_page(&self, page: u32) -> bool {
+        self.pages
+            .get(page.saturating_sub(1) as usize)
+            .is_some_and(|page| page.blank)
+    }
+
+    /// First-line indents of 1-based `page`, in geometry units.
+    pub fn line_indents(&self, page: u32) -> Vec<f32> {
+        self.pages
+            .get(page.saturating_sub(1) as usize)
+            .map(|page| page.lines.iter().map(|line| line.indent).collect())
+            .unwrap_or_default()
+    }
+
+    /// Em size of the first glyph of paragraph `index`.
+    pub fn paragraph_em(&self, index: usize) -> Option<f32> {
+        self.lines
+            .get(index)?
+            .iter()
+            .find_map(|line| line.glyphs.first().map(|glyph| glyph.em))
     }
 
     pub fn page_count(&self) -> u32 {
@@ -332,6 +419,7 @@ impl Document {
                     .map(|line| PaintedLine {
                         paragraph: line.paragraph,
                         glyphs: line.glyphs.clone(),
+                        indent: line.indent,
                     })
                     .collect()
             })
@@ -520,11 +608,16 @@ impl Document {
         self.lines.clear();
         let mut cache: HashMap<String, Vec<FlowLine>> = HashMap::new();
         for index in 0..self.paragraphs.len() {
+            let style = &self.paragraphs[index].style;
             let key = format!(
-                "{}|{}|{}",
+                "{}|{}|{}|{}|{}|{}|{}",
                 self.paragraphs[index].text,
-                self.paragraphs[index].style.small_caps,
-                self.geometry.font_size
+                style.small_caps,
+                style.oldstyle_figures,
+                style.font_size,
+                style.leading,
+                style.first_indent,
+                style.drop_cap_lines
             );
             if let Some(cached) = cache.get(&key) {
                 let mut lines = cached.clone();
@@ -538,25 +631,49 @@ impl Document {
             cache.insert(key, lines.clone());
             self.lines.push(lines);
         }
+        self.link_images();
         Ok(())
+    }
+
+    fn link_images(&mut self) {
+        for index in 0..self.paragraphs.len().saturating_sub(1) {
+            let image = self.paragraphs[index].style.name == "Image";
+            let caption = self.paragraphs[index + 1].style.name == "Caption";
+            if image && caption {
+                if let Some(last) = self.lines.get_mut(index).and_then(|lines| lines.last_mut()) {
+                    last.keep_with_next = true;
+                }
+            }
+        }
     }
 
     fn reshape_one(&mut self, index: usize) -> Result<(), TypesetError> {
         let lines = self.shape_paragraph(index)?;
         self.lines[index] = lines;
+        self.link_images();
         Ok(())
     }
 
     fn shape_paragraph(&self, index: usize) -> Result<Vec<FlowLine>, TypesetError> {
         let paragraph = &self.paragraphs[index];
         let features = features_for(paragraph.style.small_caps, paragraph.style.oldstyle_figures);
-        let glyphs = self
-            .face
-            .shape(&paragraph.text, self.geometry.font_size, &features)?;
+        let size = if paragraph.style.font_size > 0.0 {
+            paragraph.style.font_size
+        } else {
+            self.geometry.font_size
+        };
+        let leading = if paragraph.style.leading > 0.0 {
+            paragraph.style.leading
+        } else {
+            self.geometry.leading
+        };
+        let indent = paragraph.style.first_indent.max(0.0);
+        let glyphs = self.face.shape(&paragraph.text, size, &features)?;
         let mut broken = break_lines(
             &paragraph.text,
             &glyphs,
             self.geometry.content_width(),
+            indent,
             paragraph.style.hyphenate,
             self.hyphenator.as_ref(),
         );
@@ -575,7 +692,7 @@ impl Document {
             .into_iter()
             .enumerate()
             .map(|(line_index, mut line)| {
-                let mut height = self.geometry.leading
+                let mut height = leading
                     + if line_index == 0 {
                         paragraph.style.space_before
                     } else {
@@ -592,7 +709,7 @@ impl Document {
                         glyph.x_advance *= factor;
                         glyph.em *= factor;
                     }
-                    height += self.geometry.leading * (factor - 1.0);
+                    height += leading * (factor - 1.0);
                 }
                 FlowLine {
                     paragraph: index,
@@ -607,6 +724,7 @@ impl Document {
                     glyphs: line.glyphs,
                     width: line.width,
                     text: line.text,
+                    indent: if line_index == 0 { indent } else { 0.0 },
                 }
             })
             .collect())
@@ -623,15 +741,20 @@ impl Document {
             return;
         }
         while !self.at_end(cursor) || carry.is_some() {
-            let page = self.fill_page(cursor, carry.take());
-            let page = avoid_widow(&mut self.pages, page);
-            carry = page.note_carry.clone();
-            cursor = next_cursor(&page);
-            self.pages.push(page);
+            if carry.is_none() && self.needs_blank_verso(cursor) {
+                self.pages.push(self.blank_page(cursor));
+            } else {
+                let page = self.fill_page(cursor, carry.take());
+                let page = avoid_widow(&mut self.pages, page);
+                carry = page.note_carry.clone();
+                cursor = next_cursor(&page);
+                self.pages.push(page);
+            }
             if self.pages.len() > self.paragraphs.len().saturating_mul(4).max(8) {
                 break;
             }
         }
+        self.dress_pages();
     }
 
     /// Rebuild from `start_page` until a break matches the cached layout.
@@ -669,6 +792,7 @@ impl Document {
             }
         }
         self.pages = pages;
+        self.dress_pages();
         rebuilt
     }
 
@@ -725,6 +849,9 @@ impl Document {
                 footnotes: old.footnotes.clone(),
                 note_carry: old.note_carry.clone(),
                 lines,
+                blank: old.blank,
+                folio: old.folio.clone(),
+                running_head: old.running_head.clone(),
             };
             cursor = next_cursor_from(&page, &self.lines);
             pages.push(page);
@@ -756,6 +883,17 @@ impl Document {
                 break;
             };
             let style = &self.paragraphs[line.paragraph].style;
+            if line.is_first
+                && !lines.is_empty()
+                && self
+                    .hints
+                    .recto_at
+                    .get(line.paragraph)
+                    .copied()
+                    .unwrap_or(false)
+            {
+                break;
+            }
             if used + line.height + note_reserve > limit && !lines.is_empty() {
                 break;
             }
@@ -779,11 +917,15 @@ impl Document {
                     }
                 }
             }
-            if line.keep_with_next
-                && used + line.height + self.geometry.leading + note_reserve > limit
-                && !lines.is_empty()
-            {
-                break;
+            if line.keep_with_next && !lines.is_empty() {
+                let next = step(cursor, &self.lines);
+                let next_height = self
+                    .line_at(next)
+                    .map(|next_line| next_line.height)
+                    .unwrap_or(self.geometry.leading);
+                if used + line.height + next_height + note_reserve > limit {
+                    break;
+                }
             }
             if line.keep_together && line.is_first {
                 let rest = self.paragraph_rest_height(cursor);
@@ -824,6 +966,69 @@ impl Document {
             lines,
             footnotes,
             note_carry,
+            blank: false,
+            folio: None,
+            running_head: None,
+        }
+    }
+
+    fn needs_blank_verso(&self, cursor: Cursor) -> bool {
+        let Some(line) = self.line_at(cursor) else {
+            return false;
+        };
+        if line.line != 0 {
+            return false;
+        }
+        let recto = self
+            .hints
+            .recto_at
+            .get(line.paragraph)
+            .copied()
+            .unwrap_or(false);
+        recto && (self.pages.len() + 1).is_multiple_of(2)
+    }
+
+    fn blank_page(&self, start: Cursor) -> Page {
+        Page {
+            start,
+            lines: Vec::new(),
+            footnotes: Vec::new(),
+            note_carry: None,
+            blank: true,
+            folio: None,
+            running_head: None,
+        }
+    }
+
+    fn dress_pages(&mut self) {
+        if !self.hints.folio && !self.hints.running_head {
+            return;
+        }
+        let mut carried = String::new();
+        for (index, page) in self.pages.iter_mut().enumerate() {
+            let page_no = index as u32 + 1;
+            if let Some(line) = page.lines.first() {
+                if let Some(head) = self.hints.heads.get(line.paragraph) {
+                    if !head.is_empty() {
+                        carried = head.clone();
+                    }
+                }
+            }
+            let opener = page.lines.first().is_some_and(|line| {
+                line.is_first
+                    && self
+                        .hints
+                        .recto_at
+                        .get(line.paragraph)
+                        .copied()
+                        .unwrap_or(false)
+            }) || (index == 0 && self.hints.hide_opener_folio);
+            if self.hints.folio && !(opener && self.hints.hide_opener_folio) {
+                page.folio = Some(page_no.to_string());
+            }
+            if self.hints.running_head && !carried.is_empty() && !opener {
+                page.running_head = Some(carried.clone());
+            }
         }
     }
 
@@ -929,6 +1134,7 @@ fn break_lines(
     text: &str,
     glyphs: &[Glyph],
     measure: f32,
+    first_indent: f32,
     hyphenate: bool,
     hyphenator: Option<&Standard>,
 ) -> Vec<Broken> {
@@ -943,6 +1149,7 @@ fn break_lines(
     let mut start = 0usize;
     let mut width = 0.0;
     let mut last_break: Option<usize> = None;
+    let mut limit = (measure - first_indent).max(1.0);
     for (index, glyph) in glyphs.iter().enumerate() {
         let cluster = glyph.cluster as usize;
         if index > start {
@@ -958,10 +1165,11 @@ fn break_lines(
                     start = index;
                     width = 0.0;
                     last_break = None;
+                    limit = measure;
                 }
             }
         }
-        if width + glyph.x_advance > measure && index > start {
+        if width + glyph.x_advance > limit && index > start {
             let (at, hyphen) = if let Some(at) = last_break.filter(|at| *at > start) {
                 (at, false)
             } else if let Some(at) = hyphen_point(text, glyphs, start, index, hyphenate, hyphenator)
@@ -979,6 +1187,7 @@ fn break_lines(
                 width_of(&glyphs[start..at]),
                 hyphen,
             ));
+            limit = measure;
             start = at;
             width = width_of(&glyphs[start..index]);
             last_break = None;
@@ -1063,6 +1272,9 @@ fn avoid_widow(pages: &mut Vec<Page>, mut page: Page) -> Page {
         lines,
         footnotes: page.footnotes,
         note_carry: page.note_carry,
+        blank: page.blank,
+        folio: page.folio,
+        running_head: page.running_head,
     }
 }
 

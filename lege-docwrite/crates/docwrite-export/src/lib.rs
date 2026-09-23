@@ -8,7 +8,7 @@ mod preflight;
 pub use idml::export_idml;
 pub use markdown::export_markdown;
 pub use pdf::export_pdf;
-pub use preflight::{preflight, AssetFacts, PreflightReport};
+pub use preflight::{AssetFacts, PreflightReport, preflight};
 
 use docwrite_model::{BlockKind, Book};
 
@@ -32,10 +32,7 @@ pub fn blocks_of(book: &Book) -> Vec<ExportBlock> {
                 for block in section.blocks() {
                     let bold = block.runs().iter().any(|run| run.marks.bold);
                     let italic = block.runs().iter().any(|run| run.marks.italic);
-                    let link = block
-                        .runs()
-                        .iter()
-                        .find_map(|run| run.marks.link.clone());
+                    let link = block.runs().iter().find_map(|run| run.marks.link.clone());
                     out.push(ExportBlock {
                         kind: match block.kind() {
                             BlockKind::ChapterTitle => "heading".into(),
@@ -49,7 +46,9 @@ pub fn blocks_of(book: &Book) -> Vec<ExportBlock> {
                         bold,
                         italic,
                         link,
-                        note: block.note().map(|id| format!("{id}")),
+                        note: block
+                            .note()
+                            .and_then(|id| book.note(id).ok().map(|note| note.text())),
                         chapter: chapter.title().to_string(),
                     });
                 }

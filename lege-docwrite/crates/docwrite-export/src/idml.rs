@@ -26,13 +26,16 @@ pub fn export_idml(book: &Book) -> Vec<u8> {
             "<ParagraphStyleRange AppliedParagraphStyle=\"ParagraphStyle/{style}\">"
         ));
         if block.kind == "image" {
-            story.push_str("<AnchoredObject><Image href=\"file://assets/image\"/></AnchoredObject>");
+            story
+                .push_str("<AnchoredObject><Image href=\"file://assets/image\"/></AnchoredObject>");
         }
         story.push_str("<CharacterStyleRange AppliedCharacterStyle=\"CharacterStyle/$ID/[No character style]\">");
         story.push_str(&format!("<Content>{}</Content>", xml_escape(&block.text)));
         story.push_str("</CharacterStyleRange>");
-        if block.note.is_some() {
-            story.push_str("<Footnote><ParagraphStyleRange AppliedParagraphStyle=\"ParagraphStyle/Footnote\"><CharacterStyleRange><Content>note</Content></CharacterStyleRange></ParagraphStyleRange></Footnote>");
+        if let Some(note) = &block.note {
+            story.push_str("<Footnote><ParagraphStyleRange AppliedParagraphStyle=\"ParagraphStyle/Footnote\"><CharacterStyleRange><Content>");
+            story.push_str(&xml_escape(note));
+            story.push_str("</Content></CharacterStyleRange></ParagraphStyleRange></Footnote>");
         }
         story.push_str("</ParagraphStyleRange>");
     }

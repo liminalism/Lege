@@ -10,7 +10,7 @@ pub use map::{BookMap, MapKind, MapRow, SIDEBAR_W};
 pub use nav::{Pager, Phase};
 
 use docwrite_model::{Book, Direction, Motion};
-use docwrite_typeset::{Document, Face, Geometry, GlyphAtlas, Paragraph, ParagraphStyle};
+use docwrite_typeset::{Document, Face, GlyphAtlas, from_book};
 use map::BookMap as Map;
 
 const DESK: u32 = 0x00E6_E1D6;
@@ -112,7 +112,9 @@ impl Editor {
         if !self.dirty {
             return Ok(());
         }
-        self.book.save_bundle(&path).map_err(|err| err.to_string())?;
+        self.book
+            .save_bundle(&path)
+            .map_err(|err| err.to_string())?;
         self.dirty = false;
         Ok(())
     }
@@ -120,7 +122,9 @@ impl Editor {
     /// Store a named snapshot of the manuscript as it is now.
     pub fn save_named_snapshot(&mut self, name: &str) -> Result<(), String> {
         let path = self.bundle.clone().ok_or_else(|| "no bundle".to_string())?;
-        self.book.save_snapshot(&path, name).map_err(|err| err.to_string())
+        self.book
+            .save_snapshot(&path, name)
+            .map_err(|err| err.to_string())
     }
 
     /// Replace the open manuscript with a named snapshot.
@@ -140,7 +144,9 @@ impl Editor {
     }
 
     pub fn extend_left(&mut self) {
-        let _ = self.book.extend_selection(Motion::Char(Direction::Backward));
+        let _ = self
+            .book
+            .extend_selection(Motion::Char(Direction::Backward));
     }
 
     pub fn extend_right(&mut self) {
@@ -190,7 +196,7 @@ impl Editor {
         let scroll = self.pager.scroll();
         let origin = (height / 2) - ((scroll.fract() * page_h as f64) as i32);
         let first = scroll.floor() as i32;
-        let document = self.laid_out(page_w, page_h);
+        let document = self.laid_out();
         let mut painter = pixelkit_raster::Painter::new(buffer);
         for slot in -1..4 {
             let page_index = first + slot;
@@ -222,7 +228,11 @@ impl Editor {
     pub fn pixels_of(&mut self, width: u32, height: u32, color: u32) -> usize {
         let mut buffer = pixelkit_raster::WindowBuffer::new(width, height);
         self.paint(&mut buffer);
-        buffer.pixels.iter().filter(|pixel| **pixel == color).count()
+        buffer
+            .pixels
+            .iter()
+            .filter(|pixel| **pixel == color)
+            .count()
     }
 
     /// How many pixels of the painted window are neither the desk nor the page.
@@ -236,19 +246,13 @@ impl Editor {
             .count()
     }
 
-    fn laid_out(&self, page_w: i32, page_h: i32) -> Option<Document> {
+    fn laid_out(&self) -> Option<Document> {
         let face = self.face.as_ref()?.duplicate().ok()?;
-        let geometry = Geometry {
-            page_width: page_w as f32,
-            page_height: page_h as f32,
-            margin_top: 48.0,
-            margin_bottom: 48.0,
-            margin_inner: 40.0,
-            margin_outer: 40.0,
-            font_size: 18.0,
-            leading: 24.0,
-        };
-        Document::new(face, geometry, paragraphs_of(&self.book, &self.preedit)).ok()
+        let mut book = self.book.clone();
+        if !self.preedit.is_empty() {
+            let _ = book.insert(&self.preedit);
+        }
+        from_book(&book, face).ok()
     }
 
     fn paint_page(
@@ -265,7 +269,30 @@ impl Editor {
             return;
         }
         let geometry = document.geometry();
+        let scale = (page_w as f32 / geometry.page_width.max(1.0))
+            .min(page_h as f32 / geometry.page_height.max(1.0))
+            .max(0.05);
         painter.push_clip(pixelkit_raster::Rect::new(left, top, page_w, page_h));
+        if let Some(head) = document.page_running_head(page) {
+            self.paint_label(
+                painter,
+                document.face(),
+                &head,
+                left + (geometry.margin_inner * scale) as i32,
+                top + (12.0 * scale) as i32,
+                10.0 * scale,
+            );
+        }
+        if let Some(folio) = document.page_folio(page) {
+            self.paint_label(
+                painter,
+                document.face(),
+                &folio,
+                left + page_w / 2,
+                top + page_h - (18.0 * scale) as i32,
+                10.0 * scale,
+            );
+        }
         let lines = document.page_painted_lines(page);
         let selected = selected_spans(&self.book);
         let focus = focus_mark(&self.book);
@@ -275,10 +302,9 @@ impl Editor {
         let face = document.face();
         for (index, line) in lines.iter().enumerate() {
             let baseline = top
-                + geometry.margin_top as i32
-                + geometry.font_size as i32
-                + index as i32 * geometry.leading as i32;
-            let mut pen = left + geometry.margin_inner as i32;
+                + ((geometry.margin_top + geometry.font_size) * scale) as i32
+                + (index as f32 * geometry.leading * scale) as i32;
+            let mut pen = left + ((geometry.margin_inner + line.indent) * scale) as i32;
             if let Some((paragraph, focus_byte)) = focus {
                 if paragraph == line.paragraph {
                     saw_focus = true;
@@ -287,30 +313,30 @@ impl Editor {
                         if glyph.cluster as usize >= focus_byte {
                             break;
                         }
-                        mark += glyph.x_advance.round() as i32;
+                        mark += (glyph.x_advance * scale).round() as i32;
                     }
                     caret_x = mark;
-                    caret_y = baseline - geometry.font_size as i32;
+                    caret_y = baseline - (geometry.font_size * scale) as i32;
                 }
             }
             for glyph in &line.glyphs {
-                let advance = glyph.x_advance.round() as i32;
+                let advance = (glyph.x_advance * scale).round() as i32;
                 if span_covers(&selected, line.paragraph, glyph.cluster as usize) {
                     painter.fill_rect(
                         pixelkit_raster::Rect::new(
                             pen,
-                            baseline - geometry.font_size as i32,
+                            baseline - (geometry.font_size * scale) as i32,
                             advance.max(1),
-                            geometry.leading.max(1.0) as i32,
+                            (geometry.leading * scale).max(1.0) as i32,
                         ),
                         SELECTION,
                     );
                 }
-                let size = if glyph.em > 0.0 {
+                let size = (if glyph.em > 0.0 {
                     glyph.em
                 } else {
                     geometry.font_size
-                };
+                }) * scale;
                 let origin_y = baseline - 48;
                 let _ = self
                     .atlas
@@ -336,7 +362,7 @@ impl Editor {
             }
         }
         if saw_focus {
-            let height = geometry.font_size.max(1.0) as i32;
+            let height = (geometry.font_size * scale).max(1.0) as i32;
             painter.fill_rect(pixelkit_raster::Rect::new(caret_x, caret_y, 2, height), INK);
             self.caret = Some(CaretRect {
                 x: caret_x as f64,
@@ -346,6 +372,45 @@ impl Editor {
             });
         }
         painter.pop_clip();
+    }
+
+    fn paint_label(
+        &mut self,
+        painter: &mut pixelkit_raster::Painter<'_>,
+        face: &Face,
+        text: &str,
+        x: i32,
+        y: i32,
+        size: f32,
+    ) {
+        let Ok(glyphs) = face.shape(text, size.max(1.0), &[]) else {
+            return;
+        };
+        let mut pen = x;
+        for glyph in glyphs {
+            let origin_y = y - 48;
+            let _ =
+                self.atlas
+                    .with_coverage(face, glyph.id, size.max(1.0), 0.0, |coverage, stride| {
+                        if stride == 0 {
+                            return;
+                        }
+                        let rows = coverage.len() as u32 / stride;
+                        for row in 0..rows {
+                            let start = (row * stride) as usize;
+                            let end = start + stride as usize;
+                            if end <= coverage.len() {
+                                painter.blend_coverage_row(
+                                    pen,
+                                    origin_y + row as i32,
+                                    INK,
+                                    &coverage[start..end],
+                                );
+                            }
+                        }
+                    });
+            pen += glyph.x_advance.round() as i32;
+        }
     }
 
     fn paint_sidebar(&self, painter: &mut pixelkit_raster::Painter<'_>, height: i32) {
@@ -457,12 +522,22 @@ fn selected_spans(book: &Book) -> Vec<(usize, usize, usize)> {
     let (Some(anchor_i), Some(focus_i)) = (anchor_i, focus_i) else {
         return Vec::new();
     };
-    let (from_i, from_off, to_i, to_off) = if (anchor_i, selection.anchor.offset) <= (focus_i, selection.focus.offset)
-    {
-        (anchor_i, selection.anchor.offset, focus_i, selection.focus.offset)
-    } else {
-        (focus_i, selection.focus.offset, anchor_i, selection.anchor.offset)
-    };
+    let (from_i, from_off, to_i, to_off) =
+        if (anchor_i, selection.anchor.offset) <= (focus_i, selection.focus.offset) {
+            (
+                anchor_i,
+                selection.anchor.offset,
+                focus_i,
+                selection.focus.offset,
+            )
+        } else {
+            (
+                focus_i,
+                selection.focus.offset,
+                anchor_i,
+                selection.anchor.offset,
+            )
+        };
     if from_i == to_i && from_off == to_off {
         return Vec::new();
     }
@@ -474,7 +549,11 @@ fn selected_spans(book: &Book) -> Vec<(usize, usize, usize)> {
         let Ok(len) = book.block_len(id) else {
             continue;
         };
-        let start = if index == from_i { from_off.min(len) } else { 0 };
+        let start = if index == from_i {
+            from_off.min(len)
+        } else {
+            0
+        };
         let end = if index == to_i { to_off.min(len) } else { len };
         if start >= end {
             continue;
@@ -482,7 +561,11 @@ fn selected_spans(book: &Book) -> Vec<(usize, usize, usize)> {
         let Ok(block) = book.block(id) else {
             continue;
         };
-        spans.push((index, byte_at(&block.text(), start), byte_at(&block.text(), end)));
+        spans.push((
+            index,
+            byte_at(&block.text(), start),
+            byte_at(&block.text(), end),
+        ));
     }
     spans
 }
@@ -491,47 +574,6 @@ fn span_covers(spans: &[(usize, usize, usize)], paragraph: usize, byte: usize) -
     spans
         .iter()
         .any(|(index, start, end)| *index == paragraph && byte >= *start && byte < *end)
-}
-
-fn paragraphs_of(book: &Book, preedit: &str) -> Vec<Paragraph> {
-    let mut paragraphs: Vec<Paragraph> = book
-        .blocks()
-        .enumerate()
-        .map(|(index, block)| Paragraph {
-            id: index as u64 + 1,
-            text: block.text(),
-            style: ParagraphStyle {
-                hyphenate: true,
-                widow_orphan: true,
-                ..ParagraphStyle::default()
-            },
-            note: None,
-            note_is_endnote: false,
-        })
-        .collect();
-    if !preedit.is_empty() {
-        if let Some(last) = paragraphs.last_mut() {
-            last.text.push_str(preedit);
-        } else {
-            paragraphs.push(Paragraph {
-                id: 1,
-                text: preedit.to_string(),
-                style: ParagraphStyle::default(),
-                note: None,
-                note_is_endnote: false,
-            });
-        }
-    }
-    if paragraphs.is_empty() {
-        paragraphs.push(Paragraph {
-            id: 1,
-            text: String::new(),
-            style: ParagraphStyle::default(),
-            note: None,
-            note_is_endnote: false,
-        });
-    }
-    paragraphs
 }
 
 /// True when opening a window is not expected to succeed.

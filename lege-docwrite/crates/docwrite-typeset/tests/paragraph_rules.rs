@@ -281,3 +281,114 @@ fn a_long_word_breaks_with_a_visible_hyphen() {
     );
     println!("hyphenated lines: {lines:?}");
 }
+
+#[test]
+fn an_image_stays_on_the_same_page_as_its_caption() {
+    let geometry = Geometry {
+        page_width: 220.0,
+        page_height: 40.0,
+        margin_top: 4.0,
+        margin_bottom: 4.0,
+        margin_inner: 8.0,
+        margin_outer: 8.0,
+        font_size: 12.0,
+        leading: 16.0,
+    };
+    let lead = Paragraph {
+        id: 1,
+        text: "Lead".into(),
+        style: ParagraphStyle::default(),
+        note: None,
+        note_is_endnote: false,
+    };
+    let image = Paragraph {
+        id: 2,
+        text: "Figure".into(),
+        style: ParagraphStyle {
+            name: "Image".into(),
+            ..ParagraphStyle::default()
+        },
+        note: None,
+        note_is_endnote: false,
+    };
+    let caption = Paragraph {
+        id: 3,
+        text: "Caption under the figure".into(),
+        style: ParagraphStyle {
+            name: "Caption".into(),
+            ..ParagraphStyle::default()
+        },
+        note: None,
+        note_is_endnote: false,
+    };
+    let document = Document::new(face(), geometry, vec![lead, image, caption]).unwrap();
+    let page_of = |needle: &str| {
+        (1..=document.page_count()).find(|page| {
+            document
+                .page_texts(*page)
+                .iter()
+                .any(|line| line.contains(needle))
+        })
+    };
+    let image_page = page_of("Figure").unwrap();
+    let caption_page = page_of("Caption").unwrap();
+    assert_eq!(image_page, caption_page, "image and caption split");
+    assert_ne!(
+        page_of("Lead"),
+        Some(image_page),
+        "the pair was not kept off a full page"
+    );
+    println!("image and caption share page {image_page}");
+}
+
+#[test]
+fn first_line_indent_shortens_the_opening_line() {
+    let geometry = Geometry {
+        page_width: 260.0,
+        page_height: 400.0,
+        margin_top: 8.0,
+        margin_bottom: 8.0,
+        margin_inner: 8.0,
+        margin_outer: 8.0,
+        font_size: 14.0,
+        leading: 18.0,
+    };
+    let text = "alpha ".repeat(24);
+    let indented = ParagraphStyle {
+        first_indent: 48.0,
+        ..ParagraphStyle::default()
+    };
+    let flush = ParagraphStyle::default();
+    let narrow = Document::new(
+        face(),
+        geometry,
+        vec![Paragraph {
+            id: 1,
+            text: text.clone(),
+            style: indented,
+            note: None,
+            note_is_endnote: false,
+        }],
+    )
+    .unwrap();
+    let wide = Document::new(
+        face(),
+        geometry,
+        vec![Paragraph {
+            id: 1,
+            text,
+            style: flush,
+            note: None,
+            note_is_endnote: false,
+        }],
+    )
+    .unwrap();
+    let narrow_first = narrow.page_texts(1).first().unwrap().chars().count();
+    let wide_first = wide.page_texts(1).first().unwrap().chars().count();
+    assert!(
+        narrow_first < wide_first,
+        "indent {narrow_first} vs flush {wide_first}"
+    );
+    assert!((narrow.line_indents(1)[0] - 48.0).abs() < 0.1);
+    println!("first line chars indented {narrow_first} < flush {wide_first}");
+}

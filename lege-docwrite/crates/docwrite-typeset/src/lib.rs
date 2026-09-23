@@ -6,12 +6,14 @@
 //! page break lands on the same block and line as the cached layout.
 
 mod atlas;
+mod book;
 mod engine;
 mod error;
 
 pub use atlas::{AtlasKey, GlyphAtlas};
+pub use book::from_book;
 pub use engine::{
-    book_of_pages, book_of_repeated_line, features_for, Cursor, Document, EditReport, Face, Geometry, Glyph, PaintedLine,
-    Paragraph, ParagraphStyle,
+    Cursor, Document, EditReport, Face, Geometry, Glyph, PaintedLine, Paragraph, ParagraphStyle,
+    book_of_pages, book_of_repeated_line, features_for,
 };
 pub use error::TypesetError;
