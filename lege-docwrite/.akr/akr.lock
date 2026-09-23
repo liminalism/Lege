@@ -5,7 +5,7 @@ build {
     tool "akr 0.5.1"
     grammar "0.1"
     vocabulary "0.2"
-    source_graph "sha256:4f58f138675b72d083bb6369f6a80042982305f3de809afae5086f0e35cf4eb0"
+    source_graph "sha256:97008bd34b37faf0874c984d66016529a287df90a85d3b5aac73f0043c6cc7d2"
 }
 
 source ".akr/project.akr" {
@@ -24,7 +24,7 @@ source ".akr/records/docwrite/evidence.akr" {
 }
 
 source ".akr/records/docwrite/milestones.akr" {
-    hash "sha256:de1db3f9a5c9d5a884710dcf48f3523c8c9959131f5df0811cca5d7964786f19"
+    hash "sha256:a22242b731c7fa75301364ff0289eabf1f2f6eb2c4fc3d09b936e22c7639fccc"
     records 5
 }
 
@@ -441,6 +441,11 @@ seal @docwrite.milestone.m3-prose-typography/1 {
 seal @docwrite.milestone.m4-research-apparatus/1 {
     state completed
     hash "sha256:1d1a3687605e97c1aee0f824e5fc0945005fd0a82c7037de136f244b27b42bf1"
+}
+
+seal @docwrite.milestone.m5-interchange/1 {
+    state completed
+    hash "sha256:6cd8d525d49ebf00ae30cc951d116828d1a1858f7a842d3a3fd08b8cc41d347b"
 }
 
 seal @docwrite.observation.no-shaping-in-workspace/1 {
