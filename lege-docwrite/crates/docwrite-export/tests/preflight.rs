@@ -28,4 +28,9 @@ fn preflight_reports_fonts_images_and_broken_links() {
     assert!(report.low_resolution_images.iter().any(|image| image == "plate"));
     assert!(report.broken_references.iter().any(|link| link == "missing-figure"));
     assert!(!report.font_embedding_warnings.is_empty());
+    println!("preflight missing fonts: {:?}", report.missing_fonts);
+    println!("preflight unembeddable fonts: {:?}", report.unembeddable_fonts);
+    println!("preflight low-resolution images: {:?}", report.low_resolution_images);
+    println!("preflight broken references: {:?}", report.broken_references);
+    println!("preflight font-embedding warnings: {:?}", report.font_embedding_warnings);
 }

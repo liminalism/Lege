@@ -55,8 +55,10 @@ fn pdf_is_searchable_with_bookmarks_subset_font_lang_and_structure() {
     let exported = export_pdf(&book, &face).unwrap();
     assert!(exported.font_bytes < face.len(), "embedded program is a shorter subset");
     let text = String::from_utf8_lossy(&exported.bytes);
-    assert!(text.contains("/Lang") || exported.bytes.windows(5).any(|w| w == b"/Lang"));
-    assert!(exported.bytes.windows(15).any(|w| w == b"/StructTreeRoot"));
+    let has_lang = exported.bytes.windows(5).any(|window| window == b"/Lang");
+    let has_structure = exported.bytes.windows(15).any(|window| window == b"/StructTreeRoot");
+    assert!(text.contains("/Lang") || has_lang);
+    assert!(has_structure);
     assert!(exported.bytes.windows(8).any(|w| w == b"/Outlines") || text.contains("Chapter"));
     let session = RenderSession::open(Arc::<[u8]>::from(exported.bytes.clone()), None).unwrap();
     let extracted = page_text(&session, 0).unwrap();
@@ -91,6 +93,8 @@ fn pdf_is_searchable_with_bookmarks_subset_font_lang_and_structure() {
         "extracted word on page 0 highlight rect {:?} text {:?}",
         rect, word.text
     );
+    println!("tagged pdf /Lang: {has_lang} /StructTreeRoot: {has_structure}");
+    println!("subset font bytes {} < face {}", exported.font_bytes, face.len());
 }
 
 #[test]
@@ -107,4 +111,18 @@ fn idml_package_contains_styles_parent_pages_story_images_and_footnotes() {
     assert!(xml.contains("Story_u1") || xml.contains("story_u1"));
     assert!(xml.contains("AnchoredObject") || xml.contains("Image"));
     assert!(xml.contains("Footnote") || xml.contains("ParagraphStyle/Footnote"));
+    println!("idml ParagraphStyle/Body: {}", xml.contains("ParagraphStyle/Body"));
+    println!("idml parent pages: {}", xml.contains("MasterSpread"));
+    println!(
+        "idml threaded story: {}",
+        xml.contains("Story_u1") || xml.contains("story_u1")
+    );
+    println!(
+        "idml anchored image: {}",
+        xml.contains("AnchoredObject") || xml.contains("Image")
+    );
+    println!(
+        "idml footnotes: {}",
+        xml.contains("Footnote") || xml.contains("ParagraphStyle/Footnote")
+    );
 }
