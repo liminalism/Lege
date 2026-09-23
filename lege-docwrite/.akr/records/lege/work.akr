@@ -30,7 +30,7 @@ record lege.work.multi-font-pages-and-tounicode/1 : work {
 
 record lege.work.tagged-pdf/1 : work {
     title "lege-pdf-write: /Lang and a structure tree"
-    state proposed
+    state completed
     intent """
         Emit /Lang and a structure tree (headings, paragraphs, notes, figures) so book PDFs are tagged and accessible.
         """

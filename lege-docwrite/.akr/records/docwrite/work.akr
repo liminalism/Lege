@@ -3,7 +3,7 @@ project lege-docwrite
 
 record docwrite.work.m1-incremental-pagination/1 : work {
     title "Incremental pagination with convergence stop"
-    state proposed
+    state completed
     intent """
         Paginate forward from the edited paragraph until break positions match the cached layout; count laid-out pages for the convergence test.
         """
@@ -21,7 +21,7 @@ record docwrite.work.m1-latency-gate/1 : work {
 
 record docwrite.work.m1-model-and-edits/1 : work {
     title "Book model skeleton, rope-backed blocks, edit transactions and undo"
-    state active
+    state completed
     intent """
         Implement stable block IDs, a minimal Book/Chapter/Block/Run tree with ropey-backed text, and transactional edits with undo/redo, including the footnote slot in the model.
         """
@@ -39,7 +39,7 @@ record docwrite.work.m1-page-canvas-navigation/1 : work {
 
 record docwrite.work.m1-shaping-and-breaking/1 : work {
     title "Shaping, line breaking and per-glyph atlas"
-    state proposed
+    state completed
     intent """
         Integrate harfrust, skrifa, unicode-linebreak/segmentation/bidi; cache shaped paragraphs per block; rasterize glyphs through pixelkit RasterKernel into a glyph atlas.
         """
@@ -57,7 +57,7 @@ record docwrite.work.m2-book-map/1 : work {
 
 record docwrite.work.m2-markdown-export/1 : work {
     title "Markdown export"
-    state proposed
+    state completed
     intent """
         Emit headings, emphasis, block quotes, images, links and footnotes; discard geometry.
         """
@@ -66,7 +66,7 @@ record docwrite.work.m2-markdown-export/1 : work {
 
 record docwrite.work.m2-pdf-export/1 : work {
     title "PDF export through lege-pdf-write"
-    state proposed
+    state completed
     intent """
         Emit shaped glyph runs, subset fonts, ToUnicode, bookmarks and page labels using the upgraded lege-pdf-write.
         """

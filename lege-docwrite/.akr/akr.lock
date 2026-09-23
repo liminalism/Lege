@@ -5,7 +5,7 @@ build {
     tool "akr 0.5.1"
     grammar "0.1"
     vocabulary "0.2"
-    source_graph "sha256:97008bd34b37faf0874c984d66016529a287df90a85d3b5aac73f0043c6cc7d2"
+    source_graph "sha256:2e8ab274a9767362219baca0ab33a638cbc3308042fe0872ee80b59c47c8b1cf"
 }
 
 source ".akr/project.akr" {
@@ -44,17 +44,17 @@ source ".akr/records/docwrite/requirements.akr" {
 }
 
 source ".akr/records/docwrite/work.akr" {
-    hash "sha256:3e23bc372151218c4b712be400b1b7d907d39385c832fdb806415380b55c92e2"
+    hash "sha256:40ca7e68c6d2d1f8e04f757b3d4c3fd0f64a308977d00a9ef03b3b87303e1a17"
     records 10
 }
 
 source ".akr/records/lege/work.akr" {
-    hash "sha256:0f45c01912863acc82fad35484c1ce29a9f5fa57ba245ad0080f55fda22a46c7"
+    hash "sha256:64e426c86bee7e3cb781ec63bd5a0be107e8f369f116870f665ab4243ca11397"
     records 5
 }
 
 source ".akr/records/pixelkit/work.akr" {
-    hash "sha256:cc40698789008a97a671c76a7d27dc6358cd095b7a4ef14907ea300eaa49e9a6"
+    hash "sha256:654ce6c325a3db6d14eabd9cc589af73d6b352cb8a11c7a17944515482f5e1a3"
     records 6
 }
 
@@ -121,31 +121,31 @@ resolution @docwrite.milestone.m1-editor-spike/1 {
 resolution @docwrite.milestone.m1-editor-spike/1 {
     slot depends_on
     to @pixelkit.work.ime/1
-    hash "sha256:380d4fd21ed55e806e7557fa6e42604f0faa9bf74a58cb5858bdc1b8db5b2779"
+    hash "sha256:e2718a7744d62f0d4fdeeacd499495a79bb51663c8176bee127fa5c6f1026c13"
 }
 
 resolution @docwrite.milestone.m1-editor-spike/1 {
     slot depends_on
     to @pixelkit.work.key-input/1
-    hash "sha256:20c41d814aa6e50d6b838ca82e846a12c3c15983a176514036222627ebbfdff7"
+    hash "sha256:102ffce63a9e3c651c5afcd40b9ee117dc93d6baab12935cacdfe0b28b4a7404"
 }
 
 resolution @docwrite.milestone.m1-editor-spike/1 {
     slot depends_on
     to @pixelkit.work.latency-phase/1
-    hash "sha256:050857c373e253d68364d73e9d9c4900bc888a9ff69260d4d6ff6a864a1f0577"
+    hash "sha256:1224422bea659769d3b09c672a4f8fcb616171fa38d67d211f88b3ff87837277"
 }
 
 resolution @docwrite.milestone.m1-editor-spike/1 {
     slot depends_on
     to @pixelkit.work.presenter-injection/1
-    hash "sha256:e7e49d595bfdea9978413f705a2676cfe124adc7bd3c5a42ce0f6304f245dee0"
+    hash "sha256:3d9b909c7f60b350c93d914c8ea71e2440e869bdd64047c43eda90aaab66eb60"
 }
 
 resolution @docwrite.milestone.m1-editor-spike/1 {
     slot depends_on
     to @pixelkit.work.scroll-phase-gestures/1
-    hash "sha256:3b13de278a4dd10db3ce3c94fc892dac083eb29feaa7fd6a8fbf8feb127bb0f1"
+    hash "sha256:8d6cc89ed0cc9509bf4303517a61aeecf9ab3df3cd438ecad74842631f50e35d"
 }
 
 resolution @docwrite.milestone.m2-book-core/1 {
@@ -229,7 +229,7 @@ resolution @docwrite.milestone.m5-interchange/1 {
 resolution @docwrite.milestone.m5-interchange/1 {
     slot depends_on
     to @lege.work.tagged-pdf/1
-    hash "sha256:ad8785e25874b409f371b6680196a0b910bd08e83155a9e957d0e822d9121ed6"
+    hash "sha256:3e76090708fa9d3f366b0757d2713e7112b0ea3a27a7c0787086ab59b96f2209"
 }
 
 resolution @docwrite.work.m1-incremental-pagination/1 {
@@ -528,7 +528,57 @@ seal @docwrite.papercut.knowledge-start-via-the-mcp-server-attached-at/1 {
     hash "sha256:981f75464664c00a3d8784860cb5774effc2f065e595e86ec645a3ef603595f7"
 }
 
+seal @docwrite.work.m1-incremental-pagination/1 {
+    state completed
+    hash "sha256:b92ce78b8a7bfb511c8a9eb85fbbd2a983b746f1ddf4b02ca3c4270eaf4950b5"
+}
+
 seal @docwrite.work.m1-model-and-edits/1 {
-    state active
-    hash "sha256:3e7bf965b1f80cfbcc5895545135afa12b30f547b5551c1274e8736644bf5b25"
+    state completed
+    hash "sha256:e8d657ef6bc1f2818e8d049c5e68a39f2a31545799b6de643cf1bfb81de833b0"
+}
+
+seal @docwrite.work.m1-shaping-and-breaking/1 {
+    state completed
+    hash "sha256:926a901ea51067b6659ef81a2f6befe6ae20b046efa03654d2a84fba6e6c22ce"
+}
+
+seal @docwrite.work.m2-markdown-export/1 {
+    state completed
+    hash "sha256:2869ee31cfe2223e6089b38c47e396607b70208a0d917c14cdff48ec4e75558e"
+}
+
+seal @docwrite.work.m2-pdf-export/1 {
+    state completed
+    hash "sha256:d40e433dfecc5ac0d9a4fc86f2df092b305f5b5bcd07d492bf2086a7b5e2c30c"
+}
+
+seal @lege.work.tagged-pdf/1 {
+    state completed
+    hash "sha256:3e76090708fa9d3f366b0757d2713e7112b0ea3a27a7c0787086ab59b96f2209"
+}
+
+seal @pixelkit.work.ime/1 {
+    state completed
+    hash "sha256:e2718a7744d62f0d4fdeeacd499495a79bb51663c8176bee127fa5c6f1026c13"
+}
+
+seal @pixelkit.work.key-input/1 {
+    state completed
+    hash "sha256:102ffce63a9e3c651c5afcd40b9ee117dc93d6baab12935cacdfe0b28b4a7404"
+}
+
+seal @pixelkit.work.latency-phase/1 {
+    state completed
+    hash "sha256:1224422bea659769d3b09c672a4f8fcb616171fa38d67d211f88b3ff87837277"
+}
+
+seal @pixelkit.work.presenter-injection/1 {
+    state completed
+    hash "sha256:3d9b909c7f60b350c93d914c8ea71e2440e869bdd64047c43eda90aaab66eb60"
+}
+
+seal @pixelkit.work.scroll-phase-gestures/1 {
+    state completed
+    hash "sha256:8d6cc89ed0cc9509bf4303517a61aeecf9ab3df3cd438ecad74842631f50e35d"
 }
