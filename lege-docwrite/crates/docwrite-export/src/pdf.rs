@@ -103,17 +103,17 @@ pub fn export_pdf(book: &Book, font: &[u8]) -> Result<PdfExport, String> {
     writer.set_structure(structure);
     writer.set_page_labels(b"<< /Nums [ 0 << /S /D >> ] >>".to_vec());
     let bytes = writer.finalize().map_err(|err| err.to_string())?;
-    Ok(PdfExport {
-        bytes,
-        font_bytes,
-    })
+    Ok(PdfExport { bytes, font_bytes })
 }
 
 fn subset_face(font: &[u8], blocks: &[crate::ExportBlock]) -> Result<Vec<u8>, String> {
     let face = Face::parse(font.to_vec()).map_err(|err| err.to_string())?;
     let mut glyphs = vec![0u16];
     for block in blocks {
-        for glyph in face.shape(&block.text, 12.0, &[]).map_err(|err| err.to_string())? {
+        for glyph in face
+            .shape(&block.text, 12.0, &[])
+            .map_err(|err| err.to_string())?
+        {
             glyphs.push(glyph.id);
         }
     }

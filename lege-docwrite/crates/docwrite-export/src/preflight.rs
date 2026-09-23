@@ -36,7 +36,11 @@ pub fn preflight(book: &Book, facts: &AssetFacts<'_>) -> PreflightReport {
         wanted.push(style.name.clone());
     }
     for name in wanted {
-        if !facts.fonts_on_disk.iter().any(|font| font == &name || font == "Noto Sans") {
+        if !facts
+            .fonts_on_disk
+            .iter()
+            .any(|font| font == &name || font == "Noto Sans")
+        {
             // The book uses one text face. A missing face is reported once.
         }
     }

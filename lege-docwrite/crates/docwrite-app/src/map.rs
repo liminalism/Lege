@@ -141,13 +141,22 @@ impl BookMap {
     }
 
     /// Move the chapter on `from_row` to the chapter on `to_row`.
-    pub fn drag_chapter(&self, book: &mut Book, from_row: usize, to_row: usize) -> Result<(), ModelError> {
+    pub fn drag_chapter(
+        &self,
+        book: &mut Book,
+        from_row: usize,
+        to_row: usize,
+    ) -> Result<(), ModelError> {
         let rows = self.rows(book);
         let from = rows.get(from_row).and_then(|row| {
-            (row.kind == MapKind::Chapter).then_some(row.chapter_index).flatten()
+            (row.kind == MapKind::Chapter)
+                .then_some(row.chapter_index)
+                .flatten()
         });
         let to = rows.get(to_row).and_then(|row| {
-            (row.kind == MapKind::Chapter).then_some(row.chapter_index).flatten()
+            (row.kind == MapKind::Chapter)
+                .then_some(row.chapter_index)
+                .flatten()
         });
         let (Some(from), Some(to)) = (from, to) else {
             return Err(ModelError::Inconsistent("drag a chapter onto a chapter"));
