@@ -7,10 +7,24 @@
 
 What should not be trusted without re-checking: records the build flagged `stale` or `at_risk`. Neither flag means a record is wrong (D-003); both mean look at it. This view is generated on every successful build, including one that exits 0 with a long queue (D-024). An empty file on an active project is more often a sign the `watches` globs are wrong than a sign the knowledge is perfect.
 
-## Stale (0)
+## Stale (1)
 
-_(none)_
+### Nothing in Lege-ecosystem shapes, breaks or hyphenates book text
 
-## At risk (0)
+`verified` · `@docwrite.observation.no-shaping-in-workspace/2` · observation · **stale** · [Nothing in Lege-ecosystem shapes, breaks or hyphenates book text](CURRENT-STATE.md#nothing-in-lege-ecosystem-shapes-breaks-or-hyphenates-book-text)
 
-_(none)_
+**Cause** — `watches "Cargo.toml"` was matched by `d631cd1b`, which touched `Cargo.toml`.
+
+## At risk (2)
+
+### Book text is shaped with harfrust and skrifa, broken with unicode-linebreak and hypher
+
+`proposed` · `@docwrite.decision.text-stack/1` · decision · **depth 1** · [Book text is shaped with harfrust and skrifa, broken with unicode-linebreak and hypher](DECISION-HISTORY.md#revision-1--book-text-is-shaped-with-harfrust-and-skrifa-broken-with-unicode-linebreak-and-hypher)
+
+**Via** `supported_by` → `@docwrite.observation.no-shaping-in-workspace/2` (stale: `watches "Cargo.toml"` was matched by `d631cd1b`, which touched `Cargo.toml`.)
+
+### M1 — editor spike: one editable paged document at full speed
+
+`proposed` · `@docwrite.milestone.m1-editor-spike/1` · milestone · **depth 2** · [M1 — editor spike: one editable paged document at full speed](ROADMAP.md#m1--editor-spike-one-editable-paged-document-at-full-speed)
+
+**Via** `depends_on` → `@docwrite.decision.text-stack/1` → `@docwrite.observation.no-shaping-in-workspace/2` (stale: `watches "Cargo.toml"` was matched by `d631cd1b`, which touched `Cargo.toml`.)

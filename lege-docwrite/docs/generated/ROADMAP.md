@@ -12,7 +12,7 @@ from evidence under the descendant-commit rule (D-016).
 
 ### M1 — editor spike: one editable paged document at full speed
 
-`proposed` · `@docwrite.milestone.m1-editor-spike/1`
+`proposed` · `@docwrite.milestone.m1-editor-spike/1` · **at risk**
 
 One editable paged document with caret, selection, undo/redo, Unicode and IME input,
 paragraphs, real font shaping, exact PageUp/PageDown and snap-on-gesture-end,

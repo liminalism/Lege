@@ -56,6 +56,8 @@ Knuth-Plass code. ropey is declared in the root workspace but no Lege crate uses
 
 **supersedes** `@docwrite.observation.no-shaping-in-workspace/1`
 
+> **Stale** — `watches "Cargo.toml"` was matched by `d631cd1b`, which touched `Cargo.toml`. See [REVIEW-REQUIRED.md](REVIEW-REQUIRED.md#nothing-in-lege-ecosystem-shapes-breaks-or-hyphenates-book-text).
+
 ### Lege's text extraction already supports page-anchored source passages
 
 `verified` · `@docwrite.observation.pdf-text-supports-source-passages/2`
