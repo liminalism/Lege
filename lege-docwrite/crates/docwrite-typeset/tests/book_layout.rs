@@ -23,7 +23,7 @@ fn next_recto_inserts_a_blank_verso_with_a_folio_and_running_head() {
     book.set_selection(Selection::collapsed(Position::new(fresh, 0)))
         .unwrap();
     book.insert("Two.").unwrap();
-    let document = from_book(&book, face()).unwrap();
+    let mut document = from_book(&book, face()).unwrap();
     let mut two_page = None;
     for page in 1..=document.page_count() {
         if document
@@ -54,6 +54,22 @@ fn next_recto_inserts_a_blank_verso_with_a_folio_and_running_head() {
     assert_eq!(
         document.page_running_head(verso).as_deref(),
         Some("Chapter 1")
+    );
+    document.edit_page(1, "x").unwrap();
+    let mut two_after = None;
+    for page in 1..=document.page_count() {
+        if document
+            .page_texts(page)
+            .iter()
+            .any(|line| line.contains("Two."))
+        {
+            two_after = Some(page);
+        }
+    }
+    let two_after = two_after.expect("chapter two remains after the edit");
+    assert!(
+        document.is_blank_page(two_after - 1),
+        "the edit dropped the blank verso before page {two_after}"
     );
     println!(
         "blank verso page {verso} folio {:?} running head {:?}",
@@ -173,4 +189,71 @@ fn footnotes_and_endnotes_come_from_the_book() {
     assert_eq!(acc, long, "endnote pieces did not reassemble");
     assert_eq!(end_page, Some(body_page), "endnote did not start on the reference page");
     println!("footnote on page {footnote_page}; endnote starts on reference page {body_page} and reassembles");
+}
+
+#[test]
+fn a_verso_page_insets_the_outer_margin() {
+    let mut book = Book::new("Facing");
+    let mut right = book
+        .page_masters()
+        .iter()
+        .find(|master| master.name == "Right Body")
+        .unwrap()
+        .clone();
+    right.height_pt = 64.0;
+    right.margin_top = 4.0;
+    right.margin_bottom = 4.0;
+    right.margin_inner = 54.0;
+    right.margin_outer = 20.0;
+    right.facing = true;
+    book.set_page_master(right).unwrap();
+    book.insert(&"word ".repeat(80)).unwrap();
+    let document = from_book(&book, face()).unwrap();
+    assert!(document.page_count() >= 2, "pages {}", document.page_count());
+    let recto = document.page_content_inset(1);
+    let verso = document.page_content_inset(2);
+    assert!((recto - 54.0).abs() < 0.1, "recto inset {recto}");
+    assert!((verso - 20.0).abs() < 0.1, "verso inset {verso}");
+    assert_ne!(recto, verso);
+    println!("recto inset {recto} verso inset {verso}");
+}
+
+#[test]
+fn a_second_note_survives_a_split_and_an_edit() {
+    let mut book = Book::new("Notes");
+    let mut right = book
+        .page_masters()
+        .iter()
+        .find(|master| master.name == "Right Body")
+        .unwrap()
+        .clone();
+    right.height_pt = 80.0;
+    right.margin_top = 8.0;
+    right.margin_bottom = 8.0;
+    right.facing = true;
+    book.set_page_master(right).unwrap();
+    let first = "N".repeat(49);
+    book.insert("First reference.").unwrap();
+    book.attach_note(NoteKind::Footnote, &first).unwrap();
+    book.insert("\nSecond reference.").unwrap();
+    book.attach_note(NoteKind::Footnote, "Second note body.").unwrap();
+    let mut document = from_book(&book, face()).unwrap();
+    let joined = note_text(&document);
+    assert!(joined.contains(&first), "first note missing from {joined:?}");
+    assert!(joined.contains("Second note body."), "second note missing from {joined:?}");
+    document.edit_page(1, "x").unwrap();
+    let after = note_text(&document);
+    assert!(after.contains(&first), "edit dropped the split note: {after:?}");
+    assert!(after.contains("Second note body."), "edit dropped the second note: {after:?}");
+    println!("both notes survive the split and the edit");
+}
+
+fn note_text(document: &docwrite_typeset::Document) -> String {
+    let mut joined = String::new();
+    for page in 1..=document.page_count() {
+        for note in document.page_footnotes(page) {
+            joined.push_str(&note);
+        }
+    }
+    joined
 }

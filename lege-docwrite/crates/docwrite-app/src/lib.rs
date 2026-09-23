@@ -278,7 +278,7 @@ impl Editor {
                 painter,
                 document.face(),
                 &head,
-                left + (geometry.margin_inner * scale) as i32,
+                left + (document.page_content_inset(page) * scale) as i32,
                 top + (12.0 * scale) as i32,
                 10.0 * scale,
             );
@@ -296,7 +296,8 @@ impl Editor {
         let lines = document.page_painted_lines(page);
         let selected = selected_spans(&self.book);
         let focus = focus_mark(&self.book);
-        let mut caret_x = left + geometry.margin_inner as i32;
+        let inset = document.page_content_inset(page);
+        let mut caret_x = left + (inset * scale) as i32;
         let mut caret_y = top + geometry.margin_top as i32;
         let mut saw_focus = false;
         let face = document.face();
@@ -304,7 +305,7 @@ impl Editor {
             let baseline = top
                 + ((geometry.margin_top + geometry.font_size) * scale) as i32
                 + (index as f32 * geometry.leading * scale) as i32;
-            let mut pen = left + ((geometry.margin_inner + line.indent) * scale) as i32;
+            let mut pen = left + ((inset + line.indent) * scale) as i32;
             if let Some((paragraph, focus_byte)) = focus {
                 if paragraph == line.paragraph {
                     saw_focus = true;

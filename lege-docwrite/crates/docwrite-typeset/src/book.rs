@@ -120,6 +120,7 @@ pub fn from_book(book: &Book, face: Face) -> Result<Document, TypesetError> {
         folio: master.is_some_and(|master| master.folio),
         hide_opener_folio: template.is_some_and(|template| !template.show_opener_folio),
         running_head: master.is_some_and(|master| master.running_head),
+        facing: master.is_some_and(|master| master.facing),
     };
     Document::new_with(face, geometry, paragraphs, hints)
 }

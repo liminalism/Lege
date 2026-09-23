@@ -253,10 +253,26 @@ struct Page {
     footnotes: Vec<String>,
     /// Tail of a note that did not fit, carried onto the next page.
     note_carry: Option<String>,
+    /// Note bodies that start on this page but could not be placed yet.
+    note_waiting: Vec<String>,
     /// A verso left empty so the next chapter can open on a recto.
     blank: bool,
     folio: Option<String>,
     running_head: Option<String>,
+    /// Left inset of the text block. Verso pages mirror inner and outer.
+    content_inset: f32,
+}
+
+#[derive(Clone, Debug, Default)]
+struct NoteFlow {
+    carry: Option<String>,
+    waiting: Vec<String>,
+}
+
+impl NoteFlow {
+    fn pending(&self) -> bool {
+        self.carry.is_some() || !self.waiting.is_empty()
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -266,6 +282,7 @@ pub(crate) struct LayoutHints {
     pub folio: bool,
     pub hide_opener_folio: bool,
     pub running_head: bool,
+    pub facing: bool,
 }
 
 impl Default for LayoutHints {
@@ -276,6 +293,7 @@ impl Default for LayoutHints {
             folio: false,
             hide_opener_folio: false,
             running_head: false,
+            facing: false,
         }
     }
 }
@@ -335,6 +353,14 @@ impl Document {
         self.pages
             .get(page.saturating_sub(1) as usize)
             .and_then(|page| page.folio.clone())
+    }
+
+    /// Left inset of 1-based `page`. Facing versos use the outer margin.
+    pub fn page_content_inset(&self, page: u32) -> f32 {
+        self.pages
+            .get(page.saturating_sub(1) as usize)
+            .map(|page| page.content_inset)
+            .unwrap_or(self.geometry.margin_inner)
     }
 
     /// Running head printed when the master asks for one.
@@ -728,7 +754,7 @@ impl Document {
             paragraph: 0,
             line: 0,
         };
-        let mut carry = None;
+        let mut flow = NoteFlow::default();
         if self.lines.is_empty() {
             return;
         }
@@ -748,22 +774,28 @@ impl Document {
                     blank: false,
                     folio: None,
                     running_head: None,
+                    note_waiting: Vec::new(),
+                    content_inset: 0.0,
                 })
                 .collect();
             self.dress_pages();
             return;
         }
-        while !self.at_end(cursor) || carry.is_some() {
-            if carry.is_none() && self.needs_blank_verso(cursor) {
+        while !self.at_end(cursor) || flow.pending() {
+            if !flow.pending() && self.needs_blank_verso(self.pages.len(), cursor) {
                 self.pages.push(self.blank_page(cursor));
+            } else if self.at_end(cursor) {
+                let (footnotes, next) = self.place_notes(&[], flow);
+                flow = next;
+                self.pages.push(self.note_page(cursor, footnotes, &flow));
             } else {
-                let page = self.fill_page(cursor, carry.take());
+                let (page, next) = self.fill_page(cursor, flow);
+                flow = next;
                 let page = avoid_widow(&mut self.pages, page);
-                carry = page.note_carry.clone();
                 cursor = next_cursor(&page);
                 self.pages.push(page);
             }
-            if self.pages.len() > self.paragraphs.len().saturating_mul(4).max(8) {
+            if self.pages.len() > self.paragraphs.len().saturating_mul(8).max(8) {
                 break;
             }
         }
@@ -782,25 +814,44 @@ impl Document {
         let mut rebuilt = Vec::new();
         let mut pages = self.pages[..start_page].to_vec();
         let mut cursor = cursor;
+        let mut flow = if start_page > 0 {
+            let previous = &pages[start_page - 1];
+            NoteFlow {
+                carry: previous.note_carry.clone(),
+                waiting: previous.note_waiting.clone(),
+            }
+        } else {
+            NoteFlow::default()
+        };
         loop {
-            if self.at_end(cursor) {
+            if self.at_end(cursor) && !flow.pending() {
                 break;
             }
             let page_number = (pages.len() + 1) as u32;
             rebuilt.push(page_number);
-            let page = self.fill_page(cursor, None);
-            let page = avoid_widow(&mut pages, page);
-            let following = next_cursor(&page);
-            pages.push(page);
-            let next_index = pages.len();
-            if cached.get(next_index) == Some(&following)
-                && self.suffix_still_valid(next_index, &cached)
-            {
-                pages.extend(self.rebind_suffix(next_index));
-                break;
+            if !flow.pending() && self.needs_blank_verso(pages.len(), cursor) {
+                pages.push(self.blank_page(cursor));
+            } else if self.at_end(cursor) {
+                let (footnotes, next) = self.place_notes(&[], flow);
+                flow = next;
+                pages.push(self.note_page(cursor, footnotes, &flow));
+            } else {
+                let (page, next) = self.fill_page(cursor, flow);
+                flow = next;
+                let page = avoid_widow(&mut pages, page);
+                let following = next_cursor(&page);
+                pages.push(page);
+                let next_index = pages.len();
+                if !flow.pending()
+                    && cached.get(next_index) == Some(&following)
+                    && self.suffix_still_valid(next_index, &cached)
+                {
+                    pages.extend(self.rebind_suffix(next_index));
+                    break;
+                }
+                cursor = following;
             }
-            cursor = following;
-            if pages.len() > self.paragraphs.len().saturating_mul(4).max(8) {
+            if pages.len() > self.paragraphs.len().saturating_mul(8).max(8) {
                 break;
             }
         }
@@ -865,6 +916,8 @@ impl Document {
                 blank: old.blank,
                 folio: old.folio.clone(),
                 running_head: old.running_head.clone(),
+                note_waiting: old.note_waiting.clone(),
+                content_inset: old.content_inset,
             };
             cursor = next_cursor_from(&page, &self.lines);
             pages.push(page);
@@ -880,7 +933,7 @@ impl Document {
         }
     }
 
-    fn fill_page(&self, start: Cursor, carry: Option<String>) -> Page {
+    fn fill_page(&self, start: Cursor, flow: NoteFlow) -> (Page, NoteFlow) {
         let mut lines = Vec::new();
         let mut used = 0.0;
         let mut cursor = start;
@@ -956,34 +1009,51 @@ impl Document {
                 lines.push(line.clone());
             }
         }
-        let mut footnotes = Vec::new();
-        let mut note_carry = None;
-        if let Some(rest) = carry {
-            let (head, tail) = split_note(&rest);
-            footnotes.push(head);
-            note_carry = tail;
+        let (footnotes, flow) = self.place_notes(&lines, flow);
+        (
+            Page {
+                start,
+                lines,
+                footnotes,
+                note_carry: flow.carry.clone(),
+                note_waiting: flow.waiting.clone(),
+                blank: false,
+                folio: None,
+                running_head: None,
+                content_inset: 0.0,
+            },
+            flow,
+        )
+    }
+
+    fn place_notes(&self, lines: &[FlowLine], mut flow: NoteFlow) -> (Vec<String>, NoteFlow) {
+        let mut queue = Vec::new();
+        if let Some(rest) = flow.carry.take() {
+            queue.push(rest);
         }
-        if note_carry.is_none() {
-            for line in lines.iter().filter(|line| line.is_first) {
-                if note_carry.is_some() {
-                    break;
-                }
-                if let Some(note) = self.paragraphs[line.paragraph].note.clone() {
-                    let (head, tail) = split_note(&note);
-                    footnotes.push(head);
-                    note_carry = tail;
-                }
+        queue.append(&mut flow.waiting);
+        for line in lines.iter().filter(|line| line.is_first) {
+            if let Some(note) = self
+                .paragraphs
+                .get(line.paragraph)
+                .and_then(|paragraph| paragraph.note.clone())
+            {
+                queue.push(note);
             }
         }
-        Page {
-            start,
-            lines,
-            footnotes,
-            note_carry,
-            blank: false,
-            folio: None,
-            running_head: None,
+        let mut footnotes = Vec::new();
+        let mut carry = None;
+        let mut waiting = Vec::new();
+        for note in queue {
+            if carry.is_some() {
+                waiting.push(note);
+                continue;
+            }
+            let (head, tail) = split_note(&note);
+            footnotes.push(head);
+            carry = tail;
         }
+        (footnotes, NoteFlow { carry, waiting })
     }
 
     fn each_paragraph_is_one_page(&self) -> bool {
@@ -1004,7 +1074,7 @@ impl Document {
         })
     }
 
-    fn needs_blank_verso(&self, cursor: Cursor) -> bool {
+    fn needs_blank_verso(&self, built: usize, cursor: Cursor) -> bool {
         let Some(line) = self.line_at(cursor) else {
             return false;
         };
@@ -1017,7 +1087,21 @@ impl Document {
             .get(line.paragraph)
             .copied()
             .unwrap_or(false);
-        recto && (self.pages.len() + 1).is_multiple_of(2)
+        recto && (built + 1).is_multiple_of(2)
+    }
+
+    fn note_page(&self, start: Cursor, footnotes: Vec<String>, flow: &NoteFlow) -> Page {
+        Page {
+            start,
+            lines: Vec::new(),
+            footnotes,
+            note_carry: flow.carry.clone(),
+            note_waiting: flow.waiting.clone(),
+            blank: false,
+            folio: None,
+            running_head: None,
+            content_inset: 0.0,
+        }
     }
 
     fn blank_page(&self, start: Cursor) -> Page {
@@ -1029,16 +1113,23 @@ impl Document {
             blank: true,
             folio: None,
             running_head: None,
+            note_waiting: Vec::new(),
+            content_inset: 0.0,
         }
     }
 
     fn dress_pages(&mut self) {
-        if !self.hints.folio && !self.hints.running_head {
-            return;
-        }
+        let inner = self.geometry.margin_inner;
+        let outer = self.geometry.margin_outer;
+        let facing = self.hints.facing;
         let mut carried = String::new();
         for (index, page) in self.pages.iter_mut().enumerate() {
             let page_no = index as u32 + 1;
+            let verso = facing && page_no.is_multiple_of(2);
+            page.content_inset = if verso { outer } else { inner };
+            if !self.hints.folio && !self.hints.running_head {
+                continue;
+            }
             if let Some(line) = page.lines.first() {
                 if let Some(head) = self.hints.heads.get(line.paragraph) {
                     if !head.is_empty() {
@@ -1303,6 +1394,8 @@ fn avoid_widow(pages: &mut Vec<Page>, mut page: Page) -> Page {
         blank: page.blank,
         folio: page.folio,
         running_head: page.running_head,
+        note_waiting: page.note_waiting,
+        content_inset: page.content_inset,
     }
 }
 
