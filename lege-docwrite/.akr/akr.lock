@@ -5,7 +5,7 @@ build {
     tool "akr 0.5.1"
     grammar "0.1"
     vocabulary "0.2"
-    source_graph "sha256:e03e4cc21fa7941f9c15453bfff3b165f75468fd83168e5159244fcbea77e50f"
+    source_graph "sha256:cbdbd3d87a03d0af6e7f5195b78479a15127568cde91cf4ac9defdc3b0db4238"
 }
 
 source ".akr/project.akr" {
@@ -18,8 +18,13 @@ source ".akr/records/docwrite/decisions.akr" {
     records 9
 }
 
+source ".akr/records/docwrite/evidence.akr" {
+    hash "sha256:8a959054c9c46b2c57cbb8bf088139aaacb3eceb84faa80f2f813930661d1163"
+    records 12
+}
+
 source ".akr/records/docwrite/milestones.akr" {
-    hash "sha256:22f2d5985b3d7374ab559e91e611fa7754fe4fa824a71c7f0a49f8d067726f0c"
+    hash "sha256:ee76f458fe2d2406638960ec3f3cf235b3b11fe56bf622e159a3b3f6045e94a7"
     records 5
 }
 
@@ -146,7 +151,7 @@ resolution @docwrite.milestone.m1-editor-spike/1 {
 resolution @docwrite.milestone.m2-book-core/1 {
     slot after
     to @docwrite.milestone.m1-editor-spike/1
-    hash "sha256:6e4be214db00ff5f44b097df60d5ad132faa29f99e61ce384f44d9c7e4b35390"
+    hash "sha256:c5ebb91e1c800d11a71221fe4e025a669b3bacb48497e191441c0faccb1c35f4"
 }
 
 resolution @docwrite.milestone.m2-book-core/1 {
@@ -194,13 +199,13 @@ resolution @docwrite.milestone.m2-book-core/1 {
 resolution @docwrite.milestone.m3-prose-typography/1 {
     slot after
     to @docwrite.milestone.m2-book-core/1
-    hash "sha256:e8632976ae0617bab05c7f7ea8d89c5493e918af52f7490ef998647649924f4f"
+    hash "sha256:b6cc25b668795f6c47c5d01ba460c3f8cbe2f7f738c667891990ee763bb33bfd"
 }
 
 resolution @docwrite.milestone.m4-research-apparatus/1 {
     slot after
     to @docwrite.milestone.m3-prose-typography/1
-    hash "sha256:6572d9532c55c6bff5c7bcf9cabb59a0f2d088eff83b365631712d36bd17f4eb"
+    hash "sha256:4c17575fca59d430c23f3e128f8d9a955de3693faeaad848802cdc6ce10c924f"
 }
 
 resolution @docwrite.milestone.m4-research-apparatus/1 {
@@ -212,7 +217,7 @@ resolution @docwrite.milestone.m4-research-apparatus/1 {
 resolution @docwrite.milestone.m5-interchange/1 {
     slot after
     to @docwrite.milestone.m4-research-apparatus/1
-    hash "sha256:74dd512d6cbbdd6f02b0ab5f17005c7c8096c9c750f76e99d1a21a81de833f38"
+    hash "sha256:1d1a3687605e97c1aee0f824e5fc0945005fd0a82c7037de136f244b27b42bf1"
 }
 
 resolution @docwrite.milestone.m5-interchange/1 {
@@ -230,61 +235,61 @@ resolution @docwrite.milestone.m5-interchange/1 {
 resolution @docwrite.work.m1-incremental-pagination/1 {
     slot part_of
     to @docwrite.milestone.m1-editor-spike/1
-    hash "sha256:6e4be214db00ff5f44b097df60d5ad132faa29f99e61ce384f44d9c7e4b35390"
+    hash "sha256:c5ebb91e1c800d11a71221fe4e025a669b3bacb48497e191441c0faccb1c35f4"
 }
 
 resolution @docwrite.work.m1-latency-gate/1 {
     slot part_of
     to @docwrite.milestone.m1-editor-spike/1
-    hash "sha256:6e4be214db00ff5f44b097df60d5ad132faa29f99e61ce384f44d9c7e4b35390"
+    hash "sha256:c5ebb91e1c800d11a71221fe4e025a669b3bacb48497e191441c0faccb1c35f4"
 }
 
 resolution @docwrite.work.m1-model-and-edits/1 {
     slot part_of
     to @docwrite.milestone.m1-editor-spike/1
-    hash "sha256:6e4be214db00ff5f44b097df60d5ad132faa29f99e61ce384f44d9c7e4b35390"
+    hash "sha256:c5ebb91e1c800d11a71221fe4e025a669b3bacb48497e191441c0faccb1c35f4"
 }
 
 resolution @docwrite.work.m1-page-canvas-navigation/1 {
     slot part_of
     to @docwrite.milestone.m1-editor-spike/1
-    hash "sha256:6e4be214db00ff5f44b097df60d5ad132faa29f99e61ce384f44d9c7e4b35390"
+    hash "sha256:c5ebb91e1c800d11a71221fe4e025a669b3bacb48497e191441c0faccb1c35f4"
 }
 
 resolution @docwrite.work.m1-shaping-and-breaking/1 {
     slot part_of
     to @docwrite.milestone.m1-editor-spike/1
-    hash "sha256:6e4be214db00ff5f44b097df60d5ad132faa29f99e61ce384f44d9c7e4b35390"
+    hash "sha256:c5ebb91e1c800d11a71221fe4e025a669b3bacb48497e191441c0faccb1c35f4"
 }
 
 resolution @docwrite.work.m2-book-map/1 {
     slot part_of
     to @docwrite.milestone.m2-book-core/1
-    hash "sha256:e8632976ae0617bab05c7f7ea8d89c5493e918af52f7490ef998647649924f4f"
+    hash "sha256:b6cc25b668795f6c47c5d01ba460c3f8cbe2f7f738c667891990ee763bb33bfd"
 }
 
 resolution @docwrite.work.m2-markdown-export/1 {
     slot part_of
     to @docwrite.milestone.m2-book-core/1
-    hash "sha256:e8632976ae0617bab05c7f7ea8d89c5493e918af52f7490ef998647649924f4f"
+    hash "sha256:b6cc25b668795f6c47c5d01ba460c3f8cbe2f7f738c667891990ee763bb33bfd"
 }
 
 resolution @docwrite.work.m2-pdf-export/1 {
     slot part_of
     to @docwrite.milestone.m2-book-core/1
-    hash "sha256:e8632976ae0617bab05c7f7ea8d89c5493e918af52f7490ef998647649924f4f"
+    hash "sha256:b6cc25b668795f6c47c5d01ba460c3f8cbe2f7f738c667891990ee763bb33bfd"
 }
 
 resolution @docwrite.work.m2-persistence/1 {
     slot part_of
     to @docwrite.milestone.m2-book-core/1
-    hash "sha256:e8632976ae0617bab05c7f7ea8d89c5493e918af52f7490ef998647649924f4f"
+    hash "sha256:b6cc25b668795f6c47c5d01ba460c3f8cbe2f7f738c667891990ee763bb33bfd"
 }
 
 resolution @docwrite.work.m2-styles-masters-templates/1 {
     slot part_of
     to @docwrite.milestone.m2-book-core/1
-    hash "sha256:e8632976ae0617bab05c7f7ea8d89c5493e918af52f7490ef998647649924f4f"
+    hash "sha256:b6cc25b668795f6c47c5d01ba460c3f8cbe2f7f738c667891990ee763bb33bfd"
 }
 
 resolution @lege.work.font-subsetting-and-cff/1 {
@@ -351,6 +356,86 @@ resolution @pixelkit.work.scroll-phase-gestures/1 {
     slot implements
     to @docwrite.decision.ui-stack-pixelkit/1
     hash "sha256:e5198932168631d8a65abf8becb28c7bd02452f21cfb5878f0006b0b0832974c"
+}
+
+seal @docwrite.evidence.m1-edit-basics/1 {
+    state verified
+    hash "sha256:09481bf34953689591d06239dc5dec593f6ff39cadbd7a1af883d65fd6692f4d"
+}
+
+seal @docwrite.evidence.m1-incremental/1 {
+    state verified
+    hash "sha256:07fa1f12a8c826a96067a09a49b1f7ca7f9182fd22561c2caefe0c200720b57b"
+}
+
+seal @docwrite.evidence.m1-latency/1 {
+    state verified
+    hash "sha256:36a8bc91160f539a5cbe1b082089ef433efde8fded5a5f3b8e94c6f8dc37bd07"
+}
+
+seal @docwrite.evidence.m1-navigation/1 {
+    state verified
+    hash "sha256:eded6205367254927cf1ddb460c65537de446f403db9133d46059ee8c4199640"
+}
+
+seal @docwrite.evidence.m2-exports/1 {
+    state verified
+    hash "sha256:2f0f802b2e7373cc5a13d069cb4b85ae10fc04d8919cf76fafbcf0ff10aaf3a0"
+}
+
+seal @docwrite.evidence.m2-persistence/1 {
+    state verified
+    hash "sha256:cbc0bd0544cb37b1c5250e3e1bc9de9511db63e248dd4eb725e3d0ff831d97ee"
+}
+
+seal @docwrite.evidence.m2-restyle/1 {
+    state verified
+    hash "sha256:10c1511465e4cf6f4b249394142d43024bc3c00903653cccb34bb698b1b0d691"
+}
+
+seal @docwrite.evidence.m3-rules/1 {
+    state verified
+    hash "sha256:bda1f6f01f492f1b80f9c5c11521aa85f7e1d78fcaca9fcb67aa993c5990352d"
+}
+
+seal @docwrite.evidence.m3-toc/1 {
+    state verified
+    hash "sha256:819d5ad86ab6b6ec85b6364c16e6948f85eb738089d5432bf0f9acb33d999176"
+}
+
+seal @docwrite.evidence.m4-footnotes/1 {
+    state verified
+    hash "sha256:fefea563ba5ca7e8ae63a345837217c5e0306336e3212ffbeda8dfe41cd951d5"
+}
+
+seal @docwrite.evidence.m4-source/1 {
+    state verified
+    hash "sha256:8792205f6376c326cf8b3620e8a3067595668d2869727483e261f4d470ef3f16"
+}
+
+seal @docwrite.evidence.m5-preflight/1 {
+    state verified
+    hash "sha256:323d2ae63ff86c3108552eb70979fe12619b6d20b66a9eacb31f8b4fead975cc"
+}
+
+seal @docwrite.milestone.m1-editor-spike/1 {
+    state completed
+    hash "sha256:c5ebb91e1c800d11a71221fe4e025a669b3bacb48497e191441c0faccb1c35f4"
+}
+
+seal @docwrite.milestone.m2-book-core/1 {
+    state completed
+    hash "sha256:b6cc25b668795f6c47c5d01ba460c3f8cbe2f7f738c667891990ee763bb33bfd"
+}
+
+seal @docwrite.milestone.m3-prose-typography/1 {
+    state completed
+    hash "sha256:4c17575fca59d430c23f3e128f8d9a955de3693faeaad848802cdc6ce10c924f"
+}
+
+seal @docwrite.milestone.m4-research-apparatus/1 {
+    state completed
+    hash "sha256:1d1a3687605e97c1aee0f824e5fc0945005fd0a82c7037de136f244b27b42bf1"
 }
 
 seal @docwrite.observation.no-shaping-in-workspace/1 {

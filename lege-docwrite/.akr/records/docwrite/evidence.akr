@@ -1,0 +1,146 @@
+akr 0.1
+project lege-docwrite
+
+record docwrite.evidence.m1-edit-basics/1 : evidence {
+    title "Insert, delete, selection, word motion, cut/copy/paste and undo/redo round-trip across paragraphs and chapters."
+    state verified
+    result pass
+    method command
+    observed_at git:49d373bd2500225971dcfd519615d8e0d85249d1
+    command "cargo test -p docwrite-model"
+    summary """
+        Insert, delete, selection, word motion, cut/copy/paste and undo/redo round-trip across paragraphs and chapters.
+        """
+}
+
+record docwrite.evidence.m1-incremental/1 : evidence {
+    title "An edit on page 147 of 400 lays out no page from 149 through 400."
+    state verified
+    result pass
+    method command
+    observed_at git:49d373bd2500225971dcfd519615d8e0d85249d1
+    command "cargo test -p docwrite-typeset --test incremental"
+    summary """
+        An edit on page 147 of 400 lays out no page from 149 through 400.
+        """
+}
+
+record docwrite.evidence.m1-latency/1 : evidence {
+    title "A 500-page document opens, pages and types inside the 8ms keypress budget."
+    state verified
+    result pass
+    method command
+    observed_at git:49d373bd2500225971dcfd519615d8e0d85249d1
+    command "cargo test -p docwrite-app --test latency_gate"
+    summary """
+        A 500-page document opens, pages and types inside the 8ms keypress budget.
+        """
+}
+
+record docwrite.evidence.m1-navigation/1 : evidence {
+    title "PageDown and PageUp land on page tops; spread mode moves by spread; gesture end snaps."
+    state verified
+    result pass
+    method command
+    observed_at git:49d373bd2500225971dcfd519615d8e0d85249d1
+    command "cargo test -p docwrite-app --test navigation"
+    summary """
+        PageDown and PageUp land on page tops; spread mode moves by spread; gesture end snaps.
+        """
+}
+
+record docwrite.evidence.m2-exports/1 : evidence {
+    title "PDF text extracts, chapter bookmarks and a subset font are present; Markdown keeps headings, emphasis, links and drops geometry."
+    state verified
+    result pass
+    method command
+    observed_at git:83c15026d4d08a2db30864deb1099969b632df23
+    command "cargo test -p docwrite-export"
+    summary """
+        PDF text extracts, chapter bookmarks and a subset font are present; Markdown keeps headings, emphasis, links and drops geometry.
+        """
+}
+
+record docwrite.evidence.m2-persistence/1 : evidence {
+    title "Reorder changes chapter order; reopen restores manuscript, Body size, template opener and caret. One template edit changes all ten openers."
+    state verified
+    result pass
+    method command
+    observed_at git:83c15026d4d08a2db30864deb1099969b632df23
+    command "cargo test -p docwrite-model --test persistence"
+    summary """
+        Reorder changes chapter order; reopen restores manuscript, Body size, template opener and caret. One template edit changes all ten openers.
+        """
+}
+
+record docwrite.evidence.m2-restyle/1 : evidence {
+    title "Restyling Body matches a fresh layout of the same paragraphs."
+    state verified
+    result pass
+    method command
+    observed_at git:83c15026d4d08a2db30864deb1099969b632df23
+    command "cargo test -p docwrite-typeset --test restyle"
+    summary """
+        Restyling Body matches a fresh layout of the same paragraphs.
+        """
+}
+
+record docwrite.evidence.m3-rules/1 : evidence {
+    title "Keep-with-next holds; small caps and old-style figures change glyph ids; drop caps, quotes, epigraphs, images and matter are in the corpus."
+    state verified
+    result pass
+    method command
+    observed_at git:83c15026d4d08a2db30864deb1099969b632df23
+    command "cargo test -p docwrite-typeset --test paragraph_rules"
+    summary """
+        Keep-with-next holds; small caps and old-style figures change glyph ids; drop caps, quotes, epigraphs, images and matter are in the corpus.
+        """
+}
+
+record docwrite.evidence.m3-toc/1 : evidence {
+    title "Inserting paragraphs before a chapter moves its contents page number."
+    state verified
+    result pass
+    method command
+    observed_at git:83c15026d4d08a2db30864deb1099969b632df23
+    command "cargo test -p docwrite-typeset --test toc"
+    summary """
+        Inserting paragraphs before a chapter moves its contents page number.
+        """
+}
+
+record docwrite.evidence.m4-footnotes/1 : evidence {
+    title "Footnotes stay on the reference page under an earlier edit, and a long note splits across later pages and reassembles."
+    state verified
+    result pass
+    method command
+    observed_at git:83c15026d4d08a2db30864deb1099969b632df23
+    command "cargo test -p docwrite-typeset --test footnotes"
+    summary """
+        Footnotes stay on the reference page under an earlier edit, and a long note splits across later pages and reassembles.
+        """
+}
+
+record docwrite.evidence.m4-source/1 : evidence {
+    title "A word captured from the exported PDF, with its page and rectangle, is cited and resolves to that same page and rectangle."
+    state verified
+    result pass
+    method command
+    observed_at git:83c15026d4d08a2db30864deb1099969b632df23
+    command "cargo test -p docwrite-export --test package pdf_is_searchable"
+    summary """
+        A word captured from the exported PDF, with its page and rectangle, is cited and resolves to that same page and rectangle.
+        """
+}
+
+record docwrite.evidence.m5-preflight/1 : evidence {
+    title "Preflight reports a missing face, an unembeddable font, a low-resolution image and a broken link."
+    state verified
+    result pass
+    method command
+    observed_at git:83c15026d4d08a2db30864deb1099969b632df23
+    command "cargo test -p docwrite-export --test preflight"
+    summary """
+        Preflight reports a missing face, an unembeddable font, a low-resolution image and a broken link.
+        """
+}

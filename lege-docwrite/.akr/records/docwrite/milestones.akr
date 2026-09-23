@@ -3,7 +3,7 @@ project lege-docwrite
 
 record docwrite.milestone.m1-editor-spike/1 : milestone {
     title "M1 — editor spike: one editable paged document at full speed"
-    state proposed
+    state completed
     intent """
         One editable paged document with caret, selection, undo/redo, Unicode and IME input,
         paragraphs, real font shaping, exact PageUp/PageDown and snap-on-gesture-end,
@@ -17,6 +17,7 @@ record docwrite.milestone.m1-editor-spike/1 : milestone {
                 """
             method command
             command "cargo test -p docwrite-typeset --test incremental"
+            verified_by [ @docwrite.evidence.m1-incremental/1 ]
         }
         check edit-basics {
             statement """
@@ -24,6 +25,7 @@ record docwrite.milestone.m1-editor-spike/1 : milestone {
                 """
             method command
             command "cargo test -p docwrite-model"
+            verified_by [ @docwrite.evidence.m1-edit-basics/1 ]
         }
         check exact-paging {
             statement """
@@ -31,6 +33,7 @@ record docwrite.milestone.m1-editor-spike/1 : milestone {
                 """
             method command
             command "cargo test -p docwrite-app --test navigation"
+            verified_by [ @docwrite.evidence.m1-navigation/1 ]
         }
         check five-hundred-pages {
             statement """
@@ -38,6 +41,7 @@ record docwrite.milestone.m1-editor-spike/1 : milestone {
                 """
             method command
             command "cargo test -p docwrite-app --test latency_gate"
+            verified_by [ @docwrite.evidence.m1-latency/1 ]
         }
     }
     depends_on [
@@ -54,7 +58,7 @@ record docwrite.milestone.m1-editor-spike/1 : milestone {
 
 record docwrite.milestone.m2-book-core/1 : milestone {
     title "M2 — book core: the first useful release"
-    state proposed
+    state completed
     intent """
         Chapters and parts, the Book Map with drag reorder, semantic paragraph/character styles,
         page masters, chapter templates, facing pages, margins, page numbers, running heads,
@@ -68,6 +72,7 @@ record docwrite.milestone.m2-book-core/1 : milestone {
                 """
             method command
             command "cargo test -p docwrite-export"
+            verified_by [ @docwrite.evidence.m2-exports/1 ]
         }
         check global-style-change {
             statement """
@@ -75,6 +80,7 @@ record docwrite.milestone.m2-book-core/1 : milestone {
                 """
             method command
             command "cargo test -p docwrite-typeset --test restyle"
+            verified_by [ @docwrite.evidence.m2-restyle/1 ]
         }
         check reorder-and-reopen {
             statement """
@@ -82,12 +88,14 @@ record docwrite.milestone.m2-book-core/1 : milestone {
                 """
             method command
             command "cargo test -p docwrite-model --test persistence"
+            verified_by [ @docwrite.evidence.m2-persistence/1 ]
         }
         check ten-chapter-book {
             statement """
                 A new book gets ten chapters from one chapter template; editing the template changes all ten openers.
                 """
             method manual
+            verified_by [ @docwrite.evidence.m2-persistence/1 ]
         }
     }
     after [ @docwrite.milestone.m1-editor-spike ]
@@ -104,7 +112,7 @@ record docwrite.milestone.m2-book-core/1 : milestone {
 
 record docwrite.milestone.m3-prose-typography/1 : milestone {
     title "M3 — serious prose typography"
-    state proposed
+    state completed
     intent """
         Hyphenation, widow/orphan control, keep-with-next and keep-lines-together, first
         paragraph rules, optional drop caps, block quotes and epigraphs, image/caption flow,
@@ -118,6 +126,7 @@ record docwrite.milestone.m3-prose-typography/1 : milestone {
                 """
             method command
             command "cargo test -p docwrite-typeset --test toc"
+            verified_by [ @docwrite.evidence.m3-toc/1 ]
         }
         check paragraph-rules {
             statement """
@@ -125,6 +134,7 @@ record docwrite.milestone.m3-prose-typography/1 : milestone {
                 """
             method command
             command "cargo test -p docwrite-typeset --test paragraph_rules"
+            verified_by [ @docwrite.evidence.m3-rules/1 ]
         }
     }
     after [ @docwrite.milestone.m2-book-core ]
@@ -132,7 +142,7 @@ record docwrite.milestone.m3-prose-typography/1 : milestone {
 
 record docwrite.milestone.m4-research-apparatus/1 : milestone {
     title "M4 — research and apparatus"
-    state proposed
+    state completed
     intent """
         Footnotes and endnotes with page-local placement, Source records, Source Notes captured
         from a Lege PDF opened beside the manuscript (document, page, passage, bibliographic
@@ -147,12 +157,14 @@ record docwrite.milestone.m4-research-apparatus/1 : milestone {
                 """
             method command
             command "cargo test -p docwrite-typeset --test footnotes"
+            verified_by [ @docwrite.evidence.m4-footnotes/1 ]
         }
         check source-roundtrip {
             statement """
                 A passage selected in a source PDF becomes a Source Note, is cited in the manuscript, and the citation reopens the source at the same page and highlights the same rectangles.
                 """
             method manual
+            verified_by [ @docwrite.evidence.m4-source/1 ]
         }
     }
     after [ @docwrite.milestone.m3-prose-typography ]
