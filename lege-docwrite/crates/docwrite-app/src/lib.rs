@@ -43,6 +43,8 @@ pub struct Editor {
     pressed_row: Option<usize>,
     bundle: Option<PathBuf>,
     dirty: bool,
+    /// Page count of the document the last [`Self::paint`] laid out.
+    pages_painted: u32,
 }
 
 impl Editor {
@@ -61,7 +63,30 @@ impl Editor {
             pressed_row: None,
             bundle: None,
             dirty: false,
+            pages_painted: 0,
         }
+    }
+
+    /// Pages in the document the last [`Self::paint`] drew. Zero before the first paint.
+    pub fn pages_painted(&self) -> u32 {
+        self.pages_painted
+    }
+
+    /// Count desk, page, and ink pixels using the colors [`Self::paint`] writes.
+    pub fn census(pixels: &[u32]) -> (usize, usize, usize) {
+        let mut desk = 0usize;
+        let mut page = 0usize;
+        let mut ink = 0usize;
+        for pixel in pixels {
+            if *pixel == DESK {
+                desk += 1;
+            } else if *pixel == PAGE_COLOR {
+                page += 1;
+            } else {
+                ink += 1;
+            }
+        }
+        (desk, page, ink)
     }
 
     /// Remember where the pointer is. The window calls this on cursor motion.
@@ -199,6 +224,7 @@ impl Editor {
         let origin = (height / 2) - ((scroll.fract() * page_h as f64) as i32);
         let first = scroll.floor() as i32;
         let document = self.laid_out();
+        self.pages_painted = document.as_ref().map(|laid| laid.page_count()).unwrap_or(0);
         let mut painter = pixelkit_raster::Painter::new(buffer);
         for slot in -1..4 {
             let page_index = first + slot;

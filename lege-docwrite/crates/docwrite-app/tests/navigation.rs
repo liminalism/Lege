@@ -90,5 +90,10 @@ fn the_window_editor_types_into_the_book_and_turns_pages() {
         ink > 80,
         "the open page paints the manuscript, ink pixels {ink}"
     );
+    assert!(
+        editor.pages_painted() >= 1,
+        "paint laid out {} pages",
+        editor.pages_painted()
+    );
     assert!(editor.caret_area().is_some(), "the caret is on the page");
 }

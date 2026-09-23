@@ -67,12 +67,14 @@ fn run() -> Result<(), RunError> {
 
 struct EditorApp {
     editor: docwrite_app::Editor,
+    announced: bool,
 }
 
 impl EditorApp {
     fn new() -> Self {
         Self {
             editor: docwrite_app::Editor::new(),
+            announced: false,
         }
     }
 }
@@ -84,6 +86,15 @@ impl pixelkit_shell::PixelApp for EditorApp {
         _scale: pixelkit_shell::Scale,
     ) {
         self.editor.paint(buffer);
+        if self.announced {
+            return;
+        }
+        self.announced = true;
+        let (desk, page, ink) = docwrite_app::Editor::census(&buffer.pixels);
+        eprintln!(
+            "paged surface: {} pages, desk pixels {desk}, page pixels {page}, ink pixels {ink}",
+            self.editor.pages_painted()
+        );
     }
 
     fn on_key(&mut self, key: &pixelkit_shell::KeyInput) {
