@@ -55,6 +55,9 @@ fn ten_chapters_follow_one_template_and_reorder_and_reopen() {
     assert_eq!(opened.chapter_templates()[0].opener, "Lesson");
     assert!(opened.saved_position().is_some());
     let _ = std::fs::remove_dir_all(&dir);
+    println!(
+        "ten chapters follow Lesson; reopen restored Body 14pt, opener Lesson, and the caret"
+    );
 }
 
 #[test]

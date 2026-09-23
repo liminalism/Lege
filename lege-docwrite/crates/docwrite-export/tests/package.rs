@@ -49,6 +49,7 @@ fn markdown_keeps_structure_and_drops_geometry() {
         !markdown.contains("432") && !markdown.contains("page 1"),
         "{markdown}"
     );
+    println!("markdown keeps the title and the link and drops page geometry");
 }
 
 #[test]

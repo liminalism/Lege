@@ -34,6 +34,10 @@ fn edit_on_page_147_of_400_skips_pages_149_through_400() {
     assert_eq!(document.page_count(), 400);
     assert_eq!(document.page_texts(400), before, "the last page is the cached one");
     assert!(document.page_texts(147)[0].starts_with('x'));
+    println!(
+        "page 147 of 400 laid out {:?}; every rebuilt page is < 149; page 400 unchanged",
+        report.pages_laid_out
+    );
 }
 
 #[test]
