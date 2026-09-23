@@ -58,6 +58,58 @@ fn ten_chapters_follow_one_template_and_reorder_and_reopen() {
 }
 
 #[test]
+fn a_named_snapshot_reopens_the_earlier_manuscript_styles_and_selection() {
+    use docwrite_model::{Position, Selection};
+
+    let mut book = Book::new("Essay");
+    book.insert("Opening paragraph.").unwrap();
+    let id = book.block_ids()[0];
+    book.set_selection(Selection {
+        anchor: Position::new(id, 0),
+        focus: Position::new(id, 7),
+    })
+    .unwrap();
+    let mut body = book
+        .paragraph_styles()
+        .iter()
+        .find(|style| style.name == "Body")
+        .unwrap()
+        .clone();
+    body.size_pt = 14.0;
+    book.set_paragraph_style(body).unwrap();
+    let mut template = book.chapter_templates()[0].clone();
+    template.opener = "Lesson".into();
+    book.set_chapter_template(template).unwrap();
+
+    let dir = env::temp_dir().join(format!("legebook-snap-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    book.save_snapshot(&dir, "dawn").unwrap();
+    book.insert(" Later.").unwrap();
+    let mut template = book.chapter_templates()[0].clone();
+    template.opener = "Chapter".into();
+    book.set_chapter_template(template).unwrap();
+    book.save_bundle(&dir).unwrap();
+
+    let snap = Book::load_snapshot(&dir, "dawn").unwrap();
+    assert!(snap.plain_text().contains("Opening paragraph."));
+    assert!(!snap.plain_text().contains("Later"));
+    assert_eq!(
+        snap.paragraph_styles().iter().find(|style| style.name == "Body").unwrap().size_pt,
+        14.0
+    );
+    assert_eq!(snap.chapter_templates()[0].opener, "Lesson");
+    let selection = snap.selection();
+    assert_eq!(selection.anchor.offset, 0);
+    assert_eq!(selection.focus.offset, 7);
+    assert!(!selection.is_collapsed());
+
+    let live = Book::load_bundle(&dir).unwrap();
+    assert!(live.plain_text().contains("Later"));
+    assert_eq!(live.chapter_templates()[0].opener, "Chapter");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn bibliography_index_and_csl_bibtex_round_trip() {
     let mut book = Book::new("Essay");
     book.import_csl_json(

@@ -5,7 +5,7 @@
 
 use crate::error::ModelError;
 use crate::ids::{BlockId, ChapterId};
-use crate::tree::{BlockKind, Book, Position};
+use crate::tree::{BlockKind, Book, Chapter, Position};
 
 /// Paragraph style. Appearance lives here; the block stores the style name.
 #[derive(Clone, Debug, PartialEq)]
@@ -258,42 +258,35 @@ impl Book {
     }
 
     /// Drag-reorder. `from` and `to` are chapter indexes in reading order.
+    ///
+    /// The moved chapter joins the part that owns the destination index.
+    /// Every other chapter stays in its part.
     pub fn reorder_chapter(&mut self, from: usize, to: usize) -> Result<(), ModelError> {
-        let mut chapters = Vec::new();
-        for part in self.parts() {
-            for chapter in part.chapters() {
-                chapters.push(chapter.id());
-            }
-        }
-        if from >= chapters.len() || to >= chapters.len() {
+        let count: usize = self.parts().iter().map(|part| part.chapters().len()).sum();
+        if from >= count || to >= count {
             return Err(ModelError::Inconsistent("chapter index"));
         }
-        let id = chapters.remove(from);
-        chapters.insert(to, id);
-        self.order_chapters(&chapters)
-    }
-
-    fn order_chapters(&mut self, order: &[ChapterId]) -> Result<(), ModelError> {
-        // Pull every chapter out, then put them back in `order` into the first part.
-        let mut owned = Vec::new();
-        for part in self.parts_mut() {
+        let mut located: Vec<(usize, Chapter)> = Vec::new();
+        for (part_index, part) in self.parts_mut().iter_mut().enumerate() {
             for chapter in part.chapters_mut().drain(..) {
-                owned.push(chapter);
+                located.push((part_index, chapter));
             }
         }
-        let mut sorted = Vec::new();
-        for id in order {
-            let index = owned
-                .iter()
-                .position(|chapter| chapter.id() == *id)
-                .ok_or(ModelError::UnknownChapter(*id))?;
-            sorted.push(owned.remove(index));
+        let (mut part_index, chapter) = located.remove(from);
+        if let Some((dest_part, _)) = located.get(to) {
+            part_index = *dest_part;
         }
-        sorted.append(&mut owned);
-        let Some(part) = self.parts_mut().first_mut() else {
-            return Err(ModelError::Inconsistent("no part"));
-        };
-        *part.chapters_mut() = sorted;
+        located.insert(to, (part_index, chapter));
+        let part_count = self.parts().len();
+        let mut buckets: Vec<Vec<Chapter>> = (0..part_count).map(|_| Vec::new()).collect();
+        for (part, chapter) in located {
+            if let Some(bucket) = buckets.get_mut(part) {
+                bucket.push(chapter);
+            }
+        }
+        for (part, chapters) in self.parts_mut().iter_mut().zip(buckets) {
+            *part.chapters_mut() = chapters;
+        }
         self.reindex();
         Ok(())
     }

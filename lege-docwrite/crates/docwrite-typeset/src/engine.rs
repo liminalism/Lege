@@ -86,6 +86,15 @@ fn scale_glyphs(glyphs: &GlyphBuffer, size_px: f32, upem: i32) -> Vec<Glyph> {
         .collect()
 }
 
+/// One shaped line, tied back to the paragraph it was broken from.
+#[derive(Clone, Debug)]
+pub struct PaintedLine {
+    /// Index into the paragraph list passed to [`Document::new`].
+    pub paragraph: usize,
+    /// Glyphs in visual order.
+    pub glyphs: Vec<Glyph>,
+}
+
 /// One shaped glyph in pixels.
 #[derive(Clone, Debug)]
 pub struct Glyph {
@@ -307,9 +316,25 @@ impl Document {
 
     /// Shaped lines of 1-based `page`, in reading order.
     pub fn page_line_glyphs(&self, page: u32) -> Vec<Vec<Glyph>> {
+        self.page_painted_lines(page)
+            .into_iter()
+            .map(|line| line.glyphs)
+            .collect()
+    }
+
+    /// Shaped lines of 1-based `page`, with the paragraph index each line came from.
+    pub fn page_painted_lines(&self, page: u32) -> Vec<PaintedLine> {
         self.pages
             .get(page.saturating_sub(1) as usize)
-            .map(|page| page.lines.iter().map(|line| line.glyphs.clone()).collect())
+            .map(|page| {
+                page.lines
+                    .iter()
+                    .map(|line| PaintedLine {
+                        paragraph: line.paragraph,
+                        glyphs: line.glyphs.clone(),
+                    })
+                    .collect()
+            })
             .unwrap_or_default()
     }
 

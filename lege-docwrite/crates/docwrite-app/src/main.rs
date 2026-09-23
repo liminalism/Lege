@@ -98,8 +98,39 @@ impl pixelkit_shell::PixelApp for EditorApp {
     }
 
     fn on_key_event(&mut self, event: &pixelkit_shell::KeyEvent) {
+        if event.pressed {
+            match event.key {
+                pixelkit_shell::KeyInput::Left if event.modifiers.shift => {
+                    self.editor.extend_left();
+                    return;
+                }
+                pixelkit_shell::KeyInput::Right if event.modifiers.shift => {
+                    self.editor.extend_right();
+                    return;
+                }
+                pixelkit_shell::KeyInput::Left => {
+                    self.editor.move_left();
+                    return;
+                }
+                pixelkit_shell::KeyInput::Right => {
+                    self.editor.move_right();
+                    return;
+                }
+                _ => {}
+            }
+        }
         if event.pressed && !event.text.is_empty() {
             self.editor.type_text(&event.text);
+        }
+    }
+
+    fn on_cursor(&mut self, x: f32, y: f32) {
+        self.editor.hover(x, y);
+    }
+
+    fn on_mouse(&mut self, button: pixelkit_shell::MouseButton, pressed: bool) {
+        if button == pixelkit_shell::MouseButton::Left {
+            self.editor.pointer(pressed);
         }
     }
 

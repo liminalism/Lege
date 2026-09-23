@@ -35,10 +35,60 @@ impl From<ModelError> for BundleError {
 }
 
 impl Book {
-    /// Write the manuscript, styles, and caret to `directory` atomically.
+    /// Write the manuscript, styles, and selection to `directory` atomically.
+    ///
+    /// A `snapshots/` directory already inside the bundle is kept.
     pub fn save_bundle(&mut self, directory: &Path) -> Result<(), BundleError> {
+        let parent = bundle_parent(directory);
+        let file_name = directory
+            .file_name()
+            .ok_or_else(|| BundleError { message: "bundle path has no name".into() })?;
+        let hold = parent.join(format!(".{}.snapshots", file_name.to_string_lossy()));
+        let snapshots = directory.join("snapshots");
+        let parked = snapshots.is_dir();
+        if parked {
+            if hold.exists() {
+                fs::remove_dir_all(&hold)?;
+            }
+            fs::rename(&snapshots, &hold)?;
+        }
+        let written = self.write_tree(directory);
+        if parked && directory.is_dir() {
+            let back = directory.join("snapshots");
+            if back.exists() {
+                fs::remove_dir_all(&back)?;
+            }
+            fs::rename(&hold, &back)?;
+        }
+        written
+    }
+
+    /// Write a named snapshot of the current manuscript under `directory/snapshots`.
+    ///
+    /// The snapshot is its own bundle. A later autosave of the live book does not
+    /// replace it. `name` is one path segment.
+    pub fn save_snapshot(&mut self, directory: &Path, name: &str) -> Result<(), BundleError> {
+        let name = snapshot_name(name)?;
+        if !directory.join("manifest.txt").is_file() {
+            self.save_bundle(directory)?;
+        }
+        let dest = directory.join("snapshots").join(name);
+        if let Some(parent) = dest.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        self.write_tree(&dest)
+    }
+
+    /// Open a snapshot written by [`Self::save_snapshot`].
+    pub fn load_snapshot(directory: &Path, name: &str) -> Result<Self, BundleError> {
+        let name = snapshot_name(name)?;
+        Self::load_bundle(&directory.join("snapshots").join(name))
+    }
+
+    fn write_tree(&mut self, directory: &Path) -> Result<(), BundleError> {
         self.remember_position();
-        let parent = directory.parent().unwrap_or(Path::new("."));
+        let parent = bundle_parent(directory);
+        fs::create_dir_all(parent)?;
         let file_name = directory
             .file_name()
             .ok_or_else(|| BundleError { message: "bundle path has no name".into() })?;
@@ -99,15 +149,17 @@ impl Book {
         }
         book.load_chapters(&chapters)?;
         if let Some(pos) = field(&manifest, "caret") {
-            let mut parts = pos.split(':');
-            let block_index: usize = parts.next().unwrap_or("0").parse().unwrap_or(0);
-            let offset: usize = parts.next().unwrap_or("0").parse().unwrap_or(0);
-            if let Some(id) = book.block_ids().get(block_index).copied() {
-                let len = book.block_len(id).unwrap_or(0);
-                let _ = book.set_selection(crate::Selection::collapsed(crate::Position::new(
-                    id,
-                    offset.min(len),
-                )));
+            if let Some(focus) = position_at(&book, &pos) {
+                let _ = book.set_selection(crate::Selection::collapsed(focus));
+                book.remember_position();
+            }
+        }
+        if let Some(spec) = field(&manifest, "selection") {
+            let mut ends = spec.split_whitespace();
+            let anchor = ends.next().and_then(|end| position_at(&book, end));
+            let focus = ends.next().and_then(|end| position_at(&book, end));
+            if let (Some(anchor), Some(focus)) = (anchor, focus) {
+                let _ = book.set_selection(crate::Selection { anchor, focus });
                 book.remember_position();
             }
         }
@@ -157,16 +209,15 @@ impl Book {
             .find(|template| template.name == "Chapter")
             .map(|template| template.opener.as_str())
             .unwrap_or("Chapter");
-        let caret = self.saved_position().map(|pos| {
-            let index = self
-                .block_ids()
-                .iter()
-                .position(|id| *id == pos.block)
-                .unwrap_or(0);
-            format!("{index}:{}", pos.offset)
-        });
+        let caret = self.saved_position().map(|pos| encode_position(self, pos));
+        let selection = self.selection();
+        let selection = format!(
+            "{} {}",
+            encode_position(self, selection.anchor),
+            encode_position(self, selection.focus)
+        );
         let mut text = format!(
-            "title {}\nbody-size {body}\ntemplate-opener {opener}\ncaret {}\n",
+            "title {}\nbody-size {body}\ntemplate-opener {opener}\ncaret {}\nselection {selection}\n",
             self.title().replace('\n', " "),
             caret.unwrap_or_else(|| "0:0".into())
         );
@@ -279,6 +330,46 @@ fn parse_chapter(text: &str) -> ParsedChapter {
         blocks.push(current);
     }
     ParsedChapter { title, blocks }
+}
+
+fn bundle_parent(directory: &Path) -> &Path {
+    directory
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or(Path::new("."))
+}
+
+fn snapshot_name(name: &str) -> Result<String, BundleError> {
+    let trimmed = name.trim();
+    if trimmed.is_empty()
+        || trimmed.contains('/')
+        || trimmed.contains('\\')
+        || trimmed.contains("..")
+        || trimmed.starts_with('.')
+    {
+        return Err(BundleError {
+            message: "snapshot name is not a single path segment".into(),
+        });
+    }
+    Ok(trimmed.to_string())
+}
+
+fn encode_position(book: &Book, pos: crate::Position) -> String {
+    let index = book
+        .block_ids()
+        .iter()
+        .position(|id| *id == pos.block)
+        .unwrap_or(0);
+    format!("{index}:{}", pos.offset)
+}
+
+fn position_at(book: &Book, spec: &str) -> Option<crate::Position> {
+    let mut parts = spec.split(':');
+    let block_index: usize = parts.next()?.parse().ok()?;
+    let offset: usize = parts.next()?.parse().ok()?;
+    let id = book.block_ids().get(block_index).copied()?;
+    let len = book.block_len(id).ok()?;
+    Some(crate::Position::new(id, offset.min(len)))
 }
 
 fn field(manifest: &str, name: &str) -> Option<String> {

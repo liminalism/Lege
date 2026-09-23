@@ -11,7 +11,7 @@ mod error;
 
 pub use atlas::{AtlasKey, GlyphAtlas};
 pub use engine::{
-    book_of_pages, book_of_repeated_line, features_for, Cursor, Document, EditReport, Face, Geometry, Glyph, Paragraph,
-    ParagraphStyle,
+    book_of_pages, book_of_repeated_line, features_for, Cursor, Document, EditReport, Face, Geometry, Glyph, PaintedLine,
+    Paragraph, ParagraphStyle,
 };
 pub use error::TypesetError;
