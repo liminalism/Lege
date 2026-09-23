@@ -44,6 +44,16 @@ fn contents_page_numbers_follow_a_chapter_that_moves() {
     document.insert_paragraphs_before(2, 2, "Inserted").unwrap();
     let after = document.contents();
     assert_eq!(after[0], ("One".into(), 1));
-    assert!(after[1].1 > before[1].1, "chapter Two moved from {} to {}", before[1].1, after[1].1);
+    assert!(
+        after[1].1 > before[1].1,
+        "chapter Two moved from {} to {}",
+        before[1].1,
+        after[1].1
+    );
+    println!("toc before cross-page move: {before:?}");
+    println!(
+        "toc after cross-page move: {after:?} (chapter Two {} -> {})",
+        before[1].1, after[1].1
+    );
     let _ = paragraphs;
 }

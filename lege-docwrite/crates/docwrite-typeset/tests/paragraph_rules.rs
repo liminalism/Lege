@@ -143,6 +143,19 @@ fn keep_rules_hold_and_prose_features_shape() {
     assert!(document.page_count() > 1);
     let violations = document.rule_violations();
     assert!(violations.is_empty(), "{violations:?}");
+    println!("keep/widow violations: {}", violations.len());
+    let pages: Vec<String> = (1..=document.page_count())
+        .flat_map(|page| document.page_texts(page))
+        .collect();
+    let has = |needle: &str| pages.iter().any(|line| line.contains(needle));
+    assert!(has("Front matter") && has("epigraph") && has("quoted passage"));
+    assert!(has("plate") && has("Caption") && has("Back matter"));
+    println!("front matter: {}", has("Front matter"));
+    println!("epigraph: {}", has("epigraph"));
+    println!("block quote: {}", has("quoted passage"));
+    println!("image: {}", has("plate"));
+    println!("caption: {}", has("Caption"));
+    println!("back matter: {}", has("Back matter"));
     assert!(!document.opens_with_widow());
     assert!(!document.ends_with_orphan());
     let em = document.drop_cap_em().expect("a drop cap was requested");
@@ -151,15 +164,16 @@ fn keep_rules_hold_and_prose_features_shape() {
         "drop cap em {em} should exceed body {}",
         geometry.font_size
     );
+    println!("drop cap em {em} > body {}", geometry.font_size);
 
     let plain = face().shape("Hello 123", 16.0, &[]).unwrap();
     let featured = face()
         .shape("Hello 123", 16.0, &features_for(true, true))
         .unwrap();
-    assert_ne!(
-        plain.iter().map(|g| g.id).collect::<Vec<_>>(),
-        featured.iter().map(|g| g.id).collect::<Vec<_>>()
-    );
+    let plain_ids: Vec<_> = plain.iter().map(|glyph| glyph.id).collect();
+    let featured_ids: Vec<_> = featured.iter().map(|glyph| glyph.id).collect();
+    assert_ne!(plain_ids, featured_ids);
+    println!("opentype smcp+onum glyph ids {plain_ids:?} -> {featured_ids:?}");
     let _ = paragraphs;
 }
 
@@ -218,6 +232,10 @@ fn widow_and_orphan_are_refused_when_the_style_asks() {
             "{:?}",
             held.rule_violations()
         );
+        println!(
+            "keep/widow violations after control: {} (loose layout had a widow or orphan at {words} words)",
+            held.rule_violations().len()
+        );
         found = true;
         break;
     }
@@ -261,4 +279,5 @@ fn a_long_word_breaks_with_a_visible_hyphen() {
         lines.iter().any(|line| line.contains('-')),
         "expected a hyphen in {lines:?}"
     );
+    println!("hyphenated lines: {lines:?}");
 }
