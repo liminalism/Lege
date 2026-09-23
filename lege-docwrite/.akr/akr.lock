@@ -5,7 +5,7 @@ build {
     tool "akr 0.5.1"
     grammar "0.1"
     vocabulary "0.2"
-    source_graph "sha256:43266244f92c19fccb0142950271bcd0b60338c5c8dc67ab62d74e37f11298dc"
+    source_graph "sha256:f387240079fe6a52905919c7f376aca76b5dfd2f99c695f14a8f378c0a0cf67b"
 }
 
 source ".akr/project.akr" {
@@ -24,8 +24,8 @@ source ".akr/records/docwrite/milestones.akr" {
 }
 
 source ".akr/records/docwrite/observations.akr" {
-    hash "sha256:00aa66ea02091236d7cd9c1c30a80e095786c2d9a9164e1d0406437db69e2557"
-    records 14
+    hash "sha256:25601b4d5c9b210c459f92290d0506d1286be95cf49fcbb6e821bd2d69f40ea9"
+    records 15
 }
 
 source ".akr/records/docwrite/requirements.akr" {
@@ -68,8 +68,8 @@ resolution @docwrite.decision.persistence-bundle/1 {
 
 resolution @docwrite.decision.text-stack/1 {
     slot supported_by
-    to @docwrite.observation.no-shaping-in-workspace/2
-    hash "sha256:038d0b392e15955785a784bca4c13764515a70b2bae87f4f4244c412ad78df20"
+    to @docwrite.observation.no-shaping-in-workspace/3
+    hash "sha256:ffd311beabbd356e4f10814e6782dd8c2b3fb971b224d0f023345a5f534ccd4d"
 }
 
 resolution @docwrite.decision.text-stack/1 {
@@ -354,8 +354,13 @@ seal @docwrite.observation.no-shaping-in-workspace/1 {
 }
 
 seal @docwrite.observation.no-shaping-in-workspace/2 {
+    state superseded
+    hash "sha256:8e7ccd47e7659d990dda92226dcc002bdce70fac968c3d363453cca5eac3ae73"
+}
+
+seal @docwrite.observation.no-shaping-in-workspace/3 {
     state verified
-    hash "sha256:038d0b392e15955785a784bca4c13764515a70b2bae87f4f4244c412ad78df20"
+    hash "sha256:ffd311beabbd356e4f10814e6782dd8c2b3fb971b224d0f023345a5f534ccd4d"
 }
 
 seal @docwrite.observation.pdf-text-supports-source-passages/1 {

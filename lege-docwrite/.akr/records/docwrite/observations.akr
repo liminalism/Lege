@@ -18,7 +18,7 @@ record docwrite.observation.no-shaping-in-workspace/1 : observation {
 
 record docwrite.observation.no-shaping-in-workspace/2 : observation {
     title "Nothing in Lege-ecosystem shapes, breaks or hyphenates book text"
-    state verified
+    state superseded
     statement """
         No ecosystem crate depends on harfbuzz/rustybuzz/harfrust/swash directly; shaping is only
         reachable through cosmic-text in lege-viewer's chrome. pdf-font (skrifa 0.44) parses
@@ -30,6 +30,22 @@ record docwrite.observation.no-shaping-in-workspace/2 : observation {
     method manual
     watches [ "lege-pdf/render/crates/pdf-font/src/**", "Cargo.toml" ]
     supersedes [ @docwrite.observation.no-shaping-in-workspace/1 ]
+}
+
+record docwrite.observation.no-shaping-in-workspace/3 : observation {
+    title "Nothing in Lege-ecosystem shapes, breaks or hyphenates book text"
+    state verified
+    statement """
+        No ecosystem crate depends on harfbuzz/rustybuzz/harfrust/swash directly; shaping is only
+        reachable through cosmic-text in lege-viewer's chrome. pdf-font (skrifa 0.44) parses
+        TrueType, CFF, Type1 and CID programs and exposes outlines, gid_for_char and advances but
+        no GSUB/GPOS. There is no unicode-linebreak, unicode-segmentation, hyphenation or
+        Knuth-Plass code. ropey is declared in the root workspace but no Lege crate uses it.
+        """
+    observed_at git:d631cd1b32e42e9068b6e2934af0d67784a65a67
+    method manual
+    watches [ "lege-pdf/render/crates/pdf-font/src/**", "Cargo.toml" ]
+    supersedes [ @docwrite.observation.no-shaping-in-workspace/2 ]
 }
 
 record docwrite.observation.pdf-text-supports-source-passages/1 : observation {
