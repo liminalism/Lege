@@ -37,6 +37,18 @@ record docwrite.evidence.book-map-drag/1 : evidence {
         """
 }
 
+record docwrite.evidence.facing-recto/1 : evidence {
+    title "Recto inset 54, verso inset 20. Blank verso page 2 keeps folio 2 and running head Chapter 1. With a 49-character footnote still pending, page 2 stays blank and Two. opens on page 3; the note reassembles after edit_page."
+    state verified
+    result pass
+    method command
+    observed_at git:05ae64374331a685c7f9185e94976fd52c1f701a
+    command "cargo test -p docwrite-typeset --test book_layout"
+    summary """
+        Recto inset 54, verso inset 20. Blank verso page 2 keeps folio 2 and running head Chapter 1. With a 49-character footnote still pending, page 2 stays blank and Two. opens on page 3; the note reassembles after edit_page.
+        """
+}
+
 record docwrite.evidence.m1-edit-basics/1 : evidence {
     title "Insert, delete, selection, word motion, cut/copy/paste and undo/redo round-trip across paragraphs and chapters."
     state verified
@@ -202,5 +214,29 @@ record docwrite.evidence.selection-highlight/1 : evidence {
     command "cargo test -p docwrite-app --test selection"
     summary """
         Extending the caret paints selection pixels behind the glyphs. A collapsed caret paints none.
+        """
+}
+
+record docwrite.evidence.template-propagates/1 : evidence {
+    title "Changing the chapter template opener from Chapter to Lesson changed all ten chapter openers, and reopening restored the template."
+    state verified
+    result pass
+    method command
+    observed_at git:05ae64374331a685c7f9185e94976fd52c1f701a
+    command "cargo test -p docwrite-model --test persistence -- ten_chapters_follow_one_template_and_reorder_and_reopen"
+    summary """
+        Changing the chapter template opener from Chapter to Lesson changed all ten chapter openers, and reopening restored the template.
+        """
+}
+
+record docwrite.evidence.typing-trace/1 : evidence {
+    title "A 46-frame typing trace on a 500-page document stayed inside 8ms. Each keypress laid out only the edited page and the next, and the typed page text starts with k."
+    state verified
+    result pass
+    method command
+    observed_at git:05ae64374331a685c7f9185e94976fd52c1f701a
+    command "cargo test -p docwrite-app --test latency_gate"
+    summary """
+        A 46-frame typing trace on a 500-page document stayed inside 8ms. Each keypress laid out only the edited page and the next, and the typed page text starts with k.
         """
 }

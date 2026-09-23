@@ -12,10 +12,20 @@ record docwrite.work.m1-incremental-pagination/1 : work {
 
 record docwrite.work.m1-latency-gate/1 : work {
     title "Keypress-to-present instrumentation and regression gate"
-    state proposed
+    state completed
     intent """
         Port lege-viewer's FrameMetrics and input-trace replay; add a test that replays a typing trace against a 500-page document and fails over budget.
         """
+    acceptance {
+        check typing-trace {
+            statement """
+                Replaying page motion and keypresses on a 500-page document stays inside the 8ms budget, and each keypress lays out only the edited page and the next.
+                """
+            method command
+            command "cargo test -p docwrite-app --test latency_gate"
+            verified_by [ @docwrite.evidence.typing-trace/1 ]
+        }
+    }
     part_of [ @docwrite.milestone.m1-editor-spike ]
 }
 
@@ -122,9 +132,27 @@ record docwrite.work.m2-persistence/1 : work {
 
 record docwrite.work.m2-styles-masters-templates/1 : work {
     title "Paragraph/character styles, page masters and chapter templates"
-    state proposed
+    state completed
     intent """
         Implement the three systems, facing pages, margins, folios, running heads and recto starts, with template edits propagating to all chapters.
         """
+    acceptance {
+        check facing-recto {
+            statement """
+                A facing verso uses the outer margin, a NextRecto chapter opens on an odd page, and the blank verso keeps its folio and running head even while a footnote carry is pending.
+                """
+            method command
+            command "cargo test -p docwrite-typeset --test book_layout"
+            verified_by [ @docwrite.evidence.facing-recto/1 ]
+        }
+        check template-propagates {
+            statement """
+                One template edit changes the opener of all ten chapters, and reopening restores that template.
+                """
+            method command
+            command "cargo test -p docwrite-model --test persistence -- ten_chapters_follow_one_template_and_reorder_and_reopen"
+            verified_by [ @docwrite.evidence.template-propagates/1 ]
+        }
+    }
     part_of [ @docwrite.milestone.m2-book-core ]
 }
