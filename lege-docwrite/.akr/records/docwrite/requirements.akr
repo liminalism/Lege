@@ -1,0 +1,35 @@
+akr 0.1
+project lege-docwrite
+
+record docwrite.req.exact-page-navigation/1 : requirement {
+    title "PageUp/PageDown move exactly one physical page or spread"
+    state proposed
+    scope [ all ]
+    topic navigation
+    statement """
+        PageDown always lands on the top of the next physical page and PageUp on the previous;
+        in spread mode they move one spread. Continuous mouse or trackpad scrolling stays
+        continuous during the gesture and settles magnetically onto the nearest page (or spread)
+        when the gesture ends. Jumps by page number, chapter, outline entry and search result are
+        deterministic.
+        """
+}
+
+record docwrite.req.typing-latency/1 : requirement {
+    title "Typing never waits on work unrelated to the edited paragraph"
+    state proposed
+    scope [ all ]
+    topic typing-latency
+    statement """
+        The hot path is key event → edit transaction → text mutation → reshape the affected
+        paragraph → incremental repagination to convergence → damage → present. Nothing else
+        runs on it: spell checking, image decoding, citation processing, index rebuilding,
+        search indexing, autosave serialization and export are asynchronous. For ordinary
+        typing in a 500-page book the application spends only a few milliseconds before handing
+        the frame to the presenter, and keypress-to-present latency is a regression gate.
+        """
+    rationale """
+        The product premise is the immediacy of typing into a typeset book. A page-native editor
+        that stutters on long manuscripts is worse than a Markdown editor.
+        """
+}

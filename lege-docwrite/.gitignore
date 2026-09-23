@@ -1,0 +1,6 @@
+/target
+.akr/cache/
+.agent/scratch/
+
+# AKR: a rebuildable cache and disposable agent notes.
+.agent/handoffs/

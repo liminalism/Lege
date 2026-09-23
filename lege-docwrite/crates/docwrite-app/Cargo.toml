@@ -1,0 +1,19 @@
+[package]
+name = "docwrite-app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "The lege-docwrite page-native book editor"
+
+[dependencies]
+docwrite-model = { workspace = true }
+docwrite-typeset = { workspace = true }
+docwrite-export = { workspace = true }
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "lege-docwrite"
+path = "src/main.rs"

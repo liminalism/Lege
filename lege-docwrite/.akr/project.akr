@@ -1,0 +1,11 @@
+akr 0.1
+project lege-docwrite
+
+namespace docwrite "The page-native book editor: product, architecture, milestones."
+namespace lege "Upgrades required in lege-pdf (Lege-ecosystem) to support lege-docwrite."
+namespace pixelkit "Upgrades required in the sibling pixelkit repository to host lege-docwrite."
+
+defaults {
+    review_after_days 90
+    view_output "docs/generated"
+}

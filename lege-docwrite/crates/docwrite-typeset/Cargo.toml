@@ -1,0 +1,13 @@
+[package]
+name = "docwrite-typeset"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Shaping, line breaking, hyphenation and incremental pagination for lege-docwrite"
+
+[dependencies]
+docwrite-model = { workspace = true }
+
+[lints]
+workspace = true

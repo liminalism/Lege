@@ -40,6 +40,8 @@ members = [
 #   freya-main               — vendored upstream fork with its own workspace
 #   lege-codecs/*            — separate build graphs / licenses (patched in below)
 #   lege-pdf/pdf-integrity   — nested forensic-triage workspace (own lockfile)
+#   lege-docwrite            — nested book-editor workspace (own lockfile);
+#                              path-depends on lege-pdf crates and ../pixelkit
 #   lege-misc/bindings/jbig2enc-py — pyo3 extension module; `extension-module`
 #                              leaves Python symbols unresolved until import,
 #                              which breaks any plain `cargo build` that links
@@ -51,6 +53,7 @@ exclude = [
     "lege-codecs",
     "lege-misc/bindings/jbig2enc-py",
     "lege-pdf/pdf-integrity",
+    "lege-docwrite",
 ]
 # `cargo build` produces the `lege` CLI plus the default GUI frontend, the
 # Freya processor GUI (bin `lege-gui`). The native viewer is an opt-in

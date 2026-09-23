@@ -1,0 +1,47 @@
+akr 0.1
+project lege-docwrite
+
+record lege.work.font-subsetting-and-cff/1 : work {
+    title "lege-pdf-write: subset and embed TrueType and CFF fonts"
+    state proposed
+    intent """
+        Subset fonts to the glyphs used (e.g. the subsetter crate) and embed both FontFile2 TrueType and FontFile3 CFF/OpenType programs with correct widths and descriptors.
+        """
+    implements [ @docwrite.decision.export-formats ]
+}
+
+record lege.work.links-labels-destinations/1 : work {
+    title "lege-pdf-write: links, named destinations and page labels"
+    state proposed
+    intent """
+        Add link annotations (internal and URI), named destinations for chapters/notes, page labels (roman front matter, arabic body), and streaming finalize without a fixed page count.
+        """
+    implements [ @docwrite.decision.export-formats ]
+}
+
+record lege.work.multi-font-pages-and-tounicode/1 : work {
+    title "lege-pdf-write: several fonts per page and per-cluster ToUnicode"
+    state proposed
+    intent """
+        Allow any number of font resources per page and generate ToUnicode maps from shaping clusters (ligatures, small caps, alternates) so output text is searchable and copyable.
+        """
+    implements [ @docwrite.decision.export-formats ]
+}
+
+record lege.work.tagged-pdf/1 : work {
+    title "lege-pdf-write: /Lang and a structure tree"
+    state proposed
+    intent """
+        Emit /Lang and a structure tree (headings, paragraphs, notes, figures) so book PDFs are tagged and accessible.
+        """
+    implements [ @docwrite.decision.export-formats ]
+}
+
+record lege.work.vector-paths-and-color/1 : work {
+    title "lege-pdf-write: path operators, RGB fill and Flate images"
+    state proposed
+    intent """
+        Add path construction/stroke/fill operators and RGB colour for rules, underlines and ornaments, and Flate-compressed RGB/alpha images with SMask.
+        """
+    implements [ @docwrite.decision.export-formats ]
+}

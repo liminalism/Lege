@@ -1,0 +1,419 @@
+akr-lock 0.1
+project lege-docwrite
+
+build {
+    tool "akr 0.5.1"
+    grammar "0.1"
+    vocabulary "0.2"
+    source_graph "sha256:43266244f92c19fccb0142950271bcd0b60338c5c8dc67ab62d74e37f11298dc"
+}
+
+source ".akr/project.akr" {
+    hash "sha256:dbb1da9882f3c9e6389c11efd43a9c6f114d216c600d539a3f70d5b7be21abd9"
+    records 0
+}
+
+source ".akr/records/docwrite/decisions.akr" {
+    hash "sha256:fd11b55f2ca63aa5b4b515adb4dea0429e7f70fc0a71fb89487bd545fd23c9d2"
+    records 9
+}
+
+source ".akr/records/docwrite/milestones.akr" {
+    hash "sha256:22f2d5985b3d7374ab559e91e611fa7754fe4fa824a71c7f0a49f8d067726f0c"
+    records 5
+}
+
+source ".akr/records/docwrite/observations.akr" {
+    hash "sha256:00aa66ea02091236d7cd9c1c30a80e095786c2d9a9164e1d0406437db69e2557"
+    records 14
+}
+
+source ".akr/records/docwrite/requirements.akr" {
+    hash "sha256:b4482b16c0e4f73bf83bc20b30e0f75fc03731c2515a9252d4102f35fce7ef5f"
+    records 2
+}
+
+source ".akr/records/docwrite/work.akr" {
+    hash "sha256:c72dcf41acc245ed7cf1e6553b4d92a04cde60f7ba79dcc64a5b0880d95b80fb"
+    records 10
+}
+
+source ".akr/records/lege/work.akr" {
+    hash "sha256:0f45c01912863acc82fad35484c1ce29a9f5fa57ba245ad0080f55fda22a46c7"
+    records 5
+}
+
+source ".akr/records/pixelkit/work.akr" {
+    hash "sha256:cc40698789008a97a671c76a7d27dc6358cd095b7a4ef14907ea300eaa49e9a6"
+    records 6
+}
+
+resolution @docwrite.decision.export-formats/1 {
+    slot supported_by
+    to @docwrite.observation.pdf-write-gaps/2
+    hash "sha256:f6bf15ecaf5c6ff9c7bf7666747e0983c80335f1f762a1ce2de5d9b77c5ef0f7"
+}
+
+resolution @docwrite.decision.incremental-pagination/1 {
+    slot depends_on
+    to @docwrite.req.typing-latency/1
+    hash "sha256:2cf372c1652afabf76141fd6e6ed96be728653038c2237389f4fbdadc556ef47"
+}
+
+resolution @docwrite.decision.persistence-bundle/1 {
+    slot depends_on
+    to @docwrite.req.typing-latency/1
+    hash "sha256:2cf372c1652afabf76141fd6e6ed96be728653038c2237389f4fbdadc556ef47"
+}
+
+resolution @docwrite.decision.text-stack/1 {
+    slot supported_by
+    to @docwrite.observation.no-shaping-in-workspace/2
+    hash "sha256:038d0b392e15955785a784bca4c13764515a70b2bae87f4f4244c412ad78df20"
+}
+
+resolution @docwrite.decision.text-stack/1 {
+    slot supported_by
+    to @docwrite.observation.pixelkit-text-limits/2
+    hash "sha256:93e2959b9d0638e7f3976aace184eaa85f04adb24900e4812b5c5bda1fddc7dd"
+}
+
+resolution @docwrite.decision.ui-stack-pixelkit/1 {
+    slot supported_by
+    to @docwrite.observation.pixelkit-shell-gaps/2
+    hash "sha256:cb8e52c306eeec4de7494de362fb1fce90dd6830ae52a2b01506cb397eb4169b"
+}
+
+resolution @docwrite.decision.ui-stack-pixelkit/1 {
+    slot supported_by
+    to @docwrite.observation.viewer-paging-is-line-continuity/2
+    hash "sha256:9ce23e6cd18156bc3cfc494895202831602d2cf108eaac5914d758852b64170d"
+}
+
+resolution @docwrite.milestone.m1-editor-spike/1 {
+    slot depends_on
+    to @docwrite.decision.incremental-pagination/1
+    hash "sha256:62ae9128bdbb792b92a4c61b90aa528e0d12dccfab6ce69bbe25adede03e97e8"
+}
+
+resolution @docwrite.milestone.m1-editor-spike/1 {
+    slot depends_on
+    to @docwrite.decision.text-stack/1
+    hash "sha256:7c38aaaf1d4c908f334d31acd32ca14ae5fb5a990b14cb0f949873b106311921"
+}
+
+resolution @docwrite.milestone.m1-editor-spike/1 {
+    slot depends_on
+    to @docwrite.decision.ui-stack-pixelkit/1
+    hash "sha256:e5198932168631d8a65abf8becb28c7bd02452f21cfb5878f0006b0b0832974c"
+}
+
+resolution @docwrite.milestone.m1-editor-spike/1 {
+    slot depends_on
+    to @pixelkit.work.ime/1
+    hash "sha256:380d4fd21ed55e806e7557fa6e42604f0faa9bf74a58cb5858bdc1b8db5b2779"
+}
+
+resolution @docwrite.milestone.m1-editor-spike/1 {
+    slot depends_on
+    to @pixelkit.work.key-input/1
+    hash "sha256:20c41d814aa6e50d6b838ca82e846a12c3c15983a176514036222627ebbfdff7"
+}
+
+resolution @docwrite.milestone.m1-editor-spike/1 {
+    slot depends_on
+    to @pixelkit.work.latency-phase/1
+    hash "sha256:050857c373e253d68364d73e9d9c4900bc888a9ff69260d4d6ff6a864a1f0577"
+}
+
+resolution @docwrite.milestone.m1-editor-spike/1 {
+    slot depends_on
+    to @pixelkit.work.presenter-injection/1
+    hash "sha256:e7e49d595bfdea9978413f705a2676cfe124adc7bd3c5a42ce0f6304f245dee0"
+}
+
+resolution @docwrite.milestone.m1-editor-spike/1 {
+    slot depends_on
+    to @pixelkit.work.scroll-phase-gestures/1
+    hash "sha256:3b13de278a4dd10db3ce3c94fc892dac083eb29feaa7fd6a8fbf8feb127bb0f1"
+}
+
+resolution @docwrite.milestone.m2-book-core/1 {
+    slot after
+    to @docwrite.milestone.m1-editor-spike/1
+    hash "sha256:6e4be214db00ff5f44b097df60d5ad132faa29f99e61ce384f44d9c7e4b35390"
+}
+
+resolution @docwrite.milestone.m2-book-core/1 {
+    slot depends_on
+    to @docwrite.decision.export-formats/1
+    hash "sha256:8aad152ba9e17fca256445ffec85694ed4c692e71ffe291dbc117e9d663dc9f4"
+}
+
+resolution @docwrite.milestone.m2-book-core/1 {
+    slot depends_on
+    to @docwrite.decision.persistence-bundle/1
+    hash "sha256:4fb872c33fe95ae0d8808cb62230d8a7070a4fca5093e284f8f21e2d061345d8"
+}
+
+resolution @docwrite.milestone.m2-book-core/1 {
+    slot depends_on
+    to @docwrite.decision.styles-masters-templates/1
+    hash "sha256:83a8db438ea7b9a5e07cb2850efbbf827ddfb28350e5de12c84c02a020bd347e"
+}
+
+resolution @docwrite.milestone.m2-book-core/1 {
+    slot depends_on
+    to @lege.work.font-subsetting-and-cff/1
+    hash "sha256:e9a89da17b7dd5b9c17807a0528acf0afc5a70288127813bb725f4a061411b55"
+}
+
+resolution @docwrite.milestone.m2-book-core/1 {
+    slot depends_on
+    to @lege.work.links-labels-destinations/1
+    hash "sha256:595bc3430824eb815a2d0e5db51bca937eed98038d0ee6a9a83be1f96c1a043b"
+}
+
+resolution @docwrite.milestone.m2-book-core/1 {
+    slot depends_on
+    to @lege.work.multi-font-pages-and-tounicode/1
+    hash "sha256:5c2ad30d5bddd6910f9903ba128e7cd40acda179924559afb0b06a0b7075e40a"
+}
+
+resolution @docwrite.milestone.m2-book-core/1 {
+    slot depends_on
+    to @lege.work.vector-paths-and-color/1
+    hash "sha256:46e885137e6d04bdc8c7a919797c511c3632c5f23d8ad0cf9bb7bc3c5250c50a"
+}
+
+resolution @docwrite.milestone.m3-prose-typography/1 {
+    slot after
+    to @docwrite.milestone.m2-book-core/1
+    hash "sha256:e8632976ae0617bab05c7f7ea8d89c5493e918af52f7490ef998647649924f4f"
+}
+
+resolution @docwrite.milestone.m4-research-apparatus/1 {
+    slot after
+    to @docwrite.milestone.m3-prose-typography/1
+    hash "sha256:6572d9532c55c6bff5c7bcf9cabb59a0f2d088eff83b365631712d36bd17f4eb"
+}
+
+resolution @docwrite.milestone.m4-research-apparatus/1 {
+    slot supported_by
+    to @docwrite.observation.pdf-text-supports-source-passages/2
+    hash "sha256:dd4c5e78ba282245f9df82455567a7c34625f89a1e8980be27855cab180e2199"
+}
+
+resolution @docwrite.milestone.m5-interchange/1 {
+    slot after
+    to @docwrite.milestone.m4-research-apparatus/1
+    hash "sha256:74dd512d6cbbdd6f02b0ab5f17005c7c8096c9c750f76e99d1a21a81de833f38"
+}
+
+resolution @docwrite.milestone.m5-interchange/1 {
+    slot depends_on
+    to @docwrite.decision.export-formats/1
+    hash "sha256:8aad152ba9e17fca256445ffec85694ed4c692e71ffe291dbc117e9d663dc9f4"
+}
+
+resolution @docwrite.milestone.m5-interchange/1 {
+    slot depends_on
+    to @lege.work.tagged-pdf/1
+    hash "sha256:ad8785e25874b409f371b6680196a0b910bd08e83155a9e957d0e822d9121ed6"
+}
+
+resolution @docwrite.work.m1-incremental-pagination/1 {
+    slot part_of
+    to @docwrite.milestone.m1-editor-spike/1
+    hash "sha256:6e4be214db00ff5f44b097df60d5ad132faa29f99e61ce384f44d9c7e4b35390"
+}
+
+resolution @docwrite.work.m1-latency-gate/1 {
+    slot part_of
+    to @docwrite.milestone.m1-editor-spike/1
+    hash "sha256:6e4be214db00ff5f44b097df60d5ad132faa29f99e61ce384f44d9c7e4b35390"
+}
+
+resolution @docwrite.work.m1-model-and-edits/1 {
+    slot part_of
+    to @docwrite.milestone.m1-editor-spike/1
+    hash "sha256:6e4be214db00ff5f44b097df60d5ad132faa29f99e61ce384f44d9c7e4b35390"
+}
+
+resolution @docwrite.work.m1-page-canvas-navigation/1 {
+    slot part_of
+    to @docwrite.milestone.m1-editor-spike/1
+    hash "sha256:6e4be214db00ff5f44b097df60d5ad132faa29f99e61ce384f44d9c7e4b35390"
+}
+
+resolution @docwrite.work.m1-shaping-and-breaking/1 {
+    slot part_of
+    to @docwrite.milestone.m1-editor-spike/1
+    hash "sha256:6e4be214db00ff5f44b097df60d5ad132faa29f99e61ce384f44d9c7e4b35390"
+}
+
+resolution @docwrite.work.m2-book-map/1 {
+    slot part_of
+    to @docwrite.milestone.m2-book-core/1
+    hash "sha256:e8632976ae0617bab05c7f7ea8d89c5493e918af52f7490ef998647649924f4f"
+}
+
+resolution @docwrite.work.m2-markdown-export/1 {
+    slot part_of
+    to @docwrite.milestone.m2-book-core/1
+    hash "sha256:e8632976ae0617bab05c7f7ea8d89c5493e918af52f7490ef998647649924f4f"
+}
+
+resolution @docwrite.work.m2-pdf-export/1 {
+    slot part_of
+    to @docwrite.milestone.m2-book-core/1
+    hash "sha256:e8632976ae0617bab05c7f7ea8d89c5493e918af52f7490ef998647649924f4f"
+}
+
+resolution @docwrite.work.m2-persistence/1 {
+    slot part_of
+    to @docwrite.milestone.m2-book-core/1
+    hash "sha256:e8632976ae0617bab05c7f7ea8d89c5493e918af52f7490ef998647649924f4f"
+}
+
+resolution @docwrite.work.m2-styles-masters-templates/1 {
+    slot part_of
+    to @docwrite.milestone.m2-book-core/1
+    hash "sha256:e8632976ae0617bab05c7f7ea8d89c5493e918af52f7490ef998647649924f4f"
+}
+
+resolution @lege.work.font-subsetting-and-cff/1 {
+    slot implements
+    to @docwrite.decision.export-formats/1
+    hash "sha256:8aad152ba9e17fca256445ffec85694ed4c692e71ffe291dbc117e9d663dc9f4"
+}
+
+resolution @lege.work.links-labels-destinations/1 {
+    slot implements
+    to @docwrite.decision.export-formats/1
+    hash "sha256:8aad152ba9e17fca256445ffec85694ed4c692e71ffe291dbc117e9d663dc9f4"
+}
+
+resolution @lege.work.multi-font-pages-and-tounicode/1 {
+    slot implements
+    to @docwrite.decision.export-formats/1
+    hash "sha256:8aad152ba9e17fca256445ffec85694ed4c692e71ffe291dbc117e9d663dc9f4"
+}
+
+resolution @lege.work.tagged-pdf/1 {
+    slot implements
+    to @docwrite.decision.export-formats/1
+    hash "sha256:8aad152ba9e17fca256445ffec85694ed4c692e71ffe291dbc117e9d663dc9f4"
+}
+
+resolution @lege.work.vector-paths-and-color/1 {
+    slot implements
+    to @docwrite.decision.export-formats/1
+    hash "sha256:8aad152ba9e17fca256445ffec85694ed4c692e71ffe291dbc117e9d663dc9f4"
+}
+
+resolution @pixelkit.work.damage-rects/1 {
+    slot implements
+    to @docwrite.decision.ui-stack-pixelkit/1
+    hash "sha256:e5198932168631d8a65abf8becb28c7bd02452f21cfb5878f0006b0b0832974c"
+}
+
+resolution @pixelkit.work.ime/1 {
+    slot implements
+    to @docwrite.decision.ui-stack-pixelkit/1
+    hash "sha256:e5198932168631d8a65abf8becb28c7bd02452f21cfb5878f0006b0b0832974c"
+}
+
+resolution @pixelkit.work.key-input/1 {
+    slot implements
+    to @docwrite.decision.ui-stack-pixelkit/1
+    hash "sha256:e5198932168631d8a65abf8becb28c7bd02452f21cfb5878f0006b0b0832974c"
+}
+
+resolution @pixelkit.work.latency-phase/1 {
+    slot implements
+    to @docwrite.decision.ui-stack-pixelkit/1
+    hash "sha256:e5198932168631d8a65abf8becb28c7bd02452f21cfb5878f0006b0b0832974c"
+}
+
+resolution @pixelkit.work.presenter-injection/1 {
+    slot implements
+    to @docwrite.decision.ui-stack-pixelkit/1
+    hash "sha256:e5198932168631d8a65abf8becb28c7bd02452f21cfb5878f0006b0b0832974c"
+}
+
+resolution @pixelkit.work.scroll-phase-gestures/1 {
+    slot implements
+    to @docwrite.decision.ui-stack-pixelkit/1
+    hash "sha256:e5198932168631d8a65abf8becb28c7bd02452f21cfb5878f0006b0b0832974c"
+}
+
+seal @docwrite.observation.no-shaping-in-workspace/1 {
+    state superseded
+    hash "sha256:a92c8f1130f11d8ba1a8340ff12a7267cea48e27dcd108f2b8120dfd03280ae1"
+}
+
+seal @docwrite.observation.no-shaping-in-workspace/2 {
+    state verified
+    hash "sha256:038d0b392e15955785a784bca4c13764515a70b2bae87f4f4244c412ad78df20"
+}
+
+seal @docwrite.observation.pdf-text-supports-source-passages/1 {
+    state superseded
+    hash "sha256:b02f0037b4d6a7c44ad79b009b5b182588adee254337addd5f4b68ea45e8f5d2"
+}
+
+seal @docwrite.observation.pdf-text-supports-source-passages/2 {
+    state verified
+    hash "sha256:dd4c5e78ba282245f9df82455567a7c34625f89a1e8980be27855cab180e2199"
+}
+
+seal @docwrite.observation.pdf-write-gaps/1 {
+    state superseded
+    hash "sha256:8a8e7a26367d39714d4b3e51b8b84ce32813b60c41e5221a42037c04920ea352"
+}
+
+seal @docwrite.observation.pdf-write-gaps/2 {
+    state verified
+    hash "sha256:f6bf15ecaf5c6ff9c7bf7666747e0983c80335f1f762a1ce2de5d9b77c5ef0f7"
+}
+
+seal @docwrite.observation.pixelkit-shell-gaps/1 {
+    state superseded
+    hash "sha256:38178c1690f122e7cb5f83c9d7b099feb2a88bedd08694c235b51c52345c4316"
+}
+
+seal @docwrite.observation.pixelkit-shell-gaps/2 {
+    state verified
+    hash "sha256:cb8e52c306eeec4de7494de362fb1fce90dd6830ae52a2b01506cb397eb4169b"
+}
+
+seal @docwrite.observation.pixelkit-text-limits/1 {
+    state superseded
+    hash "sha256:331b5140caf2c734c58587783d10f7ed6eb1770a292a0a7cdf519db238a2e65d"
+}
+
+seal @docwrite.observation.pixelkit-text-limits/2 {
+    state verified
+    hash "sha256:93e2959b9d0638e7f3976aace184eaa85f04adb24900e4812b5c5bda1fddc7dd"
+}
+
+seal @docwrite.observation.viewer-paging-is-line-continuity/1 {
+    state superseded
+    hash "sha256:02b37ce028af28c44a9b132e6acd1a549ed2f9ee5e545559ac8c229914885dc7"
+}
+
+seal @docwrite.observation.viewer-paging-is-line-continuity/2 {
+    state verified
+    hash "sha256:9ce23e6cd18156bc3cfc494895202831602d2cf108eaac5914d758852b64170d"
+}
+
+seal @docwrite.observation.zz-test/1 {
+    state superseded
+    hash "sha256:8eba93adb239be405e3caddfaef21c706b0d7934bd63da672ee412153beaff56"
+}
+
+seal @docwrite.observation.zz-test/2 {
+    state withdrawn
+    hash "sha256:95d18d80d26f961d1c99b47495ee08330750227f325b4fdd4e6d23b59d09152d"
+}

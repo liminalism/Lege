@@ -1,0 +1,56 @@
+akr 0.1
+project lege-docwrite
+
+record pixelkit.work.damage-rects/1 : work {
+    title "Optional damage rectangles through the presenter"
+    state proposed
+    intent """
+        Let render report damaged rectangles and let presenters use them (softbuffer present_with_damage), keeping full-frame repaint as the default.
+        """
+    implements [ @docwrite.decision.ui-stack-pixelkit ]
+}
+
+record pixelkit.work.ime/1 : work {
+    title "Enable IME and expose a cursor-area API"
+    state proposed
+    intent """
+        Call set_ime_allowed, forward preedit/commit reliably, and let the app set the IME cursor area so candidate windows follow the caret.
+        """
+    implements [ @docwrite.decision.ui-stack-pixelkit ]
+}
+
+record pixelkit.work.key-input/1 : work {
+    title "Full text input and key events"
+    state proposed
+    intent """
+        Deliver whole committed strings rather than the first char, key-up events, physical keys and the full function-key range, with modifiers.
+        """
+    implements [ @docwrite.decision.ui-stack-pixelkit ]
+}
+
+record pixelkit.work.latency-phase/1 : work {
+    title "Input-to-present latency in FrameTimer"
+    state proposed
+    intent """
+        Timestamp input events and report input→present alongside paint/present p50/p95/max, and record tick time instead of zero, so apps can gate keypress-to-present.
+        """
+    implements [ @docwrite.decision.ui-stack-pixelkit ]
+}
+
+record pixelkit.work.presenter-injection/1 : work {
+    title "Injectable Presenter in run_app/WindowConfig"
+    state proposed
+    intent """
+        Let an application pass its own Presenter (softbuffer default, wgpu later) instead of the hardcoded SoftbufferPresenter in pixelkit-shell's resumed.
+        """
+    implements [ @docwrite.decision.ui-stack-pixelkit ]
+}
+
+record pixelkit.work.scroll-phase-gestures/1 : work {
+    title "Forward scroll TouchPhase and magnify gestures"
+    state proposed
+    intent """
+        Keep line vs pixel deltas distinct, forward TouchPhase (started/moved/ended, momentum) and pinch/magnify so an app can snap to a page when a gesture ends.
+        """
+    implements [ @docwrite.decision.ui-stack-pixelkit ]
+}

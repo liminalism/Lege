@@ -1,0 +1,232 @@
+akr 0.1
+project lege-docwrite
+
+record docwrite.observation.no-shaping-in-workspace/1 : observation {
+    title "Nothing in Lege-ecosystem shapes, breaks or hyphenates book text"
+    state superseded
+    statement """
+        No ecosystem crate depends on harfbuzz/rustybuzz/harfrust/swash directly; shaping is only
+        reachable through cosmic-text in lege-viewer's chrome. pdf-font (skrifa 0.44) parses
+        TrueType, CFF, Type1 and CID programs and exposes outlines, gid_for_char and advances but
+        no GSUB/GPOS. There is no unicode-linebreak, unicode-segmentation, hyphenation or
+        Knuth-Plass code. ropey is declared in the root workspace but no Lege crate uses it.
+        """
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    method manual
+    watches [ "../lege-pdf/render/crates/pdf-font/src/**", "../Cargo.toml" ]
+}
+
+record docwrite.observation.no-shaping-in-workspace/2 : observation {
+    title "Nothing in Lege-ecosystem shapes, breaks or hyphenates book text"
+    state verified
+    statement """
+        No ecosystem crate depends on harfbuzz/rustybuzz/harfrust/swash directly; shaping is only
+        reachable through cosmic-text in lege-viewer's chrome. pdf-font (skrifa 0.44) parses
+        TrueType, CFF, Type1 and CID programs and exposes outlines, gid_for_char and advances but
+        no GSUB/GPOS. There is no unicode-linebreak, unicode-segmentation, hyphenation or
+        Knuth-Plass code. ropey is declared in the root workspace but no Lege crate uses it.
+        """
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    method manual
+    watches [ "lege-pdf/render/crates/pdf-font/src/**", "Cargo.toml" ]
+    supersedes [ @docwrite.observation.no-shaping-in-workspace/1 ]
+}
+
+record docwrite.observation.pdf-text-supports-source-passages/1 : observation {
+    title "Lege's text extraction already supports page-anchored source passages"
+    state superseded
+    statement """
+        pdf_text::TextPage exposes per-character origin, boxes and matrices, words(), rects() and
+        text_in_rect() over UTF-16 ranges; lege_pdf_read::positioned_words returns word boxes per
+        page; lege-viewer's text/selection.rs implements hit-testing and word/line/multi-page
+        selection. A Source Note can therefore record document, page, UTF-16 range and rectangles
+        and reopen the source at exactly that passage.
+        """
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    method manual
+    watches [
+        "../lege-pdf/render/crates/pdf-text/src/**",
+        "../lege-pdf/read/src/text.rs",
+        "../lege-viewer/src/text/selection.rs"
+    ]
+}
+
+record docwrite.observation.pdf-text-supports-source-passages/2 : observation {
+    title "Lege's text extraction already supports page-anchored source passages"
+    state verified
+    statement """
+        pdf_text::TextPage exposes per-character origin, boxes and matrices, words(), rects() and
+        text_in_rect() over UTF-16 ranges; lege_pdf_read::positioned_words returns word boxes per
+        page; lege-viewer's text/selection.rs implements hit-testing and word/line/multi-page
+        selection. A Source Note can therefore record document, page, UTF-16 range and rectangles
+        and reopen the source at exactly that passage.
+        """
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    method manual
+    watches [
+        "lege-pdf/render/crates/pdf-text/src/**",
+        "lege-pdf/read/src/text.rs",
+        "lege-viewer/src/text/selection.rs"
+    ]
+    supersedes [ @docwrite.observation.pdf-text-supports-source-passages/1 ]
+}
+
+record docwrite.observation.pdf-write-gaps/1 : observation {
+    title "lege-pdf-write lacks what typeset-book PDF output needs"
+    state superseded
+    statement """
+        lege-pdf-write is image-oriented and append-only; DocumentWriter needs the page count up
+        front. It embeds Type0/Identity-H CIDFontType2 (FontFile2 only) with caller-supplied
+        bytes, no subsetting, no CFF/FontFile3, one glyph-font bank per page and only
+        None/Identity/Custom ToUnicode. Usable foundations: GlyphLine/GlyphItem TJ glyph runs,
+        OutlineItem bookmarks, metadata. Missing: subsetting, CFF embedding, multiple fonts per
+        page, per-cluster ToUnicode, path operators and RGB fill, Flate RGB/alpha images, link
+        annotations and named destinations, page labels, /Lang and a structure tree.
+        """
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    method manual
+    watches [ "../lege-pdf/write/src/**" ]
+}
+
+record docwrite.observation.pdf-write-gaps/2 : observation {
+    title "lege-pdf-write lacks what typeset-book PDF output needs"
+    state verified
+    statement """
+        lege-pdf-write is image-oriented and append-only; DocumentWriter needs the page count up
+        front. It embeds Type0/Identity-H CIDFontType2 (FontFile2 only) with caller-supplied
+        bytes, no subsetting, no CFF/FontFile3, one glyph-font bank per page and only
+        None/Identity/Custom ToUnicode. Usable foundations: GlyphLine/GlyphItem TJ glyph runs,
+        OutlineItem bookmarks, metadata. Missing: subsetting, CFF embedding, multiple fonts per
+        page, per-cluster ToUnicode, path operators and RGB fill, Flate RGB/alpha images, link
+        annotations and named destinations, page labels, /Lang and a structure tree.
+        """
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    method manual
+    watches [ "lege-pdf/write/src/**" ]
+    supersedes [ @docwrite.observation.pdf-write-gaps/1 ]
+}
+
+record docwrite.observation.pixelkit-shell-gaps/1 : observation {
+    title "pixelkit-shell needs presenter injection, IME, scroll phases and fuller key input"
+    state superseded
+    statement """
+        pixelkit-shell hardcodes SoftbufferPresenter in resumed (the Presenter trait already
+        exists and has a Gpu backend variant); never calls set_ime_allowed or
+        set_ime_cursor_area, so IME events do not arrive; drops scroll TouchPhase and
+        pinch/magnify; keeps only the first char of Character input, emits no key-up and maps
+        few function keys; FrameTimer records paint and present but not input-to-present, and
+        tick is recorded as zero. Rendering repaints the full frame with no damage rects. The
+        single-line TextFieldState has no word motion, shift-extend, clipboard or undo.
+        """
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    method manual
+    watches [
+        "../../pixelkit/crates/pixelkit-shell/src/**",
+        "../../pixelkit/crates/pixelkit-ui/src/widget.rs"
+    ]
+}
+
+record docwrite.observation.pixelkit-shell-gaps/2 : observation {
+    title "pixelkit-shell needs presenter injection, IME, scroll phases and fuller key input"
+    state verified
+    statement """
+        pixelkit-shell hardcodes SoftbufferPresenter in resumed (the Presenter trait already
+        exists and has a Gpu backend variant); never calls set_ime_allowed or
+        set_ime_cursor_area, so IME events do not arrive; drops scroll TouchPhase and
+        pinch/magnify; keeps only the first char of Character input, emits no key-up and maps
+        few function keys; FrameTimer records paint and present but not input-to-present, and
+        tick is recorded as zero. Rendering repaints the full frame with no damage rects. The
+        single-line TextFieldState has no word motion, shift-extend, clipboard or undo.
+        """
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    method manual
+    supersedes [ @docwrite.observation.pixelkit-shell-gaps/1 ]
+}
+
+record docwrite.observation.pixelkit-text-limits/1 : observation {
+    title "pixelkit-text cannot typeset books"
+    state superseded
+    statement """
+        pixelkit-text parses only TrueType glyf outlines (no CFF, variable fonts or
+        collections), applies a fixed feature set (GSUB ccmp/liga, GPOS kern/mark/mkmk) with no
+        way to request smcp/onum/etc., skips GSUB type 5/7 and GPOS types 1/3/5/7/8/9, ignores
+        the ScriptList, has no bidi or UAX #14 line breaking, and caches rasterized whole strings
+        rather than glyphs.
+        """
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    method manual
+    watches [ "../../pixelkit/crates/pixelkit-text/src/**" ]
+}
+
+record docwrite.observation.pixelkit-text-limits/2 : observation {
+    title "pixelkit-text cannot typeset books"
+    state verified
+    statement """
+        pixelkit-text parses only TrueType glyf outlines (no CFF, variable fonts or
+        collections), applies a fixed feature set (GSUB ccmp/liga, GPOS kern/mark/mkmk) with no
+        way to request smcp/onum/etc., skips GSUB type 5/7 and GPOS types 1/3/5/7/8/9, ignores
+        the ScriptList, has no bidi or UAX #14 line breaking, and caches rasterized whole strings
+        rather than glyphs.
+        """
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    method manual
+    supersedes [ @docwrite.observation.pixelkit-text-limits/1 ]
+}
+
+record docwrite.observation.viewer-paging-is-line-continuity/1 : observation {
+    title "lege-viewer pages by line continuity and snaps only on command"
+    state superseded
+    statement """
+        lege-viewer's PageUp/PageDown is line-continuity paging: paging_target makes the last
+        fully visible line the new top line, with notional-line and 8%-overlap geometric
+        fallbacks (lege-viewer/src/scroll/paging.rs). Nearest-page snap is an explicit command
+        (nearest_page_boundary, bound to S) and never happens automatically. Reusable, not
+        PDF-coupled: scroll/anchor.rs, frame.rs, damage.rs, diagnostics.rs, trace.rs, scene.rs,
+        present/*. The conductor/tile pipeline and the Pdf-variant artifact enums in
+        document/engine.rs assume read-only content.
+        """
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    method manual
+    watches [ "../lege-viewer/src/scroll/**", "../lege-viewer/src/document/engine.rs" ]
+}
+
+record docwrite.observation.viewer-paging-is-line-continuity/2 : observation {
+    title "lege-viewer pages by line continuity and snaps only on command"
+    state verified
+    statement """
+        lege-viewer's PageUp/PageDown is line-continuity paging: paging_target makes the last
+        fully visible line the new top line, with notional-line and 8%-overlap geometric
+        fallbacks (lege-viewer/src/scroll/paging.rs). Nearest-page snap is an explicit command
+        (nearest_page_boundary, bound to S) and never happens automatically. Reusable, not
+        PDF-coupled: scroll/anchor.rs, frame.rs, damage.rs, diagnostics.rs, trace.rs, scene.rs,
+        present/*. The conductor/tile pipeline and the Pdf-variant artifact enums in
+        document/engine.rs assume read-only content.
+        """
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    method manual
+    watches [ "lege-viewer/src/scroll/**", "lege-viewer/src/document/engine.rs" ]
+    supersedes [ @docwrite.observation.viewer-paging-is-line-continuity/1 ]
+}
+
+record docwrite.observation.zz-test/1 : observation {
+    title "t"
+    state superseded
+    statement """
+        test
+        """
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    method manual
+    watches [ "../lege-viewer/src/scroll/paging.rs" ]
+}
+
+record docwrite.observation.zz-test/2 : observation {
+    title "Withdrawn: syntax probe created while scaffolding the ledger"
+    state withdrawn
+    statement """
+        test
+        """
+    observed_at git:823d46ddc946bb5d6ac8fc360a9d9ba6506d7a7d
+    method manual
+    watches [ "../lege-viewer/src/scroll/paging.rs" ]
+    supersedes [ @docwrite.observation.zz-test/1 ]
+}

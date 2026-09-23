@@ -1,0 +1,92 @@
+akr 0.1
+project lege-docwrite
+
+record docwrite.work.m1-incremental-pagination/1 : work {
+    title "Incremental pagination with convergence stop"
+    state proposed
+    intent """
+        Paginate forward from the edited paragraph until break positions match the cached layout; count laid-out pages for the convergence test.
+        """
+    part_of [ @docwrite.milestone.m1-editor-spike ]
+}
+
+record docwrite.work.m1-latency-gate/1 : work {
+    title "Keypress-to-present instrumentation and regression gate"
+    state proposed
+    intent """
+        Port lege-viewer's FrameMetrics and input-trace replay; add a test that replays a typing trace against a 500-page document and fails over budget.
+        """
+    part_of [ @docwrite.milestone.m1-editor-spike ]
+}
+
+record docwrite.work.m1-model-and-edits/1 : work {
+    title "Book model skeleton, rope-backed blocks, edit transactions and undo"
+    state proposed
+    intent """
+        Implement stable block IDs, a minimal Book/Chapter/Block/Run tree with ropey-backed text, and transactional edits with undo/redo, including the footnote slot in the model.
+        """
+    part_of [ @docwrite.milestone.m1-editor-spike ]
+}
+
+record docwrite.work.m1-page-canvas-navigation/1 : work {
+    title "Page canvas, caret/selection painting and exact navigation"
+    state proposed
+    intent """
+        Stacked-page canvas with damage tracking; exact PageUp/PageDown, spread mode, snap on gesture end; ReadingAnchor ported from lege-viewer.
+        """
+    part_of [ @docwrite.milestone.m1-editor-spike ]
+}
+
+record docwrite.work.m1-shaping-and-breaking/1 : work {
+    title "Shaping, line breaking and per-glyph atlas"
+    state proposed
+    intent """
+        Integrate harfrust, skrifa, unicode-linebreak/segmentation/bidi; cache shaped paragraphs per block; rasterize glyphs through pixelkit RasterKernel into a glyph atlas.
+        """
+    part_of [ @docwrite.milestone.m1-editor-spike ]
+}
+
+record docwrite.work.m2-book-map/1 : work {
+    title "Book Map sidebar with collapse and drag reorder"
+    state proposed
+    intent """
+        Left sidebar listing front matter, parts, chapters, sections and back matter; drag reorder reorders the book.
+        """
+    part_of [ @docwrite.milestone.m2-book-core ]
+}
+
+record docwrite.work.m2-markdown-export/1 : work {
+    title "Markdown export"
+    state proposed
+    intent """
+        Emit headings, emphasis, block quotes, images, links and footnotes; discard geometry.
+        """
+    part_of [ @docwrite.milestone.m2-book-core ]
+}
+
+record docwrite.work.m2-pdf-export/1 : work {
+    title "PDF export through lege-pdf-write"
+    state proposed
+    intent """
+        Emit shaped glyph runs, subset fonts, ToUnicode, bookmarks and page labels using the upgraded lege-pdf-write.
+        """
+    part_of [ @docwrite.milestone.m2-book-core ]
+}
+
+record docwrite.work.m2-persistence/1 : work {
+    title ".legebook bundle, atomic autosave and snapshots"
+    state proposed
+    intent """
+        Choose the serialization, write per-chapter files atomically, autosave off the typing path, and add named snapshots.
+        """
+    part_of [ @docwrite.milestone.m2-book-core ]
+}
+
+record docwrite.work.m2-styles-masters-templates/1 : work {
+    title "Paragraph/character styles, page masters and chapter templates"
+    state proposed
+    intent """
+        Implement the three systems, facing pages, margins, folios, running heads and recto starts, with template edits propagating to all chapters.
+        """
+    part_of [ @docwrite.milestone.m2-book-core ]
+}

@@ -72,6 +72,11 @@ jbig2 = "build --manifest-path lege-codecs/jbig2enc-rust/Cargo.toml"
 jp2 = "build --manifest-path lege-codecs/jp2lam/Cargo.toml"
 djvu = "build --manifest-path lege-codecs/djvulibrust/Cargo.toml --features cli --bin djvu-encoder"
 
+# lege-docwrite: page-native book editor, its own nested workspace.
+docwrite = "build --manifest-path lege-docwrite/Cargo.toml --bin lege-docwrite"
+docwrite-check = "check --manifest-path lege-docwrite/Cargo.toml --all-targets"
+docwrite-run = "run --manifest-path lege-docwrite/Cargo.toml --bin lege-docwrite --"
+
 # Android. `cargo check` for this target needs only
 # `rustup target add aarch64-linux-android` — no NDK, because checking does not
 # link. Keep it that way: it is why lege-ocr pins blake3 to its `pure` feature

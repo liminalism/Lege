@@ -1,0 +1,12 @@
+[package]
+name = "docwrite-model"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Canonical book model: tree, blocks, runs, styles, page masters, chapter templates, edit transactions"
+
+[dependencies]
+
+[lints]
+workspace = true
