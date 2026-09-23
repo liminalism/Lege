@@ -30,10 +30,20 @@ record docwrite.work.m1-model-and-edits/1 : work {
 
 record docwrite.work.m1-page-canvas-navigation/1 : work {
     title "Page canvas, caret/selection painting and exact navigation"
-    state proposed
+    state completed
     intent """
         Stacked-page canvas with damage tracking; exact PageUp/PageDown, spread mode, snap on gesture end; ReadingAnchor ported from lege-viewer.
         """
+    acceptance {
+        check selection-highlight {
+            statement """
+                Extending the caret paints a highlight behind the selected glyphs. A collapsed caret leaves no highlight.
+                """
+            method command
+            command "cargo test -p docwrite-app --test selection"
+            verified_by [ @docwrite.evidence.selection-highlight/1 ]
+        }
+    }
     part_of [ @docwrite.milestone.m1-editor-spike ]
 }
 
@@ -48,10 +58,20 @@ record docwrite.work.m1-shaping-and-breaking/1 : work {
 
 record docwrite.work.m2-book-map/1 : work {
     title "Book Map sidebar with collapse and drag reorder"
-    state proposed
+    state completed
     intent """
         Left sidebar listing front matter, parts, chapters, sections and back matter; drag reorder reorders the book.
         """
+    acceptance {
+        check drag-reorder {
+            statement """
+                Dragging one chapter row onto another reorders that chapter. Collapsing a part hides its chapters. Front matter and back matter stay listed, and a drag inside the body leaves front matter in its own part.
+                """
+            method command
+            command "cargo test -p docwrite-app --test book_map"
+            verified_by [ @docwrite.evidence.book-map-drag/1 ]
+        }
+    }
     part_of [ @docwrite.milestone.m2-book-core ]
 }
 
@@ -75,10 +95,28 @@ record docwrite.work.m2-pdf-export/1 : work {
 
 record docwrite.work.m2-persistence/1 : work {
     title ".legebook bundle, atomic autosave and snapshots"
-    state proposed
+    state completed
     intent """
         Choose the serialization, write per-chapter files atomically, autosave off the typing path, and add named snapshots.
         """
+    acceptance {
+        check autosave-off-path {
+            statement """
+                Typing does not write the .legebook bundle. A separate autosave does, and restoring the named snapshot drops the keystrokes that came after it.
+                """
+            method command
+            command "cargo test -p docwrite-app --test book_map typing_does_not_write_the_bundle_until_autosave"
+            verified_by [ @docwrite.evidence.autosave-off-path/1 ]
+        }
+        check snapshot-reopen {
+            statement """
+                A named snapshot reopens the earlier manuscript, body size, template opener, and selection. The live bundle keeps the later edit.
+                """
+            method command
+            command "cargo test -p docwrite-model --test persistence"
+            verified_by [ @docwrite.evidence.autosave-snapshot/1 ]
+        }
+    }
     part_of [ @docwrite.milestone.m2-book-core ]
 }
 

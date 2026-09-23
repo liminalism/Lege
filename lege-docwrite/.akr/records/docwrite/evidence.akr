@@ -1,6 +1,42 @@
 akr 0.1
 project lege-docwrite
 
+record docwrite.evidence.autosave-off-path/1 : evidence {
+    title "Typing does not create the bundle. Autosave writes it. Restoring the named snapshot drops the keystrokes that came after the snapshot."
+    state verified
+    result pass
+    method command
+    observed_at git:fe9fbbe24d9ea661363b36b90ce78b4e946416f9
+    command "cargo test -p docwrite-app --test book_map typing_does_not_write_the_bundle_until_autosave"
+    summary """
+        Typing does not create the bundle. Autosave writes it. Restoring the named snapshot drops the keystrokes that came after the snapshot.
+        """
+}
+
+record docwrite.evidence.autosave-snapshot/1 : evidence {
+    title "A named snapshot reopens the earlier manuscript, Body size, template opener, and a non-collapsed selection. The live bundle keeps the later edit. Typing does not write the bundle until autosave."
+    state verified
+    result pass
+    method command
+    observed_at git:fe9fbbe24d9ea661363b36b90ce78b4e946416f9
+    command "cargo test -p docwrite-model --test persistence"
+    summary """
+        A named snapshot reopens the earlier manuscript, Body size, template opener, and a non-collapsed selection. The live bundle keeps the later edit. Typing does not write the bundle until autosave.
+        """
+}
+
+record docwrite.evidence.book-map-drag/1 : evidence {
+    title "Dragging a chapter row reorders that chapter inside its part. Collapsing the body hides its chapters. Front matter and back matter stay listed, and a body drag leaves the preface in front matter."
+    state verified
+    result pass
+    method command
+    observed_at git:fe9fbbe24d9ea661363b36b90ce78b4e946416f9
+    command "cargo test -p docwrite-app --test book_map"
+    summary """
+        Dragging a chapter row reorders that chapter inside its part. Collapsing the body hides its chapters. Front matter and back matter stay listed, and a body drag leaves the preface in front matter.
+        """
+}
+
 record docwrite.evidence.m1-edit-basics/1 : evidence {
     title "Insert, delete, selection, word motion, cut/copy/paste and undo/redo round-trip across paragraphs and chapters."
     state verified
@@ -154,5 +190,17 @@ record docwrite.evidence.m5-preflight-current/1 : evidence {
     command "cargo test -p docwrite-export --test preflight"
     summary """
         On f19325d, preflight reports a missing face, an unembeddable font, a 72 dpi image, and a broken link.
+        """
+}
+
+record docwrite.evidence.selection-highlight/1 : evidence {
+    title "Extending the caret paints selection pixels behind the glyphs. A collapsed caret paints none."
+    state verified
+    result pass
+    method command
+    observed_at git:fe9fbbe24d9ea661363b36b90ce78b4e946416f9
+    command "cargo test -p docwrite-app --test selection"
+    summary """
+        Extending the caret paints selection pixels behind the glyphs. A collapsed caret paints none.
         """
 }
