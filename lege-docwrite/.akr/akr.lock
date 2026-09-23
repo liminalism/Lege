@@ -5,7 +5,7 @@ build {
     tool "akr 0.5.1"
     grammar "0.1"
     vocabulary "0.2"
-    source_graph "sha256:cbdbd3d87a03d0af6e7f5195b78479a15127568cde91cf4ac9defdc3b0db4238"
+    source_graph "sha256:4f58f138675b72d083bb6369f6a80042982305f3de809afae5086f0e35cf4eb0"
 }
 
 source ".akr/project.akr" {
@@ -19,12 +19,12 @@ source ".akr/records/docwrite/decisions.akr" {
 }
 
 source ".akr/records/docwrite/evidence.akr" {
-    hash "sha256:8a959054c9c46b2c57cbb8bf088139aaacb3eceb84faa80f2f813930661d1163"
-    records 12
+    hash "sha256:0b4dcac44e015da50f7ebaf39c2f4f34c5c2859f881cfa5be3a5141589ed37ec"
+    records 13
 }
 
 source ".akr/records/docwrite/milestones.akr" {
-    hash "sha256:ee76f458fe2d2406638960ec3f3cf235b3b11fe56bf622e159a3b3f6045e94a7"
+    hash "sha256:de1db3f9a5c9d5a884710dcf48f3523c8c9959131f5df0811cca5d7964786f19"
     records 5
 }
 
@@ -416,6 +416,11 @@ seal @docwrite.evidence.m4-source/1 {
 seal @docwrite.evidence.m5-preflight/1 {
     state verified
     hash "sha256:323d2ae63ff86c3108552eb70979fe12619b6d20b66a9eacb31f8b4fead975cc"
+}
+
+seal @docwrite.evidence.m5-preflight-current/1 {
+    state verified
+    hash "sha256:3e3832657f507f3033db0e8b505e3d5e051f9424c635256193602af98b7ed0df"
 }
 
 seal @docwrite.milestone.m1-editor-spike/1 {

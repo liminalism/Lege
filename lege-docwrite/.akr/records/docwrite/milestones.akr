@@ -192,6 +192,7 @@ record docwrite.milestone.m5-interchange/1 : milestone {
                 """
             method command
             command "cargo test -p docwrite-export --test preflight"
+            verified_by [ @docwrite.evidence.m5-preflight-current/1 ]
         }
     }
     after [ @docwrite.milestone.m4-research-apparatus ]

@@ -144,3 +144,15 @@ record docwrite.evidence.m5-preflight/1 : evidence {
         Preflight reports a missing face, an unembeddable font, a low-resolution image and a broken link.
         """
 }
+
+record docwrite.evidence.m5-preflight-current/1 : evidence {
+    title "On f19325d, preflight reports a missing face, an unembeddable font, a 72 dpi image, and a broken link."
+    state verified
+    result pass
+    method command
+    observed_at git:f19325debdbc7b6299cafeba65e384bebdb2beab
+    command "cargo test -p docwrite-export --test preflight"
+    summary """
+        On f19325d, preflight reports a missing face, an unembeddable font, a 72 dpi image, and a broken link.
+        """
+}
