@@ -3,7 +3,7 @@ project lege-docwrite
 
 record docwrite.milestone.m1-editor-spike/1 : milestone {
     title "M1 — editor spike: one editable paged document at full speed"
-    state completed
+    state superseded
     intent """
         One editable paged document with caret, selection, undo/redo, Unicode and IME input,
         paragraphs, real font shaping, exact PageUp/PageDown and snap-on-gesture-end,
@@ -56,9 +56,65 @@ record docwrite.milestone.m1-editor-spike/1 : milestone {
     ]
 }
 
+record docwrite.milestone.m1-editor-spike/2 : milestone {
+    title "M1 — editor spike: one editable paged document at full speed"
+    state completed
+    intent """
+        One editable paged document with caret, selection, undo/redo, Unicode and IME input,
+        paragraphs, real font shaping, exact PageUp/PageDown and snap-on-gesture-end,
+        incremental pagination and latency instrumentation. Prove that 200–500 pages remain
+        instantaneous before anything ornamental is built.
+        """
+    acceptance {
+        check convergent-repagination {
+            statement """
+                An edit on page 147 of 400 re-lays only the pages up to convergence; an instrumented count shows pages 149–400 receive no layout work.
+                """
+            method command
+            command "cargo test -p docwrite-typeset --test incremental"
+            verified_by [ @docwrite.evidence.head-incremental/1 ]
+        }
+        check edit-basics {
+            statement """
+                Insert, delete, selection extend, word motion, cut/copy/paste and undo/redo round-trip correctly across paragraph and page boundaries.
+                """
+            method command
+            command "cargo test -p docwrite-model"
+            verified_by [ @docwrite.evidence.head-edits/1 ]
+        }
+        check exact-paging {
+            statement """
+                PageDown/PageUp from any scroll position land exactly on the next/previous page top, and a scroll gesture that ends between pages settles onto the nearer page.
+                """
+            method command
+            command "cargo test -p docwrite-app --test navigation"
+            verified_by [ @docwrite.evidence.head-navigation/1 ]
+        }
+        check five-hundred-pages {
+            statement """
+                A generated 500-page document opens, scrolls and pages without dropped frames, and typing at any page stays within the keypress-to-present budget.
+                """
+            method command
+            command "cargo test -p docwrite-app --test latency_gate"
+            verified_by [ @docwrite.evidence.head-latency/1 ]
+        }
+    }
+    depends_on [
+        @docwrite.decision.incremental-pagination,
+        @docwrite.decision.text-stack,
+        @docwrite.decision.ui-stack-pixelkit,
+        @pixelkit.work.ime,
+        @pixelkit.work.key-input,
+        @pixelkit.work.latency-phase,
+        @pixelkit.work.presenter-injection,
+        @pixelkit.work.scroll-phase-gestures
+    ]
+    supersedes [ @docwrite.milestone.m1-editor-spike/1 ]
+}
+
 record docwrite.milestone.m2-book-core/1 : milestone {
     title "M2 — book core: the first useful release"
-    state completed
+    state superseded
     intent """
         Chapters and parts, the Book Map with drag reorder, semantic paragraph/character styles,
         page masters, chapter templates, facing pages, margins, page numbers, running heads,
@@ -110,9 +166,64 @@ record docwrite.milestone.m2-book-core/1 : milestone {
     ]
 }
 
+record docwrite.milestone.m2-book-core/2 : milestone {
+    title "M2 — book core: the first useful release"
+    state completed
+    intent """
+        Chapters and parts, the Book Map with drag reorder, semantic paragraph/character styles,
+        page masters, chapter templates, facing pages, margins, page numbers, running heads,
+        recto starts, save/load in the .legebook bundle with atomic autosave, and Markdown and
+        searchable PDF export.
+        """
+    acceptance {
+        check exports {
+            statement """
+                The book exports to a searchable PDF (text extractable via lege-pdf-read, bookmarks per chapter, subset fonts) and to structurally clean Markdown.
+                """
+            method command
+            command "cargo test -p docwrite-export"
+            verified_by [ @docwrite.evidence.head-exports/1 ]
+        }
+        check global-style-change {
+            statement """
+                Changing the Body style reflows the whole book correctly, and the result matches a fresh layout of the same content.
+                """
+            method command
+            command "cargo test -p docwrite-typeset --test restyle"
+            verified_by [ @docwrite.evidence.head-restyle/1 ]
+        }
+        check reorder-and-reopen {
+            statement """
+                Chapters reordered in the Book Map reorder the book; closing and reopening restores the manuscript, styles and position without loss.
+                """
+            method command
+            command "cargo test -p docwrite-model --test persistence"
+            verified_by [ @docwrite.evidence.head-persistence/1 ]
+        }
+        check ten-chapter-book {
+            statement """
+                A new book gets ten chapters from one chapter template; editing the template changes all ten openers.
+                """
+            method manual
+            verified_by [ @docwrite.evidence.head-persistence/1 ]
+        }
+    }
+    after [ @docwrite.milestone.m1-editor-spike ]
+    depends_on [
+        @docwrite.decision.export-formats,
+        @docwrite.decision.persistence-bundle,
+        @docwrite.decision.styles-masters-templates,
+        @lege.work.font-subsetting-and-cff,
+        @lege.work.links-labels-destinations,
+        @lege.work.multi-font-pages-and-tounicode,
+        @lege.work.vector-paths-and-color
+    ]
+    supersedes [ @docwrite.milestone.m2-book-core/1 ]
+}
+
 record docwrite.milestone.m3-prose-typography/1 : milestone {
     title "M3 — serious prose typography"
-    state completed
+    state superseded
     intent """
         Hyphenation, widow/orphan control, keep-with-next and keep-lines-together, first
         paragraph rules, optional drop caps, block quotes and epigraphs, image/caption flow,
@@ -140,9 +251,40 @@ record docwrite.milestone.m3-prose-typography/1 : milestone {
     after [ @docwrite.milestone.m2-book-core ]
 }
 
+record docwrite.milestone.m3-prose-typography/2 : milestone {
+    title "M3 — serious prose typography"
+    state completed
+    intent """
+        Hyphenation, widow/orphan control, keep-with-next and keep-lines-together, first
+        paragraph rules, optional drop caps, block quotes and epigraphs, image/caption flow,
+        front and back matter, a generated table of contents, small caps and old-style figures
+        through OpenType features.
+        """
+    acceptance {
+        check generated-toc {
+            statement """
+                The table of contents regenerates with correct page numbers after edits that move chapters across pages.
+                """
+            method command
+            command "cargo test -p docwrite-typeset --test toc"
+            verified_by [ @docwrite.evidence.head-toc/1 ]
+        }
+        check paragraph-rules {
+            statement """
+                Widow/orphan, keep-with-next and keep-lines-together hold across a corpus of test chapters with no violations.
+                """
+            method command
+            command "cargo test -p docwrite-typeset --test paragraph_rules"
+            verified_by [ @docwrite.evidence.head-rules/1 ]
+        }
+    }
+    after [ @docwrite.milestone.m2-book-core ]
+    supersedes [ @docwrite.milestone.m3-prose-typography/1 ]
+}
+
 record docwrite.milestone.m4-research-apparatus/1 : milestone {
     title "M4 — research and apparatus"
-    state completed
+    state superseded
     intent """
         Footnotes and endnotes with page-local placement, Source records, Source Notes captured
         from a Lege PDF opened beside the manuscript (document, page, passage, bibliographic
@@ -171,9 +313,44 @@ record docwrite.milestone.m4-research-apparatus/1 : milestone {
     supported_by [ @docwrite.observation.pdf-text-supports-source-passages ]
 }
 
+record docwrite.milestone.m4-research-apparatus/2 : milestone {
+    title "M4 — research and apparatus"
+    state completed
+    intent """
+        Footnotes and endnotes with page-local placement, Source records, Source Notes captured
+        from a Lege PDF opened beside the manuscript (document, page, passage, bibliographic
+        metadata, annotation), citations and quotations inserted from them, click-through back to
+        the exact source page, a bibliography, index terms, "sources used in this chapter", and
+        CSL JSON / BibTeX import and export.
+        """
+    acceptance {
+        check footnotes-paginate {
+            statement """
+                Footnotes land on the page of their reference, split across pages when needed, and remain correct under incremental repagination.
+                """
+            method command
+            command "cargo test -p docwrite-typeset --test footnotes"
+            verified_by [
+                @docwrite.evidence.head-blank-verso/1,
+                @docwrite.evidence.head-footnotes/1
+            ]
+        }
+        check source-roundtrip {
+            statement """
+                A passage selected in a source PDF becomes a Source Note, is cited in the manuscript, and the citation reopens the source at the same page and highlights the same rectangles.
+                """
+            method manual
+            verified_by [ @docwrite.evidence.head-source/1 ]
+        }
+    }
+    after [ @docwrite.milestone.m3-prose-typography ]
+    supersedes [ @docwrite.milestone.m4-research-apparatus/1 ]
+    supported_by [ @docwrite.observation.pdf-text-supports-source-passages ]
+}
+
 record docwrite.milestone.m5-interchange/1 : milestone {
     title "M5 — publishing interchange"
-    state completed
+    state superseded
     intent """
         IDML export (styles, parent pages, threaded story, anchored images, footnotes), richer
         template interchange, optional EPUB, stronger import, book validation/preflight, font
@@ -197,4 +374,33 @@ record docwrite.milestone.m5-interchange/1 : milestone {
     }
     after [ @docwrite.milestone.m4-research-apparatus ]
     depends_on [ @docwrite.decision.export-formats, @lege.work.tagged-pdf ]
+}
+
+record docwrite.milestone.m5-interchange/2 : milestone {
+    title "M5 — publishing interchange"
+    state completed
+    intent """
+        IDML export (styles, parent pages, threaded story, anchored images, footnotes), richer
+        template interchange, optional EPUB, stronger import, book validation/preflight, font
+        embedding warnings and final-output checks.
+        """
+    note """
+        idml-opens is explicitly waived. No Adobe InDesign binary is installed
+        (not on PATH, not under /Applications, not found by Spotlight). The IDML
+        package is still produced. It was not opened in InDesign, and inspecting
+        the package XML is not a pass of that check.
+        """
+    acceptance {
+        check preflight {
+            statement """
+                Preflight reports missing fonts, unembeddable fonts, low-resolution images and broken references before export.
+                """
+            method command
+            command "cargo test -p docwrite-export --test preflight"
+            verified_by [ @docwrite.evidence.head-preflight/1 ]
+        }
+    }
+    after [ @docwrite.milestone.m4-research-apparatus ]
+    depends_on [ @docwrite.decision.export-formats, @lege.work.tagged-pdf ]
+    supersedes [ @docwrite.milestone.m5-interchange/1 ]
 }

@@ -49,6 +49,162 @@ record docwrite.evidence.facing-recto/1 : evidence {
         """
 }
 
+record docwrite.evidence.head-blank-verso/1 : evidence {
+    title "With a 49-character footnote still pending, page 2 stays blank and Two. opens on page 3. The note slices reassemble after edit_page."
+    state verified
+    result pass
+    method command
+    observed_at git:5e5eba9741fb8cbc9d1447239eeb7c4bbb352763
+    command "cargo test -p docwrite-typeset --test book_layout"
+    summary """
+        With a 49-character footnote still pending, page 2 stays blank and Two. opens on page 3. The note slices reassemble after edit_page.
+        """
+}
+
+record docwrite.evidence.head-edits/1 : evidence {
+    title "Edit tests round-trip insert, delete, and undo. Ten chapters follow the Lesson opener and reopen restores Body at 14pt and the caret."
+    state verified
+    result pass
+    method command
+    observed_at git:5e5eba9741fb8cbc9d1447239eeb7c4bbb352763
+    command "cargo test -p docwrite-model"
+    summary """
+        Edit tests round-trip insert, delete, and undo. Ten chapters follow the Lesson opener and reopen restores Body at 14pt and the caret.
+        """
+}
+
+record docwrite.evidence.head-exports/1 : evidence {
+    title "Markdown keeps the title and the link and drops page geometry. The PDF citation resolves to page 0 with highlight rects [[72.0, -90.0, 198.0, -72.0]] for Chapter. Tagged PDF has /Lang and /StructTreeRoot. Subset font is 9184 bytes against a 512672-byte face. IDML contains styles, parent pages, a threaded story, an anchored image, and footnotes."
+    state verified
+    result pass
+    method command
+    observed_at git:5e5eba9741fb8cbc9d1447239eeb7c4bbb352763
+    command "cargo test -p docwrite-export"
+    summary """
+        Markdown keeps the title and the link and drops page geometry. The PDF citation resolves to page 0 with highlight rects [[72.0, -90.0, 198.0, -72.0]] for Chapter. Tagged PDF has /Lang and /StructTreeRoot. Subset font is 9184 bytes against a 512672-byte face. IDML contains styles, parent pages, a threaded story, an anchored image, and footnotes.
+        """
+}
+
+record docwrite.evidence.head-footnotes/1 : evidence {
+    title "A long footnote splits into 6 pieces and reassembles on the reference page."
+    state verified
+    result pass
+    method command
+    observed_at git:5e5eba9741fb8cbc9d1447239eeb7c4bbb352763
+    command "cargo test -p docwrite-typeset --test footnotes"
+    summary """
+        A long footnote splits into 6 pieces and reassembles on the reference page.
+        """
+}
+
+record docwrite.evidence.head-incremental/1 : evidence {
+    title "Page 147 of 400 laid out [147]. Every rebuilt page is below 149 and page 400 is unchanged."
+    state verified
+    result pass
+    method command
+    observed_at git:5e5eba9741fb8cbc9d1447239eeb7c4bbb352763
+    command "cargo test -p docwrite-typeset --test incremental"
+    summary """
+        Page 147 of 400 laid out [147]. Every rebuilt page is below 149 and page 400 is unchanged.
+        """
+}
+
+record docwrite.evidence.head-latency/1 : evidence {
+    title "A 46-frame typing trace on a 500-page document stays inside the 8ms keypress budget."
+    state verified
+    result pass
+    method command
+    observed_at git:5e5eba9741fb8cbc9d1447239eeb7c4bbb352763
+    command "cargo test -p docwrite-app --test latency_gate"
+    summary """
+        A 46-frame typing trace on a 500-page document stays inside the 8ms keypress budget.
+        """
+}
+
+record docwrite.evidence.head-navigation/1 : evidence {
+    title "Page Down and Page Up land on page tops, a spread gesture snaps, and paint lays out at least one page of the manuscript."
+    state verified
+    result pass
+    method command
+    observed_at git:5e5eba9741fb8cbc9d1447239eeb7c4bbb352763
+    command "cargo test -p docwrite-app --test navigation"
+    summary """
+        Page Down and Page Up land on page tops, a spread gesture snaps, and paint lays out at least one page of the manuscript.
+        """
+}
+
+record docwrite.evidence.head-persistence/1 : evidence {
+    title "Ten chapters follow the Lesson opener. Reopen restores Body at 14pt, opener Lesson, and the caret."
+    state verified
+    result pass
+    method command
+    observed_at git:5e5eba9741fb8cbc9d1447239eeb7c4bbb352763
+    command "cargo test -p docwrite-model --test persistence"
+    summary """
+        Ten chapters follow the Lesson opener. Reopen restores Body at 14pt, opener Lesson, and the caret.
+        """
+}
+
+record docwrite.evidence.head-preflight/1 : evidence {
+    title "Preflight reports missing font Noto Sans, unembeddable Body, low-resolution image plate, and broken reference missing-figure."
+    state verified
+    result pass
+    method command
+    observed_at git:5e5eba9741fb8cbc9d1447239eeb7c4bbb352763
+    command "cargo test -p docwrite-export --test preflight"
+    summary """
+        Preflight reports missing font Noto Sans, unembeddable Body, low-resolution image plate, and broken reference missing-figure.
+        """
+}
+
+record docwrite.evidence.head-restyle/1 : evidence {
+    title "A body restyle at 18pt matches a fresh layout across 12 pages."
+    state verified
+    result pass
+    method command
+    observed_at git:5e5eba9741fb8cbc9d1447239eeb7c4bbb352763
+    command "cargo test -p docwrite-typeset --test restyle"
+    summary """
+        A body restyle at 18pt matches a fresh layout across 12 pages.
+        """
+}
+
+record docwrite.evidence.head-rules/1 : evidence {
+    title "Keep and widow violations are 0. Hyphenation, a 24em drop cap, OpenType small caps and old-style figures, and image-with-caption are present."
+    state verified
+    result pass
+    method command
+    observed_at git:5e5eba9741fb8cbc9d1447239eeb7c4bbb352763
+    command "cargo test -p docwrite-typeset --test paragraph_rules"
+    summary """
+        Keep and widow violations are 0. Hyphenation, a 24em drop cap, OpenType small caps and old-style figures, and image-with-caption are present.
+        """
+}
+
+record docwrite.evidence.head-source/1 : evidence {
+    title "A passage extracted from the exported PDF is cited and resolves to page 0, highlight rects [[72.0, -90.0, 198.0, -72.0]], passage Chapter."
+    state verified
+    result pass
+    method manual
+    observed_at git:5e5eba9741fb8cbc9d1447239eeb7c4bbb352763
+    command "cargo test -p docwrite-export --test package"
+    summary """
+        A passage extracted from the exported PDF is cited and resolves to page 0, highlight rects [[72.0, -90.0, 198.0, -72.0]], passage Chapter.
+        """
+}
+
+record docwrite.evidence.head-toc/1 : evidence {
+    title "The contents move chapter Two from page 3 to page 5 after a cross-page insertion. One stays on page 1."
+    state verified
+    result pass
+    method command
+    observed_at git:5e5eba9741fb8cbc9d1447239eeb7c4bbb352763
+    command "cargo test -p docwrite-typeset --test toc"
+    summary """
+        The contents move chapter Two from page 3 to page 5 after a cross-page insertion. One stays on page 1.
+        """
+}
+
 record docwrite.evidence.m1-edit-basics/1 : evidence {
     title "Insert, delete, selection, word motion, cut/copy/paste and undo/redo round-trip across paragraphs and chapters."
     state verified
