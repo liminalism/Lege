@@ -248,6 +248,88 @@ fn a_second_note_survives_a_split_and_an_edit() {
     println!("both notes survive the split and the edit");
 }
 
+#[test]
+fn a_pending_footnote_still_blanks_the_verso_before_the_next_recto() {
+    let mut book = Book::new("Carry");
+    let mut right = book
+        .page_masters()
+        .iter()
+        .find(|master| master.name == "Right Body")
+        .unwrap()
+        .clone();
+    right.height_pt = 80.0;
+    right.margin_top = 8.0;
+    right.margin_bottom = 8.0;
+    right.facing = true;
+    book.set_page_master(right).unwrap();
+    let first = "N".repeat(49);
+    book.insert("One.").unwrap();
+    book.attach_note(NoteKind::Footnote, &first).unwrap();
+    book.insert("\nSecond reference.").unwrap();
+    book.attach_note(NoteKind::Footnote, "Second note body.").unwrap();
+    let part = book.parts()[0].id();
+    book.add_chapter(part, "Second").unwrap();
+    let fresh = *book.block_ids().last().unwrap();
+    book.set_selection(Selection::collapsed(Position::new(fresh, 0)))
+        .unwrap();
+    book.insert("Two.").unwrap();
+    let mut document = from_book(&book, face()).unwrap();
+    assert_note_recto(&document, &first);
+    document.edit_page(1, "x").unwrap();
+    assert_note_recto(&document, &first);
+    let two = page_with(&document, "Two.");
+    document.edit_page(two, "y").unwrap();
+    assert_note_recto(&document, &first);
+    println!(
+        "pending note keeps page 2 blank; Two. opens on page {}",
+        page_with(&document, "Two.")
+    );
+}
+
+fn page_with(document: &docwrite_typeset::Document, needle: &str) -> u32 {
+    (1..=document.page_count())
+        .find(|page| {
+            document
+                .page_texts(*page)
+                .iter()
+                .any(|line| line.contains(needle))
+        })
+        .unwrap_or(0)
+}
+
+fn assert_note_recto(document: &docwrite_typeset::Document, first: &str) {
+    assert!(
+        document.is_blank_page(2),
+        "page 2 texts {:?} notes {:?} blank {}",
+        document.page_texts(2),
+        document.page_footnotes(2),
+        document.is_blank_page(2)
+    );
+    assert!(
+        document.page_texts(2).is_empty(),
+        "verso held {:?}",
+        document.page_texts(2)
+    );
+    assert!(
+        document.page_footnotes(2).is_empty(),
+        "a blank verso placed notes {:?}",
+        document.page_footnotes(2)
+    );
+    let two = page_with(document, "Two.");
+    assert_ne!(two, 0, "chapter two is missing");
+    assert_eq!(two % 2, 1, "Two. opened on even page {two}");
+    assert!(two > 2, "Two. is on page {two}");
+    let joined = note_text(document);
+    assert!(
+        joined.contains(first),
+        "footnote did not reassemble: {joined:?}"
+    );
+    assert!(
+        joined.contains("Second note body."),
+        "second note missing from {joined:?}"
+    );
+}
+
 fn note_text(document: &docwrite_typeset::Document) -> String {
     let mut joined = String::new();
     for page in 1..=document.page_count() {

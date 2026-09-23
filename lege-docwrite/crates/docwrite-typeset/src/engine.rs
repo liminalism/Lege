@@ -263,10 +263,37 @@ struct Page {
     content_inset: f32,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct NoteFlow {
     carry: Option<String>,
     waiting: Vec<String>,
+}
+
+/// What the next page is, before any line is placed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum PageStep {
+    /// Empty verso. `outgoing` is the incoming flow, notes unconsumed.
+    Blank { outgoing: NoteFlow },
+    /// Body is finished. Place whatever notes remain.
+    NotesOnly,
+    /// Place body lines, then notes.
+    Fill,
+}
+
+/// A blank verso is required when the next page is even and the cursor is the
+/// first line of a recto chapter. A pending note does not cancel that blank;
+/// the blank carries the same flow forward.
+fn page_decision(built: usize, recto_opener: bool, at_end: bool, flow: &NoteFlow) -> PageStep {
+    let next_is_verso = (built + 1).is_multiple_of(2);
+    if recto_opener && next_is_verso {
+        PageStep::Blank {
+            outgoing: flow.clone(),
+        }
+    } else if at_end {
+        PageStep::NotesOnly
+    } else {
+        PageStep::Fill
+    }
 }
 
 impl NoteFlow {
@@ -782,19 +809,18 @@ impl Document {
             return;
         }
         while !self.at_end(cursor) || flow.pending() {
-            if !flow.pending() && self.needs_blank_verso(self.pages.len(), cursor) {
-                self.pages.push(self.blank_page(cursor));
-            } else if self.at_end(cursor) {
-                let (footnotes, next) = self.place_notes(&[], flow);
-                flow = next;
-                self.pages.push(self.note_page(cursor, footnotes, &flow));
+            let built = self.pages.len();
+            let (page, next, filled) = self.take_page(built, cursor, flow);
+            flow = next;
+            let page = if filled {
+                avoid_widow(&mut self.pages, page)
             } else {
-                let (page, next) = self.fill_page(cursor, flow);
-                flow = next;
-                let page = avoid_widow(&mut self.pages, page);
+                page
+            };
+            if filled {
                 cursor = next_cursor(&page);
-                self.pages.push(page);
             }
+            self.pages.push(page);
             if self.pages.len() > self.paragraphs.len().saturating_mul(8).max(8) {
                 break;
             }
@@ -829,18 +855,17 @@ impl Document {
             }
             let page_number = (pages.len() + 1) as u32;
             rebuilt.push(page_number);
-            if !flow.pending() && self.needs_blank_verso(pages.len(), cursor) {
-                pages.push(self.blank_page(cursor));
-            } else if self.at_end(cursor) {
-                let (footnotes, next) = self.place_notes(&[], flow);
-                flow = next;
-                pages.push(self.note_page(cursor, footnotes, &flow));
+            let built = pages.len();
+            let (page, next, filled) = self.take_page(built, cursor, flow);
+            flow = next;
+            let page = if filled {
+                avoid_widow(&mut pages, page)
             } else {
-                let (page, next) = self.fill_page(cursor, flow);
-                flow = next;
-                let page = avoid_widow(&mut pages, page);
-                let following = next_cursor(&page);
-                pages.push(page);
+                page
+            };
+            let following = filled.then(|| next_cursor(&page));
+            pages.push(page);
+            if let Some(following) = following {
                 let next_index = pages.len();
                 if !flow.pending()
                     && cached.get(next_index) == Some(&following)
@@ -933,11 +958,12 @@ impl Document {
         }
     }
 
-    fn fill_page(&self, start: Cursor, flow: NoteFlow) -> (Page, NoteFlow) {
+    fn fill_page(&self, start: Cursor, flow: NoteFlow, built: usize) -> (Page, NoteFlow) {
         let mut lines = Vec::new();
         let mut used = 0.0;
         let mut cursor = start;
         let limit = self.geometry.content_height();
+        let verso = (built + 1).is_multiple_of(2);
         let reserve_note = self.note_on_paragraph(start.paragraph);
         let note_reserve = if reserve_note {
             self.geometry.leading
@@ -949,15 +975,7 @@ impl Document {
                 break;
             };
             let style = &self.paragraphs[line.paragraph].style;
-            if line.is_first
-                && !lines.is_empty()
-                && self
-                    .hints
-                    .recto_at
-                    .get(line.paragraph)
-                    .copied()
-                    .unwrap_or(false)
-            {
+            if self.refuses_recto(line, !lines.is_empty(), verso) {
                 break;
             }
             if used + line.height + note_reserve > limit && !lines.is_empty() {
@@ -1006,7 +1024,11 @@ impl Document {
         }
         if lines.is_empty() {
             if let Some(line) = self.line_at(start) {
-                lines.push(line.clone());
+                // Do not undo a recto refusal: an empty verso must stay empty
+                // of the chapter that is waiting for an odd page.
+                if !self.refuses_recto(line, false, verso) {
+                    lines.push(line.clone());
+                }
             }
         }
         let (footnotes, flow) = self.place_notes(&lines, flow);
@@ -1074,11 +1096,48 @@ impl Document {
         })
     }
 
-    fn needs_blank_verso(&self, built: usize, cursor: Cursor) -> bool {
-        let Some(line) = self.line_at(cursor) else {
-            return false;
-        };
-        if line.line != 0 {
+    /// One page from the shared decision. `filled` is body placement: the
+    /// caller then applies widow control and advances the cursor. A blank
+    /// verso and a notes-only page leave the cursor where it is.
+    fn take_page(&self, built: usize, cursor: Cursor, flow: NoteFlow) -> (Page, NoteFlow, bool) {
+        match page_decision(
+            built,
+            self.is_recto_opener(cursor),
+            self.at_end(cursor),
+            &flow,
+        ) {
+            PageStep::Blank { outgoing } => {
+                let page = self.blank_page(cursor, &outgoing);
+                (page, outgoing, false)
+            }
+            PageStep::NotesOnly => {
+                let (footnotes, next) = self.place_notes(&[], flow);
+                let page = self.note_page(cursor, footnotes, &next);
+                (page, next, false)
+            }
+            PageStep::Fill => {
+                let (page, next) = self.fill_page(cursor, flow, built);
+                (page, next, true)
+            }
+        }
+    }
+
+    fn is_recto_opener(&self, cursor: Cursor) -> bool {
+        self.line_at(cursor).is_some_and(|line| {
+            line.line == 0
+                && self
+                    .hints
+                    .recto_at
+                    .get(line.paragraph)
+                    .copied()
+                    .unwrap_or(false)
+        })
+    }
+
+    /// A recto chapter does not join a page that already has lines, and does
+    /// not open on an empty verso. [`page_decision`] is what emits the blank.
+    fn refuses_recto(&self, line: &FlowLine, page_has_lines: bool, verso: bool) -> bool {
+        if !line.is_first {
             return false;
         }
         let recto = self
@@ -1087,7 +1146,7 @@ impl Document {
             .get(line.paragraph)
             .copied()
             .unwrap_or(false);
-        recto && (built + 1).is_multiple_of(2)
+        recto && (page_has_lines || verso)
     }
 
     fn note_page(&self, start: Cursor, footnotes: Vec<String>, flow: &NoteFlow) -> Page {
@@ -1104,16 +1163,18 @@ impl Document {
         }
     }
 
-    fn blank_page(&self, start: Cursor) -> Page {
+    fn blank_page(&self, start: Cursor, flow: &NoteFlow) -> Page {
         Page {
             start,
             lines: Vec::new(),
             footnotes: Vec::new(),
-            note_carry: None,
+            // The blank consumes no notes. The next page, and a repaginate
+            // that reloads this page, receive the same pending flow.
+            note_carry: flow.carry.clone(),
+            note_waiting: flow.waiting.clone(),
             blank: true,
             folio: None,
             running_head: None,
-            note_waiting: Vec::new(),
             content_inset: 0.0,
         }
     }
@@ -1469,4 +1530,59 @@ pub fn book_of_pages(face: Face, pages: u32, seed: &str) -> Result<Document, Typ
         })
         .collect();
     Document::new(face, Geometry::one_line_pages(), paragraphs)
+}
+
+#[cfg(test)]
+mod page_decision_tests {
+    use super::{NoteFlow, PageStep, page_decision};
+
+    #[test]
+    fn a_verso_stays_blank_while_a_note_carry_is_pending() {
+        let pending = NoteFlow {
+            carry: Some("N".to_string()),
+            waiting: vec!["Second note body.".to_string()],
+        };
+        let idle = NoteFlow::default();
+        let cases = [
+            (0usize, true, false, &idle, PageStep::Fill),
+            (
+                1,
+                true,
+                false,
+                &idle,
+                PageStep::Blank {
+                    outgoing: idle.clone(),
+                },
+            ),
+            (
+                1,
+                true,
+                false,
+                &pending,
+                PageStep::Blank {
+                    outgoing: pending.clone(),
+                },
+            ),
+            (2, true, false, &pending, PageStep::Fill),
+            (1, false, true, &pending, PageStep::NotesOnly),
+            (1, false, false, &pending, PageStep::Fill),
+            (
+                3,
+                true,
+                false,
+                &pending,
+                PageStep::Blank {
+                    outgoing: pending.clone(),
+                },
+            ),
+            (0, false, false, &idle, PageStep::Fill),
+        ];
+        for (built, recto, at_end, flow, expected) in cases {
+            assert_eq!(
+                page_decision(built, recto, at_end, flow),
+                expected,
+                "built {built} recto {recto} at_end {at_end}"
+            );
+        }
+    }
 }
