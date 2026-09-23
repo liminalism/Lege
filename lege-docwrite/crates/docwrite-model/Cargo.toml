@@ -7,6 +7,8 @@ license.workspace = true
 description = "Canonical book model: tree, blocks, runs, styles, page masters, chapter templates, edit transactions"
 
 [dependencies]
+ropey = { workspace = true }
+unicode-segmentation = { workspace = true }
 
 [lints]
 workspace = true

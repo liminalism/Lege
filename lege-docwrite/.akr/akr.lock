@@ -5,7 +5,7 @@ build {
     tool "akr 0.5.1"
     grammar "0.1"
     vocabulary "0.2"
-    source_graph "sha256:f387240079fe6a52905919c7f376aca76b5dfd2f99c695f14a8f378c0a0cf67b"
+    source_graph "sha256:e03e4cc21fa7941f9c15453bfff3b165f75468fd83168e5159244fcbea77e50f"
 }
 
 source ".akr/project.akr" {
@@ -28,13 +28,18 @@ source ".akr/records/docwrite/observations.akr" {
     records 15
 }
 
+source ".akr/records/docwrite/papercuts.akr" {
+    hash "sha256:fd4bfac8329eb974879d0821307ddad1a8951bdab4230c93fd347babffa2b251"
+    records 1
+}
+
 source ".akr/records/docwrite/requirements.akr" {
     hash "sha256:b4482b16c0e4f73bf83bc20b30e0f75fc03731c2515a9252d4102f35fce7ef5f"
     records 2
 }
 
 source ".akr/records/docwrite/work.akr" {
-    hash "sha256:c72dcf41acc245ed7cf1e6553b4d92a04cde60f7ba79dcc64a5b0880d95b80fb"
+    hash "sha256:3e23bc372151218c4b712be400b1b7d907d39385c832fdb806415380b55c92e2"
     records 10
 }
 
@@ -421,4 +426,14 @@ seal @docwrite.observation.zz-test/1 {
 seal @docwrite.observation.zz-test/2 {
     state withdrawn
     hash "sha256:95d18d80d26f961d1c99b47495ee08330750227f325b4fdd4e6d23b59d09152d"
+}
+
+seal @docwrite.papercut.knowledge-start-via-the-mcp-server-attached-at/1 {
+    state verified
+    hash "sha256:981f75464664c00a3d8784860cb5774effc2f065e595e86ec645a3ef603595f7"
+}
+
+seal @docwrite.work.m1-model-and-edits/1 {
+    state active
+    hash "sha256:3e7bf965b1f80cfbcc5895545135afa12b30f547b5551c1274e8736644bf5b25"
 }

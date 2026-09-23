@@ -9,6 +9,9 @@ description = "PDF and Markdown export (IDML later) for lege-docwrite"
 [dependencies]
 docwrite-model = { workspace = true }
 docwrite-typeset = { workspace = true }
+lege-pdf-write = { workspace = true }
+lege-pdf-read = { workspace = true }
+subsetter = "0.2.6"
 
 [lints]
 workspace = true

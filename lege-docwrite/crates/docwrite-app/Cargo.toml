@@ -6,14 +6,20 @@ rust-version.workspace = true
 license.workspace = true
 description = "The lege-docwrite page-native book editor"
 
-[dependencies]
-docwrite-model = { workspace = true }
-docwrite-typeset = { workspace = true }
-docwrite-export = { workspace = true }
-
-[lints]
-workspace = true
+[lib]
+name = "docwrite_app"
+path = "src/lib.rs"
 
 [[bin]]
 name = "lege-docwrite"
 path = "src/main.rs"
+
+[dependencies]
+docwrite-model = { workspace = true }
+docwrite-typeset = { workspace = true }
+docwrite-export = { workspace = true }
+pixelkit-raster = { workspace = true }
+pixelkit-shell = { workspace = true }
+
+[lints]
+workspace = true

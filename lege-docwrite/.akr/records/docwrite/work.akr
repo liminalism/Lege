@@ -21,7 +21,7 @@ record docwrite.work.m1-latency-gate/1 : work {
 
 record docwrite.work.m1-model-and-edits/1 : work {
     title "Book model skeleton, rope-backed blocks, edit transactions and undo"
-    state proposed
+    state active
     intent """
         Implement stable block IDs, a minimal Book/Chapter/Block/Run tree with ropey-backed text, and transactional edits with undo/redo, including the footnote slot in the model.
         """

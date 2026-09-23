@@ -1,0 +1,14 @@
+akr 0.1
+project lege-docwrite
+
+record docwrite.papercut.knowledge-start-via-the-mcp-server-attached-at/1 : papercut {
+    title "knowledge_start via the MCP server attached at the projects workspace…"
+    state verified
+    statement """
+        knowledge_start via the MCP server attached at the projects workspace failed with AKR-C011 (no .akr there). The lege-docwrite ledger is nested, and the MCP tool has no --dir argument, so the session had to switch to the akr CLI with --dir.
+        """
+    observed_at git:b479438c4375c11e8dfb90aff46abdabea337c6c
+    about "akr"
+    author "grok"
+    created_at 2026-09-23
+}

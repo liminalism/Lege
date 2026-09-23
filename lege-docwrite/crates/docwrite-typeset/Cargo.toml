@@ -8,6 +8,12 @@ description = "Shaping, line breaking, hyphenation and incremental pagination fo
 
 [dependencies]
 docwrite-model = { workspace = true }
+harfrust = "0.13.3"
+hyphenation = { version = "0.8.4", features = ["embed_en-us"] }
+pixelkit-raster.workspace = true
+skrifa = "0.47.0"
+unicode-bidi = "0.3.18"
+unicode-linebreak = "0.1.5"
 
 [lints]
 workspace = true

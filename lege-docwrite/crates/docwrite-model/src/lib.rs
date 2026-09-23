@@ -1,17 +1,34 @@
 //! Canonical book model for lege-docwrite.
 //!
-//! The semantic model is the document; pages are derived from it by
-//! `docwrite-typeset` and never stored. The planned shape:
+//! The semantic model is the document. Pages, lines and glyph positions are
+//! derived later by `docwrite-typeset` and are not stored here.
 //!
-//! - `Book → Part → Chapter → Section → Block → Run`, with stable block IDs
-//!   so layout caches, undo and research links survive edits and reordering.
-//! - Blocks: body paragraph, chapter title, subhead, block quote, epigraph,
-//!   image, caption, verse, bibliography entry, section break, and a
-//!   footnote reference slot from the start.
-//! - Runs carry emphasis, small caps, language, link and citation refs.
-//! - Paragraph/character styles, page masters and chapter templates are
-//!   three separate systems; a chapter refers to a template, so changing the
-//!   template changes every chapter that uses it.
-//! - Edits are transactions with undo/redo.
+//! The tree is `Book → Part → Chapter → Section → Block → Run`, with stable
+//! block ids. Each block's text is a [`ropey::Rope`]. Insert, delete,
+//! selection, word motion, cut/copy/paste and undo/redo are transactions.
+//! A block can hold one footnote or endnote id; the note body lives on the book.
 //!
-//! This crate is a scaffold; see the project ledger (`.akr/`) for scope.
+//! Named paragraph styles, page masters and chapter templates are a later
+//! milestone. Runs already carry direct marks (bold, italic, small caps,
+//! script, language, link, citation) so those systems have something to address.
+
+mod bundle;
+mod edit;
+mod error;
+mod ids;
+mod nav;
+mod publish;
+mod runs;
+mod tree;
+
+pub use edit::{Direction, Fragment, Motion};
+pub use error::ModelError;
+pub use ids::{BlockId, ChapterId, NoteId, PartId, SectionId};
+pub use publish::{
+    BibliographyEntry, ChapterStart, ChapterTemplate, IndexTerm, PageMaster, ParagraphStyle,
+    SourceNote,
+};
+pub use runs::{Run, RunMarks, Script};
+pub use tree::{
+    Block, BlockKind, Book, Chapter, Note, NoteKind, Part, Position, Section, Selection,
+};

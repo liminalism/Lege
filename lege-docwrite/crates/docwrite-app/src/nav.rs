@@ -1,0 +1,116 @@
+//! Exact page and spread navigation.
+//!
+//! `PageDown` lands on the next page top from any scroll position. In spread
+//! mode it lands on the next spread. A scroll gesture stays continuous while
+//! it moves and settles on the nearer page, or spread, when it ends.
+
+/// Gesture phase, matching the pixelkit scroll seam.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Phase {
+    Started,
+    Moved,
+    Ended,
+    Cancelled,
+}
+
+/// Viewport over a sequence of equal pages.
+#[derive(Clone, Debug)]
+pub struct Pager {
+    pages: u32,
+    spread: bool,
+    /// Scroll position in pages. `2.0` is the top of page 3 (0-based index 2).
+    scroll: f64,
+    origin: Option<f64>,
+}
+
+impl Pager {
+    pub fn new(pages: u32, spread: bool) -> Self {
+        Self {
+            pages: pages.max(1),
+            spread,
+            scroll: 0.0,
+            origin: None,
+        }
+    }
+
+    pub fn scroll(&self) -> f64 {
+        self.scroll
+    }
+
+    pub fn page_top(&self) -> u32 {
+        self.scroll.round().clamp(0.0, self.last()) as u32
+    }
+
+    pub fn page_down(&mut self) {
+        self.scroll = self.forward_target();
+        self.origin = None;
+    }
+
+    pub fn page_up(&mut self) {
+        self.scroll = self.backward_target();
+        self.origin = None;
+    }
+
+    /// `delta` is in pages. Positive moves toward later pages.
+    pub fn scroll_gesture(&mut self, delta: f64, phase: Phase) {
+        match phase {
+            Phase::Started => {
+                self.origin = Some(self.scroll);
+                self.scroll = (self.scroll + delta).clamp(0.0, self.last());
+            }
+            Phase::Moved => {
+                let base = self.origin.unwrap_or(self.scroll);
+                // `delta` is the gesture total from the start, not a step.
+                self.scroll = (base + delta).clamp(0.0, self.last());
+            }
+            Phase::Ended | Phase::Cancelled => {
+                let base = self.origin.take().unwrap_or(self.scroll);
+                self.scroll = (base + delta).clamp(0.0, self.last());
+                self.snap();
+            }
+        }
+    }
+
+    fn forward_target(&self) -> f64 {
+        if self.spread {
+            let spread = (self.scroll / 2.0).floor();
+            ((spread + 1.0) * 2.0).min(self.last_spread())
+        } else {
+            (self.scroll.floor() + 1.0).min(self.last())
+        }
+    }
+
+    fn backward_target(&self) -> f64 {
+        if self.spread {
+            let aligned = (self.scroll / 2.0).floor() * 2.0;
+            let previous = if (self.scroll - aligned).abs() < 1e-9 {
+                aligned - 2.0
+            } else {
+                aligned
+            };
+            previous.max(0.0)
+        } else if self.scroll.fract().abs() < 1e-9 {
+            (self.scroll - 1.0).max(0.0)
+        } else {
+            self.scroll.floor()
+        }
+    }
+
+    fn snap(&mut self) {
+        if self.spread {
+            self.scroll = (self.scroll / 2.0).round() * 2.0;
+            self.scroll = self.scroll.clamp(0.0, self.last_spread());
+        } else {
+            self.scroll = self.scroll.round().clamp(0.0, self.last());
+        }
+    }
+
+    fn last(&self) -> f64 {
+        self.pages.saturating_sub(1) as f64
+    }
+
+    fn last_spread(&self) -> f64 {
+        let last = self.last();
+        (last / 2.0).floor() * 2.0
+    }
+}

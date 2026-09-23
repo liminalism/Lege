@@ -164,13 +164,19 @@ pub fn write_pages_root<W: Write>(
 }
 
 /// Optional catalog entries beyond `/Pages`.
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Default, Clone)]
 pub struct CatalogExtras {
     pub outlines: Option<ObjectId>,
     /// PDF/A OutputIntent object; adds `/OutputIntents [id]`.
     pub output_intent: Option<ObjectId>,
     /// Adds `/MarkInfo << /Marked true >>`.
     pub mark_info: bool,
+    /// `/Lang`, for example `en-US`.
+    pub lang: Option<String>,
+    /// `/StructTreeRoot` object.
+    pub struct_tree: Option<ObjectId>,
+    /// `/PageLabels` number tree body, already the inner dictionary bytes.
+    pub page_labels: Option<Vec<u8>>,
 }
 
 /// Write the document catalog and return its id.
@@ -199,6 +205,20 @@ pub fn write_catalog<W: Write>(
     if extras.mark_info {
         kname(&mut d, b"MarkInfo");
         d.extend_from_slice(b"<</Marked true>>");
+    }
+    if let Some(lang) = &extras.lang {
+        kname(&mut d, b"Lang");
+        d.push(b'(');
+        d.extend_from_slice(lang.as_bytes());
+        d.push(b')');
+    }
+    if let Some(tree) = extras.struct_tree {
+        kname(&mut d, b"StructTreeRoot");
+        write_ref(&mut d, tree);
+    }
+    if let Some(labels) = &extras.page_labels {
+        kname(&mut d, b"PageLabels");
+        d.extend_from_slice(labels);
     }
     d.extend_from_slice(b">>");
     sink.write_indirect(id, &d)?;

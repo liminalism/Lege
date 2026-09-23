@@ -51,6 +51,10 @@ pub struct DocumentWriter<W: Write> {
     /// that draws from that bank, written at finalization.
     glyph_font_ids: Vec<Option<ObjectId>>,
     bookmarks: Vec<OutlineItem>,
+    lang: Option<String>,
+    /// Structure element names (`H1`, `P`, `Note`, `Figure`) in reading order.
+    structure: Vec<String>,
+    page_labels: Option<Vec<u8>>,
 }
 
 impl<W: Write> std::fmt::Debug for DocumentWriter<W> {
@@ -106,6 +110,9 @@ impl<W: Write> DocumentWriter<W> {
             glyph_fonts: Vec::new(),
             glyph_font_ids: Vec::new(),
             bookmarks: Vec::new(),
+            lang: None,
+            structure: Vec::new(),
+            page_labels: None,
         };
         // Reserve the /Pages root so pages written on arrival can carry a valid
         // /Parent.
@@ -144,6 +151,21 @@ impl<W: Write> DocumentWriter<W> {
     /// Provide the outline (bookmark) tree, keyed by output page index.
     pub fn set_bookmarks(&mut self, bookmarks: Vec<OutlineItem>) {
         self.bookmarks = bookmarks;
+    }
+
+    /// `/Lang` on the catalog.
+    pub fn set_language(&mut self, lang: impl Into<String>) {
+        self.lang = Some(lang.into());
+    }
+
+    /// Structure element types written as a `/StructTreeRoot`.
+    pub fn set_structure(&mut self, elements: Vec<String>) {
+        self.structure = elements;
+    }
+
+    /// Raw `/PageLabels` number-tree dictionary, including the outer `<< >>`.
+    pub fn set_page_labels(&mut self, labels: Vec<u8>) {
+        self.page_labels = Some(labels);
     }
 
     /// Register a shared resource's bytes (e.g. JBIG2 globals) before any
@@ -291,13 +313,25 @@ impl<W: Write> DocumentWriter<W> {
             None
         };
 
+        let struct_tree = if self.structure.is_empty() {
+            None
+        } else {
+            Some(write_structure_tree(
+                &mut self.sink,
+                &self.slots,
+                &self.structure,
+            )?)
+        };
         let catalog = write_catalog(
             &mut self.sink,
             self.pages_root,
             CatalogExtras {
                 outlines,
                 output_intent,
-                mark_info: self.profile.wants_pdfa_metadata(),
+                mark_info: self.profile.wants_pdfa_metadata() || struct_tree.is_some(),
+                lang: self.lang.clone(),
+                struct_tree,
+                page_labels: self.page_labels.clone(),
             },
         )?;
 
@@ -332,6 +366,44 @@ impl<W: Write> DocumentWriter<W> {
 }
 
 /// Deflate (zlib) a content stream.
+fn write_structure_tree<W: Write>(
+    sink: &mut PdfSink<W>,
+    slots: &crate::pages::WrittenPageSlots,
+    elements: &[String],
+) -> Result<ObjectId> {
+    let mut kids = Vec::new();
+    for (index, name) in elements.iter().enumerate() {
+        let id = sink.alloc_id();
+        let Some(page) = slots.page_id(index as u32).or_else(|| slots.page_id(0)) else {
+            continue;
+        };
+        let mut d = Vec::new();
+        d.extend_from_slice(b"<<");
+        d.extend_from_slice(b"/Type /StructElem");
+        d.extend_from_slice(b" /S /");
+        d.extend_from_slice(name.as_bytes());
+        d.extend_from_slice(b" /Pg ");
+        crate::serialize::write_ref(&mut d, page);
+        d.extend_from_slice(b" /K (");
+        d.extend_from_slice(name.as_bytes());
+        d.extend_from_slice(b")>>");
+        sink.write_indirect(id, &d)?;
+        kids.push(id);
+    }
+    let root = sink.alloc_id();
+    let mut d = Vec::new();
+    d.extend_from_slice(b"<< /Type /StructTreeRoot /K [");
+    for (index, id) in kids.iter().enumerate() {
+        if index > 0 {
+            d.push(b' ');
+        }
+        crate::serialize::write_ref(&mut d, *id);
+    }
+    d.extend_from_slice(b"]>>");
+    sink.write_indirect(root, &d)?;
+    Ok(root)
+}
+
 fn deflate(data: &[u8]) -> Result<Vec<u8>> {
     let mut enc = ZlibEncoder::new(Vec::new(), Compression::default());
     enc.write_all(data).map_err(WriteError::from)?;

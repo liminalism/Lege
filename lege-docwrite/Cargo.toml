@@ -29,6 +29,9 @@ docwrite-model = { path = "crates/docwrite-model" }
 docwrite-typeset = { path = "crates/docwrite-typeset" }
 docwrite-export = { path = "crates/docwrite-export" }
 
+ropey = "1.6.1"
+unicode-segmentation = "1.12"
+
 # Lege crates, consumed by path from the sibling trees. They keep inheriting
 # from the ecosystem workspace root; only the dependency edge is ours.
 #
