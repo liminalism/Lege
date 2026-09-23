@@ -1,6 +1,6 @@
 //! Exact PageUp/PageDown and snap-at-gesture-end.
 
-use docwrite_app::{Pager, Phase};
+use docwrite_app::{Editor, Pager, Phase};
 
 #[test]
 fn page_down_and_page_up_land_on_page_tops_from_any_scroll() {
@@ -48,4 +48,17 @@ fn spread_mode_moves_by_spread_and_a_gesture_snaps() {
     single.scroll_gesture(0.0, Phase::Started);
     single.scroll_gesture(0.6, Phase::Ended);
     assert_eq!(single.scroll(), 3.0, "2.6 snaps to page 3");
+}
+
+#[test]
+fn the_window_editor_types_into_the_book_and_turns_pages() {
+    let mut editor = Editor::new();
+    let before = editor.book().plain_text();
+    editor.type_text(" Hello");
+    assert!(editor.book().plain_text().ends_with(" Hello"));
+    assert_ne!(editor.book().plain_text(), before);
+    editor.page_down();
+    assert_eq!(editor.pager().scroll(), 1.0);
+    editor.page_up();
+    assert_eq!(editor.pager().scroll(), 0.0);
 }
