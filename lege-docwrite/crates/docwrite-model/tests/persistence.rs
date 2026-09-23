@@ -142,4 +142,13 @@ fn bibliography_index_and_csl_bibtex_round_trip() {
     let used = book.sources_in_chapter(chapter);
     assert_eq!(used.len(), 1);
     assert_eq!(used[0].rects, vec![[1.0, 2.0, 3.0, 4.0]]);
+    println!("csl title: {}", again.bibliography()[0].title);
+    println!("bibtex author: {}", third.bibliography()[0].author);
+    println!("index term: {}", book.index_terms()[0].term);
+    println!(
+        "sources in chapter: {} page {} rects {:?}",
+        used.len(),
+        used[0].page,
+        used[0].rects
+    );
 }

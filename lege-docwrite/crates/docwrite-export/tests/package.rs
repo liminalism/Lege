@@ -83,6 +83,14 @@ fn pdf_is_searchable_with_bookmarks_subset_font_lang_and_structure() {
     assert_eq!(resolved.page, 0);
     assert_eq!(resolved.rects, vec![rect]);
     assert_eq!(resolved.passage, word.text);
+    println!(
+        "citation resolves to page {} highlight rects {:?} passage {:?}",
+        resolved.page, resolved.rects, resolved.passage
+    );
+    println!(
+        "extracted word on page 0 highlight rect {:?} text {:?}",
+        rect, word.text
+    );
 }
 
 #[test]

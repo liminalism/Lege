@@ -46,5 +46,10 @@ fn footnotes_stay_on_the_reference_page_through_an_edit() {
         vec!["The note that belongs on this page.".to_string()],
         "the note did not drift when an earlier page was edited"
     );
+    println!(
+        "footnote on reference page 3 after an earlier-page edit: {:?}",
+        document.page_footnotes(3)
+    );
+    println!("long note split into {pieces} pieces and reassembled");
     let _ = book_of_pages;
 }
