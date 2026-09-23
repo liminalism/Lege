@@ -207,6 +207,8 @@ struct Page {
     lines: Vec<FlowLine>,
     /// Footnote text placed on this page, possibly a slice of a longer note.
     footnotes: Vec<String>,
+    /// Tail of a note that did not fit, carried onto the next page.
+    note_carry: Option<String>,
 }
 
 /// What an edit did to pagination. Page numbers are 1-based.
@@ -443,11 +445,13 @@ impl Document {
     fn paginate_all(&mut self) {
         self.pages.clear();
         let mut cursor = Cursor { paragraph: 0, line: 0 };
+        let mut carry = None;
         if self.lines.is_empty() {
             return;
         }
-        while !self.at_end(cursor) {
-            let page = self.fill_page(cursor);
+        while !self.at_end(cursor) || carry.is_some() {
+            let page = self.fill_page(cursor, carry.take());
+            carry = page.note_carry.clone();
             cursor = next_cursor(&page);
             self.pages.push(page);
             if self.pages.len() > self.paragraphs.len().saturating_mul(4).max(8) {
@@ -474,7 +478,7 @@ impl Document {
             }
             let page_number = (pages.len() + 1) as u32;
             rebuilt.push(page_number);
-            let page = self.fill_page(cursor);
+            let page = self.fill_page(cursor, None);
             let following = next_cursor(&page);
             pages.push(page);
             let next_index = pages.len();
@@ -530,6 +534,7 @@ impl Document {
             let page = Page {
                 start: cursor,
                 footnotes: old.footnotes.clone(),
+                note_carry: old.note_carry.clone(),
                 lines,
             };
             cursor = next_cursor_from(&page, &self.lines);
@@ -546,7 +551,7 @@ impl Document {
         }
     }
 
-    fn fill_page(&self, start: Cursor) -> Page {
+    fn fill_page(&self, start: Cursor, carry: Option<String>) -> Page {
         let mut lines = Vec::new();
         let mut used = 0.0;
         let mut cursor = start;
@@ -598,14 +603,29 @@ impl Document {
             }
         }
         let mut footnotes = Vec::new();
-        if let Some(line) = lines.iter().find(|line| line.is_first) {
-            if let Some(note) = self.paragraphs[line.paragraph].note.clone() {
-                if !self.paragraphs[line.paragraph].note_is_endnote {
-                    footnotes.push(note);
+        let mut note_carry = None;
+        if let Some(rest) = carry {
+            let (head, tail) = split_note(&rest);
+            footnotes.push(head);
+            note_carry = tail;
+        }
+        if note_carry.is_none() {
+            if let Some(line) = lines.iter().find(|line| line.is_first) {
+                if let Some(note) = self.paragraphs[line.paragraph].note.clone() {
+                    if !self.paragraphs[line.paragraph].note_is_endnote {
+                        let (head, tail) = split_note(&note);
+                        footnotes.push(head);
+                        note_carry = tail;
+                    }
                 }
             }
         }
-        Page { start, lines, footnotes }
+        Page {
+            start,
+            lines,
+            footnotes,
+            note_carry,
+        }
     }
 
     fn note_on_paragraph(&self, index: usize) -> bool {
@@ -631,6 +651,18 @@ impl Document {
             .map(|lines| lines.iter().skip(cursor.line as usize).map(|line| line.height).sum())
             .unwrap_or(0.0)
     }
+}
+
+/// Notes longer than one footnote line continue on the next page.
+fn split_note(note: &str) -> (String, Option<String>) {
+    const BUDGET: usize = 48;
+    let count = note.chars().count();
+    if count <= BUDGET {
+        return (note.to_string(), None);
+    }
+    let head: String = note.chars().take(BUDGET).collect();
+    let tail: String = note.chars().skip(BUDGET).collect();
+    (head, Some(tail))
 }
 
 fn step(cursor: Cursor, lines: &[Vec<FlowLine>]) -> Cursor {
