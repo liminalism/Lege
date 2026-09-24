@@ -570,6 +570,8 @@ pub struct Document {
     hints: LayoutHints,
     /// Paragraph index by paragraph id.
     by_id: HashMap<u64, usize>,
+    /// Page numbers the table of contents shows, by chapter id.
+    pub(crate) contents_pages: HashMap<u64, u32>,
 }
 
 impl Document {
@@ -602,6 +604,7 @@ impl Document {
             hyphenator,
             hints,
             by_id: HashMap::new(),
+            contents_pages: HashMap::new(),
         };
         doc.index_ids();
         doc.reshape_all()?;
@@ -1309,6 +1312,20 @@ impl Document {
             paragraph.style.small_caps,
             paragraph.style.oldstyle_figures,
         )?;
+        // A tab shapes as a space whose width alignment sets later.
+        if paragraph.text.contains('\t') {
+            let space = self.face().shape(" ", size, &features_for(false, false))?;
+            if let Some(space) = space.first() {
+                for glyph in glyphs
+                    .iter_mut()
+                    .filter(|glyph| is_tab(&paragraph.text, glyph))
+                {
+                    glyph.id = space.id;
+                    glyph.face = 0;
+                    glyph.x_advance = space.x_advance;
+                }
+            }
+        }
         // A drop cap: the first letter, sized so its cap height reaches from
         // the baseline of line `drop_lines` up to the cap height of line one,
         // set on that lower baseline, with the lines beside it indented.
@@ -1440,6 +1457,23 @@ impl Document {
             let available = measure - own_indent;
             let natural = natural_width(&paragraph.text, &line.glyphs);
             let slack = (available - natural).max(0.0);
+            if line
+                .glyphs
+                .iter()
+                .any(|glyph| is_tab(&paragraph.text, glyph))
+            {
+                // A tab takes the line's slack: what follows sits flush right.
+                if let Some(tab) = line
+                    .glyphs
+                    .iter_mut()
+                    .rev()
+                    .find(|glyph| is_tab(&paragraph.text, glyph))
+                {
+                    tab.x_advance += slack;
+                }
+                offsets.push(0.0);
+                continue;
+            }
             let offset = match paragraph.style.align {
                 Alignment::Center => slack / 2.0,
                 Alignment::Right => slack,
@@ -2229,6 +2263,13 @@ fn natural_width(text: &str, glyphs: &[Glyph]) -> f32 {
         .map(|glyph| glyph.x_advance)
         .sum::<f32>();
     width_of(glyphs) - trailing
+}
+
+fn is_tab(text: &str, glyph: &Glyph) -> bool {
+    glyph.cluster < NOTE_MARK_CLUSTER
+        && text
+            .get(glyph.cluster as usize..)
+            .is_some_and(|rest| rest.starts_with('\t'))
 }
 
 fn is_space(text: &str, glyph: &Glyph) -> bool {

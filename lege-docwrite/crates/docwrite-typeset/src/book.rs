@@ -1,5 +1,7 @@
 //! Layout a [`Book`](docwrite_model::Book) with its masters, styles, and notes.
 
+use std::collections::HashMap;
+
 use docwrite_model::{BlockKind, Book, ChapterStart, NoteKind};
 
 use crate::engine::{
@@ -24,8 +26,10 @@ pub fn from_book(book: &Book, face: Face) -> Result<Document, TypesetError> {
 /// Paginate `book` with a font family: regular, bold, italic and bold
 /// italic, in that order. Styles the family lacks are set in regular.
 pub fn from_book_with(book: &Book, faces: Vec<Face>) -> Result<Document, TypesetError> {
-    let (geometry, paragraphs, hints) = layout_inputs(book);
-    Document::new_with(faces, geometry, paragraphs, hints)
+    let (geometry, paragraphs, hints) = layout_inputs(book, &HashMap::new());
+    let mut document = Document::new_with(faces, geometry, paragraphs, hints)?;
+    settle_contents(&mut document, book)?;
+    Ok(document)
 }
 
 /// Bring `document` up to date with `book` after an edit.
@@ -34,11 +38,72 @@ pub fn from_book_with(book: &Book, faces: Vec<Face>) -> Result<Document, Typeset
 /// pagination stops once the page breaks line up with the previous layout.
 /// A change of page master or body size lays out the whole book.
 pub fn update_from_book(document: &mut Document, book: &Book) -> Result<EditReport, TypesetError> {
-    let (geometry, paragraphs, hints) = layout_inputs(book);
-    document.apply(geometry, paragraphs, hints)
+    let pages = document.contents_pages.clone();
+    let (geometry, paragraphs, hints) = layout_inputs(book, &pages);
+    let mut report = document.apply(geometry, paragraphs, hints)?;
+    if let Some(more) = settle_contents(document, book)? {
+        report.pages_laid_out.extend(more.pages_laid_out);
+        report.pages_laid_out.sort_unstable();
+        report.pages_laid_out.dedup();
+        report.paragraphs_shaped += more.paragraphs_shaped;
+        report.page_count = more.page_count;
+    }
+    Ok(report)
 }
 
-fn layout_inputs(book: &Book) -> (Geometry, Vec<Paragraph>, LayoutHints) {
+/// The Contents section's heading is this id; each entry is this bit with
+/// its chapter's id. Block ids never set it.
+pub const CONTENTS_ID: u64 = 1 << 61;
+
+/// Set the table of contents' page numbers from where the chapters landed,
+/// laying out again until they stop changing (entries of the same length
+/// change nothing else). Returns what the last extra pass did, if any.
+fn settle_contents(
+    document: &mut Document,
+    book: &Book,
+) -> Result<Option<EditReport>, TypesetError> {
+    if !book.has_contents() {
+        document.contents_pages.clear();
+        return Ok(None);
+    }
+    let mut last = None;
+    for _ in 0..3 {
+        let pages = chapter_pages(document, book);
+        if pages == document.contents_pages {
+            break;
+        }
+        document.contents_pages = pages.clone();
+        let (geometry, paragraphs, hints) = layout_inputs(book, &pages);
+        last = Some(document.apply(geometry, paragraphs, hints)?);
+    }
+    Ok(last)
+}
+
+/// The page each chapter opens on, by chapter id.
+fn chapter_pages(document: &Document, book: &Book) -> HashMap<u64, u32> {
+    let mut pages = HashMap::new();
+    for chapter in book.parts().iter().flat_map(|part| part.chapters()) {
+        let opener = document
+            .paragraph_of(CHAPTER_TITLE_ID | chapter.id().raw())
+            .or_else(|| {
+                chapter
+                    .sections()
+                    .iter()
+                    .flat_map(|section| section.blocks())
+                    .next()
+                    .and_then(|block| document.paragraph_of(block.id().raw()))
+            });
+        if let Some(page) = opener.and_then(|index| document.page_of(index, 0)) {
+            pages.insert(chapter.id().raw(), page);
+        }
+    }
+    pages
+}
+
+fn layout_inputs(
+    book: &Book,
+    contents_pages: &HashMap<u64, u32>,
+) -> (Geometry, Vec<Paragraph>, LayoutHints) {
     let template = book
         .chapter_templates()
         .iter()
@@ -105,6 +170,43 @@ fn layout_inputs(book: &Book) -> (Geometry, Vec<Paragraph>, LayoutHints) {
     let mut heads = Vec::new();
     let mut footnote_count = 0usize;
     let mut endnotes: Vec<(u64, String)> = Vec::new();
+    if book.has_contents() {
+        // Contents: a heading, then each titled chapter with its page number
+        // after a tab, which takes the line's slack to push it flush right.
+        let mut title = map_style(&named_style(book, "Chapter Title"));
+        title.name = "Chapter Title".into();
+        title.keep_with_next = true;
+        title.space_after = title.space_after.max(title.leading);
+        paragraphs.push(Paragraph {
+            id: CONTENTS_ID,
+            text: "Contents".into(),
+            style: title,
+            ..Paragraph::default()
+        });
+        recto_at.push(false);
+        break_at.push(false);
+        master_at.push(default_master);
+        heads.push(String::new());
+        let entry = map_style(&named_style(book, "Contents Entry"));
+        for chapter in book.parts().iter().flat_map(|part| part.chapters()) {
+            if chapter.title().is_empty() {
+                continue;
+            }
+            let page = contents_pages
+                .get(&chapter.id().raw())
+                .map_or_else(|| "0".to_string(), u32::to_string);
+            paragraphs.push(Paragraph {
+                id: CONTENTS_ID | chapter.id().raw(),
+                text: format!("{}\t{page}", chapter.title()),
+                style: entry.clone(),
+                ..Paragraph::default()
+            });
+            recto_at.push(false);
+            break_at.push(false);
+            master_at.push(default_master);
+            heads.push(String::new());
+        }
+    }
     for part in book.parts() {
         for chapter in part.chapters() {
             let template = book

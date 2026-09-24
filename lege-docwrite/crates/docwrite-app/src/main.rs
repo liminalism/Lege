@@ -211,6 +211,7 @@ impl EditorApp {
             "KeyN" if alt => self.editor.open_prompt(PromptKind::Footnote),
             "KeyF" if alt => self.editor.open_prompt(PromptKind::Replace),
             "KeyE" if alt => self.editor.open_prompt(PromptKind::Endnote),
+            "KeyT" if alt => self.editor.toggle_contents(),
             "KeyF" if shift => self.editor.toggle_fullscreen(),
             "KeyF" => self.editor.open_prompt(PromptKind::Find),
             "KeyG" => {

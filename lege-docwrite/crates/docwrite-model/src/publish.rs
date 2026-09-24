@@ -164,6 +164,9 @@ pub(crate) struct Stylesheet {
     pub bibliography: Vec<BibliographyEntry>,
     pub index: Vec<IndexTerm>,
     pub saved_position: Option<Position>,
+    /// Set a table of contents before the first chapter.
+    #[serde(default)]
+    pub contents: bool,
 }
 
 impl Stylesheet {
@@ -210,6 +213,7 @@ impl Stylesheet {
             bibliography: Vec::new(),
             index: Vec::new(),
             saved_position: None,
+            contents: false,
         }
     }
 }
@@ -327,6 +331,16 @@ impl Book {
             .ok_or(ModelError::UnknownChapter(chapter))?;
         target.set_template(template.to_string());
         Ok(())
+    }
+
+    /// Whether the book sets a table of contents before its first chapter.
+    pub fn has_contents(&self) -> bool {
+        self.stylesheet.contents
+    }
+
+    /// Turn the table of contents on or off.
+    pub fn set_contents(&mut self, on: bool) {
+        self.stylesheet.contents = on;
     }
 
     /// Opener text of every chapter, in book order, from its template.
@@ -805,6 +819,13 @@ pub(crate) fn standard_styles() -> Vec<ParagraphStyle> {
             align: Align::Center,
             space_before_pt: 8.0,
             space_after_pt: 8.0,
+            ..body.clone()
+        },
+        ParagraphStyle {
+            name: "Contents Entry".into(),
+            first_indent_pt: 0.0,
+            hyphenate: false,
+            space_after_pt: 4.0,
             ..body.clone()
         },
         ParagraphStyle {

@@ -33,6 +33,7 @@ pub enum Action {
     Endnote,
     OpenSource,
     Spread,
+    Contents,
 }
 
 /// What a prompt's text is for.
@@ -174,6 +175,13 @@ impl Editor {
             14.0,
         );
         push(Action::Spread, "Spread".into(), self.spread, 62.0, 4.0);
+        push(
+            Action::Contents,
+            "Contents".into(),
+            self.book.has_contents(),
+            78.0,
+            4.0,
+        );
         out.retain(|button| button.x + button.w <= width);
         out
     }
@@ -191,7 +199,15 @@ impl Editor {
             Action::Endnote => self.open_prompt(PromptKind::Endnote),
             Action::OpenSource => self.open_prompt(PromptKind::OpenSource),
             Action::Spread => self.set_spread(!self.spread),
+            Action::Contents => self.toggle_contents(),
         }
+    }
+
+    /// Set or remove the table of contents before the first chapter.
+    pub fn toggle_contents(&mut self) {
+        let on = !self.book.has_contents();
+        self.book.set_contents(on);
+        self.edited();
     }
 
     /// Toggle a character mark on the selection, or for what is typed next.
