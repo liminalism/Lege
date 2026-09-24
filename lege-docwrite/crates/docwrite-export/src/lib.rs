@@ -29,6 +29,8 @@ pub struct ExportBlock {
     pub note: Option<String>,
     /// The chapter it is in.
     pub chapter: String,
+    /// Character runs over `text` (character ranges) with their marks.
+    pub runs: Vec<docwrite_model::Run>,
 }
 
 /// Every block of the book, chapter titles included, in reading order.
@@ -53,6 +55,7 @@ pub fn blocks_of(book: &Book) -> Vec<ExportBlock> {
                     link: None,
                     note: None,
                     chapter: chapter.title().to_string(),
+                    runs: Vec::new(),
                 });
             }
             for section in chapter.sections() {
@@ -77,6 +80,7 @@ pub fn blocks_of(book: &Book) -> Vec<ExportBlock> {
                             .note()
                             .and_then(|id| book.note(id).ok().map(|note| note.text())),
                         chapter: chapter.title().to_string(),
+                        runs: block.runs().to_vec(),
                     });
                 }
             }
