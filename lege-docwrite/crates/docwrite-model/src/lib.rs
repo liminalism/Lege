@@ -15,6 +15,7 @@
 mod bundle;
 mod edit;
 mod error;
+mod find;
 mod ids;
 mod nav;
 mod publish;

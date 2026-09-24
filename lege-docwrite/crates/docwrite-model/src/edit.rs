@@ -368,6 +368,24 @@ impl Book {
         self.insert(text)
     }
 
+    /// Fold every transaction recorded since the undo stack was `depth`
+    /// deep into one, so a multi-step command undoes as one step.
+    pub(crate) fn merge_undo_since(&mut self, depth: usize, selection_before: Selection) {
+        if self.undo.len() <= depth + 1 {
+            return;
+        }
+        let merged: Vec<Transaction> = self.undo.drain(depth..).collect();
+        let selection_after = merged
+            .last()
+            .map_or(self.selection, |txn| txn.selection_after);
+        let changes = merged.into_iter().flat_map(|txn| txn.changes).collect();
+        self.undo.push(Transaction {
+            changes,
+            selection_before,
+            selection_after,
+        });
+    }
+
     /// Reverse the latest transaction and remember it for [`Self::redo`].
     pub fn undo(&mut self) -> Result<(), ModelError> {
         let Some(txn) = self.undo.pop() else {

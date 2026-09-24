@@ -220,3 +220,64 @@ fn the_caret_is_drawn_on_its_own_line_of_a_wrapped_paragraph() {
         "the paragraph's start and end are on different lines: {early:?} {late:?}"
     );
 }
+
+#[test]
+fn typing_curls_quotes_and_makes_dashes_and_ellipses() {
+    let mut editor = Editor::new();
+    let first = editor.book().block_ids()[0];
+    let len = editor.book().block_len(first).unwrap();
+    editor
+        .book_mut()
+        .set_selection(Selection {
+            anchor: Position::new(first, 0),
+            focus: Position::new(first, len),
+        })
+        .unwrap();
+    editor.type_text("");
+    for key in "\"It's late--\" she said...".chars() {
+        editor.type_key(&key.to_string());
+    }
+    assert_eq!(
+        editor.book().plain_text(),
+        "\u{201c}It\u{2019}s late\u{2014}\u{201d} she said\u{2026}"
+    );
+    editor.undo();
+    assert_eq!(
+        editor.book().plain_text(),
+        "\u{201c}It\u{2019}s late\u{2014}\u{201d} she said..",
+        "one undo gives back the periods as typed"
+    );
+}
+
+#[test]
+fn find_and_replace_through_the_prompts() {
+    use docwrite_app::PromptKind;
+    let mut editor = editor_with(3);
+    editor.open_prompt(PromptKind::Find);
+    editor.prompt_type("bundle");
+    editor.commit_prompt();
+    let first = editor.book().selection();
+    assert!(!first.is_collapsed(), "the match is selected");
+    assert!(editor.find_again());
+    assert_ne!(editor.book().selection(), first, "find again moves on");
+
+    editor.open_prompt(PromptKind::Replace);
+    assert_eq!(
+        editor.prompt().unwrap().text,
+        "bundle",
+        "replace starts from the search"
+    );
+    editor.commit_prompt();
+    assert_eq!(
+        editor.prompt().map(|p| p.kind),
+        Some(PromptKind::ReplaceWith)
+    );
+    editor.prompt_type("parcel");
+    editor.commit_prompt();
+    let text = editor.book().plain_text();
+    assert!(!text.contains("bundle"));
+    // Two in each of the three paragraphs: "bundles" and "bundle carried".
+    assert_eq!(text.matches("parcel").count(), 6);
+    editor.undo();
+    assert_eq!(editor.book().plain_text().matches("bundle").count(), 6);
+}

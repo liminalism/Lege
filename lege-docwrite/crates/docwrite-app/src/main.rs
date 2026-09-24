@@ -208,9 +208,14 @@ impl EditorApp {
                 self.editor.set_spread(on);
             }
             "KeyR" if shift => self.editor.open_prompt(PromptKind::RenameChapter),
-            "KeyF" if alt => self.editor.open_prompt(PromptKind::Footnote),
+            "KeyN" if alt => self.editor.open_prompt(PromptKind::Footnote),
+            "KeyF" if alt => self.editor.open_prompt(PromptKind::Replace),
             "KeyE" if alt => self.editor.open_prompt(PromptKind::Endnote),
             "KeyF" if shift => self.editor.toggle_fullscreen(),
+            "KeyF" => self.editor.open_prompt(PromptKind::Find),
+            "KeyG" => {
+                self.editor.find_again();
+            }
             "Backslash" => self.editor.toggle_sidebar(),
             "KeyE" if shift => self.export_next_to_bundle("md"),
             "KeyE" => self.export_next_to_bundle("pdf"),
@@ -339,7 +344,7 @@ impl pixelkit_shell::PixelApp for EditorApp {
             _ if !event.text.is_empty() && !modifiers.accel() && !modifiers.control => {
                 let text: String = event.text.chars().filter(|ch| !ch.is_control()).collect();
                 if !text.is_empty() {
-                    self.editor.type_text(&text);
+                    self.editor.type_key(&text);
                 }
             }
             _ => {}

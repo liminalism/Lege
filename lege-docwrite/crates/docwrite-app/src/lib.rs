@@ -86,6 +86,10 @@ pub struct Editor {
     theme_now: Theme,
     /// Two facing pages side by side.
     spread: bool,
+    /// The last search, for find-again.
+    last_find: Option<String>,
+    /// The search text while a replace prompt asks for its replacement.
+    replacing: Option<String>,
     /// A toolbar prompt taking typed text, when one is open.
     prompt: Option<Prompt>,
     /// Size of the last painted frame, for toolbar and pane hits.
@@ -136,6 +140,8 @@ impl Editor {
             caret_status: None,
             theme_now: PAPER,
             spread: false,
+            last_find: None,
+            replacing: None,
             prompt: None,
             frame_width: 0,
             frame_height: 0,

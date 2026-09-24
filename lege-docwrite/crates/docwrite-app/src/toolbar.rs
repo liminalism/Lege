@@ -46,6 +46,10 @@ pub enum PromptKind {
     Citation,
     /// The path of a PDF to open beside the manuscript.
     OpenSource,
+    Find,
+    /// What to replace; the prompt then asks what with.
+    Replace,
+    ReplaceWith,
 }
 
 impl PromptKind {
@@ -57,6 +61,9 @@ impl PromptKind {
             Self::Endnote => "Endnote:",
             Self::Citation => "Cite as:",
             Self::OpenSource => "Open source PDF:",
+            Self::Find => "Find:",
+            Self::Replace => "Replace:",
+            Self::ReplaceWith => "With:",
         }
     }
 }
@@ -257,6 +264,7 @@ impl Editor {
     pub fn open_prompt(&mut self, kind: PromptKind) {
         let text = match kind {
             PromptKind::RenameChapter => self.current_chapter_title().unwrap_or_default(),
+            PromptKind::Find | PromptKind::Replace => self.last_find.clone().unwrap_or_default(),
             _ => String::new(),
         };
         if self.fullscreen {
@@ -320,6 +328,24 @@ impl Editor {
                 }
             }
             PromptKind::Citation => self.set_last_citation(&text),
+            PromptKind::Find => {
+                if !text.is_empty() {
+                    self.find(&text);
+                }
+            }
+            PromptKind::Replace => {
+                if !text.is_empty() {
+                    self.last_find = Some(text.clone());
+                    self.replacing = Some(text);
+                    self.open_prompt(PromptKind::ReplaceWith);
+                }
+            }
+            PromptKind::ReplaceWith => {
+                if let Some(query) = self.replacing.take() {
+                    // The replacement is taken as typed, spaces included.
+                    self.replace_all(&query, &prompt.text);
+                }
+            }
             PromptKind::OpenSource => {
                 let path = text.trim_matches(|ch| ch == '"' || ch == '\'');
                 if let Err(err) = self.open_source(path) {

@@ -320,6 +320,93 @@ impl Editor {
         self.follow_caret = true;
     }
 
+    /// Type one keypress's text, with smart punctuation: straight quotes
+    /// curl open after a space or an opening bracket and closed otherwise
+    /// (after a dash too, where speech is cut off), two hyphens make an em
+    /// dash, and three periods an ellipsis. One undo reverts a substitution
+    /// to what was typed.
+    pub fn type_key(&mut self, text: &str) {
+        let mut chars = text.chars();
+        let (Some(ch), None) = (chars.next(), chars.next()) else {
+            self.type_text(text);
+            return;
+        };
+        let before: Vec<char> = self.text_before_caret(2);
+        let prev = before.last().copied();
+        let opens = |prev: Option<char>| {
+            prev.is_none_or(|p| p.is_whitespace() || "([{\u{201c}\u{2018}".contains(p))
+        };
+        let (replace, with) = match ch {
+            '"' => (0, if opens(prev) { "\u{201c}" } else { "\u{201d}" }),
+            '\'' => (0, if opens(prev) { "\u{2018}" } else { "\u{2019}" }),
+            '-' if prev == Some('-') => (1, "\u{2014}"),
+            '.' if before == ['.', '.'] => (2, "\u{2026}"),
+            _ => (0, ""),
+        };
+        if with.is_empty() {
+            self.type_text(text);
+            return;
+        }
+        let selection = self.book.selection();
+        if replace > 0 && selection.is_collapsed() && selection.focus.offset >= replace {
+            let anchor = Position::new(selection.focus.block, selection.focus.offset - replace);
+            let _ = self.book.set_selection(Selection {
+                anchor,
+                focus: selection.focus,
+            });
+        }
+        self.type_text(with);
+    }
+
+    /// Up to `count` characters before the caret (or the selection's start),
+    /// within its paragraph.
+    fn text_before_caret(&self, count: usize) -> Vec<char> {
+        let selection = self.book.selection();
+        let at = if selection.anchor.block == selection.focus.block {
+            Position::new(
+                selection.focus.block,
+                selection.anchor.offset.min(selection.focus.offset),
+            )
+        } else {
+            selection.focus
+        };
+        let Ok(block) = self.book.block(at.block) else {
+            return Vec::new();
+        };
+        let chars: Vec<char> = block.text().chars().take(at.offset).collect();
+        chars[chars.len().saturating_sub(count)..].to_vec()
+    }
+
+    /// Select the next occurrence of `query` after the caret, remembering it
+    /// for [`Self::find_again`]. Returns whether one was found.
+    pub fn find(&mut self, query: &str) -> bool {
+        self.last_find = Some(query.to_string());
+        self.find_again()
+    }
+
+    /// Select the next occurrence of the last search.
+    pub fn find_again(&mut self) -> bool {
+        let Some(query) = self.last_find.clone() else {
+            return false;
+        };
+        let found = self.book.find_next(&query);
+        if found {
+            self.follow_caret = true;
+        }
+        found
+    }
+
+    /// Replace every occurrence of `query` with `with`; one undo step.
+    pub fn replace_all(&mut self, query: &str, with: &str) -> usize {
+        match self.book.replace_all(query, with) {
+            Ok(count) if count > 0 => {
+                self.edited();
+                count
+            }
+            _ => 0,
+        }
+    }
+
     /// Record an edit: the layout is stale, the view follows the caret, and
     /// autosave waits for typing to pause.
     pub(crate) fn edited(&mut self) {
