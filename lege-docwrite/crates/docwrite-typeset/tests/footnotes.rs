@@ -4,7 +4,7 @@
 
 use std::path::PathBuf;
 
-use docwrite_typeset::{book_of_pages, Document, Face, Geometry, Paragraph, ParagraphStyle};
+use docwrite_typeset::{Document, Face, Geometry, Paragraph, ParagraphStyle, book_of_pages};
 
 fn face() -> Face {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -24,10 +24,16 @@ fn footnotes_stay_on_the_reference_page_through_an_edit() {
             note_is_endnote: false,
         });
     }
-    let mut document = Document::new(face(), Geometry::one_line_pages(), paragraphs.clone()).unwrap();
-    assert_eq!(document.page_footnotes(3), vec!["The note that belongs on this page.".to_string()]);
+    let mut document =
+        Document::new(face(), Geometry::one_line_pages(), paragraphs.clone()).unwrap();
+    assert_eq!(
+        document.page_footnotes(3),
+        vec!["The note that belongs on this page.".to_string()]
+    );
     assert!(document.page_footnotes(1).is_empty());
-    let long = "The note continues across the page boundary because it is longer than one footnote line. ".repeat(3);
+    let long =
+        "The note continues across the page boundary because it is longer than one footnote line. "
+            .repeat(3);
     paragraphs[2].note = Some(long.clone());
     let split = Document::new(face(), Geometry::one_line_pages(), paragraphs).unwrap();
     let mut joined = String::new();
@@ -38,7 +44,10 @@ fn footnotes_stay_on_the_reference_page_through_an_edit() {
             pieces += 1;
         }
     }
-    assert!(pieces >= 2, "a long note splits across pages, got {pieces} pieces");
+    assert!(
+        pieces >= 2,
+        "a long note splits across pages, got {pieces} pieces"
+    );
     assert_eq!(joined, long);
     let _ = document.edit_page(1, "x").unwrap();
     assert_eq!(

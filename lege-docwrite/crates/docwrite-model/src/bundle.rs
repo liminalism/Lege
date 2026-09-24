@@ -24,13 +24,17 @@ impl std::error::Error for BundleError {}
 
 impl From<io::Error> for BundleError {
     fn from(err: io::Error) -> Self {
-        Self { message: err.to_string() }
+        Self {
+            message: err.to_string(),
+        }
     }
 }
 
 impl From<ModelError> for BundleError {
     fn from(err: ModelError) -> Self {
-        Self { message: err.to_string() }
+        Self {
+            message: err.to_string(),
+        }
     }
 }
 
@@ -40,9 +44,9 @@ impl Book {
     /// A `snapshots/` directory already inside the bundle is kept.
     pub fn save_bundle(&mut self, directory: &Path) -> Result<(), BundleError> {
         let parent = bundle_parent(directory);
-        let file_name = directory
-            .file_name()
-            .ok_or_else(|| BundleError { message: "bundle path has no name".into() })?;
+        let file_name = directory.file_name().ok_or_else(|| BundleError {
+            message: "bundle path has no name".into(),
+        })?;
         let hold = parent.join(format!(".{}.snapshots", file_name.to_string_lossy()));
         let snapshots = directory.join("snapshots");
         let parked = snapshots.is_dir();
@@ -89,9 +93,9 @@ impl Book {
         self.remember_position();
         let parent = bundle_parent(directory);
         fs::create_dir_all(parent)?;
-        let file_name = directory
-            .file_name()
-            .ok_or_else(|| BundleError { message: "bundle path has no name".into() })?;
+        let file_name = directory.file_name().ok_or_else(|| BundleError {
+            message: "bundle path has no name".into(),
+        })?;
         let temp = parent.join(format!(".{}.tmp", file_name.to_string_lossy()));
         if temp.exists() {
             fs::remove_dir_all(&temp)?;
@@ -99,7 +103,10 @@ impl Book {
         fs::create_dir_all(temp.join("chapters"))?;
         fs::write(temp.join("manifest.txt"), self.manifest_text())?;
         for (index, chapter) in self.chapter_records().into_iter().enumerate() {
-            fs::write(temp.join("chapters").join(format!("{index:04}.txt")), chapter)?;
+            fs::write(
+                temp.join("chapters").join(format!("{index:04}.txt")),
+                chapter,
+            )?;
         }
         if directory.exists() {
             fs::remove_dir_all(directory)?;
@@ -119,7 +126,9 @@ impl Book {
                     .iter()
                     .find(|style| style.name == "Body")
                     .cloned()
-                    .ok_or_else(|| BundleError { message: "missing Body".into() })?;
+                    .ok_or_else(|| BundleError {
+                        message: "missing Body".into(),
+                    })?;
                 style.size_pt = size_pt;
                 book.set_paragraph_style(style)?;
             }
@@ -130,7 +139,9 @@ impl Book {
                 .iter()
                 .find(|template| template.name == "Chapter")
                 .cloned()
-                .ok_or_else(|| BundleError { message: "missing template".into() })?;
+                .ok_or_else(|| BundleError {
+                    message: "missing template".into(),
+                })?;
             template.opener = opener;
             book.set_chapter_template(template)?;
         }
@@ -145,7 +156,9 @@ impl Book {
             index += 1;
         }
         if chapters.is_empty() {
-            return Err(BundleError { message: "bundle has no chapters".into() });
+            return Err(BundleError {
+                message: "bundle has no chapters".into(),
+            });
         }
         book.load_chapters(&chapters)?;
         if let Some(pos) = field(&manifest, "caret") {
@@ -224,7 +237,10 @@ impl Book {
         for source in self.stylesheet().sources.iter() {
             text.push_str(&format!(
                 "source {}\t{}\t{}\t{}\n",
-                source.id, source.document, source.page, source.passage.replace('\n', " ")
+                source.id,
+                source.document,
+                source.page,
+                source.passage.replace('\n', " ")
             ));
         }
         for entry in self.bibliography() {
@@ -277,7 +293,9 @@ impl Book {
             let parsed = parse_chapter(chapter);
             self.add_chapter(part, parsed.title)?;
             let Some(id) = self.block_ids().last().copied() else {
-                return Err(BundleError { message: "new chapter has no block".into() });
+                return Err(BundleError {
+                    message: "new chapter has no block".into(),
+                });
             };
             // add_chapter clears undo; the new block is empty.
             self.set_selection(crate::Selection::collapsed(crate::Position::new(id, 0)))?;

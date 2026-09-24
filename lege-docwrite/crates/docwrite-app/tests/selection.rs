@@ -18,7 +18,10 @@ fn extending_the_caret_paints_a_highlight_and_a_collapsed_caret_does_not() {
     }
     assert!(!editor.book().selection().is_collapsed());
     let highlighted = editor.pixels_of(900, 700, SELECTION);
-    assert!(highlighted > 0, "selected glyphs leave highlight pixels, got {highlighted}");
+    assert!(
+        highlighted > 0,
+        "selected glyphs leave highlight pixels, got {highlighted}"
+    );
     for _ in 0..4 {
         editor.move_right();
     }

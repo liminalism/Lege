@@ -17,13 +17,19 @@ fn ten_chapters_follow_one_template_and_reorder_and_reopen() {
         book.insert("Body.").unwrap();
     }
     assert_eq!(book.chapter_openers().len(), 10);
-    assert!(book.chapter_openers().iter().all(|opener| opener.starts_with("Chapter ")));
+    assert!(
+        book.chapter_openers()
+            .iter()
+            .all(|opener| opener.starts_with("Chapter "))
+    );
 
     let mut template = book.chapter_templates()[0].clone();
     template.opener = "Lesson".into();
     book.set_chapter_template(template).unwrap();
     assert!(
-        book.chapter_openers().iter().all(|opener| opener.starts_with("Lesson ")),
+        book.chapter_openers()
+            .iter()
+            .all(|opener| opener.starts_with("Lesson ")),
         "{:?}",
         book.chapter_openers()
     );
@@ -49,15 +55,18 @@ fn ten_chapters_follow_one_template_and_reorder_and_reopen() {
     assert_eq!(opened.title(), "Essay");
     assert!(opened.plain_text().contains("Opening paragraph."));
     assert_eq!(
-        opened.paragraph_styles().iter().find(|s| s.name == "Body").unwrap().size_pt,
+        opened
+            .paragraph_styles()
+            .iter()
+            .find(|s| s.name == "Body")
+            .unwrap()
+            .size_pt,
         14.0
     );
     assert_eq!(opened.chapter_templates()[0].opener, "Lesson");
     assert!(opened.saved_position().is_some());
     let _ = std::fs::remove_dir_all(&dir);
-    println!(
-        "ten chapters follow Lesson; reopen restored Body 14pt, opener Lesson, and the caret"
-    );
+    println!("ten chapters follow Lesson; reopen restored Body 14pt, opener Lesson, and the caret");
 }
 
 #[test]
@@ -97,7 +106,11 @@ fn a_named_snapshot_reopens_the_earlier_manuscript_styles_and_selection() {
     assert!(snap.plain_text().contains("Opening paragraph."));
     assert!(!snap.plain_text().contains("Later"));
     assert_eq!(
-        snap.paragraph_styles().iter().find(|style| style.name == "Body").unwrap().size_pt,
+        snap.paragraph_styles()
+            .iter()
+            .find(|style| style.name == "Body")
+            .unwrap()
+            .size_pt,
         14.0
     );
     assert_eq!(snap.chapter_templates()[0].opener, "Lesson");

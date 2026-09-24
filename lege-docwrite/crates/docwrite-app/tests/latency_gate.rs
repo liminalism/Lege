@@ -5,8 +5,8 @@
 use std::path::PathBuf;
 use std::time::Instant;
 
-use docwrite_app::{InputTrace, Pager, Phase, TraceCommand, KEYPRESS_BUDGET};
-use docwrite_typeset::{book_of_repeated_line, Face};
+use docwrite_app::{InputTrace, KEYPRESS_BUDGET, Pager, Phase, TraceCommand};
+use docwrite_typeset::{Face, book_of_repeated_line};
 
 fn noto() -> Vec<u8> {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -18,7 +18,8 @@ fn noto() -> Vec<u8> {
 fn five_hundred_pages_page_and_type_inside_the_budget() {
     let face = Face::parse(noto()).expect("font");
     let opened = Instant::now();
-    let mut document = book_of_repeated_line(face, 500, "A sentence of the manuscript.").expect("open");
+    let mut document =
+        book_of_repeated_line(face, 500, "A sentence of the manuscript.").expect("open");
     let open = opened.elapsed();
     assert_eq!(document.page_count(), 500);
     assert!(

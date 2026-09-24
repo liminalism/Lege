@@ -38,7 +38,8 @@ fn body(id: u64) -> Paragraph {
 #[test]
 fn contents_page_numbers_follow_a_chapter_that_moves() {
     let mut paragraphs = vec![title(1, "One"), body(2), title(3, "Two"), body(4)];
-    let mut document = Document::new(face(), Geometry::one_line_pages(), paragraphs.clone()).unwrap();
+    let mut document =
+        Document::new(face(), Geometry::one_line_pages(), paragraphs.clone()).unwrap();
     let before = document.contents();
     assert_eq!(before, vec![("One".into(), 1), ("Two".into(), 3)]);
     document.insert_paragraphs_before(2, 2, "Inserted").unwrap();

@@ -187,8 +187,14 @@ fn footnotes_and_endnotes_come_from_the_book() {
         }
     }
     assert_eq!(acc, long, "endnote pieces did not reassemble");
-    assert_eq!(end_page, Some(body_page), "endnote did not start on the reference page");
-    println!("footnote on page {footnote_page}; endnote starts on reference page {body_page} and reassembles");
+    assert_eq!(
+        end_page,
+        Some(body_page),
+        "endnote did not start on the reference page"
+    );
+    println!(
+        "footnote on page {footnote_page}; endnote starts on reference page {body_page} and reassembles"
+    );
 }
 
 #[test]
@@ -209,7 +215,11 @@ fn a_verso_page_insets_the_outer_margin() {
     book.set_page_master(right).unwrap();
     book.insert(&"word ".repeat(80)).unwrap();
     let document = from_book(&book, face()).unwrap();
-    assert!(document.page_count() >= 2, "pages {}", document.page_count());
+    assert!(
+        document.page_count() >= 2,
+        "pages {}",
+        document.page_count()
+    );
     let recto = document.page_content_inset(1);
     let verso = document.page_content_inset(2);
     assert!((recto - 54.0).abs() < 0.1, "recto inset {recto}");
@@ -236,15 +246,28 @@ fn a_second_note_survives_a_split_and_an_edit() {
     book.insert("First reference.").unwrap();
     book.attach_note(NoteKind::Footnote, &first).unwrap();
     book.insert("\nSecond reference.").unwrap();
-    book.attach_note(NoteKind::Footnote, "Second note body.").unwrap();
+    book.attach_note(NoteKind::Footnote, "Second note body.")
+        .unwrap();
     let mut document = from_book(&book, face()).unwrap();
     let joined = note_text(&document);
-    assert!(joined.contains(&first), "first note missing from {joined:?}");
-    assert!(joined.contains("Second note body."), "second note missing from {joined:?}");
+    assert!(
+        joined.contains(&first),
+        "first note missing from {joined:?}"
+    );
+    assert!(
+        joined.contains("Second note body."),
+        "second note missing from {joined:?}"
+    );
     document.edit_page(1, "x").unwrap();
     let after = note_text(&document);
-    assert!(after.contains(&first), "edit dropped the split note: {after:?}");
-    assert!(after.contains("Second note body."), "edit dropped the second note: {after:?}");
+    assert!(
+        after.contains(&first),
+        "edit dropped the split note: {after:?}"
+    );
+    assert!(
+        after.contains("Second note body."),
+        "edit dropped the second note: {after:?}"
+    );
     println!("both notes survive the split and the edit");
 }
 
@@ -266,7 +289,8 @@ fn a_pending_footnote_still_blanks_the_verso_before_the_next_recto() {
     book.insert("One.").unwrap();
     book.attach_note(NoteKind::Footnote, &first).unwrap();
     book.insert("\nSecond reference.").unwrap();
-    book.attach_note(NoteKind::Footnote, "Second note body.").unwrap();
+    book.attach_note(NoteKind::Footnote, "Second note body.")
+        .unwrap();
     let part = book.parts()[0].id();
     book.add_chapter(part, "Second").unwrap();
     let fresh = *book.block_ids().last().unwrap();

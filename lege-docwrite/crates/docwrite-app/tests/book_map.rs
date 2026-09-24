@@ -9,7 +9,11 @@ fn titles(editor: &Editor) -> Vec<String> {
         .book()
         .parts()
         .iter()
-        .flat_map(|part| part.chapters().iter().map(|chapter| chapter.title().to_string()))
+        .flat_map(|part| {
+            part.chapters()
+                .iter()
+                .map(|chapter| chapter.title().to_string())
+        })
         .collect()
 }
 
@@ -37,16 +41,31 @@ fn the_map_lists_matter_and_a_drag_reorders_chapters() {
     editor.book_mut().add_chapter(back, "Index").unwrap();
 
     let rows = editor.map_rows();
-    assert!(rows.iter().any(|row| row.kind == MapKind::FrontMatter && row.title == "Front matter"));
-    assert!(rows.iter().any(|row| row.kind == MapKind::BackMatter && row.title == "Back matter"));
-    assert!(rows.iter().any(|row| row.kind == MapKind::Chapter && row.title == "Alpha"));
+    assert!(
+        rows.iter()
+            .any(|row| row.kind == MapKind::FrontMatter && row.title == "Front matter")
+    );
+    assert!(
+        rows.iter()
+            .any(|row| row.kind == MapKind::BackMatter && row.title == "Back matter")
+    );
+    assert!(
+        rows.iter()
+            .any(|row| row.kind == MapKind::Chapter && row.title == "Alpha")
+    );
     assert!(rows.iter().any(|row| row.kind == MapKind::Section));
 
-    let body_row = rows.iter().position(|row| row.kind == MapKind::Part).unwrap();
+    let body_row = rows
+        .iter()
+        .position(|row| row.kind == MapKind::Part)
+        .unwrap();
     press(&mut editor, body_row);
     release(&mut editor, body_row);
     assert!(
-        editor.map_rows().iter().all(|row| row.title != "Chapter 1" && row.title != "Alpha"),
+        editor
+            .map_rows()
+            .iter()
+            .all(|row| row.title != "Chapter 1" && row.title != "Alpha"),
         "collapsing the body hides its chapters: {:?}",
         editor.map_rows()
     );
@@ -56,13 +75,23 @@ fn the_map_lists_matter_and_a_drag_reorders_chapters() {
 
     let rows = editor.map_rows();
     let from = rows.iter().position(|row| row.title == "Beta").unwrap();
-    let to = rows.iter().position(|row| row.title == "Chapter 1").unwrap();
+    let to = rows
+        .iter()
+        .position(|row| row.title == "Chapter 1")
+        .unwrap();
     press(&mut editor, from);
     release(&mut editor, to);
     assert_eq!(titles(&editor)[0], "Beta");
     assert!(titles(&editor).contains(&"Preface".to_string()));
     assert_eq!(
-        editor.book().parts().iter().find(|part| part.title() == "Front matter").unwrap().chapters()[0].title(),
+        editor
+            .book()
+            .parts()
+            .iter()
+            .find(|part| part.title() == "Front matter")
+            .unwrap()
+            .chapters()[0]
+            .title(),
         "Preface",
         "a drag inside the body leaves front matter in its part"
     );
@@ -75,14 +104,20 @@ fn typing_does_not_write_the_bundle_until_autosave() {
     let mut editor = Editor::new();
     editor.open_bundle(&dir);
     editor.type_text(" Hello");
-    assert!(!dir.join("manifest.txt").exists(), "typing must not autosave");
+    assert!(
+        !dir.join("manifest.txt").exists(),
+        "typing must not autosave"
+    );
     editor.autosave().unwrap();
     let saved = std::fs::read_to_string(dir.join("chapters/0000.txt")).unwrap();
     assert!(saved.contains("Hello"));
     editor.save_named_snapshot("dawn").unwrap();
     editor.type_text(" MORE");
     let still = std::fs::read_to_string(dir.join("chapters/0000.txt")).unwrap();
-    assert!(!still.contains("MORE"), "the later keystrokes stay off the disk");
+    assert!(
+        !still.contains("MORE"),
+        "the later keystrokes stay off the disk"
+    );
     editor.autosave().unwrap();
     editor.restore_named_snapshot("dawn").unwrap();
     assert!(editor.book().plain_text().contains("Hello"));

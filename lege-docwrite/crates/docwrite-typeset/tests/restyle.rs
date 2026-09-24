@@ -33,7 +33,9 @@ fn body_restyle_matches_a_fresh_layout() {
     fresh_geometry.font_size = 18.0;
     fresh_geometry.leading = 32.0;
     let fresh = Document::new(face(), fresh_geometry, paras("Body")).unwrap();
-    let fresh_pages: Vec<_> = (1..=fresh.page_count()).map(|page| fresh.page_texts(page)).collect();
+    let fresh_pages: Vec<_> = (1..=fresh.page_count())
+        .map(|page| fresh.page_texts(page))
+        .collect();
     assert_eq!(restyled, fresh_pages);
     println!(
         "body restyle at 18pt matches a fresh layout across {} pages",

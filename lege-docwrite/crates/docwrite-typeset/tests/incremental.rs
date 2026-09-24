@@ -5,7 +5,7 @@
 
 use std::path::PathBuf;
 
-use docwrite_typeset::{book_of_pages, Face, GlyphAtlas};
+use docwrite_typeset::{Face, GlyphAtlas, book_of_pages};
 
 fn noto() -> Vec<u8> {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -32,7 +32,11 @@ fn edit_on_page_147_of_400_skips_pages_149_through_400() {
         report.pages_laid_out
     );
     assert_eq!(document.page_count(), 400);
-    assert_eq!(document.page_texts(400), before, "the last page is the cached one");
+    assert_eq!(
+        document.page_texts(400),
+        before,
+        "the last page is the cached one"
+    );
     assert!(document.page_texts(147)[0].starts_with('x'));
     println!(
         "page 147 of 400 laid out {:?}; every rebuilt page is < 149; page 400 unchanged",
@@ -46,7 +50,11 @@ fn shaping_distinguishes_small_caps_and_the_atlas_caches_a_glyph() {
     let face = Face::parse(bytes).expect("noto");
     let plain = face.shape("Hello 123", 16.0, &[]).expect("shape");
     let featured = face
-        .shape("Hello 123", 16.0, &docwrite_typeset::features_for(true, true))
+        .shape(
+            "Hello 123",
+            16.0,
+            &docwrite_typeset::features_for(true, true),
+        )
         .expect("features");
     assert_ne!(
         plain.iter().map(|glyph| glyph.id).collect::<Vec<_>>(),
@@ -57,5 +65,9 @@ fn shaping_distinguishes_small_caps_and_the_atlas_caches_a_glyph() {
     assert!(atlas.ensure(&face, glyph, 32.0, 0.0).expect("raster"));
     let first = atlas.len();
     assert!(atlas.ensure(&face, glyph, 32.0, 0.0).expect("cache"));
-    assert_eq!(atlas.len(), first, "a second lookup does not rasterize again");
+    assert_eq!(
+        atlas.len(),
+        first,
+        "a second lookup does not rasterize again"
+    );
 }
