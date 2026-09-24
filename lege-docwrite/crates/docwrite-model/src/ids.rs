@@ -29,6 +29,11 @@ macro_rules! id_impl {
             pub(crate) fn new(raw: u64) -> Self {
                 Self(raw)
             }
+
+            /// The number behind this id. Stable for the life of the book.
+            pub fn raw(self) -> u64 {
+                self.0
+            }
         }
 
         impl std::fmt::Display for $ty {

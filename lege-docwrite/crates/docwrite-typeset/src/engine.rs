@@ -163,7 +163,7 @@ impl Geometry {
 }
 
 /// How a paragraph participates in pagination.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ParagraphStyle {
     pub hyphenate: bool,
     pub keep_with_next: bool,
@@ -206,7 +206,7 @@ impl Default for ParagraphStyle {
 
 /// A paragraph the paginator can see. `id` is the model's block id as a number
 /// so this crate does not need to own the model type.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Paragraph {
     pub id: u64,
     pub text: String,
@@ -302,7 +302,7 @@ impl NoteFlow {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct LayoutHints {
     pub recto_at: Vec<bool>,
     pub heads: Vec<String>,
@@ -330,6 +330,8 @@ impl Default for LayoutHints {
 pub struct EditReport {
     pub pages_laid_out: Vec<u32>,
     pub page_count: u32,
+    /// Paragraphs shaped and line-broken again by this edit.
+    pub paragraphs_shaped: usize,
 }
 
 /// A shaped, paginated document.
@@ -350,7 +352,6 @@ impl Document {
         geometry: Geometry,
         paragraphs: Vec<Paragraph>,
     ) -> Result<Self, TypesetError> {
-        let hyphenator = Standard::from_embedded(Language::EnglishUS).ok();
         Self::new_with(face, geometry, paragraphs, LayoutHints::default())
     }
 
@@ -589,10 +590,144 @@ impl Document {
         };
         self.paragraphs[paragraph].text.insert_str(0, extra);
         self.reshape_one(paragraph)?;
-        let laid = self.repaginate_from(index);
+        let laid = self.repaginate_from(index.saturating_sub(1), None, paragraph);
         Ok(EditReport {
             pages_laid_out: laid,
             page_count: self.page_count(),
+            paragraphs_shaped: 1,
+        })
+    }
+
+    /// Bring the layout up to date with `paragraphs`, the book in reading
+    /// order as the paginator sees it. Paragraphs are matched by `id`; one
+    /// whose text, style and note are unchanged keeps its shaped lines, even
+    /// if it moved. Pagination restarts one page before the first change and
+    /// stops where the old page breaks line up again.
+    pub(crate) fn apply(
+        &mut self,
+        geometry: Geometry,
+        paragraphs: Vec<Paragraph>,
+        hints: LayoutHints,
+    ) -> Result<EditReport, TypesetError> {
+        let same_geometry = geometry_eq(&self.geometry, &geometry);
+        let same_page_rules = self.hints.folio == hints.folio
+            && self.hints.hide_opener_folio == hints.hide_opener_folio
+            && self.hints.running_head == hints.running_head
+            && self.hints.facing == hints.facing;
+        if !same_geometry || !same_page_rules || self.pages.is_empty() {
+            self.geometry = geometry;
+            self.paragraphs = paragraphs;
+            self.hints = hints;
+            self.reshape_all()?;
+            self.paginate_all();
+            return Ok(EditReport {
+                pages_laid_out: (1..=self.page_count()).collect(),
+                page_count: self.page_count(),
+                paragraphs_shaped: self.paragraphs.len(),
+            });
+        }
+        let old_index: HashMap<u64, usize> = self
+            .paragraphs
+            .iter()
+            .enumerate()
+            .map(|(index, paragraph)| (paragraph.id, index))
+            .collect();
+        let mut remap = vec![None; self.paragraphs.len()];
+        let mut old_lines = std::mem::take(&mut self.lines);
+        let old_paragraphs = std::mem::replace(&mut self.paragraphs, paragraphs);
+        let mut lines = Vec::with_capacity(self.paragraphs.len());
+        let mut first_change: Option<usize> = None;
+        let mut last_change = 0;
+        let mut shaped = 0;
+        let mut mark = |index: usize, first: &mut Option<usize>| {
+            *first = Some(first.map_or(index, |first| first.min(index)));
+            last_change = last_change.max(index);
+        };
+        // Old index of the previous paragraph, whether kept or not. A kept
+        // paragraph is in place only when it directly follows the same
+        // predecessor it followed before; otherwise its old page breaks
+        // cannot be trusted.
+        let mut previous_old: Option<usize> = None;
+        let mut previous_new_was_kept = true;
+        for index in 0..self.paragraphs.len() {
+            let reuse = old_index
+                .get(&self.paragraphs[index].id)
+                .copied()
+                .filter(|old| {
+                    old_paragraphs.get(*old) == self.paragraphs.get(index)
+                        && self.hints.recto_at.get(*old) == hints.recto_at.get(index)
+                });
+            match reuse {
+                Some(old) => {
+                    remap[old] = Some(index);
+                    let in_place = previous_new_was_kept
+                        && match previous_old {
+                            Some(previous) => old == previous + 1,
+                            None => old == 0,
+                        };
+                    // A new paragraph just before this one already marked the
+                    // change; this one only needs to follow it.
+                    let after_insert = !previous_new_was_kept
+                        && previous_old.map_or(old == 0, |previous| old == previous + 1);
+                    if !in_place && !after_insert {
+                        mark(index, &mut first_change);
+                    }
+                    let mut kept = std::mem::take(&mut old_lines[old]);
+                    if old != index {
+                        for line in &mut kept {
+                            line.paragraph = index;
+                        }
+                    }
+                    lines.push(kept);
+                    previous_old = Some(old);
+                    previous_new_was_kept = true;
+                }
+                None => {
+                    mark(index, &mut first_change);
+                    lines.push(Vec::new());
+                    previous_new_was_kept = false;
+                }
+            }
+        }
+        // Old paragraphs that no longer exist change the layout at the place
+        // they used to occupy: right after their surviving predecessor.
+        let mut place = 0;
+        for old in 0..old_paragraphs.len() {
+            match remap[old] {
+                Some(index) => place = index + 1,
+                None => mark(place, &mut first_change),
+            }
+        }
+        self.hints = hints;
+        self.lines = lines;
+        for index in 0..self.paragraphs.len() {
+            if self.lines[index].is_empty() {
+                self.lines[index] = self.shape_paragraph(index)?;
+                shaped += 1;
+            }
+        }
+        self.link_images();
+        let Some(first_change) = first_change else {
+            self.dress_pages();
+            return Ok(EditReport {
+                pages_laid_out: Vec::new(),
+                page_count: self.page_count(),
+                paragraphs_shaped: 0,
+            });
+        };
+        let first_page = self
+            .pages
+            .iter()
+            .rposition(|page| {
+                page.start.paragraph < first_change
+                    || page.start.paragraph == first_change && page.start.line == 0
+            })
+            .unwrap_or(0);
+        let laid = self.repaginate_from(first_page.saturating_sub(1), Some(&remap), last_change);
+        Ok(EditReport {
+            pages_laid_out: laid,
+            page_count: self.page_count(),
+            paragraphs_shaped: shaped,
         })
     }
 
@@ -678,7 +813,11 @@ impl Document {
     }
 
     fn link_images(&mut self) {
-        if !self.paragraphs.iter().any(|paragraph| paragraph.style.name == "Image") {
+        if !self
+            .paragraphs
+            .iter()
+            .any(|paragraph| paragraph.style.name == "Image")
+        {
             return;
         }
         for index in 0..self.paragraphs.len().saturating_sub(1) {
@@ -829,32 +968,60 @@ impl Document {
     }
 
     /// Rebuild from `start_page` until a break matches the cached layout.
-    fn repaginate_from(&mut self, start_page: usize) -> Vec<u32> {
+    ///
+    /// `remap` maps each old paragraph index to its new index (`None` when
+    /// the paragraph is gone); `None` means indices did not move. Paragraphs
+    /// after `last_change` are unchanged, so once a page break lands after
+    /// it, at the same page index and with no notes in flight, the old
+    /// pages from there on are moved over with their indices fixed up.
+    /// Returns the 1-based pages that were laid out again.
+    fn repaginate_from(
+        &mut self,
+        start_page: usize,
+        remap: Option<&[Option<usize>]>,
+        last_change: usize,
+    ) -> Vec<u32> {
         if self.pages.is_empty() {
             self.paginate_all();
             return (1..=self.page_count()).collect();
         }
         let start_page = start_page.min(self.pages.len().saturating_sub(1));
-        let cursor = self.pages[start_page].start;
-        let cached: Vec<Cursor> = self.pages.iter().map(|page| page.start).collect();
-        let mut rebuilt = Vec::new();
-        let mut pages = self.pages[..start_page].to_vec();
-        let mut cursor = cursor;
-        let mut flow = if start_page > 0 {
-            let previous = &pages[start_page - 1];
-            NoteFlow {
+        let mut old = std::mem::take(&mut self.pages);
+        let mut old_tail = old.split_off(start_page);
+        let mut pages = old;
+        let map = |paragraph: usize| match remap {
+            Some(remap) => remap.get(paragraph).copied().flatten(),
+            None => Some(paragraph),
+        };
+        let cached: Vec<Option<Cursor>> = old_tail
+            .iter()
+            .map(|page| {
+                map(page.start.paragraph).map(|paragraph| Cursor {
+                    paragraph,
+                    line: page.start.line,
+                })
+            })
+            .collect();
+        // The kept pages end before the first change, so the line after
+        // them is where layout resumes. The old start of `start_page` is not:
+        // its paragraph may itself have moved.
+        let mut cursor = pages.last().map(next_cursor).unwrap_or(Cursor {
+            paragraph: 0,
+            line: 0,
+        });
+        let mut flow = pages
+            .last()
+            .map(|previous| NoteFlow {
                 carry: previous.note_carry.clone(),
                 waiting: previous.note_waiting.clone(),
-            }
-        } else {
-            NoteFlow::default()
-        };
+            })
+            .unwrap_or_default();
+        let mut rebuilt = Vec::new();
         loop {
             if self.at_end(cursor) && !flow.pending() {
                 break;
             }
-            let page_number = (pages.len() + 1) as u32;
-            rebuilt.push(page_number);
+            rebuilt.push((pages.len() + 1) as u32);
             let built = pages.len();
             let (page, next, filled) = self.take_page(built, cursor, flow);
             flow = next;
@@ -866,12 +1033,30 @@ impl Document {
             let following = filled.then(|| next_cursor(&page));
             pages.push(page);
             if let Some(following) = following {
-                let next_index = pages.len();
+                let at = pages.len() - start_page;
+                let old_quiet = at
+                    .checked_sub(1)
+                    .and_then(|index| old_tail.get(index))
+                    .is_some_and(|page| page.note_carry.is_none() && page.note_waiting.is_empty());
                 if !flow.pending()
-                    && cached.get(next_index) == Some(&following)
-                    && self.suffix_still_valid(next_index, &cached)
+                    && old_quiet
+                    && following.paragraph > last_change
+                    && cached.get(at).copied().flatten() == Some(following)
                 {
-                    pages.extend(self.rebind_suffix(next_index));
+                    for mut page in old_tail.drain(at..) {
+                        if remap.is_some() {
+                            let Some(paragraph) = map(page.start.paragraph) else {
+                                break;
+                            };
+                            page.start.paragraph = paragraph;
+                            for line in &mut page.lines {
+                                if let Some(paragraph) = map(line.paragraph) {
+                                    line.paragraph = paragraph;
+                                }
+                            }
+                        }
+                        pages.push(page);
+                    }
                     break;
                 }
                 cursor = following;
@@ -883,71 +1068,6 @@ impl Document {
         self.pages = pages;
         self.dress_pages();
         rebuilt
-    }
-
-    /// The cached pages from `index` are still the right slices when every
-    /// paragraph they start on still has the same number of lines. A reflow
-    /// that changes a later paragraph's line count invalidates them.
-    fn suffix_still_valid(&self, index: usize, cached: &[Cursor]) -> bool {
-        cached.get(index).is_some_and(|cursor| {
-            self.lines
-                .get(cursor.paragraph)
-                .is_some_and(|lines| cursor.line < lines.len() as u32)
-        })
-    }
-
-    fn rebind_suffix(&self, index: usize) -> Vec<Page> {
-        // The old page objects still hold the pre-edit lines of untouched
-        // paragraphs. Rebuild those pages from the cache without counting
-        // them as laid-out work: their breaks already matched.
-        let mut pages = Vec::new();
-        if index >= self.pages.len() {
-            return pages;
-        }
-        let mut cursor = self.pages[index].start;
-        // `self.pages` is still the old pagination here; the caller has not
-        // assigned `self.pages` yet. Use the old starts.
-        let old_starts: Vec<Cursor> = self
-            .pages
-            .iter()
-            .skip(index)
-            .map(|page| page.start)
-            .collect();
-        for start in old_starts {
-            if start != cursor && pages.is_empty() {
-                cursor = start;
-            }
-            if self.at_end(cursor) {
-                break;
-            }
-            // Take the lines the old page had, re-read from the cache so an
-            // untouched paragraph shows its current (unchanged) lines.
-            let old = &self.pages[index + pages.len()];
-            let lines = old
-                .lines
-                .iter()
-                .filter_map(|line| {
-                    self.lines
-                        .get(line.paragraph)
-                        .and_then(|set| set.get(line.line as usize))
-                        .cloned()
-                })
-                .collect();
-            let page = Page {
-                start: cursor,
-                footnotes: old.footnotes.clone(),
-                note_carry: old.note_carry.clone(),
-                lines,
-                blank: old.blank,
-                folio: old.folio.clone(),
-                running_head: old.running_head.clone(),
-                note_waiting: old.note_waiting.clone(),
-                content_inset: old.content_inset,
-            };
-            cursor = next_cursor_from(&page, &self.lines);
-            pages.push(page);
-        }
-        pages
     }
 
     fn at_end(&self, cursor: Cursor) -> bool {
@@ -1090,9 +1210,15 @@ impl Document {
         }) {
             return false;
         }
+        // One line per page only when no two lines could share one: a
+        // one-line paragraph is otherwise just a short paragraph.
         let limit = self.geometry.content_height();
         self.lines.iter().all(|lines| {
-            lines.len() == 1 && lines[0].height <= limit && !lines[0].keep_with_next && !lines[0].keep_together
+            lines.len() == 1
+                && lines[0].height <= limit
+                && lines[0].height * 2.0 > limit
+                && !lines[0].keep_with_next
+                && !lines[0].keep_together
         })
     }
 
@@ -1291,19 +1417,6 @@ fn next_cursor(page: &Page) -> Cursor {
     }
 }
 
-fn next_cursor_from(page: &Page, lines: &[Vec<FlowLine>]) -> Cursor {
-    match page.lines.last() {
-        Some(line) => step(
-            Cursor {
-                paragraph: line.paragraph,
-                line: line.line,
-            },
-            lines,
-        ),
-        None => page.start,
-    }
-}
-
 struct Broken {
     glyphs: Vec<Glyph>,
     width: f32,
@@ -1458,6 +1571,17 @@ fn avoid_widow(pages: &mut Vec<Page>, mut page: Page) -> Page {
         note_waiting: page.note_waiting,
         content_inset: page.content_inset,
     }
+}
+
+fn geometry_eq(left: &Geometry, right: &Geometry) -> bool {
+    left.page_width == right.page_width
+        && left.page_height == right.page_height
+        && left.margin_top == right.margin_top
+        && left.margin_bottom == right.margin_bottom
+        && left.margin_inner == right.margin_inner
+        && left.margin_outer == right.margin_outer
+        && left.font_size == right.font_size
+        && left.leading == right.leading
 }
 
 fn same_shape(left: &Paragraph, right: &Paragraph) -> bool {

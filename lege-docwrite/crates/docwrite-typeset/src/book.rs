@@ -2,11 +2,26 @@
 
 use docwrite_model::{BlockKind, Book, ChapterStart, NoteKind};
 
-use crate::engine::{Document, Face, Geometry, LayoutHints, Paragraph, ParagraphStyle};
+use crate::engine::{Document, EditReport, Face, Geometry, LayoutHints, Paragraph, ParagraphStyle};
 use crate::error::TypesetError;
 
 /// Paginate `book` with the chapter template's page master and paragraph styles.
 pub fn from_book(book: &Book, face: Face) -> Result<Document, TypesetError> {
+    let (geometry, paragraphs, hints) = layout_inputs(book);
+    Document::new_with(face, geometry, paragraphs, hints)
+}
+
+/// Bring `document` up to date with `book` after an edit.
+///
+/// Only paragraphs whose text, style or note changed are shaped again, and
+/// pagination stops once the page breaks line up with the previous layout.
+/// A change of page master or body size lays out the whole book.
+pub fn update_from_book(document: &mut Document, book: &Book) -> Result<EditReport, TypesetError> {
+    let (geometry, paragraphs, hints) = layout_inputs(book);
+    document.apply(geometry, paragraphs, hints)
+}
+
+fn layout_inputs(book: &Book) -> (Geometry, Vec<Paragraph>, LayoutHints) {
     let template = book
         .chapter_templates()
         .iter()
@@ -86,7 +101,7 @@ pub fn from_book(book: &Book, face: Face) -> Result<Document, TypesetError> {
                         }
                     }
                     paragraphs.push(Paragraph {
-                        id: paragraphs.len() as u64 + 1,
+                        id: block.id().raw(),
                         text: block.text(),
                         style,
                         note,
@@ -105,7 +120,7 @@ pub fn from_book(book: &Book, face: Face) -> Result<Document, TypesetError> {
     }
     if paragraphs.is_empty() {
         paragraphs.push(Paragraph {
-            id: 1,
+            id: u64::MAX,
             text: String::new(),
             style: map_style(&body),
             note: None,
@@ -122,7 +137,7 @@ pub fn from_book(book: &Book, face: Face) -> Result<Document, TypesetError> {
         running_head: master.is_some_and(|master| master.running_head),
         facing: master.is_some_and(|master| master.facing),
     };
-    Document::new_with(face, geometry, paragraphs, hints)
+    (geometry, paragraphs, hints)
 }
 
 fn named_style(book: &Book, name: &str) -> docwrite_model::ParagraphStyle {
