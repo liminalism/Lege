@@ -245,6 +245,8 @@ impl Editor {
         );
         if let Some(position) = self.position_of(line.paragraph, byte) {
             self.set_focus(position, extend);
+            // A click on a citation opens its source where it came from.
+            self.follow_citation();
         }
         true
     }

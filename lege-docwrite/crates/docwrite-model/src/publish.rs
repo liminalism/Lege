@@ -5,6 +5,7 @@
 
 use crate::error::ModelError;
 use crate::ids::{BlockId, ChapterId};
+use crate::runs::RunMarks;
 use crate::tree::{BlockKind, Book, Chapter, Position};
 
 /// How a paragraph's lines sit in the measure.
@@ -386,6 +387,27 @@ impl Book {
         self.stylesheet.sources.push(source);
     }
 
+    /// Replace the source with the same id. Returns false when none has it.
+    pub fn update_source(&mut self, source: SourceNote) -> bool {
+        match self
+            .stylesheet
+            .sources
+            .iter_mut()
+            .find(|existing| existing.id == source.id)
+        {
+            Some(slot) => {
+                *slot = source;
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Every source note, in the order they were captured.
+    pub fn sources(&self) -> &[SourceNote] {
+        &self.stylesheet.sources
+    }
+
     pub fn source(&self, id: &str) -> Option<&SourceNote> {
         self.stylesheet
             .sources
@@ -393,23 +415,56 @@ impl Book {
             .find(|source| source.id == id)
     }
 
-    /// Insert the source's passage as a quotation and remember the citation key on the caret block.
+    /// Insert a citation of source `id` at the caret: its citation text
+    /// (or "document, p. N" when it has none) in parentheses, marked with
+    /// the source's id so it leads back to the source.
     pub fn cite(&mut self, id: &str) -> Result<(), ModelError> {
         let source = self
             .source(id)
             .ok_or(ModelError::Inconsistent("unknown source"))?
             .clone();
-        let block = self.selection().focus.block;
-        self.insert(&source.passage)?;
-        // The citation key is the source id. Runs stay direct marks; the block note
-        // is the footnote slot, so the citation is recorded on the stylesheet index
-        // of citations by storing it as an index term with the key prefixed.
-        self.stylesheet.index.push(IndexTerm {
-            term: format!("cite:{id}"),
-            block,
-        });
-        let _ = source;
-        Ok(())
+        let label = if source.citation.trim().is_empty() {
+            let name = std::path::Path::new(&source.document)
+                .file_stem()
+                .map(|stem| stem.to_string_lossy().into_owned())
+                .unwrap_or_else(|| source.document.clone());
+            format!("{name}, p. {}", source.page + 1)
+        } else {
+            source.citation.clone()
+        };
+        let marks = RunMarks {
+            citation: Some(source.id.clone()),
+            ..crate::runs::marks_before(
+                self.block(self.selection().focus.block)?.runs(),
+                self.selection().focus.offset,
+            )
+        };
+        self.insert_with_marks(&format!("({label})"), marks)
+    }
+
+    /// Quote source `id` at the caret, in quotation marks, then cite it.
+    pub fn quote(&mut self, id: &str) -> Result<(), ModelError> {
+        let passage = self
+            .source(id)
+            .ok_or(ModelError::Inconsistent("unknown source"))?
+            .passage
+            .clone();
+        self.insert(&format!("\u{201c}{}\u{201d} ", passage.trim()))?;
+        self.cite(id)
+    }
+
+    /// The source a citation at the caret (or just before it) points to.
+    pub fn citation_at_caret(&self) -> Option<&SourceNote> {
+        let focus = self.selection().focus;
+        let block = self.block(focus.block).ok()?;
+        let id = block
+            .runs()
+            .iter()
+            .find(|run| {
+                run.start <= focus.offset && focus.offset <= run.end && run.marks.citation.is_some()
+            })
+            .and_then(|run| run.marks.citation.clone())?;
+        self.source(&id)
     }
 
     pub fn citation_target(&self, id: &str) -> Option<&SourceNote> {
@@ -446,17 +501,29 @@ impl Book {
             .flat_map(|section| section.blocks())
             .map(|block| block.id())
             .collect();
-        let cited: Vec<&str> = self
+        // Citations are marked runs; books from before that recorded them as
+        // "cite:" index terms, which still count.
+        let mut cited: Vec<String> = self
             .stylesheet
             .index
             .iter()
             .filter(|term| term.term.starts_with("cite:") && block_ids.contains(&term.block))
-            .map(|term| term.term.trim_start_matches("cite:"))
+            .map(|term| term.term.trim_start_matches("cite:").to_string())
             .collect();
+        for id in &block_ids {
+            if let Ok(block) = self.block(*id) {
+                cited.extend(
+                    block
+                        .runs()
+                        .iter()
+                        .filter_map(|run| run.marks.citation.clone()),
+                );
+            }
+        }
         self.stylesheet
             .sources
             .iter()
-            .filter(|source| cited.contains(&source.id.as_str()))
+            .filter(|source| cited.contains(&source.id))
             .collect()
     }
 

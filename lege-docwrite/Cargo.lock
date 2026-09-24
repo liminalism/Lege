@@ -470,6 +470,7 @@ dependencies = [
  "docwrite-export",
  "docwrite-model",
  "docwrite-typeset",
+ "lege-pdf-read",
  "pixelkit-raster",
  "pixelkit-shell",
 ]

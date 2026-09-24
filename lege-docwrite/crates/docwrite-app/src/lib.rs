@@ -3,6 +3,7 @@
 mod commands;
 mod map;
 mod nav;
+mod research;
 mod toolbar;
 mod trace;
 mod view;
@@ -16,6 +17,7 @@ use commands::PageSlot;
 
 pub use map::{BookMap, MapKind, MapRow, SIDEBAR_W};
 pub use nav::{Pager, Phase};
+pub use research::SourceAction;
 pub use toolbar::{Action, Button, Prompt, PromptKind, TOOLBAR_H};
 pub use trace::{FrameMetrics, InputTrace, ReplayStep, TraceCommand};
 use view::Sidebar;
@@ -84,8 +86,11 @@ pub struct Editor {
     theme_now: Theme,
     /// A toolbar prompt taking typed text, when one is open.
     prompt: Option<Prompt>,
-    /// Width of the last painted frame, for toolbar hits.
+    /// Size of the last painted frame, for toolbar and pane hits.
     frame_width: i32,
+    frame_height: i32,
+    /// A source PDF open beside the manuscript.
+    research: Option<research::Research>,
     /// Page count of the document the last [`Self::paint`] laid out.
     pages_painted: u32,
 }
@@ -130,6 +135,8 @@ impl Editor {
             theme_now: PAPER,
             prompt: None,
             frame_width: 0,
+            frame_height: 0,
+            research: None,
             pages_painted: 0,
         }
     }
@@ -166,12 +173,16 @@ impl Editor {
     pub fn hover(&mut self, x: f32, y: f32) {
         self.cursor = (x, y);
         self.drag_sidebar(x);
+        self.research_drag(x, y);
     }
 
     /// Press or release the pointer. A drag from one chapter row to another
     /// reorders the book. A click collapses the part or chapter under the pointer.
     pub fn pointer(&mut self, pressed: bool) {
         if self.sidebar_pointer(pressed) {
+            return;
+        }
+        if self.research_pointer(pressed) {
             return;
         }
         if self.cursor.0 >= self.sidebar_width() as f32 {
@@ -330,8 +341,10 @@ impl Editor {
         if width <= 0 || height <= 0 {
             return;
         }
+        self.frame_width = width;
+        self.frame_height = height;
         let content_left = self.sidebar_width().min(width - 1);
-        let content_w = (width - content_left).max(1);
+        let content_w = (width - content_left - self.pane_width()).max(1);
         let aspect = self
             .document
             .as_ref()
@@ -399,6 +412,7 @@ impl Editor {
             }
         } else {
             if let Some(face) = face {
+                self.paint_research(&mut painter, face, width, height);
                 let pages = self.pages_painted;
                 self.paint_toolbar(&mut painter, face, width, pages);
             }

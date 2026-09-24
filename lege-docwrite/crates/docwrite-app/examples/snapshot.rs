@@ -1,5 +1,5 @@
 //! Paint the editor without a window and save the frame as a PNG:
-//! `cargo run -p docwrite-app --example snapshot -- BOOK.legebook OUT.png [page] [--fullscreen] [--scale 2]`
+//! `cargo run -p docwrite-app --example snapshot -- BOOK.legebook OUT.png [page] [--fullscreen] [--scale 2] [--source S.pdf]`
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
@@ -14,9 +14,15 @@ fn main() {
         .and_then(|index| args.get(index + 1))
         .and_then(|value| value.parse().ok())
         .unwrap_or(1.0);
+    let source = args
+        .iter()
+        .position(|arg| arg == "--source")
+        .and_then(|index| args.get(index + 1))
+        .cloned();
     let plain: Vec<&String> = args
         .iter()
         .filter(|arg| !arg.starts_with("--") && arg.parse::<f32>().is_err())
+        .filter(|arg| Some(*arg) != source.as_ref())
         .collect();
     let page: u32 = args
         .iter()
@@ -30,7 +36,11 @@ fn main() {
     let mut editor = Editor::open_or_create(book.as_str()).expect("open");
     editor.set_ui_scale(scale);
     editor.set_fullscreen(fullscreen);
-    let (width, height) = ((1100.0 * scale) as u32, (800.0 * scale) as u32);
+    if let Some(source) = &source {
+        editor.open_source(source).expect("open source");
+    }
+    let base_w = if source.is_some() { 1500.0 } else { 1100.0 };
+    let (width, height) = ((base_w * scale) as u32, (800.0 * scale) as u32);
     let mut frame = pixelkit_raster::WindowBuffer::new(width, height);
     editor.paint(&mut frame);
     editor.jump_to_page(page);

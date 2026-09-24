@@ -140,7 +140,12 @@ pub fn export_pdf_family(book: &Book, fonts: &[Vec<u8>]) -> Result<PdfExport, St
                 .entry(gid)
                 .or_insert_with(|| thousandths(glyph.advance, glyph.em).clamp(0, 65_535) as u16);
             if !glyph.text.is_empty() {
-                unicode.entry(gid).or_insert_with(|| glyph.text.clone());
+                // One glyph, one text: a capital drawn for both "t" and "T"
+                // (synthesized small caps) reads as the capital it shows.
+                let slot = unicode.entry(gid).or_insert_with(|| glyph.text.clone());
+                if *slot != glyph.text && slot.to_uppercase() == glyph.text {
+                    *slot = glyph.text.clone();
+                }
             }
         }
         let width_count = widths.keys().last().map_or(1, |gid| usize::from(*gid) + 1);

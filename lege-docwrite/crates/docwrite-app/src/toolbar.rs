@@ -31,6 +31,7 @@ pub enum Action {
     RenameChapter,
     Footnote,
     Endnote,
+    OpenSource,
 }
 
 /// What a prompt's text is for.
@@ -40,6 +41,10 @@ pub enum PromptKind {
     RenameChapter,
     Footnote,
     Endnote,
+    /// The citation text for a source just captured.
+    Citation,
+    /// The path of a PDF to open beside the manuscript.
+    OpenSource,
 }
 
 impl PromptKind {
@@ -49,6 +54,8 @@ impl PromptKind {
             Self::RenameChapter => "Rename chapter:",
             Self::Footnote => "Footnote:",
             Self::Endnote => "Endnote:",
+            Self::Citation => "Cite as:",
+            Self::OpenSource => "Open source PDF:",
         }
     }
 }
@@ -150,7 +157,14 @@ impl Editor {
         push(Action::NewChapter, "+ Chapter".into(), false, 84.0, 4.0);
         push(Action::RenameChapter, "Rename".into(), false, 66.0, 14.0);
         push(Action::Footnote, "Footnote".into(), false, 74.0, 4.0);
-        push(Action::Endnote, "Endnote".into(), false, 70.0, 4.0);
+        push(Action::Endnote, "Endnote".into(), false, 70.0, 14.0);
+        push(
+            Action::OpenSource,
+            "Source\u{2026}".into(),
+            false,
+            70.0,
+            4.0,
+        );
         out.retain(|button| button.x + button.w <= width);
         out
     }
@@ -166,6 +180,7 @@ impl Editor {
             Action::RenameChapter => self.open_prompt(PromptKind::RenameChapter),
             Action::Footnote => self.open_prompt(PromptKind::Footnote),
             Action::Endnote => self.open_prompt(PromptKind::Endnote),
+            Action::OpenSource => self.open_prompt(PromptKind::OpenSource),
         }
     }
 
@@ -299,6 +314,13 @@ impl Editor {
                     if self.book.rename_chapter(id, text).is_ok() {
                         self.edited();
                     }
+                }
+            }
+            PromptKind::Citation => self.set_last_citation(&text),
+            PromptKind::OpenSource => {
+                let path = text.trim_matches(|ch| ch == '"' || ch == '\'');
+                if let Err(err) = self.open_source(path) {
+                    eprintln!("lege-docwrite: {err}");
                 }
             }
             PromptKind::Footnote | PromptKind::Endnote if !text.is_empty() => {

@@ -1,7 +1,7 @@
 //! `lege-docwrite`: the page-native book editor.
 //!
 //! ```text
-//! lege-docwrite [--fullscreen] [BOOK.legebook]  open or start a book
+//! lege-docwrite [--fullscreen] [--source S.pdf] [BOOK.legebook]  open or start a book
 //! lege-docwrite export BOOK.legebook OUT     write OUT as .pdf or .md
 //! ```
 //!
@@ -68,12 +68,20 @@ fn run() -> Result<(), RunError> {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
     let fullscreen = args.iter().any(|arg| arg == "--fullscreen");
     args.retain(|arg| arg != "--fullscreen");
+    let source = args
+        .iter()
+        .position(|arg| arg == "--source")
+        .map(|index| {
+            args.remove(index);
+            (index < args.len()).then(|| PathBuf::from(args.remove(index)))
+        })
+        .flatten();
     match args.as_slice() {
         [command, book, out] if command == "export" => export(Path::new(book), Path::new(out)),
-        [] => open(PathBuf::from("Untitled.legebook"), fullscreen),
-        [book] if !book.starts_with('-') => open(PathBuf::from(book), fullscreen),
+        [] => open(PathBuf::from("Untitled.legebook"), fullscreen, source),
+        [book] if !book.starts_with('-') => open(PathBuf::from(book), fullscreen, source),
         _ => Err(RunError::other(
-            "usage: lege-docwrite [--fullscreen] [BOOK.legebook] | lege-docwrite export BOOK.legebook OUT.pdf|OUT.md",
+            "usage: lege-docwrite [--fullscreen] [--source SOURCE.pdf] [BOOK.legebook] | lege-docwrite export BOOK.legebook OUT.pdf|OUT.md",
         )),
     }
 }
@@ -93,7 +101,7 @@ fn export(book: &Path, out: &Path) -> Result<(), RunError> {
     Ok(())
 }
 
-fn open(book: PathBuf, fullscreen: bool) -> Result<(), RunError> {
+fn open(book: PathBuf, fullscreen: bool, source: Option<PathBuf>) -> Result<(), RunError> {
     if docwrite_app::display_unavailable() {
         return Err(RunError::display(
             "no display; the paged surface was not opened",
@@ -101,6 +109,9 @@ fn open(book: PathBuf, fullscreen: bool) -> Result<(), RunError> {
     }
     let mut editor = docwrite_app::Editor::open_or_create(&book).map_err(RunError::other)?;
     editor.set_fullscreen(fullscreen);
+    if let Some(source) = source {
+        editor.open_source(source).map_err(RunError::other)?;
+    }
     let title = format!(
         "{} — lege-docwrite",
         book.file_name()
@@ -191,6 +202,7 @@ impl EditorApp {
             "Equal" if shift => self.editor.toggle_mark(Mark::Superscript),
             "Minus" if shift => self.editor.toggle_mark(Mark::Subscript),
             "KeyN" if shift => self.editor.open_prompt(PromptKind::NewChapter),
+            "KeyO" if shift => self.editor.open_prompt(PromptKind::OpenSource),
             "KeyR" if shift => self.editor.open_prompt(PromptKind::RenameChapter),
             "KeyF" if alt => self.editor.open_prompt(PromptKind::Footnote),
             "KeyE" if alt => self.editor.open_prompt(PromptKind::Endnote),
