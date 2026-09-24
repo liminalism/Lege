@@ -25,6 +25,9 @@ pub struct PdfPageArtifact {
     pub media_box: PdfRect,
     /// Draw order = paint order (background element before any stencil mask).
     pub elements: Box<[PdfImageElement]>,
+    /// Filled rectangles (rules, underlines), drawn after the images and
+    /// before any text.
+    pub fills: Box<[PdfFill]>,
     /// Invisible OCR text layer, if any (emitted from M2 onward).
     pub text_layer: Option<PreparedTextLayer>,
     /// Visible glyph-font text (the page's printed text as text objects drawn
@@ -33,6 +36,14 @@ pub struct PdfPageArtifact {
     /// How the reader should turn the page for display (`/Rotate`). The page's
     /// own content stays in the coordinates it was written in.
     pub rotation: PageRotation,
+}
+
+/// A filled rectangle in PDF user space (points, bottom-left origin).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PdfFill {
+    pub rect: PdfRect,
+    /// Fill gray: 0 is black, 1 white.
+    pub gray: f64,
 }
 
 /// The `/Rotate` entry: how far clockwise a reader turns the page before
@@ -304,6 +315,7 @@ mod tests {
                     image_mask_paints_one: false,
                 },
             }]),
+            fills: Box::new([]),
             text_layer: None,
             glyph_layer: None,
             rotation: PageRotation::Upright,

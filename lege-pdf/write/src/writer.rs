@@ -193,6 +193,14 @@ impl<W: Write> DocumentWriter<W> {
             content.restore();
         }
 
+        for fill in artifact.fills.iter() {
+            let rect = fill.rect;
+            content.save();
+            content.set_gray_fill(fill.gray);
+            content.fill_rect(rect.x0, rect.y0, rect.x1 - rect.x0, rect.y1 - rect.y0);
+            content.restore();
+        }
+
         // Text layer: emit into the same content stream and select fonts.
         let mut fonts: Vec<(ResourceName, ObjectId)> = Vec::new();
         let has_text = artifact
@@ -444,6 +452,7 @@ mod tests {
                     color: ColorModel::Rgb,
                 },
             }]),
+            fills: Box::new([]),
             text_layer: None,
             glyph_layer: None,
             rotation: PageRotation::Upright,
@@ -467,6 +476,7 @@ mod tests {
             index,
             media_box: PdfRect::from_size(612.0, 792.0),
             elements: Box::new([]),
+            fills: Box::new([]),
             text_layer: None,
             glyph_layer: Some(PreparedGlyphLayer {
                 lines: Box::new([GlyphLine {
@@ -536,6 +546,45 @@ mod tests {
             t.contains("/F2") && t.contains("/F3"),
             "both banks are page resources"
         );
+    }
+
+    #[test]
+    fn fills_are_drawn_as_gray_rectangles() {
+        let mut w = DocumentWriter::new(Vec::new(), 1).unwrap();
+        let mut page = glyph_page(0);
+        page.fills = Box::new([crate::artifact::PdfFill {
+            rect: PdfRect::new(72.0, 100.0, 172.0, 100.5),
+            gray: 0.0,
+        }]);
+        w.add_page(&page).unwrap();
+        let mut font = sample_font();
+        font.symbolic = true;
+        font.to_unicode = ToUnicode::None;
+        font.cid_widths = Some(Arc::from(&[0u16, 500][..]));
+        w.set_glyph_fonts(vec![font]);
+        let bytes = w.finalize().unwrap();
+        // The content stream is compressed when it has text: inflate them all.
+        let mut content = Vec::new();
+        for (index, _) in bytes
+            .windows(6)
+            .enumerate()
+            .filter(|(_, window)| *window == b"stream")
+        {
+            let start = index
+                + 6
+                + if bytes.get(index + 6) == Some(&b'\r') {
+                    2
+                } else {
+                    1
+                };
+            let mut data = Vec::new();
+            let mut decoder = flate2::read::ZlibDecoder::new(&bytes[start..]);
+            if std::io::Read::read_to_end(&mut decoder, &mut data).is_ok() {
+                content.extend(data);
+            }
+        }
+        let text = String::from_utf8_lossy(&content);
+        assert!(text.contains("72 100 100 0.5 re f"), "{text}");
     }
 
     #[test]
@@ -654,6 +703,7 @@ mod tests {
             index: 0,
             media_box: PdfRect::from_size(612.0, 792.0),
             elements: Box::new([]),
+            fills: Box::new([]),
             text_layer: Some(PreparedTextLayer {
                 runs: Box::new([TextRun {
                     text: "hello".to_string(),

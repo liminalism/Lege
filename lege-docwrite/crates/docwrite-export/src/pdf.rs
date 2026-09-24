@@ -16,7 +16,7 @@ use docwrite_typeset::{
     from_book_with,
 };
 use lege_pdf_write::artifact::{
-    GlyphItem, GlyphLine, PageRotation, PdfPageArtifact, PreparedGlyphLayer,
+    GlyphItem, GlyphLine, PageRotation, PdfFill, PdfPageArtifact, PreparedGlyphLayer,
 };
 use lege_pdf_write::font::{EmbeddedFont, ToUnicode, to_unicode_cmap};
 use lege_pdf_write::outline::OutlineItem;
@@ -188,6 +188,9 @@ pub fn export_pdf_family(book: &Book, fonts: &[Vec<u8>]) -> Result<PdfExport, St
                     f64::from(geometry.page_height),
                 ),
                 elements: Box::new([]),
+                fills: footnote_rule(&document, index as u32 + 1)
+                    .into_iter()
+                    .collect(),
                 text_layer: None,
                 glyph_layer: Some(PreparedGlyphLayer {
                     lines: glyph_lines.into_boxed_slice(),
@@ -203,6 +206,18 @@ pub fn export_pdf_family(book: &Book, fonts: &[Vec<u8>]) -> Result<PdfExport, St
     writer.set_page_labels(b"<< /Nums [ 0 << /S /D >> ] >>".to_vec());
     let bytes = writer.finalize().map_err(|err| err.to_string())?;
     Ok(PdfExport { bytes, font_bytes })
+}
+
+/// The short rule above 1-based `page`'s footnotes, as a PDF fill.
+fn footnote_rule(document: &Document, page: u32) -> Option<PdfFill> {
+    let (y, width) = document.page_footnote_rule(page)?;
+    let geometry = document.geometry();
+    let x = f64::from(document.page_content_inset(page));
+    let top = f64::from(geometry.page_height - y);
+    Some(PdfFill {
+        rect: PdfRect::new(x, top - 0.5, x + f64::from(width), top),
+        gray: 0.0,
+    })
 }
 
 /// Everything drawn on 1-based `page`, in page coordinates from the top left.

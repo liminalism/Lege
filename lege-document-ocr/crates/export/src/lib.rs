@@ -373,6 +373,7 @@ fn rasterized_searchable_pdf(request: &ExportRequest<'_>, path: &Path) -> Result
                         color: ColorModel::Rgb,
                     },
                 }]),
+                fills: Box::new([]),
                 text_layer: page_text_layer(page, request.text_view),
                 glyph_layer: None,
                 rotation: PageRotation::Upright,

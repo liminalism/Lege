@@ -58,6 +58,15 @@ impl ContentWriter {
         self.bytes.extend_from_slice(b" g\n");
     }
 
+    /// `re f` — fill the rectangle at (`x`, `y`) sized `w` by `h`.
+    pub fn fill_rect(&mut self, x: f64, y: f64, w: f64, h: f64) {
+        for value in [x, y, w, h] {
+            write_real(&mut self.bytes, value);
+            self.bytes.push(b' ');
+        }
+        self.bytes.extend_from_slice(b"re f\n");
+    }
+
     /// `cm` — concatenate a matrix onto the CTM.
     pub fn concat_matrix(&mut self, m: Affine) {
         self.write_affine(m);

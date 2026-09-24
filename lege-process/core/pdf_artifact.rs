@@ -101,6 +101,7 @@ pub fn page_to_artifact(
         index: page.index as u32,
         media_box: PdfRect::from_size(page.width as f64, page.height as f64),
         elements: elements.into_boxed_slice(),
+        fills: Box::new([]),
         text_layer,
         glyph_layer,
         rotation: display_rotation(glyph_turns.unwrap_or(page.quarter_turns)),
