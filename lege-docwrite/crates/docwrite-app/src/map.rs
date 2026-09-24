@@ -57,7 +57,9 @@ impl BookMap {
     }
 
     pub fn row_at(&self, x: f32, y: f32, nrows: usize) -> Option<usize> {
-        if x < 0.0 || x >= SIDEBAR_W as f32 || nrows == 0 {
+        // The caller decides whether the point is inside the (resizable)
+        // sidebar; this only maps a height to a row.
+        if x < 0.0 || nrows == 0 {
             return None;
         }
         let index = (y as i32 - ROW_TOP) / ROW_H;

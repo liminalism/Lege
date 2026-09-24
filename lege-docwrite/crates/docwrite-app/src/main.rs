@@ -1,7 +1,7 @@
 //! `lege-docwrite`: the page-native book editor.
 //!
 //! ```text
-//! lege-docwrite [BOOK.legebook]              open or start a book
+//! lege-docwrite [--fullscreen] [BOOK.legebook]  open or start a book
 //! lege-docwrite export BOOK.legebook OUT     write OUT as .pdf or .md
 //! ```
 //!
@@ -63,13 +63,15 @@ impl std::fmt::Display for RunError {
 }
 
 fn run() -> Result<(), RunError> {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
+    let fullscreen = args.iter().any(|arg| arg == "--fullscreen");
+    args.retain(|arg| arg != "--fullscreen");
     match args.as_slice() {
         [command, book, out] if command == "export" => export(Path::new(book), Path::new(out)),
-        [] => open(PathBuf::from("Untitled.legebook")),
-        [book] if !book.starts_with('-') => open(PathBuf::from(book)),
+        [] => open(PathBuf::from("Untitled.legebook"), fullscreen),
+        [book] if !book.starts_with('-') => open(PathBuf::from(book), fullscreen),
         _ => Err(RunError::other(
-            "usage: lege-docwrite [BOOK.legebook] | lege-docwrite export BOOK.legebook OUT.pdf|OUT.md",
+            "usage: lege-docwrite [--fullscreen] [BOOK.legebook] | lege-docwrite export BOOK.legebook OUT.pdf|OUT.md",
         )),
     }
 }
@@ -89,13 +91,14 @@ fn export(book: &Path, out: &Path) -> Result<(), RunError> {
     Ok(())
 }
 
-fn open(book: PathBuf) -> Result<(), RunError> {
+fn open(book: PathBuf, fullscreen: bool) -> Result<(), RunError> {
     if docwrite_app::display_unavailable() {
         return Err(RunError::display(
             "no display; the paged surface was not opened",
         ));
     }
-    let editor = docwrite_app::Editor::open_or_create(&book).map_err(RunError::other)?;
+    let mut editor = docwrite_app::Editor::open_or_create(&book).map_err(RunError::other)?;
+    editor.set_fullscreen(fullscreen);
     let title = format!(
         "{} — lege-docwrite",
         book.file_name()
@@ -181,6 +184,8 @@ impl EditorApp {
                 let outcome = self.editor.save_now().map(|()| "saved".to_string());
                 self.report(outcome);
             }
+            'f' if shift => self.editor.toggle_fullscreen(),
+            '\\' => self.editor.toggle_sidebar(),
             'e' if shift => self.export_next_to_bundle("md"),
             'e' => self.export_next_to_bundle("pdf"),
             _ => return false,
@@ -202,6 +207,21 @@ impl pixelkit_shell::PixelApp for EditorApp {
             "paged surface: {} pages, desk pixels {desk}, page pixels {page}, ink pixels {ink}",
             self.editor.pages_painted()
         );
+    }
+
+    fn poll_fullscreen(&mut self) -> Option<bool> {
+        self.editor.poll_fullscreen()
+    }
+
+    fn cursor_shape(&self) -> pixelkit_shell::CursorShape {
+        match self.editor.pointer_shape() {
+            docwrite_app::PointerShape::Arrow => pixelkit_shell::CursorShape::Default,
+            docwrite_app::PointerShape::Text => pixelkit_shell::CursorShape::Text,
+            docwrite_app::PointerShape::Hand => pixelkit_shell::CursorShape::Pointer,
+            docwrite_app::PointerShape::ResizeColumn => {
+                pixelkit_shell::CursorShape::ResizeHorizontal
+            }
+        }
     }
 
     fn animation_interval(&self) -> Option<Duration> {
@@ -239,6 +259,8 @@ impl pixelkit_shell::PixelApp for EditorApp {
             modifiers.control
         };
         match event.key {
+            KeyInput::Function(11) => self.editor.toggle_fullscreen(),
+            KeyInput::Escape if self.editor.is_fullscreen() => self.editor.set_fullscreen(false),
             KeyInput::Left if word => self.editor.move_word(false, shift),
             KeyInput::Right if word => self.editor.move_word(true, shift),
             KeyInput::Left if modifiers.logo => self.editor.move_home(shift),

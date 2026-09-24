@@ -4,6 +4,7 @@ mod commands;
 mod map;
 mod nav;
 mod trace;
+mod view;
 
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
@@ -15,6 +16,8 @@ use commands::PageSlot;
 pub use map::{BookMap, MapKind, MapRow, SIDEBAR_W};
 pub use nav::{Pager, Phase};
 pub use trace::{FrameMetrics, InputTrace, ReplayStep, TraceCommand};
+use view::Sidebar;
+pub use view::{PAPER, PointerShape, Theme, WORDPERFECT};
 
 use docwrite_model::{Book, Direction, Motion};
 use docwrite_typeset::{
@@ -22,11 +25,10 @@ use docwrite_typeset::{
 };
 use map::BookMap as Map;
 
-const DESK: u32 = 0x00E6_E1D6;
-const PAGE_COLOR: u32 = 0x00FF_FBF4;
-const INK: u32 = 0x001C_1916;
-/// Selection highlight painted behind selected glyphs.
-pub const SELECTION: u32 = 0x00B7_D0F5;
+const DESK: u32 = PAPER.desk;
+const PAGE_COLOR: u32 = PAPER.page;
+/// Selection highlight painted behind selected glyphs in the paged view.
+pub const SELECTION: u32 = PAPER.selection;
 
 /// Caret rectangle in window pixels, for the IME candidate window.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -68,6 +70,15 @@ pub struct Editor {
     slots: Vec<PageSlot>,
     /// Physical pixels per logical pixel. Chrome is sized in logical pixels.
     ui_scale: f32,
+    sidebar: Sidebar,
+    fullscreen: bool,
+    /// A full-screen change the window has not applied yet.
+    fullscreen_request: Option<bool>,
+    /// Caret page and position in inches (line from the top, position from
+    /// the left edge), as of the last paint.
+    caret_status: Option<(u32, f32, f32)>,
+    /// Colors of the paint in progress.
+    theme_now: Theme,
     /// Page count of the document the last [`Self::paint`] laid out.
     pages_painted: u32,
 }
@@ -107,6 +118,11 @@ impl Editor {
             font_bytes,
             slots: Vec::new(),
             ui_scale: 1.0,
+            sidebar: Sidebar::default(),
+            fullscreen: false,
+            fullscreen_request: None,
+            caret_status: None,
+            theme_now: PAPER,
             pages_painted: 0,
         }
     }
@@ -138,19 +154,19 @@ impl Editor {
         self.ui_scale = scale.max(0.5);
     }
 
-    fn sidebar_width(&self) -> i32 {
-        (SIDEBAR_W as f32 * self.ui_scale).round() as i32
-    }
-
     /// Remember where the pointer is, in window pixels. The window calls
     /// this on cursor motion.
     pub fn hover(&mut self, x: f32, y: f32) {
         self.cursor = (x, y);
+        self.drag_sidebar(x);
     }
 
     /// Press or release the pointer. A drag from one chapter row to another
     /// reorders the book. A click collapses the part or chapter under the pointer.
     pub fn pointer(&mut self, pressed: bool) {
+        if self.sidebar_pointer(pressed) {
+            return;
+        }
         if self.cursor.0 >= self.sidebar_width() as f32 {
             if pressed {
                 self.click_at(self.cursor.0, self.cursor.1, false);
@@ -279,9 +295,12 @@ impl Editor {
         // Layout first: it can move the view to follow the caret.
         self.refresh_layout();
         self.caret = None;
+        self.caret_status = None;
         self.slots.clear();
+        let theme = self.theme();
+        self.theme_now = theme;
         for pixel in buffer.pixels.iter_mut() {
-            *pixel = DESK;
+            *pixel = theme.desk;
         }
         let width = buffer.width as i32;
         let height = buffer.height as i32;
@@ -290,11 +309,29 @@ impl Editor {
         }
         let content_left = self.sidebar_width().min(width - 1);
         let content_w = (width - content_left).max(1);
-        // The page in view fills the window's height, one gap from the top;
-        // the next page starts one gap below it.
-        let gap = (16.0 * self.ui_scale).round() as i32;
-        let page_h = (height - 2 * gap).max(1);
-        let page_w = (page_h * 2 / 3).min(content_w - 2 * gap).max(1);
+        let aspect = self
+            .document
+            .as_ref()
+            .map(|document| document.geometry())
+            .map_or(1.5, |geometry| {
+                geometry.page_height / geometry.page_width.max(1.0)
+            });
+        let (gap, page_w, page_h) = if self.fullscreen {
+            // Full screen: the page runs edge to edge across the screen;
+            // pages scroll past with a thin rule between them.
+            let gap = (2.0 * self.ui_scale).round().max(1.0) as i32;
+            let page_w = width;
+            (gap, page_w, (page_w as f32 * aspect) as i32)
+        } else {
+            // The page in view fills the window's height, one gap from the
+            // top; the next page starts one gap below it.
+            let gap = (16.0 * self.ui_scale).round() as i32;
+            let page_h = (height - 2 * gap).max(1);
+            let page_w = ((page_h as f32 / aspect) as i32)
+                .min(content_w - 2 * gap)
+                .max(1);
+            (gap, page_w, page_h)
+        };
         let scroll = self.pager.scroll();
         let origin = gap - (scroll.fract() * f64::from(page_h + gap)) as i32;
         let first = scroll.floor() as i32;
@@ -308,9 +345,15 @@ impl Editor {
             }
             let top = origin + slot * (page_h + gap);
             let left = content_left + (content_w - page_w) / 2;
+            if self.fullscreen {
+                painter.fill_rect(
+                    pixelkit_raster::Rect::new(0, top - gap, width, gap),
+                    theme.rule,
+                );
+            }
             painter.fill_rect(
                 pixelkit_raster::Rect::new(left, top, page_w, page_h),
-                PAGE_COLOR,
+                theme.page,
             );
             if let Some(document) = document.as_ref() {
                 self.paint_page(
@@ -325,7 +368,15 @@ impl Editor {
             }
         }
         let face = document.as_ref().map(|document| document.face());
-        self.paint_sidebar(&mut painter, height, face);
+        if self.fullscreen {
+            if let Some(face) = face {
+                self.paint_status_line(&mut painter, face, width, height);
+            }
+        } else if self.sidebar.collapsed {
+            self.paint_tab(&mut painter);
+        } else {
+            self.paint_sidebar(&mut painter, height, face);
+        }
         self.document = document;
     }
 
@@ -513,7 +564,7 @@ impl Editor {
                             (advance.round() as i32).max(1),
                             (geometry.leading * scale).max(1.0) as i32,
                         ),
-                        SELECTION,
+                        self.theme_now.selection,
                     );
                 }
                 let size = (if glyph.em > 0.0 {
@@ -529,7 +580,7 @@ impl Editor {
                     size,
                     pen + glyph.x_offset * scale,
                     baseline - (glyph.y_offset * scale).round() as i32,
-                    INK,
+                    self.theme_now.ink,
                 );
                 pen += advance;
             }
@@ -553,23 +604,29 @@ impl Editor {
                             size.max(1.0),
                             caret_x as f32,
                             baseline,
-                            INK,
+                            self.theme_now.ink,
                         );
                         caret_x += glyph.x_advance.round() as i32;
                     }
                 }
                 painter.fill_rect(
                     pixelkit_raster::Rect::new(before, baseline + 2, (caret_x - before).max(1), 1),
-                    INK,
+                    self.theme_now.ink,
                 );
             }
-            painter.fill_rect(pixelkit_raster::Rect::new(caret_x, caret_y, 2, height), INK);
+            painter.fill_rect(
+                pixelkit_raster::Rect::new(caret_x, caret_y, 2, height),
+                self.theme_now.ink,
+            );
             self.caret = Some(CaretRect {
                 x: caret_x as f64,
                 y: caret_y as f64,
                 width: 2.0,
                 height: height as f64,
             });
+            let inches = |pixels: i32| pixels as f32 / scale / 72.0;
+            self.caret_status =
+                Some((page, inches(caret_y + height - top), inches(caret_x - left)));
         }
         painter.pop_clip();
     }
@@ -596,7 +653,7 @@ impl Editor {
                 size.max(1.0),
                 pen as f32,
                 y,
-                INK,
+                self.theme_now.ink,
             );
             pen += glyph.x_advance.round() as i32;
         }
