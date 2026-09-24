@@ -3,7 +3,7 @@ project lege-docwrite
 
 record docwrite.observation.milestones-closed-on-synthetic-paths/1 : observation {
     title "M1–M5 were closed on synthetic test paths, not the editor"
-    state verified
+    state superseded
     statement """
         At 8cc8d8f the ledger marked M1–M5 completed, but their evidence exercised
         synthetic paths rather than the editor a writer uses. The window's Editor
@@ -23,6 +23,26 @@ record docwrite.observation.milestones-closed-on-synthetic-paths/1 : observation
         "lege-docwrite/crates/docwrite-export/src/pdf.rs",
         "lege-docwrite/crates/docwrite-typeset/src/**"
     ]
+}
+
+record docwrite.observation.milestones-closed-on-synthetic-paths/2 : observation {
+    title "M1–M5 were closed on synthetic test paths, not the editor"
+    state verified
+    statement """
+        At 8cc8d8f the ledger marked M1–M5 completed, but their evidence exercised
+        synthetic paths rather than the editor a writer uses. The window's Editor
+        cloned the Book and ran from_book on every paint and paged over a hardcoded
+        eight pages; the latency gate typed through Document::edit_page on a
+        one-line-per-page synthetic book. export_pdf put eight blocks per page, each
+        paragraph as one run in the invisible OCR text layer, so the PDF was
+        searchable but rendered blank. The one-line-per-page fast path put every
+        short paragraph on its own page whenever no chapter started recto. Chapter
+        titles never reached their openers or the Markdown/IDML exports, hyphenated
+        breaks drew no hyphen, and the binary could not open, save or export a book.
+        """
+    observed_at git:8cc8d8f763a1734effed5de24ea2d688f8076197
+    method manual
+    supersedes [ @docwrite.observation.milestones-closed-on-synthetic-paths/1 ]
 }
 
 record docwrite.observation.no-shaping-in-workspace/1 : observation {
@@ -148,7 +168,7 @@ record docwrite.observation.pdf-write-gaps/2 : observation {
 
 record docwrite.observation.pdf-write-gaps/3 : observation {
     title "lege-pdf-write lacks what typeset-book PDF output needs"
-    state verified
+    state superseded
     statement """
         lege-pdf-write is still image-oriented and append-only: DocumentWriter needs the page count up front. Content operators are q, Q, g, cm, Do and the text set BT ET Tr Tc Tw Tz Tf Tm Tj TJ Ts; there are no path operators and fill is gray only. Fonts are Type0/Identity-H CIDFontType2 with FontFile2 only, no CFF/FontFile3. The writer embeds caller-supplied bytes and does not subset. ToUnicode is None, Identity, or a caller-supplied CMap. Several glyph fonts can be registered on the document. Image XObjects cover DCT, JPX, JBIG2, CCITT and indexed DeviceRGB; there is no Flate RGB image and no alpha channel. Outline bookmarks and metadata remain. The catalog can now carry /Lang, a /StructTreeRoot of element names, and /PageLabels. Link annotations and named destinations are still absent.
         """
@@ -156,6 +176,22 @@ record docwrite.observation.pdf-write-gaps/3 : observation {
     method manual
     watches [ "lege-pdf/write/src/**" ]
     supersedes [ @docwrite.observation.pdf-write-gaps/2 ]
+}
+
+record docwrite.observation.pdf-write-gaps/4 : observation {
+    title "lege-pdf-write lacks what typeset-book PDF output needs"
+    state verified
+    statement """
+        lege-pdf-write now embeds several glyph-font banks per page (GlyphLine.font), each
+        a caller-subset TrueType program with custom ToUnicode and widths, and draws gray
+        filled rectangles (PdfPageArtifact.fills). Still missing for book output: CFF /
+        FontFile3 embedding, general paths and RGB colour, link annotations and named
+        destinations, and a real structure tree (set_structure writes a flat list).
+        """
+    observed_at git:6aa8fc0ab7799d8c9dbec6154b21b8e72f1768b6
+    method manual
+    watches [ "lege-pdf/write/src/**" ]
+    supersedes [ @docwrite.observation.pdf-write-gaps/3 ]
 }
 
 record docwrite.observation.pixelkit-shell-gaps/1 : observation {
