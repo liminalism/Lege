@@ -11,7 +11,9 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use docwrite_model::Book;
-use docwrite_typeset::{Document, Face, Glyph, HYPHEN_CLUSTER, features_for, from_book};
+use docwrite_typeset::{
+    CHAPTER_TITLE_ID, Document, Face, Glyph, HYPHEN_CLUSTER, features_for, from_book,
+};
 use lege_pdf_write::artifact::{
     GlyphItem, GlyphLine, PageRotation, PdfPageArtifact, PreparedGlyphLayer,
 };
@@ -303,25 +305,25 @@ fn thousandths(length: f32, em: f32) -> i32 {
     (length / em * 1000.0).round() as i32
 }
 
-/// One bookmark per chapter, on the page its first block lands on.
+/// One bookmark per chapter, on the page it opens on.
 fn bookmarks(book: &Book, document: &Document) -> Vec<OutlineItem> {
-    let ids = book.block_ids();
     let top = document.geometry().page_height - document.geometry().margin_top;
     let mut items = Vec::new();
     for part in book.parts() {
         for chapter in part.chapters() {
-            let Some(first) = chapter
-                .sections()
-                .iter()
-                .flat_map(|section| section.blocks())
-                .next()
-            else {
-                continue;
-            };
-            let Some(index) = ids.iter().position(|id| *id == first.id()) else {
-                continue;
-            };
-            let Some(page) = document.page_of(index, 0) else {
+            // The opener is the title set from the chapter's metadata, or
+            // the chapter's first block when that block is its title.
+            let opener = document
+                .paragraph_of(CHAPTER_TITLE_ID | chapter.id().raw())
+                .or_else(|| {
+                    chapter
+                        .sections()
+                        .iter()
+                        .flat_map(|section| section.blocks())
+                        .next()
+                        .and_then(|block| document.paragraph_of(block.id().raw()))
+                });
+            let Some(page) = opener.and_then(|index| document.page_of(index, 0)) else {
                 continue;
             };
             items.push(OutlineItem {

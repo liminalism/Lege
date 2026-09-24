@@ -28,6 +28,25 @@ pub fn blocks_of(book: &Book) -> Vec<ExportBlock> {
     let mut out = Vec::new();
     for part in book.parts() {
         for chapter in part.chapters() {
+            let titled = chapter
+                .sections()
+                .iter()
+                .flat_map(|section| section.blocks())
+                .next()
+                .is_some_and(|block| matches!(block.kind(), BlockKind::ChapterTitle));
+            if !titled && !chapter.title().is_empty() {
+                // The title is chapter metadata; it heads the chapter in
+                // every export, as it does on the opener page.
+                out.push(ExportBlock {
+                    kind: "heading".into(),
+                    text: chapter.title().to_string(),
+                    bold: false,
+                    italic: false,
+                    link: None,
+                    note: None,
+                    chapter: chapter.title().to_string(),
+                });
+            }
             for section in chapter.sections() {
                 for block in section.blocks() {
                     let bold = block.runs().iter().any(|run| run.marks.bold);

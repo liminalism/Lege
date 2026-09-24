@@ -355,6 +355,8 @@ pub struct Document {
     pages: Vec<Page>,
     hyphenator: Option<Standard>,
     hints: LayoutHints,
+    /// Paragraph index by paragraph id.
+    by_id: HashMap<u64, usize>,
 }
 
 impl Document {
@@ -381,7 +383,9 @@ impl Document {
             pages: Vec::new(),
             hyphenator,
             hints,
+            by_id: HashMap::new(),
         };
+        doc.index_ids();
         doc.reshape_all()?;
         doc.paginate_all();
         Ok(doc)
@@ -457,6 +461,20 @@ impl Document {
             }
         }
         found
+    }
+
+    /// Reading-order index of the paragraph with `id` (a block's raw id).
+    pub fn paragraph_of(&self, id: u64) -> Option<usize> {
+        self.by_id.get(&id).copied()
+    }
+
+    fn index_ids(&mut self) {
+        self.by_id = self
+            .paragraphs
+            .iter()
+            .enumerate()
+            .map(|(index, paragraph)| (paragraph.id, index))
+            .collect();
     }
 
     pub fn page_count(&self) -> u32 {
@@ -680,6 +698,7 @@ impl Document {
             self.geometry = geometry;
             self.paragraphs = paragraphs;
             self.hints = hints;
+            self.index_ids();
             self.reshape_all()?;
             self.paginate_all();
             return Ok(EditReport {
@@ -697,6 +716,14 @@ impl Document {
         let mut remap = vec![None; self.paragraphs.len()];
         let mut old_lines = std::mem::take(&mut self.lines);
         let old_paragraphs = std::mem::replace(&mut self.paragraphs, paragraphs);
+        if old_paragraphs.len() != self.paragraphs.len()
+            || old_paragraphs
+                .iter()
+                .zip(&self.paragraphs)
+                .any(|(old, new)| old.id != new.id)
+        {
+            self.index_ids();
+        }
         let mut lines = Vec::with_capacity(self.paragraphs.len());
         let mut first_change: Option<usize> = None;
         let mut last_change = 0;
@@ -851,6 +878,7 @@ impl Document {
                 },
             );
         }
+        self.index_ids();
         self.reshape_all()?;
         self.paginate_all();
         Ok(())

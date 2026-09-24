@@ -434,6 +434,23 @@ impl Book {
     ///
     /// Structural builders are not edit transactions. They clear undo and redo
     /// so a later undo cannot revive a block index from before the builder ran.
+    /// Give chapter `id` a new title. The title heads the chapter's opener
+    /// page, its running heads, the Book Map and every export.
+    pub fn rename_chapter(
+        &mut self,
+        id: ChapterId,
+        title: impl Into<String>,
+    ) -> Result<(), ModelError> {
+        let chapter = self
+            .parts_mut()
+            .iter_mut()
+            .flat_map(|part| part.chapters_mut().iter_mut())
+            .find(|chapter| chapter.id() == id)
+            .ok_or(ModelError::Inconsistent("chapter id"))?;
+        chapter.set_title(title.into());
+        Ok(())
+    }
+
     pub fn add_part(&mut self, title: impl Into<String>) -> PartId {
         let id = self.ids.part();
         self.parts.push(Part {

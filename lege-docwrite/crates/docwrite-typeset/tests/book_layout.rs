@@ -83,8 +83,13 @@ fn body_style_metrics_reflow_and_match_a_fresh_layout() {
     let mut book = Book::new("Measure");
     book.insert("Opener.\n").unwrap();
     book.insert(&"word ".repeat(40)).unwrap();
+    // The body paragraph, found by its block id: the chapter title set from
+    // the chapter's metadata comes before it in the layout.
+    let body_block = book.block_ids()[1].raw();
     let small = from_book(&book, face()).unwrap();
-    let small_em = small.paragraph_em(1).unwrap();
+    let small_em = small
+        .paragraph_em(small.paragraph_of(body_block).unwrap())
+        .unwrap();
     let mut body = book
         .paragraph_styles()
         .iter()
@@ -96,7 +101,9 @@ fn body_style_metrics_reflow_and_match_a_fresh_layout() {
     book.set_paragraph_style(body).unwrap();
     let large = from_book(&book, face()).unwrap();
     let fresh = from_book(&book, face()).unwrap();
-    let large_em = large.paragraph_em(1).unwrap();
+    let large_em = large
+        .paragraph_em(large.paragraph_of(body_block).unwrap())
+        .unwrap();
     assert!(
         (small_em - 12.0).abs() < 0.1,
         "body em before restyle was {small_em}"
@@ -285,6 +292,10 @@ fn a_pending_footnote_still_blanks_the_verso_before_the_next_recto() {
     right.margin_bottom = 8.0;
     right.facing = true;
     book.set_page_master(right).unwrap();
+    // Untitled chapters: this is about note flow, and an opener title would
+    // take one of these tiny pages' lines.
+    let opening = book.parts()[0].chapters()[0].id();
+    book.rename_chapter(opening, "").unwrap();
     let first = "N".repeat(49);
     book.insert("One.").unwrap();
     book.attach_note(NoteKind::Footnote, &first).unwrap();
@@ -292,7 +303,7 @@ fn a_pending_footnote_still_blanks_the_verso_before_the_next_recto() {
     book.attach_note(NoteKind::Footnote, "Second note body.")
         .unwrap();
     let part = book.parts()[0].id();
-    book.add_chapter(part, "Second").unwrap();
+    book.add_chapter(part, "").unwrap();
     let fresh = *book.block_ids().last().unwrap();
     book.set_selection(Selection::collapsed(Position::new(fresh, 0)))
         .unwrap();

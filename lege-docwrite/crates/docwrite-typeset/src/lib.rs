@@ -11,7 +11,7 @@ mod engine;
 mod error;
 
 pub use atlas::{AtlasKey, GlyphAtlas};
-pub use book::{from_book, update_from_book};
+pub use book::{CHAPTER_TITLE_ID, from_book, update_from_book};
 pub use engine::{
     Cursor, Document, EditReport, Face, Geometry, Glyph, HYPHEN_CLUSTER, PaintedLine, Paragraph,
     ParagraphStyle, book_of_pages, book_of_repeated_line, features_for,

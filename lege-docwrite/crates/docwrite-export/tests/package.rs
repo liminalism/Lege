@@ -229,3 +229,15 @@ fn pdf_pages_are_the_typeset_pages_and_visibly_inked() {
         "outline {outline:?}"
     );
 }
+
+#[test]
+fn markdown_heads_each_chapter_with_its_title() {
+    let mut book = Book::new("Essay");
+    book.insert("First words.").unwrap();
+    let part = book.parts()[0].id();
+    book.add_chapter(part, "The Second").unwrap();
+    let markdown = export_markdown(&book);
+    assert!(markdown.contains("# Chapter 1"), "{markdown}");
+    assert!(markdown.contains("# The Second"), "{markdown}");
+    assert!(markdown.find("# Chapter 1") < markdown.find("First words."));
+}

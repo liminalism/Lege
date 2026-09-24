@@ -373,8 +373,8 @@ impl Editor {
         let Some(document) = self.document.as_ref() else {
             return;
         };
-        let page =
-            focus_mark(&self.book).and_then(|(paragraph, byte)| document.page_of(paragraph, byte));
+        let page = focus_mark(&self.book, document)
+            .and_then(|(paragraph, byte)| document.page_of(paragraph, byte));
         if let Some(page) = page {
             if self.pager.page_top() + 1 != page {
                 self.pager.jump_to(page - 1);
@@ -467,8 +467,8 @@ impl Editor {
             );
         }
         let lines = document.page_painted_lines(page);
-        let selected = selected_spans(&self.book);
-        let focus = focus_mark(&self.book);
+        let selected = selected_spans(&self.book, document);
+        let focus = focus_mark(&self.book, document);
         let inset = document.page_content_inset(page);
         let mut caret_x = left + (inset * scale) as i32;
         let mut caret_y = top + geometry.margin_top as i32;
@@ -747,14 +747,16 @@ fn byte_at(text: &str, chars: usize) -> usize {
     text.chars().take(chars).map(|ch| ch.len_utf8()).sum()
 }
 
-fn focus_mark(book: &Book) -> Option<(usize, usize)> {
+/// The caret as (layout paragraph index, byte offset in that paragraph).
+fn focus_mark(book: &Book, document: &Document) -> Option<(usize, usize)> {
     let focus = book.selection().focus;
-    let index = book.block_ids().iter().position(|id| *id == focus.block)?;
+    let index = document.paragraph_of(focus.block.raw())?;
     let text = book.block(focus.block).ok()?.text();
     Some((index, byte_at(&text, focus.offset)))
 }
 
-fn selected_spans(book: &Book) -> Vec<(usize, usize, usize)> {
+/// Selected byte ranges as (layout paragraph index, start, end).
+fn selected_spans(book: &Book, document: &Document) -> Vec<(usize, usize, usize)> {
     let ids = book.block_ids();
     let selection = book.selection();
     let anchor_i = ids.iter().position(|id| *id == selection.anchor.block);
@@ -801,8 +803,11 @@ fn selected_spans(book: &Book) -> Vec<(usize, usize, usize)> {
         let Ok(block) = book.block(id) else {
             continue;
         };
+        let Some(paragraph) = document.paragraph_of(id.raw()) else {
+            continue;
+        };
         spans.push((
-            index,
+            paragraph,
             byte_at(&block.text(), start),
             byte_at(&block.text(), end),
         ));

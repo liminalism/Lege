@@ -252,7 +252,7 @@ impl Editor {
 
     fn line_neighbor(&self, down: bool) -> Option<Position> {
         let document = self.document.as_ref()?;
-        let (paragraph, byte) = focus_mark(&self.book)?;
+        let (paragraph, byte) = focus_mark(&self.book, document)?;
         let page = document.page_of(paragraph, byte)?;
         let lines = document.page_painted_lines(page);
         let index = lines
@@ -290,9 +290,16 @@ impl Editor {
             .map_or(0, |paragraph| paragraph.text.len())
     }
 
-    /// The model position of byte `byte` in reading-order paragraph `paragraph`.
+    /// The model position of byte `byte` in layout paragraph `paragraph`.
+    /// `None` for a paragraph that is not a block, such as a chapter title
+    /// set from the chapter's metadata.
     fn position_of(&self, paragraph: usize, byte: usize) -> Option<Position> {
-        let id = *self.book.block_ids().get(paragraph)?;
+        let raw = self.document.as_ref()?.paragraphs().get(paragraph)?.id;
+        let id = self
+            .book
+            .block_ids()
+            .into_iter()
+            .find(|id| id.raw() == raw)?;
         let text = self.book.block(id).ok()?.text();
         let byte = byte.min(text.len());
         let chars = text.get(..byte).map_or(0, |head| head.chars().count());
