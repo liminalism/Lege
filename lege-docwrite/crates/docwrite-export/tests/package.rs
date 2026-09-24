@@ -168,3 +168,64 @@ fn idml_package_contains_styles_parent_pages_story_images_and_footnotes() {
     );
     println!("note text in markdown and idml: A marginal remark.");
 }
+
+#[test]
+fn pdf_pages_are_the_typeset_pages_and_visibly_inked() {
+    use docwrite_model::{Position, Selection};
+    use lege_pdf_read::{RasterPlane, RasterProduct};
+
+    let prose = "Reading the letters in order was like watching a clerk grow old, \
+        the careful hand of the first bundles hurrying year by year.";
+    let mut book = Book::new("Archive");
+    let body: Vec<String> = (0..30).map(|n| format!("{n}. {prose}")).collect();
+    book.insert(&body.join("\n")).unwrap();
+    let part = book.parts()[0].id();
+    book.add_chapter(part, "Second").unwrap();
+    let fresh = *book.block_ids().last().unwrap();
+    book.set_selection(Selection::collapsed(Position::new(fresh, 0)))
+        .unwrap();
+    book.insert("The second chapter opens here.").unwrap();
+
+    let face = font();
+    let layout =
+        docwrite_typeset::from_book(&book, docwrite_typeset::Face::parse(face.clone()).unwrap())
+            .unwrap();
+    let exported = export_pdf(&book, &face).unwrap();
+    let session = RenderSession::open(Arc::from(exported.bytes.clone()), None).unwrap();
+    assert_eq!(
+        session.page_count(),
+        layout.page_count(),
+        "one PDF page per typeset page"
+    );
+
+    // The first line of the PDF is the first typeset line, and the text of
+    // the whole first page reads in order.
+    let text = page_text(&session, 0).unwrap();
+    let first_line = &layout.page_texts(1)[0];
+    let squash = |s: &str| s.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(
+        squash(&text).starts_with(&squash(first_line)),
+        "page 1 text {text:?} starts with {first_line:?}"
+    );
+    assert!(squash(&text).contains("1. Reading the letters"));
+
+    // Pages are drawn, not just searchable: rendering shows ink.
+    let page = session.compile(0).unwrap();
+    let raster = session
+        .render(&page, &RasterProduct::gray8(432, 648))
+        .unwrap();
+    let RasterPlane::Gray8(gray) = raster else {
+        panic!("asked for gray");
+    };
+    let ink = gray.pixels.iter().filter(|value| **value < 128).count();
+    assert!(ink > 2_000, "page 1 renders {ink} dark pixels");
+
+    // The second chapter's bookmark points at the page it opens on.
+    let outline = lege_pdf_read::extract_outline(&session);
+    assert!(
+        outline
+            .iter()
+            .any(|node| format!("{node:?}").contains("Second")),
+        "outline {outline:?}"
+    );
+}

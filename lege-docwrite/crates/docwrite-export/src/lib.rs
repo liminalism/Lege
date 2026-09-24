@@ -7,7 +7,7 @@ mod preflight;
 
 pub use idml::export_idml;
 pub use markdown::export_markdown;
-pub use pdf::export_pdf;
+pub use pdf::{PdfExport, export_pdf};
 pub use preflight::{AssetFacts, PreflightReport, preflight};
 
 use docwrite_model::{BlockKind, Book};

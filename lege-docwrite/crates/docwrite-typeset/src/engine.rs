@@ -87,15 +87,24 @@ fn scale_glyphs(glyphs: &GlyphBuffer, size_px: f32, upem: i32) -> Vec<Glyph> {
         .collect()
 }
 
+/// Cluster of a hyphen glyph inserted at a hyphenated line break. It points
+/// at no byte of the paragraph; its text is "-".
+pub const HYPHEN_CLUSTER: u32 = u32::MAX;
+
 /// One shaped line, tied back to the paragraph it was broken from.
 #[derive(Clone, Debug)]
 pub struct PaintedLine {
     /// Index into the paragraph list passed to [`Document::new`].
     pub paragraph: usize,
-    /// Glyphs in visual order.
+    /// Glyphs in visual order. `cluster` is a byte offset into the
+    /// paragraph's text, or [`HYPHEN_CLUSTER`].
     pub glyphs: Vec<Glyph>,
     /// First-line indent in geometry units. Other lines are zero.
     pub indent: f32,
+    /// Baseline, measured down from the top of the page in geometry units.
+    pub baseline: f32,
+    /// Em size of the paragraph's body text.
+    pub em: f32,
 }
 
 /// One shaped glyph in pixels.
@@ -497,12 +506,35 @@ impl Document {
         self.pages
             .get(page.saturating_sub(1) as usize)
             .map(|page| {
+                let mut top = self.geometry.margin_top;
                 page.lines
                     .iter()
-                    .map(|line| PaintedLine {
-                        paragraph: line.paragraph,
-                        glyphs: line.glyphs.as_ref().clone(),
-                        indent: line.indent,
+                    .map(|line| {
+                        let style = self.paragraphs.get(line.paragraph).map(|p| &p.style);
+                        let after = match style {
+                            Some(style) if line.is_last => style.space_after,
+                            _ => 0.0,
+                        };
+                        let em = style
+                            .map(|style| style.font_size)
+                            .filter(|size| *size > 0.0)
+                            .unwrap_or(self.geometry.font_size);
+                        let leading = style
+                            .map(|style| style.leading)
+                            .filter(|leading| *leading > 0.0)
+                            .unwrap_or(self.geometry.leading);
+                        // The text sits centred in its leading, at the bottom
+                        // of the line box (a drop-cap line's box is taller).
+                        let bottom = top + line.height - after;
+                        let baseline = bottom - (leading - em).max(0.0) / 2.0 - em * 0.2;
+                        top += line.height;
+                        PaintedLine {
+                            paragraph: line.paragraph,
+                            glyphs: line.glyphs.as_ref().clone(),
+                            indent: line.indent,
+                            baseline,
+                            em,
+                        }
                     })
                     .collect()
             })
@@ -893,7 +925,22 @@ impl Document {
                 glyphs: Vec::new(),
                 width: 0.0,
                 text: String::new(),
+                hyphenated: false,
             });
+        }
+        if broken.iter().any(|line| line.hyphenated) {
+            // The break inserted a hyphen the source text does not contain:
+            // draw it. Its cluster is `HYPHEN_CLUSTER`, which maps to "-".
+            let hyphen = self.face.shape("-", size, &features)?;
+            for line in broken.iter_mut().filter(|line| line.hyphenated) {
+                for glyph in &hyphen {
+                    line.width += glyph.x_advance;
+                    line.glyphs.push(Glyph {
+                        cluster: HYPHEN_CLUSTER,
+                        ..glyph.clone()
+                    });
+                }
+            }
         }
         let last = broken.len().saturating_sub(1) as u32;
         let keep_together = paragraph.style.keep_lines && broken.len() <= 3;
@@ -1448,6 +1495,8 @@ struct Broken {
     glyphs: Vec<Glyph>,
     width: f32,
     text: String,
+    /// Broken inside a word: the line ends with an inserted hyphen.
+    hyphenated: bool,
 }
 
 fn break_lines(
@@ -1549,6 +1598,7 @@ fn slice_line(
         glyphs: glyphs[start..end].to_vec(),
         width,
         text,
+        hyphenated: hyphen,
     }
 }
 

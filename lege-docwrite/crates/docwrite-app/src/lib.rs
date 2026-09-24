@@ -404,10 +404,8 @@ impl Editor {
         let mut caret_y = top + geometry.margin_top as i32;
         let mut saw_focus = false;
         let face = document.face();
-        for (index, line) in lines.iter().enumerate() {
-            let baseline = top
-                + ((geometry.margin_top + geometry.font_size) * scale) as i32
-                + (index as f32 * geometry.leading * scale) as i32;
+        for line in lines.iter() {
+            let baseline = top + (line.baseline * scale) as i32;
             let mut pen = left + ((inset + line.indent) * scale) as i32;
             if let Some((paragraph, focus_byte)) = focus {
                 if paragraph == line.paragraph {
