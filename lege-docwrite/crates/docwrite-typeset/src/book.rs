@@ -3,7 +3,8 @@
 use docwrite_model::{BlockKind, Book, ChapterStart, NoteKind};
 
 use crate::engine::{
-    Document, EditReport, Face, Geometry, LayoutHints, PageRules, Paragraph, ParagraphStyle,
+    Alignment, Document, EditReport, Face, Geometry, LayoutHints, PageRules, Paragraph,
+    ParagraphStyle, StyledRun,
 };
 use crate::error::TypesetError;
 
@@ -17,8 +18,14 @@ pub const CHAPTER_TITLE_ID: u64 = 1 << 63;
 
 /// Paginate `book` with the chapter template's page master and paragraph styles.
 pub fn from_book(book: &Book, face: Face) -> Result<Document, TypesetError> {
+    from_book_with(book, vec![face])
+}
+
+/// Paginate `book` with a font family: regular, bold, italic and bold
+/// italic, in that order. Styles the family lacks are set in regular.
+pub fn from_book_with(book: &Book, faces: Vec<Face>) -> Result<Document, TypesetError> {
     let (geometry, paragraphs, hints) = layout_inputs(book);
-    Document::new_with(face, geometry, paragraphs, hints)
+    Document::new_with(faces, geometry, paragraphs, hints)
 }
 
 /// Bring `document` up to date with `book` after an edit.
@@ -136,6 +143,7 @@ fn layout_inputs(book: &Book) -> (Geometry, Vec<Paragraph>, LayoutHints) {
                     note: None,
                     note_is_endnote: false,
                     note_mark: String::new(),
+                    runs: Vec::new(),
                 });
                 recto_at.push(false);
                 break_at.push(false);
@@ -150,6 +158,12 @@ fn layout_inputs(book: &Book) -> (Geometry, Vec<Paragraph>, LayoutHints) {
                             .unwrap_or("Chapter Title"),
                         BlockKind::Image { .. } => "Image",
                         BlockKind::Caption => "Caption",
+                        BlockKind::Subhead => "Subhead",
+                        BlockKind::BlockQuote => "Block Quote",
+                        BlockKind::Epigraph => "Epigraph",
+                        BlockKind::Verse => "Verse",
+                        BlockKind::SceneBreak => "Scene Break",
+                        BlockKind::BibliographyEntry => "Bibliography Entry",
                         _ if first_body => {
                             first_body = false;
                             template
@@ -184,13 +198,22 @@ fn layout_inputs(book: &Book) -> (Geometry, Vec<Paragraph>, LayoutHints) {
                             note = Some(format!("{footnote_count}\u{2002}{}", body.text()));
                         }
                     }
+                    let mut text = block.text();
+                    if matches!(block.kind(), BlockKind::SceneBreak) && text.trim().is_empty() {
+                        // An empty scene break shows as a centered ornament.
+                        text = "*\u{2003}*\u{2003}*".into();
+                    }
+                    let model_style = named_style(book, style_name);
+                    let runs =
+                        styled_runs(&text, block.runs(), model_style.bold, model_style.italic);
                     paragraphs.push(Paragraph {
                         id: block.id().raw(),
-                        text: block.text(),
+                        text,
                         style,
                         note,
                         note_is_endnote: false,
                         note_mark,
+                        runs,
                     });
                     recto_at.push(false);
                     break_at.push(false);
@@ -269,6 +292,79 @@ fn layout_inputs(book: &Book) -> (Geometry, Vec<Paragraph>, LayoutHints) {
     (geometry, paragraphs, hints)
 }
 
+/// The model's runs (character ranges) as byte ranges over `text`, keeping
+/// only runs that change how text is set.
+fn styled_runs(
+    text: &str,
+    runs: &[docwrite_model::Run],
+    style_bold: bool,
+    style_italic: bool,
+) -> Vec<StyledRun> {
+    if style_bold || style_italic {
+        // A bold or italic style sets every run so; italic runs inside an
+        // italic style turn roman, for emphasis within an epigraph.
+        let mut spans = styled_runs(text, runs, false, false);
+        if spans.is_empty() && !text.is_empty() {
+            spans.push(StyledRun {
+                start: 0,
+                end: text.len(),
+                ..StyledRun::default()
+            });
+        }
+        let mut covered = 0;
+        let mut out = Vec::new();
+        for span in spans {
+            if span.start > covered {
+                out.push(StyledRun {
+                    start: covered,
+                    end: span.start,
+                    ..StyledRun::default()
+                });
+            }
+            covered = covered.max(span.end);
+            out.push(span);
+        }
+        if covered < text.len() {
+            out.push(StyledRun {
+                start: covered,
+                end: text.len(),
+                ..StyledRun::default()
+            });
+        }
+        for span in &mut out {
+            span.bold |= style_bold;
+            span.italic ^= style_italic;
+        }
+        return out;
+    }
+    if runs.iter().all(|run| {
+        !run.marks.bold
+            && !run.marks.italic
+            && !run.marks.small_caps
+            && run.marks.script == docwrite_model::Script::Normal
+    }) {
+        return Vec::new();
+    }
+    let mut bytes: Vec<usize> = text.char_indices().map(|(byte, _)| byte).collect();
+    bytes.push(text.len());
+    let at = |chars: usize| bytes.get(chars).copied().unwrap_or(text.len());
+    runs.iter()
+        .filter(|run| run.start < run.end)
+        .map(|run| StyledRun {
+            start: at(run.start),
+            end: at(run.end),
+            bold: run.marks.bold,
+            italic: run.marks.italic,
+            small_caps: run.marks.small_caps,
+            script: match run.marks.script {
+                docwrite_model::Script::Super => 1,
+                docwrite_model::Script::Sub => -1,
+                docwrite_model::Script::Normal => 0,
+            },
+        })
+        .collect()
+}
+
 fn named_style(book: &Book, name: &str) -> docwrite_model::ParagraphStyle {
     book.paragraph_styles()
         .iter()
@@ -276,13 +372,9 @@ fn named_style(book: &Book, name: &str) -> docwrite_model::ParagraphStyle {
         .cloned()
         .unwrap_or_else(|| docwrite_model::ParagraphStyle {
             name: name.into(),
-            size_pt: 12.0,
-            leading_pt: 16.0,
             first_indent_pt: 0.0,
             hyphenate: false,
-            small_caps: false,
-            oldstyle_figures: false,
-            drop_cap_lines: 0,
+            ..docwrite_model::ParagraphStyle::default()
         })
 }
 
@@ -297,6 +389,16 @@ fn map_style(style: &docwrite_model::ParagraphStyle) -> ParagraphStyle {
         first_indent: style.first_indent_pt,
         name: style.name.clone(),
         widow_orphan: true,
+        align: match style.align {
+            docwrite_model::Align::Left => Alignment::Left,
+            docwrite_model::Align::Justify => Alignment::Justify,
+            docwrite_model::Align::Center => Alignment::Center,
+            docwrite_model::Align::Right => Alignment::Right,
+        },
+        left_indent: style.left_indent_pt,
+        right_indent: style.right_indent_pt,
+        space_before: style.space_before_pt,
+        space_after: style.space_after_pt,
         ..ParagraphStyle::default()
     }
 }

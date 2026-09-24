@@ -239,6 +239,9 @@ pub struct GlyphLine {
     /// scale is the em size in points.
     pub matrix: Affine,
     pub items: Box<[GlyphItem]>,
+    /// The glyph font bank this line draws from, when it is not the layer's
+    /// [`PreparedGlyphLayer::font`]. Lets one page mix faces (bold, italic).
+    pub font: Option<u16>,
 }
 
 /// One glyph occurrence inside a line. Units are thousandths of a text-space

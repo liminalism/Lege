@@ -23,6 +23,7 @@ fn title(id: u64, text: &str) -> Paragraph {
         note: None,
         note_is_endnote: false,
         note_mark: String::new(),
+        runs: Vec::new(),
     }
 }
 
@@ -34,6 +35,7 @@ fn body(id: u64) -> Paragraph {
         note: None,
         note_is_endnote: false,
         note_mark: String::new(),
+        runs: Vec::new(),
     }
 }
 

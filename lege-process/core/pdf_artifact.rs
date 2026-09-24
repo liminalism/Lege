@@ -218,6 +218,7 @@ fn glyph_runs_to_lines(
                 origin_y,
             ),
             items: items.into_boxed_slice(),
+            font: None,
         });
     }
     Ok(lines)

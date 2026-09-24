@@ -21,6 +21,7 @@ fn paras(text: &str) -> Vec<Paragraph> {
             note: None,
             note_is_endnote: false,
             note_mark: String::new(),
+            runs: Vec::new(),
         })
         .collect()
 }

@@ -320,6 +320,9 @@ pub struct Book {
     notes: BTreeMap<NoteId, Note>,
     pub(crate) index: HashMap<BlockId, BlockLoc>,
     pub(crate) selection: Selection,
+    /// Marks the next typed text takes, set by toggling a mark with nothing
+    /// selected. Cleared when the caret moves.
+    pub(crate) typing_marks: Option<RunMarks>,
     pub(crate) undo: Vec<crate::edit::Transaction>,
     pub(crate) redo: Vec<crate::edit::Transaction>,
 }
@@ -356,6 +359,7 @@ impl Book {
             notes: BTreeMap::new(),
             index: HashMap::new(),
             selection,
+            typing_marks: None,
             undo: Vec::new(),
             redo: Vec::new(),
         };
@@ -800,9 +804,21 @@ impl Book {
                 .collect(),
             index: HashMap::new(),
             selection: manifest.selection,
+            typing_marks: None,
             undo: Vec::new(),
             redo: Vec::new(),
         };
+        // A book from before a standard style existed gains it, by name.
+        for style in crate::publish::standard_styles() {
+            if !book
+                .stylesheet
+                .paragraphs
+                .iter()
+                .any(|existing| existing.name == style.name)
+            {
+                book.stylesheet.paragraphs.push(style);
+            }
+        }
         book.reindex();
         book.check_consistency()?;
         if book.set_selection(manifest.selection).is_err() {

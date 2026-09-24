@@ -118,6 +118,7 @@ fn scale_glyphs(glyphs: &GlyphBuffer, size_px: f32, upem: i32) -> Vec<Glyph> {
         .iter()
         .zip(positions)
         .map(|(info, pos)| Glyph {
+            face: 0,
             id: info.glyph_id as u16,
             cluster: info.cluster,
             x_advance: pos.x_advance as f32 * scale,
@@ -177,8 +178,10 @@ pub struct PaintedLine {
 }
 
 /// One shaped glyph in pixels.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Default)]
 pub struct Glyph {
+    /// Which face of the document's family drew it: see [`FaceStyle`].
+    pub face: u8,
     pub id: u16,
     pub cluster: u32,
     pub x_advance: f32,
@@ -256,10 +259,30 @@ pub struct ParagraphStyle {
     pub font_size: f32,
     /// Zero uses the document geometry.
     pub leading: f32,
-    /// First-line indent. Later lines use the full measure.
+    /// First-line indent, from the left indent; negative hangs.
     pub first_indent: f32,
     /// Stable name such as `Body` or `Chapter Title`. Empty uses the geometry's size.
     pub name: String,
+    /// How lines sit in the measure.
+    pub align: Alignment,
+    /// Indent of every line from the left of the measure.
+    pub left_indent: f32,
+    /// Indent of every line from the right of the measure.
+    pub right_indent: f32,
+}
+
+/// Line alignment.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Alignment {
+    /// Flush left, ragged right.
+    #[default]
+    Left,
+    /// Flush both sides; a paragraph's last line is flush left.
+    Justify,
+    /// Centered.
+    Center,
+    /// Flush right.
+    Right,
 }
 
 impl Default for ParagraphStyle {
@@ -278,6 +301,9 @@ impl Default for ParagraphStyle {
             leading: 0.0,
             first_indent: 0.0,
             name: "Body".into(),
+            align: Alignment::Left,
+            left_indent: 0.0,
+            right_indent: 0.0,
         }
     }
 }
@@ -295,6 +321,43 @@ pub struct Paragraph {
     /// Reference mark set in superscript after the paragraph's last
     /// character, such as a note number. Empty for none.
     pub note_mark: String,
+    /// Character styling. Empty means the whole paragraph in its style's face.
+    pub runs: Vec<StyledRun>,
+}
+
+/// The faces of a family, as indices into [`Document::faces`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FaceStyle {
+    Regular = 0,
+    Bold = 1,
+    Italic = 2,
+    BoldItalic = 3,
+}
+
+impl FaceStyle {
+    /// The face for these marks.
+    pub fn of(bold: bool, italic: bool) -> Self {
+        match (bold, italic) {
+            (false, false) => Self::Regular,
+            (true, false) => Self::Bold,
+            (false, true) => Self::Italic,
+            (true, true) => Self::BoldItalic,
+        }
+    }
+}
+
+/// Character styling over a span of a paragraph's text.
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct StyledRun {
+    /// First byte, inclusive.
+    pub start: usize,
+    /// First byte after the run.
+    pub end: usize,
+    pub bold: bool,
+    pub italic: bool,
+    pub small_caps: bool,
+    /// Positive for superscript, negative for subscript, zero on the baseline.
+    pub script: i8,
 }
 
 /// A position in the line stream: which paragraph, which of its lines.
@@ -425,7 +488,8 @@ pub struct EditReport {
 
 /// A shaped, paginated document.
 pub struct Document {
-    face: Face,
+    /// Regular, bold, italic, bold italic; missing styles use regular.
+    faces: Vec<Face>,
     geometry: Geometry,
     paragraphs: Vec<Paragraph>,
     /// Cached lines per paragraph index.
@@ -443,18 +507,23 @@ impl Document {
         geometry: Geometry,
         paragraphs: Vec<Paragraph>,
     ) -> Result<Self, TypesetError> {
-        Self::new_with(face, geometry, paragraphs, LayoutHints::default())
+        Self::new_with(vec![face], geometry, paragraphs, LayoutHints::default())
     }
 
     pub(crate) fn new_with(
-        face: Face,
+        faces: Vec<Face>,
         geometry: Geometry,
         paragraphs: Vec<Paragraph>,
         hints: LayoutHints,
     ) -> Result<Self, TypesetError> {
+        if faces.is_empty() {
+            return Err(TypesetError::Font(
+                "a document needs at least one face".into(),
+            ));
+        }
         let hyphenator = Standard::from_embedded(Language::EnglishUS).ok();
         let mut doc = Self {
-            face,
+            faces,
             geometry,
             paragraphs,
             lines: Vec::new(),
@@ -597,8 +666,100 @@ impl Document {
         self.pages.len() as u32
     }
 
+    /// The regular face.
     pub fn face(&self) -> &Face {
-        &self.face
+        &self.faces[0]
+    }
+
+    /// The face a glyph's `face` index names; regular when the family has
+    /// no such style.
+    pub fn face_at(&self, index: u8) -> &Face {
+        self.faces.get(usize::from(index)).unwrap_or(&self.faces[0])
+    }
+
+    /// Every face of the family, regular first.
+    pub fn faces(&self) -> &[Face] {
+        &self.faces
+    }
+
+    /// Shape `text` in paragraph style `features`, span by span with each
+    /// run's face, size and features; clusters stay offsets into `text`.
+    fn shape_runs(
+        &self,
+        text: &str,
+        runs: &[StyledRun],
+        size: f32,
+        small_caps: bool,
+        oldstyle: bool,
+    ) -> Result<Vec<Glyph>, TypesetError> {
+        let plain = runs
+            .iter()
+            .all(|run| !run.bold && !run.italic && !run.small_caps && run.script == 0);
+        if plain {
+            return self
+                .face()
+                .shape(text, size, &features_for(small_caps, oldstyle));
+        }
+        let mut glyphs = Vec::new();
+        let mut covered = 0;
+        let spans = runs
+            .iter()
+            .filter(|run| run.start < run.end && run.end <= text.len())
+            .cloned()
+            .collect::<Vec<_>>();
+        let mut emit = |glyphs: &mut Vec<Glyph>, run: &StyledRun| -> Result<(), TypesetError> {
+            let Some(slice) = text.get(run.start..run.end) else {
+                return Ok(());
+            };
+            let style = FaceStyle::of(run.bold, run.italic) as u8;
+            let face_index = if usize::from(style) < self.faces.len() {
+                style
+            } else {
+                0
+            };
+            let face = self.face_at(face_index);
+            let (em, rise) = match run.script {
+                s if s > 0 => (size * 0.65, size * 0.35),
+                s if s < 0 => (size * 0.65, -size * 0.15),
+                _ => (size, 0.0),
+            };
+            let features = features_for(small_caps || run.small_caps, oldstyle);
+            for glyph in face.shape(slice, em, &features)? {
+                glyphs.push(Glyph {
+                    face: face_index,
+                    cluster: glyph.cluster + run.start as u32,
+                    y_offset: glyph.y_offset + rise,
+                    em,
+                    ..glyph
+                });
+            }
+            Ok(())
+        };
+        for run in &spans {
+            if run.start > covered {
+                emit(
+                    &mut glyphs,
+                    &StyledRun {
+                        start: covered,
+                        end: run.start,
+                        ..StyledRun::default()
+                    },
+                )?;
+            }
+            emit(&mut glyphs, run)?;
+            covered = covered.max(run.end);
+        }
+        if covered < text.len() {
+            emit(
+                &mut glyphs,
+                &StyledRun {
+                    start: covered,
+                    end: text.len(),
+                    ..StyledRun::default()
+                },
+            )?;
+        }
+        Ok(glyphs)
     }
 
     pub fn geometry(&self) -> Geometry {
@@ -1000,6 +1161,7 @@ impl Document {
                     note: None,
                     note_is_endnote: false,
                     note_mark: String::new(),
+                    runs: Vec::new(),
                 },
             );
         }
@@ -1067,19 +1229,27 @@ impl Document {
         } else {
             self.geometry.leading
         };
-        let indent = paragraph.style.first_indent.max(0.0);
-        let mut glyphs = self.face.shape(&paragraph.text, size, &features)?;
+        let indent = paragraph.style.first_indent;
+        let left = paragraph.style.left_indent.max(0.0);
+        let measure = (self.measure(index) - left - paragraph.style.right_indent.max(0.0)).max(1.0);
+        let mut glyphs = self.shape_runs(
+            &paragraph.text,
+            &paragraph.runs,
+            size,
+            paragraph.style.small_caps,
+            paragraph.style.oldstyle_figures,
+        )?;
         // A drop cap: the first letter, sized so its cap height reaches from
         // the baseline of line `drop_lines` up to the cap height of line one,
         // set on that lower baseline, with the lines beside it indented.
         let drop_lines = usize::from(paragraph.style.drop_cap_lines);
         let drop = if drop_lines >= 2 {
             let first_len = paragraph.text.chars().next().map_or(0, char::len_utf8);
-            let ratio = self.face.cap_height_ratio();
+            let ratio = self.face().cap_height_ratio();
             let cap_em = ((drop_lines - 1) as f32 * leading + size * ratio) / ratio;
             let cap_text = paragraph.text.get(..first_len).unwrap_or("");
             let cap: Vec<Glyph> = self
-                .face
+                .face()
                 .shape(cap_text, cap_em, &features)?
                 .into_iter()
                 .map(|glyph| Glyph {
@@ -1103,7 +1273,7 @@ impl Document {
             if drop.is_some() {
                 if line < drop_lines { hang } else { 0.0 }
             } else if line == 0 {
-                indent
+                indent.max(-left)
             } else {
                 0.0
             }
@@ -1111,7 +1281,7 @@ impl Document {
         let mut broken = break_lines(
             &paragraph.text,
             &glyphs,
-            self.measure(index),
+            measure,
             &line_indent,
             paragraph.style.hyphenate,
             self.hyphenator.as_ref(),
@@ -1151,7 +1321,7 @@ impl Document {
         if broken.iter().any(|line| line.hyphenated) {
             // The break inserted a hyphen the source text does not contain:
             // draw it. Its cluster is `HYPHEN_CLUSTER`, which maps to "-".
-            let hyphen = self.face.shape("-", size, &features)?;
+            let hyphen = self.face().shape("-", size, &features)?;
             for line in broken.iter_mut().filter(|line| line.hyphenated) {
                 for glyph in &hyphen {
                     line.width += glyph.x_advance;
@@ -1167,7 +1337,10 @@ impl Document {
         {
             // The reference mark: superscript, after the last character.
             let mark_em = size * 0.6;
-            for glyph in self.face.shape(&paragraph.note_mark, mark_em, &features)? {
+            for glyph in self
+                .face()
+                .shape(&paragraph.note_mark, mark_em, &features)?
+            {
                 last_line.width += glyph.x_advance;
                 last_line.glyphs.push(Glyph {
                     cluster: NOTE_MARK_CLUSTER,
@@ -1185,6 +1358,31 @@ impl Document {
         let last = broken.len().saturating_sub(1) as u32;
         let keep_together = paragraph.style.keep_lines && broken.len() <= 3;
         let has_cap = drop.is_some();
+        // Alignment: each line's offset in the measure, and for justified
+        // lines the extra width each space takes.
+        let mut offsets = Vec::with_capacity(broken.len());
+        for (line_index, line) in broken.iter_mut().enumerate() {
+            let own_indent = if has_cap && line_index == 0 {
+                0.0
+            } else {
+                line_indent(line_index)
+            };
+            let available = measure - own_indent;
+            let natural = natural_width(&paragraph.text, &line.glyphs);
+            let slack = (available - natural).max(0.0);
+            let offset = match paragraph.style.align {
+                Alignment::Center => slack / 2.0,
+                Alignment::Right => slack,
+                Alignment::Left => 0.0,
+                Alignment::Justify => {
+                    if line_index as u32 != last {
+                        justify(&paragraph.text, &mut line.glyphs, slack, size);
+                    }
+                    0.0
+                }
+            };
+            offsets.push(offset);
+        }
         // A paragraph shorter than its drop cap still makes room for it.
         let cap_room = if has_cap && broken.len() < drop_lines {
             (drop_lines - broken.len()) as f32 * leading
@@ -1225,17 +1423,17 @@ impl Document {
                     glyphs: Arc::new(line.glyphs),
                     width: line.width,
                     text: line.text,
-                    indent: if has_cap {
-                        if line_index > 0 && line_index < drop_lines {
-                            hang
+                    indent: left
+                        + offsets.get(line_index).copied().unwrap_or(0.0)
+                        + if has_cap {
+                            if line_index > 0 && line_index < drop_lines {
+                                hang
+                            } else {
+                                0.0
+                            }
                         } else {
-                            0.0
-                        }
-                    } else if line_index == 0 {
-                        indent
-                    } else {
-                        0.0
-                    },
+                            line_indent(line_index)
+                        },
                     note: if line_index == 0 { note.clone() } else { None },
                 }
             })
@@ -1245,7 +1443,7 @@ impl Document {
     /// A footnote broken into lines at footnote size on its paragraph's measure.
     fn note_lines(&self, text: &str, index: usize) -> Result<Vec<NoteLine>, TypesetError> {
         let em = self.note_em();
-        let glyphs = self.face.shape(text, em, &features_for(false, false))?;
+        let glyphs = self.face().shape(text, em, &features_for(false, false))?;
         let broken = break_lines(text, &glyphs, self.measure(index), &|_| 0.0, false, None);
         let mut lines = Vec::with_capacity(broken.len().max(1));
         for line in broken {
@@ -1952,6 +2150,55 @@ fn break_lines(
     lines
 }
 
+/// Width of a line's glyphs without the spaces it ends on.
+fn natural_width(text: &str, glyphs: &[Glyph]) -> f32 {
+    let trailing = glyphs
+        .iter()
+        .rev()
+        .take_while(|glyph| is_space(text, glyph))
+        .map(|glyph| glyph.x_advance)
+        .sum::<f32>();
+    width_of(glyphs) - trailing
+}
+
+fn is_space(text: &str, glyph: &Glyph) -> bool {
+    glyph.cluster < NOTE_MARK_CLUSTER
+        && text
+            .get(glyph.cluster as usize..)
+            .and_then(|rest| rest.chars().next())
+            .is_some_and(|ch| ch == ' ' || ch == '\u{a0}')
+}
+
+/// Spread `slack` over the inner spaces of a line (not the ones it ends on).
+/// A line with so few spaces that each would open wider than two ems is
+/// left ragged rather than torn apart.
+fn justify(text: &str, glyphs: &mut [Glyph], slack: f32, em: f32) {
+    let end = glyphs.len()
+        - glyphs
+            .iter()
+            .rev()
+            .take_while(|glyph| is_space(text, glyph))
+            .count();
+    // The spaces a justified line ends on take no width: the right edge is
+    // the last letter's.
+    for glyph in &mut glyphs[end..] {
+        glyph.x_advance = 0.0;
+    }
+    let spaces: Vec<usize> = (0..end)
+        .filter(|index| is_space(text, &glyphs[*index]))
+        .collect();
+    if spaces.is_empty() || slack <= 0.0 {
+        return;
+    }
+    let each = slack / spaces.len() as f32;
+    if each > em * 2.0 {
+        return;
+    }
+    for index in spaces {
+        glyphs[index].x_advance += each;
+    }
+}
+
 fn width_of(glyphs: &[Glyph]) -> f32 {
     glyphs.iter().map(|glyph| glyph.x_advance).sum()
 }
@@ -2098,6 +2345,7 @@ pub fn book_of_repeated_line(face: Face, pages: u32, text: &str) -> Result<Docum
             note: None,
             note_is_endnote: false,
             note_mark: String::new(),
+            runs: Vec::new(),
         })
         .collect();
     Document::new(face, Geometry::one_line_pages(), paragraphs)
@@ -2113,6 +2361,7 @@ pub fn book_of_pages(face: Face, pages: u32, seed: &str) -> Result<Document, Typ
             note: None,
             note_is_endnote: false,
             note_mark: String::new(),
+            runs: Vec::new(),
         })
         .collect();
     Document::new(face, Geometry::one_line_pages(), paragraphs)

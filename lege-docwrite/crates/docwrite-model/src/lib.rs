@@ -21,11 +21,11 @@ mod publish;
 mod runs;
 mod tree;
 
-pub use edit::{Direction, Fragment, Motion};
+pub use edit::{Direction, Fragment, Mark, Motion};
 pub use error::ModelError;
 pub use ids::{BlockId, ChapterId, NoteId, PartId, SectionId};
 pub use publish::{
-    BibliographyEntry, ChapterStart, ChapterTemplate, IndexTerm, PageMaster, ParagraphStyle,
+    Align, BibliographyEntry, ChapterStart, ChapterTemplate, IndexTerm, PageMaster, ParagraphStyle,
     SourceNote,
 };
 pub use runs::{Run, RunMarks, Script};

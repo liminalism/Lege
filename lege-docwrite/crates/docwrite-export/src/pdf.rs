@@ -13,7 +13,7 @@ use std::sync::Arc;
 use docwrite_model::Book;
 use docwrite_typeset::{
     CHAPTER_TITLE_ID, Document, Face, Glyph, HYPHEN_CLUSTER, NOTE_MARK_CLUSTER, features_for,
-    from_book,
+    from_book_with,
 };
 use lege_pdf_write::artifact::{
     GlyphItem, GlyphLine, PageRotation, PdfPageArtifact, PreparedGlyphLayer,
@@ -52,6 +52,8 @@ struct PlacedGlyph {
     rise: f32,
     /// Em size this glyph is set at: the line's, or smaller for a mark.
     em: f32,
+    /// Face of the family that draws it.
+    face: u8,
     /// Text this glyph stands for; empty when an earlier glyph of the same
     /// cluster already carries it.
     text: String,
@@ -62,31 +64,75 @@ struct PlacedGlyph {
 /// `font` must be a TrueType-outline font; CFF-flavoured OpenType is refused
 /// until lege-pdf-write can embed FontFile3 programs.
 pub fn export_pdf(book: &Book, font: &[u8]) -> Result<PdfExport, String> {
-    if font.starts_with(b"OTTO") {
+    export_pdf_family(book, &[font.to_vec()])
+}
+
+/// One embedded font: a distinct face file, subset to the glyphs it draws.
+struct Bank {
+    mapper: GlyphRemapper,
+    widths: BTreeMap<u16, u16>,
+}
+
+/// Lay out `book` with a font family (regular, bold, italic, bold italic;
+/// missing styles may repeat regular) and write it as a PDF. Each distinct
+/// face file is embedded once, subset to what the book uses from it.
+pub fn export_pdf_family(book: &Book, fonts: &[Vec<u8>]) -> Result<PdfExport, String> {
+    if fonts.is_empty() {
+        return Err("no font".into());
+    }
+    if fonts.iter().any(|font| font.starts_with(b"OTTO")) {
         return Err("CFF-outline fonts cannot be embedded yet; use a TrueType font".into());
     }
-    let face = Face::parse(font.to_vec()).map_err(|err| err.to_string())?;
-    let document = from_book(book, face).map_err(|err| err.to_string())?;
+    let faces = fonts
+        .iter()
+        .map(|font| Face::parse(font.clone()).map_err(|err| err.to_string()))
+        .collect::<Result<Vec<_>, _>>()?;
+    // Faces with the same bytes share a bank.
+    let mut files: Vec<&Vec<u8>> = Vec::new();
+    let bank_of: Vec<u16> = fonts
+        .iter()
+        .map(|font| match files.iter().position(|known| *known == font) {
+            Some(bank) => bank as u16,
+            None => {
+                files.push(font);
+                (files.len() - 1) as u16
+            }
+        })
+        .collect();
+    let document = from_book_with(book, faces).map_err(|err| err.to_string())?;
     let geometry = document.geometry();
     let pages: Vec<Vec<PlacedLine>> = (1..=document.page_count())
         .map(|page| place_page(&document, page))
         .collect::<Result<_, _>>()?;
+    let bank = |glyph: &PlacedGlyph| bank_of.get(usize::from(glyph.face)).copied().unwrap_or(0);
 
-    let mut used: Vec<u16> = vec![0];
-    for line in pages.iter().flatten() {
-        used.extend(line.glyphs.iter().map(|glyph| glyph.gid));
-    }
-    used.sort_unstable();
-    used.dedup();
-    let mapper = GlyphRemapper::new_from_glyphs_sorted(&used);
-    let program = subsetter::subset(font, 0, &mapper).map_err(|err| err.to_string())?;
-    let font_bytes = program.len();
-
-    // Widths and text per subset glyph, from the first place each is used.
-    let mut widths: BTreeMap<u16, u16> = BTreeMap::new();
-    let mut unicode: BTreeMap<u16, String> = BTreeMap::new();
-    for line in pages.iter().flatten() {
-        for glyph in &line.glyphs {
+    let mut font_bytes = 0;
+    let mut banks = Vec::with_capacity(files.len());
+    let mut embedded = Vec::with_capacity(files.len());
+    for (index, file) in files.iter().enumerate() {
+        let mut used: Vec<u16> = vec![0];
+        for line in pages.iter().flatten() {
+            used.extend(
+                line.glyphs
+                    .iter()
+                    .filter(|glyph| usize::from(bank(glyph)) == index)
+                    .map(|glyph| glyph.gid),
+            );
+        }
+        used.sort_unstable();
+        used.dedup();
+        let mapper = GlyphRemapper::new_from_glyphs_sorted(&used);
+        let program = subsetter::subset(file, 0, &mapper).map_err(|err| err.to_string())?;
+        font_bytes += program.len();
+        // Widths and text per subset glyph, from the first place each is used.
+        let mut widths: BTreeMap<u16, u16> = BTreeMap::new();
+        let mut unicode: BTreeMap<u16, String> = BTreeMap::new();
+        for glyph in pages
+            .iter()
+            .flatten()
+            .flat_map(|line| line.glyphs.iter())
+            .filter(|glyph| usize::from(bank(glyph)) == index)
+        {
             let Some(gid) = mapper.get(glyph.gid) else {
                 continue;
             };
@@ -97,13 +143,27 @@ pub fn export_pdf(book: &Book, font: &[u8]) -> Result<PdfExport, String> {
                 unicode.entry(gid).or_insert_with(|| glyph.text.clone());
             }
         }
+        let width_count = widths.keys().last().map_or(1, |gid| usize::from(*gid) + 1);
+        let mut cid_widths = vec![0u16; width_count];
+        for (gid, width) in &widths {
+            cid_widths[usize::from(*gid)] = *width;
+        }
+        let entries: Vec<(u16, String)> = unicode.into_iter().collect();
+        embedded.push(EmbeddedFont {
+            data: Arc::from(program),
+            post_script_name: format!("DocwriteSubset{index}"),
+            ascent: 800,
+            descent: -200,
+            cap_height: 700,
+            italic_angle: 0.0,
+            bbox: [0, -250, 1000, 900],
+            symbolic: true,
+            to_unicode: ToUnicode::Custom(Arc::from(to_unicode_cmap(&entries))),
+            cid_widths: Some(Arc::from(cid_widths)),
+            compress_program: true,
+        });
+        banks.push(Bank { mapper, widths });
     }
-    let width_count = widths.keys().last().map_or(1, |gid| usize::from(*gid) + 1);
-    let mut cid_widths = vec![0u16; width_count];
-    for (gid, width) in &widths {
-        cid_widths[usize::from(*gid)] = *width;
-    }
-    let entries: Vec<(u16, String)> = unicode.into_iter().collect();
 
     let mut writer =
         DocumentWriter::new(Vec::new(), pages.len().max(1)).map_err(|err| err.to_string())?;
@@ -113,7 +173,7 @@ pub fn export_pdf(book: &Book, font: &[u8]) -> Result<PdfExport, String> {
         let glyph_lines: Vec<GlyphLine> = lines
             .iter()
             .filter(|line| !line.glyphs.is_empty())
-            .flat_map(|line| glyph_lines(line, &mapper, &widths, page_height))
+            .flat_map(|line| glyph_lines(line, &banks, &bank_of, page_height))
             .collect();
         writer
             .add_page(&PdfPageArtifact {
@@ -132,19 +192,7 @@ pub fn export_pdf(book: &Book, font: &[u8]) -> Result<PdfExport, String> {
             })
             .map_err(|err| err.to_string())?;
     }
-    writer.set_glyph_font(EmbeddedFont {
-        data: Arc::from(program),
-        post_script_name: "DocwriteSubset".into(),
-        ascent: 800,
-        descent: -200,
-        cap_height: 700,
-        italic_angle: 0.0,
-        bbox: [0, -250, 1000, 900],
-        symbolic: true,
-        to_unicode: ToUnicode::Custom(Arc::from(to_unicode_cmap(&entries))),
-        cid_widths: Some(Arc::from(cid_widths)),
-        compress_program: true,
-    });
+    writer.set_glyph_fonts(embedded);
     writer.set_bookmarks(bookmarks(book, &document));
     writer.set_structure(structure(&document));
     writer.set_page_labels(b"<< /Nums [ 0 << /S /D >> ] >>".to_vec());
@@ -265,6 +313,7 @@ fn placed_glyphs(text: &str, glyphs: &[Glyph], mark: &str, line_em: f32) -> Vec<
                 advance: glyph.x_advance,
                 rise: glyph.y_offset,
                 em: if glyph.em > 0.0 { glyph.em } else { line_em },
+                face: glyph.face,
                 text,
             }
         })
@@ -285,30 +334,36 @@ fn char_end(text: &str, start: usize) -> usize {
 /// its shaped advance, kerning included.
 fn glyph_lines(
     line: &PlacedLine,
-    mapper: &GlyphRemapper,
-    widths: &BTreeMap<u16, u16>,
+    banks: &[Bank],
+    bank_of: &[u16],
     page_height: f64,
 ) -> Vec<GlyphLine> {
+    let bank = |glyph: &PlacedGlyph| bank_of.get(usize::from(glyph.face)).copied().unwrap_or(0);
     let mut out = Vec::new();
     let mut x = f64::from(line.x);
     let mut start = 0;
     while start < line.glyphs.len() {
         let em = line.glyphs[start].em.max(0.1);
+        let run_bank = bank(&line.glyphs[start]);
         let end = line.glyphs[start..]
             .iter()
-            .position(|glyph| (glyph.em - em).abs() > 0.01)
+            .position(|glyph| (glyph.em - em).abs() > 0.01 || bank(glyph) != run_bank)
             .map_or(line.glyphs.len(), |offset| start + offset);
+        let Some(fonts) = banks.get(usize::from(run_bank)) else {
+            start = end;
+            continue;
+        };
         let mut items = Vec::with_capacity(end - start);
         let mut correction = 0;
         let mut run_width = 0.0;
         for glyph in &line.glyphs[start..end] {
-            let gid = mapper.get(glyph.gid).unwrap_or(0);
+            let gid = fonts.mapper.get(glyph.gid).unwrap_or(0);
             items.push(GlyphItem {
                 gid,
                 adjust: correction,
                 rise: thousandths(glyph.rise, em),
             });
-            let nominal = widths.get(&gid).copied().map_or(0, i32::from);
+            let nominal = fonts.widths.get(&gid).copied().map_or(0, i32::from);
             correction = nominal - thousandths(glyph.advance, em);
             run_width += f64::from(glyph.advance);
         }
@@ -320,6 +375,7 @@ fn glyph_lines(
                 page_height - f64::from(line.baseline),
             ),
             items: items.into_boxed_slice(),
+            font: Some(run_bank),
         });
         x += run_width;
         start = end;

@@ -7,17 +7,76 @@ use crate::error::ModelError;
 use crate::ids::{BlockId, ChapterId};
 use crate::tree::{BlockKind, Book, Chapter, Position};
 
-/// Paragraph style. Appearance lives here; the block stores the style name.
+/// How a paragraph's lines sit in the measure.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum Align {
+    /// Flush left, ragged right.
+    Left,
+    /// Both edges flush; the last line flush left.
+    #[default]
+    Justify,
+    /// Centered.
+    Center,
+    /// Flush right.
+    Right,
+}
+
+/// Paragraph style. Appearance lives here; a block's kind picks its style.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 pub struct ParagraphStyle {
+    /// Stable name, such as `Body` or `Block Quote`.
     pub name: String,
+    /// Type size in points.
     pub size_pt: f32,
+    /// Baseline-to-baseline distance in points.
     pub leading_pt: f32,
+    /// First-line indent in points.
     pub first_indent_pt: f32,
+    /// Hyphenate at line ends.
     pub hyphenate: bool,
+    /// Set in small capitals (OpenType `smcp`).
     pub small_caps: bool,
+    /// Old-style figures (OpenType `onum`).
     pub oldstyle_figures: bool,
+    /// Lines a drop cap spans; zero or one for none.
     pub drop_cap_lines: u8,
+    /// Alignment of the lines.
+    pub align: Align,
+    /// Indent from the left of the measure, every line, in points.
+    pub left_indent_pt: f32,
+    /// Indent from the right of the measure, every line, in points.
+    pub right_indent_pt: f32,
+    /// Space above the paragraph, in points.
+    pub space_before_pt: f32,
+    /// Space below the paragraph, in points.
+    pub space_after_pt: f32,
+    /// Set in the family's bold face.
+    pub bold: bool,
+    /// Set in the family's italic face; italic runs inside turn roman.
+    pub italic: bool,
+}
+
+impl Default for ParagraphStyle {
+    fn default() -> Self {
+        Self {
+            name: "Body".into(),
+            size_pt: 12.0,
+            leading_pt: 16.0,
+            first_indent_pt: 12.0,
+            hyphenate: true,
+            small_caps: false,
+            oldstyle_figures: false,
+            drop_cap_lines: 0,
+            align: Align::Justify,
+            left_indent_pt: 0.0,
+            right_indent_pt: 0.0,
+            space_before_pt: 0.0,
+            space_after_pt: 0.0,
+            bold: false,
+            italic: false,
+        }
+    }
 }
 
 /// Page master: geometry, folio, running head.
@@ -109,38 +168,7 @@ pub(crate) struct Stylesheet {
 impl Stylesheet {
     pub(crate) fn standard() -> Self {
         Self {
-            paragraphs: vec![
-                ParagraphStyle {
-                    name: "Body".into(),
-                    size_pt: 12.0,
-                    leading_pt: 16.0,
-                    first_indent_pt: 12.0,
-                    hyphenate: true,
-                    small_caps: false,
-                    oldstyle_figures: false,
-                    drop_cap_lines: 0,
-                },
-                ParagraphStyle {
-                    name: "First Paragraph".into(),
-                    size_pt: 12.0,
-                    leading_pt: 16.0,
-                    first_indent_pt: 0.0,
-                    hyphenate: true,
-                    small_caps: false,
-                    oldstyle_figures: false,
-                    drop_cap_lines: 2,
-                },
-                ParagraphStyle {
-                    name: "Chapter Title".into(),
-                    size_pt: 22.0,
-                    leading_pt: 26.0,
-                    first_indent_pt: 0.0,
-                    hyphenate: false,
-                    small_caps: true,
-                    oldstyle_figures: false,
-                    drop_cap_lines: 0,
-                },
-            ],
+            paragraphs: standard_styles(),
             masters: vec![
                 PageMaster {
                     name: "Right Body".into(),
@@ -624,4 +652,102 @@ fn parse_bibtex(bibtex: &str) -> Vec<BibliographyEntry> {
         });
     }
     entries
+}
+
+/// The styles a new book starts with, one for each kind of block.
+pub(crate) fn standard_styles() -> Vec<ParagraphStyle> {
+    let body = ParagraphStyle::default();
+    vec![
+        body.clone(),
+        ParagraphStyle {
+            name: "First Paragraph".into(),
+            first_indent_pt: 0.0,
+            drop_cap_lines: 2,
+            ..body.clone()
+        },
+        ParagraphStyle {
+            name: "Chapter Title".into(),
+            size_pt: 22.0,
+            leading_pt: 26.0,
+            first_indent_pt: 0.0,
+            hyphenate: false,
+            small_caps: true,
+            align: Align::Left,
+            ..body.clone()
+        },
+        ParagraphStyle {
+            name: "Subhead".into(),
+            size_pt: 13.0,
+            leading_pt: 16.0,
+            first_indent_pt: 0.0,
+            hyphenate: false,
+            align: Align::Left,
+            space_before_pt: 16.0,
+            space_after_pt: 4.0,
+            bold: true,
+            ..body.clone()
+        },
+        ParagraphStyle {
+            name: "Block Quote".into(),
+            size_pt: 11.0,
+            leading_pt: 14.0,
+            first_indent_pt: 0.0,
+            left_indent_pt: 24.0,
+            right_indent_pt: 24.0,
+            space_before_pt: 8.0,
+            space_after_pt: 8.0,
+            ..body.clone()
+        },
+        ParagraphStyle {
+            name: "Epigraph".into(),
+            size_pt: 11.0,
+            leading_pt: 14.0,
+            first_indent_pt: 0.0,
+            hyphenate: false,
+            align: Align::Left,
+            left_indent_pt: 96.0,
+            space_after_pt: 16.0,
+            italic: true,
+            ..body.clone()
+        },
+        ParagraphStyle {
+            name: "Verse".into(),
+            first_indent_pt: 0.0,
+            hyphenate: false,
+            align: Align::Left,
+            left_indent_pt: 36.0,
+            space_before_pt: 8.0,
+            space_after_pt: 8.0,
+            ..body.clone()
+        },
+        ParagraphStyle {
+            name: "Caption".into(),
+            size_pt: 10.0,
+            leading_pt: 13.0,
+            first_indent_pt: 0.0,
+            hyphenate: false,
+            align: Align::Center,
+            space_after_pt: 8.0,
+            italic: true,
+            ..body.clone()
+        },
+        ParagraphStyle {
+            name: "Scene Break".into(),
+            first_indent_pt: 0.0,
+            hyphenate: false,
+            align: Align::Center,
+            space_before_pt: 8.0,
+            space_after_pt: 8.0,
+            ..body.clone()
+        },
+        ParagraphStyle {
+            name: "Bibliography Entry".into(),
+            size_pt: 11.0,
+            leading_pt: 14.0,
+            first_indent_pt: -18.0,
+            left_indent_pt: 18.0,
+            align: Align::Left,
+            ..body
+        },
+    ]
 }

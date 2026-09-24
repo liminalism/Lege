@@ -21,7 +21,7 @@ pub use view::{PAPER, PointerShape, Theme, WORDPERFECT};
 
 use docwrite_model::{Book, Direction, Motion};
 use docwrite_typeset::{
-    Document, EditReport, Face, GlyphAtlas, NOTE_MARK_CLUSTER, from_book, update_from_book,
+    Document, EditReport, Face, GlyphAtlas, NOTE_MARK_CLUSTER, from_book_with, update_from_book,
 };
 use map::BookMap as Map;
 
@@ -43,7 +43,8 @@ pub struct CaretRect {
 pub struct Editor {
     book: Book,
     pager: Pager,
-    face: Option<Face>,
+    /// The font family, regular first; empty when no font could be loaded.
+    faces: Vec<Face>,
     /// The laid-out book. Edits mark it stale; the next paint brings it up
     /// to date incrementally rather than laying the book out again.
     document: Option<Document>,
@@ -65,7 +66,7 @@ pub struct Editor {
     saving: Arc<AtomicBool>,
     save_error: Arc<Mutex<Option<String>>>,
     /// The font file the face was parsed from, for PDF export.
-    font_bytes: Option<Vec<u8>>,
+    font_files: Vec<Vec<u8>>,
     /// Where the last paint put each visible page, for pointer hits.
     slots: Vec<PageSlot>,
     /// Physical pixels per logical pixel. Chrome is sized in logical pixels.
@@ -92,14 +93,12 @@ impl Editor {
 
     /// Open `book` in the editor. Layout happens on the first paint.
     pub fn with_book(book: Book) -> Self {
-        let (face, font_bytes) = match load_face() {
-            Some((face, bytes)) => (Some(face), Some(bytes)),
-            None => (None, None),
-        };
+        let (faces, font_files): (Vec<Face>, Vec<Vec<u8>>) =
+            load_family().unwrap_or_default().into_iter().unzip();
         Self {
             book,
             pager: Pager::new(1, false),
-            face,
+            faces,
             document: None,
             layout_stale: true,
             follow_caret: false,
@@ -115,7 +114,7 @@ impl Editor {
             last_edit: None,
             saving: Arc::new(AtomicBool::new(false)),
             save_error: Arc::new(Mutex::new(None)),
-            font_bytes,
+            font_files,
             slots: Vec::new(),
             ui_scale: 1.0,
             sidebar: Sidebar::default(),
@@ -396,11 +395,14 @@ impl Editor {
             Some(report) => Some(report),
             None => {
                 // First layout, or an update that failed: lay out afresh.
-                let fresh = self
-                    .face
-                    .as_ref()
-                    .and_then(|face| face.duplicate().ok())
-                    .and_then(|face| from_book(&self.book, face).ok());
+                let faces: Option<Vec<Face>> = self
+                    .faces
+                    .iter()
+                    .map(|face| face.duplicate().ok())
+                    .collect();
+                let fresh = faces
+                    .filter(|faces| !faces.is_empty())
+                    .and_then(|faces| from_book_with(&self.book, faces).ok());
                 let report = fresh.as_ref().map(|document| EditReport {
                     pages_laid_out: (1..=document.page_count()).collect(),
                     page_count: document.page_count(),
@@ -575,7 +577,7 @@ impl Editor {
                 draw_glyph(
                     &mut self.atlas,
                     painter,
-                    face,
+                    document.face_at(glyph.face),
                     glyph.id,
                     size,
                     pen + glyph.x_offset * scale,
@@ -812,29 +814,57 @@ fn draw_glyph(
 /// Keypress-to-present budget. A few milliseconds, inside one 60 Hz frame.
 pub const KEYPRESS_BUDGET: Duration = Duration::from_millis(8);
 
-fn load_face() -> Option<(Face, Vec<u8>)> {
-    let mut paths = Vec::new();
-    if let Some(path) = std::env::var_os("LEGE_DOCWRITE_FONT") {
-        paths.push(std::path::PathBuf::from(path));
+/// The font family the editor sets books in: regular, bold, italic, bold
+/// italic, as faces and their files. `LEGE_DOCWRITE_FONT` (with optional
+/// `_BOLD`, `_ITALIC`, `_BOLD_ITALIC`) overrides; otherwise the first family
+/// found of Georgia, Times New Roman and Noto Sans. A style a family lacks
+/// is its regular face again.
+fn load_family() -> Option<Vec<(Face, Vec<u8>)>> {
+    let supplemental = std::path::Path::new("/System/Library/Fonts/Supplemental");
+    let noto = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../../pixelkit/crates/pixelkit-text/test-fonts/NotoSans-Regular.ttf");
+    let mut families: Vec<[Option<std::path::PathBuf>; 4]> = Vec::new();
+    if let Some(regular) = std::env::var_os("LEGE_DOCWRITE_FONT") {
+        let variant = |name: &str| std::env::var_os(name).map(std::path::PathBuf::from);
+        families.push([
+            Some(regular.into()),
+            variant("LEGE_DOCWRITE_FONT_BOLD"),
+            variant("LEGE_DOCWRITE_FONT_ITALIC"),
+            variant("LEGE_DOCWRITE_FONT_BOLD_ITALIC"),
+        ]);
     }
-    paths.push(
-        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../../../pixelkit/crates/pixelkit-text/test-fonts/NotoSans-Regular.ttf"),
-    );
-    paths.push(std::path::PathBuf::from(
-        "/System/Library/Fonts/Supplemental/Arial.ttf",
-    ));
-    paths.push(std::path::PathBuf::from("/Library/Fonts/Arial.ttf"));
-    paths.push(std::path::PathBuf::from(
-        "/System/Library/Fonts/Supplemental/Times New Roman.ttf",
-    ));
-    for path in paths {
-        let Ok(bytes) = std::fs::read(&path) else {
+    for name in ["Georgia", "Times New Roman"] {
+        families.push([
+            Some(supplemental.join(format!("{name}.ttf"))),
+            Some(supplemental.join(format!("{name} Bold.ttf"))),
+            Some(supplemental.join(format!("{name} Italic.ttf"))),
+            Some(supplemental.join(format!("{name} Bold Italic.ttf"))),
+        ]);
+    }
+    families.push([Some(noto), None, None, None]);
+    for family in families {
+        let read = |path: &Option<std::path::PathBuf>| -> Option<(Face, Vec<u8>)> {
+            let bytes = std::fs::read(path.as_ref()?).ok()?;
+            Face::parse(bytes.clone()).ok().map(|face| (face, bytes))
+        };
+        let Some(regular) = read(&family[0]) else {
             continue;
         };
-        if let Ok(face) = Face::parse(bytes.clone()) {
-            return Some((face, bytes));
+        let mut faces = Vec::with_capacity(4);
+        for style in &family[1..] {
+            let face = read(style).or_else(|| {
+                regular
+                    .0
+                    .duplicate()
+                    .ok()
+                    .map(|face| (face, regular.1.clone()))
+            });
+            if let Some(face) = face {
+                faces.push(face);
+            }
         }
+        faces.insert(0, regular);
+        return Some(faces);
     }
     None
 }

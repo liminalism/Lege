@@ -222,20 +222,31 @@ impl<W: Write> DocumentWriter<W> {
             .as_ref()
             .is_some_and(|gl| gl.lines.iter().any(|l| !l.items.is_empty()));
         if has_glyphs {
-            let bank = artifact.glyph_layer.as_ref().unwrap().font;
-            if self.glyph_font_ids.len() <= usize::from(bank) {
-                self.glyph_font_ids.resize(usize::from(bank) + 1, None);
-            }
-            let gid = match self.glyph_font_ids[usize::from(bank)] {
-                Some(id) => id,
-                None => {
-                    let id = self.sink.alloc_id();
-                    self.glyph_font_ids[usize::from(bank)] = Some(id);
-                    id
+            let layer = artifact.glyph_layer.as_ref().unwrap();
+            // Every bank the page draws from: the layer's and any line's own.
+            let mut banks = vec![layer.font];
+            for line in layer.lines.iter() {
+                if let Some(bank) = line.font
+                    && !banks.contains(&bank)
+                {
+                    banks.push(bank);
                 }
-            };
-            fonts.push((crate::artifact::glyph_font_resource(bank), gid));
-            emit_glyph_layer(&mut content, artifact.glyph_layer.as_ref().unwrap());
+            }
+            for bank in banks {
+                if self.glyph_font_ids.len() <= usize::from(bank) {
+                    self.glyph_font_ids.resize(usize::from(bank) + 1, None);
+                }
+                let gid = match self.glyph_font_ids[usize::from(bank)] {
+                    Some(id) => id,
+                    None => {
+                        let id = self.sink.alloc_id();
+                        self.glyph_font_ids[usize::from(bank)] = Some(id);
+                        id
+                    }
+                };
+                fonts.push((crate::artifact::glyph_font_resource(bank), gid));
+            }
+            emit_glyph_layer(&mut content, layer);
         }
 
         // Content stream: compress when it carries text (parity with the
@@ -465,6 +476,7 @@ mod tests {
                         adjust: 0,
                         rise: 0,
                     }]),
+                    font: None,
                 }]),
                 font: 0,
             }),
@@ -493,6 +505,37 @@ mod tests {
         );
         assert!(t.contains("/F2"), "{t}");
         assert!(t.contains("/F3"), "{t}");
+    }
+
+    #[test]
+    fn one_page_can_draw_lines_from_several_banks() {
+        let mut w = DocumentWriter::new(Vec::new(), 1).unwrap();
+        let mut page = glyph_page(0);
+        let layer = page.glyph_layer.as_mut().unwrap();
+        let mut lines = std::mem::take(&mut layer.lines).into_vec();
+        lines.push(GlyphLine {
+            matrix: Affine::scale_translate(100.0, 100.0, 72.0, 600.0),
+            items: Box::new([GlyphItem {
+                gid: 1,
+                adjust: 0,
+                rise: 0,
+            }]),
+            font: Some(1),
+        });
+        layer.lines = lines.into_boxed_slice();
+        w.add_page(&page).unwrap();
+        let mut font = sample_font();
+        font.symbolic = true;
+        font.to_unicode = ToUnicode::None;
+        font.cid_widths = Some(Arc::from(&[0u16, 500][..]));
+        w.set_glyph_fonts(vec![font.clone(), font]);
+        let bytes = w.finalize().unwrap();
+        let t = String::from_utf8_lossy(&bytes).into_owned();
+        assert_eq!(t.matches("/Subtype /Type0").count(), 2, "{t}");
+        assert!(
+            t.contains("/F2") && t.contains("/F3"),
+            "both banks are page resources"
+        );
     }
 
     #[test]

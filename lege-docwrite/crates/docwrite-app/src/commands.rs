@@ -112,11 +112,10 @@ impl Editor {
 
     /// Write the book as a typeset PDF at `path`.
     pub fn export_pdf_to(&self, path: &Path) -> Result<(), String> {
-        let font = self
-            .font_bytes
-            .as_deref()
-            .ok_or_else(|| "no font is loaded".to_string())?;
-        let pdf = docwrite_export::export_pdf(&self.book, font)?;
+        if self.font_files.is_empty() {
+            return Err("no font is loaded".to_string());
+        }
+        let pdf = docwrite_export::export_pdf_family(&self.book, &self.font_files)?;
         write_atomically(path, &pdf.bytes)
     }
 

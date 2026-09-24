@@ -9,7 +9,7 @@ use std::cmp::Ordering;
 use crate::error::ModelError;
 use crate::ids::{BlockId, NoteId};
 use crate::nav;
-use crate::runs::{self, Run, RunMarks};
+use crate::runs::{self, Run, RunMarks, Script};
 use crate::tree::{Block, BlockKind, BlockLoc, Book, Note, NoteKind, Position, Selection};
 
 /// Which way a motion or a neighbor step moves.
@@ -33,6 +33,47 @@ pub enum Motion {
     /// Backward moves to the start of this block, then to the previous block.
     /// Forward moves to the start of the next block.
     Block(Direction),
+}
+
+/// A character mark the toolbar and keyboard toggle.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Mark {
+    /// Bold.
+    Bold,
+    /// Italic.
+    Italic,
+    /// Small capitals.
+    SmallCaps,
+    /// Superscript.
+    Superscript,
+    /// Subscript.
+    Subscript,
+}
+
+impl Mark {
+    fn is_set(self, marks: &RunMarks) -> bool {
+        match self {
+            Self::Bold => marks.bold,
+            Self::Italic => marks.italic,
+            Self::SmallCaps => marks.small_caps,
+            Self::Superscript => marks.script == Script::Super,
+            Self::Subscript => marks.script == Script::Sub,
+        }
+    }
+
+    fn set(self, marks: &mut RunMarks, on: bool) {
+        match self {
+            Self::Bold => marks.bold = on,
+            Self::Italic => marks.italic = on,
+            Self::SmallCaps => marks.small_caps = on,
+            Self::Superscript => {
+                marks.script = if on { Script::Super } else { Script::Normal };
+            }
+            Self::Subscript => {
+                marks.script = if on { Script::Sub } else { Script::Normal };
+            }
+        }
+    }
 }
 
 /// Text cut or copied out of the book.
@@ -131,6 +172,7 @@ struct Piece {
 impl Book {
     /// Move the focus. A range selection collapses toward the motion first.
     pub fn move_caret(&mut self, motion: Motion) -> Result<(), ModelError> {
+        self.typing_marks = None;
         let origin = self.motion_origin(motion)?;
         let focus = self.position_after(origin, motion)?;
         self.selection = Selection::collapsed(focus);
@@ -139,6 +181,7 @@ impl Book {
 
     /// Move the focus and leave the anchor where it is.
     pub fn extend_selection(&mut self, motion: Motion) -> Result<(), ModelError> {
+        self.typing_marks = None;
         let focus = self.position_after(self.selection.focus, motion)?;
         self.selection.focus = focus;
         Ok(())
@@ -148,6 +191,9 @@ impl Book {
     pub fn set_selection(&mut self, selection: Selection) -> Result<(), ModelError> {
         self.ensure_position(selection.anchor)?;
         self.ensure_position(selection.focus)?;
+        if selection != self.selection {
+            self.typing_marks = None;
+        }
         self.selection = selection;
         Ok(())
     }
@@ -354,6 +400,114 @@ impl Book {
         self.check_consistency()
     }
 
+    /// Apply `edit` to the marks of every selected character: one undo step.
+    /// With nothing selected, the edit applies to the text typed next.
+    pub fn format_selection(&mut self, edit: impl Fn(&mut RunMarks)) -> Result<(), ModelError> {
+        if self.selection.is_collapsed() {
+            let at = self.selection.focus;
+            let mut marks = match self.typing_marks.clone() {
+                Some(marks) => marks,
+                None => runs::marks_before(self.block_ref(at.block)?.runs(), at.offset),
+            };
+            edit(&mut marks);
+            self.typing_marks = Some(marks);
+            return Ok(());
+        }
+        let (start, end) = self.normalized()?;
+        let ids = self.block_ids();
+        let first = ids
+            .iter()
+            .position(|id| *id == start.block)
+            .ok_or(ModelError::UnknownBlock(start.block))?;
+        let last = ids
+            .iter()
+            .position(|id| *id == end.block)
+            .ok_or(ModelError::UnknownBlock(end.block))?;
+        let targets: Vec<(BlockId, usize, usize)> = ids[first..=last]
+            .iter()
+            .map(|id| {
+                let len = self.block_len(*id).unwrap_or(0);
+                let from = if *id == start.block { start.offset } else { 0 };
+                let to = if *id == end.block { end.offset } else { len };
+                (*id, from, to)
+            })
+            .collect();
+        let selection = self.selection;
+        self.transact(|book, changes| {
+            for (id, from, to) in targets {
+                if from >= to {
+                    continue;
+                }
+                let old_runs = book.block_ref(id)?.runs().to_vec();
+                let new_runs = runs::edit_marks(&old_runs, from, to, &edit);
+                if new_runs == old_runs {
+                    continue;
+                }
+                let change = Change::ReplaceText {
+                    block: id,
+                    start: 0,
+                    old: String::new(),
+                    new: String::new(),
+                    old_runs,
+                    new_runs,
+                };
+                book.apply(&change, false)?;
+                changes.push(change);
+            }
+            book.selection = selection;
+            Ok(())
+        })
+    }
+
+    /// Whether every selected character carries `mark` (or, with nothing
+    /// selected, whether text typed now would).
+    pub fn selection_has(&self, mark: Mark) -> bool {
+        let has = |marks: &RunMarks| mark.is_set(marks);
+        if self.selection.is_collapsed() {
+            let at = self.selection.focus;
+            return match self.typing_marks.as_ref() {
+                Some(marks) => has(marks),
+                None => self
+                    .block_ref(at.block)
+                    .map(|block| has(&runs::marks_before(block.runs(), at.offset)))
+                    .unwrap_or(false),
+            };
+        }
+        let Ok((start, end)) = self.normalized() else {
+            return false;
+        };
+        let ids = self.block_ids();
+        let (Some(first), Some(last)) = (
+            ids.iter().position(|id| *id == start.block),
+            ids.iter().position(|id| *id == end.block),
+        ) else {
+            return false;
+        };
+        ids[first..=last].iter().all(|id| {
+            let Ok(block) = self.block_ref(*id) else {
+                return false;
+            };
+            let from = if *id == start.block { start.offset } else { 0 };
+            let to = if *id == end.block {
+                end.offset
+            } else {
+                block.len_chars()
+            };
+            block
+                .runs()
+                .iter()
+                .filter(|run| run.start < to && run.end > from)
+                .all(|run| has(&run.marks))
+        })
+    }
+
+    /// Turn `mark` off across the selection if all of it has the mark, on
+    /// otherwise. Superscript and subscript replace each other.
+    pub fn toggle_mark(&mut self, mark: Mark) -> Result<(), ModelError> {
+        let on = !self.selection_has(mark);
+        self.format_selection(|marks| mark.set(marks, on))
+    }
+
     /// Anchor a new footnote or endnote to the focus block.
     ///
     /// The note is a slot on the block, not a character in the rope. The body
@@ -386,6 +540,8 @@ impl Book {
             }
             let at = book.selection.focus;
             let inherited = if let Some(marks) = marks {
+                marks
+            } else if let Some(marks) = book.typing_marks.clone() {
                 marks
             } else {
                 let block = book.block_ref(at.block)?;
