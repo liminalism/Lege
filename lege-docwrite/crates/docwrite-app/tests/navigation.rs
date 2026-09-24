@@ -72,10 +72,39 @@ fn the_window_editor_types_into_the_book_and_turns_pages() {
     editor.type_text(" Hello");
     assert!(editor.book().plain_text().ends_with(" Hello"));
     assert_ne!(editor.book().plain_text(), before);
+    // A one-page book has nowhere to page to.
+    editor.refresh_layout();
+    assert_eq!(editor.pager().pages(), 1);
+    editor.page_down();
+    assert_eq!(editor.pager().scroll(), 0.0);
+
+    // Enough text for several pages: the pager follows the laid-out book.
+    let paragraph = "A paragraph long enough to wrap over a few lines of the page. ".repeat(4);
+    for _ in 0..40 {
+        editor.type_text(&format!("\n{paragraph}"));
+    }
+    editor.refresh_layout();
+    let pages = editor.pager().pages();
+    assert!(pages >= 3, "forty paragraphs fill {pages} pages");
+    assert_eq!(
+        editor.pager().scroll(),
+        f64::from(pages - 1),
+        "typing follows the caret onto the last page"
+    );
+    editor.jump_to_page(1);
     editor.page_down();
     assert_eq!(editor.pager().scroll(), 1.0);
     editor.page_up();
     assert_eq!(editor.pager().scroll(), 0.0);
+    editor.jump_to_page(pages);
+    assert_eq!(editor.pager().scroll(), f64::from(pages - 1));
+    editor.page_down();
+    assert_eq!(
+        editor.pager().scroll(),
+        f64::from(pages - 1),
+        "no page past the last"
+    );
+    editor.jump_to_page(1);
 
     let before = editor.book().plain_text().to_string();
     editor.set_preedit("未");

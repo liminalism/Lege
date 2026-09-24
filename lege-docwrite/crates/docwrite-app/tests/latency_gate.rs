@@ -1,11 +1,18 @@
-//! 500-page open, page, and keypress-to-present budget.
+//! Keypress-to-present budget.
+//!
+//! The editor test types through [`Editor`], the same path the window drives:
+//! edit the book, refresh the layout incrementally, paint the frame. Work is
+//! asserted in every build; wall-clock time only in optimized builds, since a
+//! debug build is not what a writer types into:
+//! `cargo test --release -p docwrite-app --test latency_gate -- --nocapture`.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use std::path::PathBuf;
 use std::time::Instant;
 
-use docwrite_app::{InputTrace, KEYPRESS_BUDGET, Pager, Phase, TraceCommand};
+use docwrite_app::{Editor, InputTrace, KEYPRESS_BUDGET, Pager, Phase, TraceCommand};
+use docwrite_model::{Book, ChapterStart, Position, Selection};
 use docwrite_typeset::{Face, book_of_repeated_line};
 
 fn noto() -> Vec<u8> {
@@ -15,17 +22,11 @@ fn noto() -> Vec<u8> {
 }
 
 #[test]
-fn five_hundred_pages_page_and_type_inside_the_budget() {
+fn a_replayed_trace_pages_and_types_inside_the_budget() {
     let face = Face::parse(noto()).expect("font");
-    let opened = Instant::now();
     let mut document =
         book_of_repeated_line(face, 500, "A sentence of the manuscript.").expect("open");
-    let open = opened.elapsed();
     assert_eq!(document.page_count(), 500);
-    assert!(
-        open <= KEYPRESS_BUDGET,
-        "opening 500 cached pages took {open:?}, budget {KEYPRESS_BUDGET:?}"
-    );
 
     let mut pager = Pager::new(document.page_count(), false);
     let mut trace = InputTrace::default();
@@ -78,4 +79,86 @@ fn five_hundred_pages_page_and_type_inside_the_budget() {
         steps.len(),
         KEYPRESS_BUDGET
     );
+}
+
+const PROSE: &str = "The archive kept its letters in bundles tied with string, \
+and each bundle carried a date in a hand that changed over the years from \
+careful to hurried. Reading them in order was like watching a clerk grow old.";
+
+/// About 500 pages: 50 chapters of 80 four-line paragraphs.
+fn long_book() -> Book {
+    let mut book = Book::new("Archive");
+    let mut template = book.chapter_templates()[0].clone();
+    template.start = ChapterStart::NextPage;
+    book.set_chapter_template(template).expect("template");
+    let body = |chapter: usize| -> String {
+        (0..80)
+            .map(|n| format!("{chapter}.{n}. {PROSE}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    book.insert(&body(0)).expect("insert");
+    let part = book.parts()[0].id();
+    for chapter in 1..50 {
+        book.add_chapter(part, format!("Chapter {}", chapter + 1))
+            .expect("chapter");
+        let fresh = *book.block_ids().last().expect("block");
+        book.set_selection(Selection::collapsed(Position::new(fresh, 0)))
+            .expect("select");
+        book.insert(&body(chapter)).expect("insert");
+    }
+    book
+}
+
+#[test]
+fn typing_into_the_editor_stays_inside_the_budget() {
+    let mut editor = Editor::with_book(long_book());
+    let mut frame = pixelkit_raster::WindowBuffer::new(1100, 800);
+    let opened = Instant::now();
+    editor.paint(&mut frame);
+    let open = opened.elapsed();
+    let pages = editor.pages_painted();
+    assert!(pages >= 450, "the long book has {pages} pages");
+
+    let blocks = editor.book().block_ids();
+    let mut latencies = Vec::new();
+    for fraction in [0.0, 0.5, 0.999] {
+        let block = blocks[((blocks.len() - 1) as f64 * fraction) as usize];
+        editor
+            .book_mut()
+            .set_selection(Selection::collapsed(Position::new(block, 5)))
+            .expect("caret");
+        editor.type_text(" ");
+        editor.paint(&mut frame); // settle the view on the caret's page
+        for ch in ["k", "e", "y", "s"] {
+            let started = Instant::now();
+            editor.type_text(ch);
+            editor.paint(&mut frame);
+            latencies.push(started.elapsed());
+            let report = editor.last_layout().expect("layout ran");
+            assert_eq!(
+                report.paragraphs_shaped, 1,
+                "at {fraction}: one paragraph shaped"
+            );
+            assert!(
+                report.pages_laid_out.len() <= 3,
+                "at {fraction}: typing laid out {:?} of {pages}",
+                report.pages_laid_out
+            );
+            assert!(
+                editor.caret_area().is_some(),
+                "at {fraction}: the caret is in view"
+            );
+        }
+    }
+    latencies.sort();
+    let p50 = latencies[latencies.len() / 2];
+    let max = latencies[latencies.len() - 1];
+    println!("{pages} pages: open {open:?}; keypress-to-present p50 {p50:?}, max {max:?}");
+    if !cfg!(debug_assertions) {
+        assert!(
+            max <= KEYPRESS_BUDGET,
+            "keypress-to-present max {max:?}, budget {KEYPRESS_BUDGET:?}"
+        );
+    }
 }

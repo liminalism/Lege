@@ -12,7 +12,7 @@ pub use nav::{Pager, Phase};
 pub use trace::{FrameMetrics, InputTrace, ReplayStep, TraceCommand};
 
 use docwrite_model::{Book, Direction, Motion};
-use docwrite_typeset::{Document, Face, GlyphAtlas, from_book};
+use docwrite_typeset::{Document, EditReport, Face, GlyphAtlas, from_book, update_from_book};
 use map::BookMap as Map;
 
 const DESK: u32 = 0x00E6_E1D6;
@@ -35,6 +35,13 @@ pub struct Editor {
     book: Book,
     pager: Pager,
     face: Option<Face>,
+    /// The laid-out book. Edits mark it stale; the next paint brings it up
+    /// to date incrementally rather than laying the book out again.
+    document: Option<Document>,
+    layout_stale: bool,
+    /// Set by an edit: the next layout refresh scrolls to the caret's page.
+    follow_caret: bool,
+    last_layout: Option<EditReport>,
     atlas: GlyphAtlas,
     preedit: String,
     caret: Option<CaretRect>,
@@ -51,10 +58,19 @@ impl Editor {
     pub fn new() -> Self {
         let mut book = Book::new("Untitled");
         let _ = book.insert("The book opens on a page.");
+        Self::with_book(book)
+    }
+
+    /// Open `book` in the editor. Layout happens on the first paint.
+    pub fn with_book(book: Book) -> Self {
         Self {
             book,
-            pager: Pager::new(8, false),
+            pager: Pager::new(1, false),
             face: load_face(),
+            document: None,
+            layout_stale: true,
+            follow_caret: false,
+            last_layout: None,
             atlas: GlyphAtlas::new(),
             preedit: String::new(),
             caret: None,
@@ -113,6 +129,7 @@ impl Editor {
             self.map.activate(&self.book, from);
         } else if self.map.drag_chapter(&mut self.book, from, to).is_ok() {
             self.dirty = true;
+            self.layout_stale = true;
         }
     }
 
@@ -159,6 +176,7 @@ impl Editor {
         let path = self.bundle.clone().ok_or_else(|| "no bundle".to_string())?;
         self.book = Book::load_snapshot(&path, name).map_err(|err| err.to_string())?;
         self.dirty = false;
+        self.layout_stale = true;
         Ok(())
     }
 
@@ -186,6 +204,8 @@ impl Editor {
         if !text.is_empty() {
             let _ = self.book.insert(text);
             self.dirty = true;
+            self.layout_stale = true;
+            self.follow_caret = true;
         }
     }
 
@@ -206,6 +226,8 @@ impl Editor {
 
     /// Draw the desk, the page stack, and the manuscript on those pages.
     pub fn paint(&mut self, buffer: &mut pixelkit_raster::WindowBuffer) {
+        // Layout first: it can move the view to follow the caret.
+        self.refresh_layout();
         self.caret = None;
         for pixel in buffer.pixels.iter_mut() {
             *pixel = DESK;
@@ -223,7 +245,7 @@ impl Editor {
         let scroll = self.pager.scroll();
         let origin = (height / 2) - ((scroll.fract() * page_h as f64) as i32);
         let first = scroll.floor() as i32;
-        let document = self.laid_out();
+        let document = self.document.take();
         self.pages_painted = document.as_ref().map(|laid| laid.page_count()).unwrap_or(0);
         let mut painter = pixelkit_raster::Painter::new(buffer);
         for slot in -1..4 {
@@ -250,6 +272,68 @@ impl Editor {
             }
         }
         self.paint_sidebar(&mut painter, height);
+        self.document = document;
+    }
+
+    /// Bring the layout up to date with the book. A no-op when nothing
+    /// changed since the last call. Only the edited paragraphs are shaped
+    /// again, and pagination stops where the old page breaks line up.
+    pub fn refresh_layout(&mut self) {
+        if !self.layout_stale && self.document.is_some() {
+            return;
+        }
+        let report = match self.document.as_mut() {
+            Some(document) => update_from_book(document, &self.book).ok(),
+            None => None,
+        };
+        let report = match report {
+            Some(report) => Some(report),
+            None => {
+                // First layout, or an update that failed: lay out afresh.
+                let fresh = self
+                    .face
+                    .as_ref()
+                    .and_then(|face| face.duplicate().ok())
+                    .and_then(|face| from_book(&self.book, face).ok());
+                let report = fresh.as_ref().map(|document| EditReport {
+                    pages_laid_out: (1..=document.page_count()).collect(),
+                    page_count: document.page_count(),
+                    paragraphs_shaped: document.paragraphs().len(),
+                });
+                self.document = fresh;
+                report
+            }
+        };
+        if let Some(document) = self.document.as_ref() {
+            self.pager.set_pages(document.page_count());
+            if std::mem::take(&mut self.follow_caret) {
+                let page = focus_mark(&self.book)
+                    .and_then(|(paragraph, byte)| document.page_of(paragraph, byte));
+                if let Some(page) = page {
+                    if self.pager.page_top() + 1 != page {
+                        self.pager.jump_to(page - 1);
+                    }
+                }
+            }
+        }
+        self.last_layout = report;
+        self.layout_stale = false;
+    }
+
+    /// What the most recent layout refresh did.
+    pub fn last_layout(&self) -> Option<&EditReport> {
+        self.last_layout.as_ref()
+    }
+
+    /// The laid-out book, as of the last paint or [`Self::refresh_layout`].
+    pub fn document(&self) -> Option<&Document> {
+        self.document.as_ref()
+    }
+
+    /// Scroll so 1-based `page` is at the top of the view.
+    pub fn jump_to_page(&mut self, page: u32) {
+        self.refresh_layout();
+        self.pager.jump_to(page.saturating_sub(1));
     }
 
     /// How many painted pixels equal `color`.
@@ -272,15 +356,6 @@ impl Editor {
             .iter()
             .filter(|pixel| **pixel != DESK && **pixel != PAGE_COLOR)
             .count()
-    }
-
-    fn laid_out(&self) -> Option<Document> {
-        let face = self.face.as_ref()?.duplicate().ok()?;
-        let mut book = self.book.clone();
-        if !self.preedit.is_empty() {
-            let _ = book.insert(&self.preedit);
-        }
-        from_book(&book, face).ok()
     }
 
     fn paint_page(
@@ -392,6 +467,42 @@ impl Editor {
         }
         if saw_focus {
             let height = (geometry.font_size * scale).max(1.0) as i32;
+            if !self.preedit.is_empty() {
+                // The composition is drawn at the caret, underlined, and does
+                // not reflow the page: it is not in the manuscript yet.
+                let preedit = self.preedit.clone();
+                let size = geometry.font_size * scale;
+                let before = caret_x;
+                let baseline = caret_y + height;
+                if let Ok(glyphs) = face.shape(&preedit, size.max(1.0), &[]) {
+                    for glyph in glyphs {
+                        let _ = self.atlas.with_coverage(
+                            face,
+                            glyph.id,
+                            size.max(1.0),
+                            0.0,
+                            |coverage, stride| {
+                                if stride == 0 {
+                                    return;
+                                }
+                                for (row, cells) in coverage.chunks(stride as usize).enumerate() {
+                                    painter.blend_coverage_row(
+                                        caret_x,
+                                        baseline - 48 + row as i32,
+                                        INK,
+                                        cells,
+                                    );
+                                }
+                            },
+                        );
+                        caret_x += glyph.x_advance.round() as i32;
+                    }
+                }
+                painter.fill_rect(
+                    pixelkit_raster::Rect::new(before, baseline + 2, (caret_x - before).max(1), 1),
+                    INK,
+                );
+            }
             painter.fill_rect(pixelkit_raster::Rect::new(caret_x, caret_y, 2, height), INK);
             self.caret = Some(CaretRect {
                 x: caret_x as f64,
@@ -465,7 +576,11 @@ impl Editor {
         &self.book
     }
 
+    /// Mutable access to the manuscript. The layout is refreshed on the
+    /// next paint.
     pub fn book_mut(&mut self) -> &mut Book {
+        self.layout_stale = true;
+        self.dirty = true;
         &mut self.book
     }
 
@@ -476,11 +591,15 @@ impl Editor {
     pub fn type_text(&mut self, text: &str) {
         let _ = self.book.insert(text);
         self.dirty = true;
+        self.layout_stale = true;
+        self.follow_caret = true;
     }
 
     pub fn backspace(&mut self) {
         let _ = self.book.delete_backward();
         self.dirty = true;
+        self.layout_stale = true;
+        self.follow_caret = true;
     }
 
     pub fn page_down(&mut self) {

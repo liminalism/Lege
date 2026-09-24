@@ -33,6 +33,24 @@ impl Pager {
         }
     }
 
+    /// Follow a document whose page count changed. The scroll position is
+    /// kept, clamped to the new last page.
+    pub fn set_pages(&mut self, pages: u32) {
+        self.pages = pages.max(1);
+        self.scroll = self.scroll.clamp(0.0, self.last());
+    }
+
+    /// Land on the top of 0-based page `index`.
+    pub fn jump_to(&mut self, index: u32) {
+        self.scroll = (index as f64).clamp(0.0, self.last());
+        self.origin = None;
+    }
+
+    /// Pages the pager navigates.
+    pub fn pages(&self) -> u32 {
+        self.pages
+    }
+
     pub fn scroll(&self) -> f64 {
         self.scroll
     }

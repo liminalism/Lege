@@ -421,6 +421,33 @@ impl Document {
             .find_map(|line| line.glyphs.first().map(|glyph| glyph.em))
     }
 
+    /// The 1-based page showing byte `byte` of paragraph index `paragraph`
+    /// (its index in reading order), or `None` past the end of the book.
+    pub fn page_of(&self, paragraph: usize, byte: usize) -> Option<u32> {
+        let first = self
+            .pages
+            .partition_point(|page| page.start.paragraph < paragraph)
+            .saturating_sub(1);
+        let mut found = None;
+        for (index, page) in self.pages.iter().enumerate().skip(first) {
+            if page.start.paragraph > paragraph {
+                break;
+            }
+            for line in page.lines.iter().filter(|line| line.paragraph == paragraph) {
+                let starts_at = line
+                    .glyphs
+                    .iter()
+                    .map(|glyph| glyph.cluster as usize)
+                    .min()
+                    .unwrap_or(0);
+                if line.is_first || starts_at <= byte {
+                    found = Some(index as u32 + 1);
+                }
+            }
+        }
+        found
+    }
+
     pub fn page_count(&self) -> u32 {
         self.pages.len() as u32
     }
