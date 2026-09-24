@@ -40,10 +40,21 @@ impl Pager {
         self.scroll = self.scroll.clamp(0.0, self.last());
     }
 
-    /// Land on the top of 0-based page `index`.
+    /// Land on the top of 0-based page `index`, or in spread mode on the
+    /// spread that holds it (spread `k` holds pages `2k` and `2k + 1`).
     pub fn jump_to(&mut self, index: u32) {
-        self.scroll = (index as f64).clamp(0.0, self.last());
+        let target = if self.spread {
+            f64::from((index + 1) / 2 * 2)
+        } else {
+            f64::from(index)
+        };
+        self.scroll = target.clamp(0.0, self.last());
         self.origin = None;
+    }
+
+    /// Whether the pager moves by spreads.
+    pub fn is_spread(&self) -> bool {
+        self.spread
     }
 
     /// Pages the pager navigates.
@@ -124,7 +135,12 @@ impl Pager {
     }
 
     fn last(&self) -> f64 {
-        self.pages.saturating_sub(1) as f64
+        if self.spread {
+            // Spread k holds pages 2k and 2k + 1; the last one holds the last page.
+            f64::from(self.pages / 2 * 2)
+        } else {
+            self.pages.saturating_sub(1) as f64
+        }
     }
 
     fn last_spread(&self) -> f64 {

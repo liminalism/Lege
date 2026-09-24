@@ -203,6 +203,10 @@ impl EditorApp {
             "Minus" if shift => self.editor.toggle_mark(Mark::Subscript),
             "KeyN" if shift => self.editor.open_prompt(PromptKind::NewChapter),
             "KeyO" if shift => self.editor.open_prompt(PromptKind::OpenSource),
+            "KeyP" if shift => {
+                let on = !self.editor.is_spread();
+                self.editor.set_spread(on);
+            }
             "KeyR" if shift => self.editor.open_prompt(PromptKind::RenameChapter),
             "KeyF" if alt => self.editor.open_prompt(PromptKind::Footnote),
             "KeyE" if alt => self.editor.open_prompt(PromptKind::Endnote),

@@ -1,5 +1,5 @@
 //! Paint the editor without a window and save the frame as a PNG:
-//! `cargo run -p docwrite-app --example snapshot -- BOOK.legebook OUT.png [page] [--fullscreen] [--scale 2] [--source S.pdf]`
+//! `cargo run -p docwrite-app --example snapshot -- BOOK.legebook OUT.png [page] [--fullscreen] [--scale 2] [--source S.pdf] [--spread]`
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
@@ -8,6 +8,7 @@ use docwrite_app::Editor;
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let fullscreen = args.iter().any(|arg| arg == "--fullscreen");
+    let spread = args.iter().any(|arg| arg == "--spread");
     let scale: f32 = args
         .iter()
         .position(|arg| arg == "--scale")
@@ -36,10 +37,15 @@ fn main() {
     let mut editor = Editor::open_or_create(book.as_str()).expect("open");
     editor.set_ui_scale(scale);
     editor.set_fullscreen(fullscreen);
+    editor.set_spread(spread);
     if let Some(source) = &source {
         editor.open_source(source).expect("open source");
     }
-    let base_w = if source.is_some() { 1500.0 } else { 1100.0 };
+    let base_w = if source.is_some() || spread {
+        1500.0
+    } else {
+        1100.0
+    };
     let (width, height) = ((base_w * scale) as u32, (800.0 * scale) as u32);
     let mut frame = pixelkit_raster::WindowBuffer::new(width, height);
     editor.paint(&mut frame);

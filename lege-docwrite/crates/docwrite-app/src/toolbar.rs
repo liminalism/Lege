@@ -32,6 +32,7 @@ pub enum Action {
     Footnote,
     Endnote,
     OpenSource,
+    Spread,
 }
 
 /// What a prompt's text is for.
@@ -163,8 +164,9 @@ impl Editor {
             "Source\u{2026}".into(),
             false,
             70.0,
-            4.0,
+            14.0,
         );
+        push(Action::Spread, "Spread".into(), self.spread, 62.0, 4.0);
         out.retain(|button| button.x + button.w <= width);
         out
     }
@@ -181,6 +183,7 @@ impl Editor {
             Action::Footnote => self.open_prompt(PromptKind::Footnote),
             Action::Endnote => self.open_prompt(PromptKind::Endnote),
             Action::OpenSource => self.open_prompt(PromptKind::OpenSource),
+            Action::Spread => self.set_spread(!self.spread),
         }
     }
 
@@ -526,7 +529,17 @@ impl Editor {
             self.paint_label(painter, face, &button.label, x, baseline, size);
         }
         if pages > 0 {
-            let status = format!("{} / {pages}", self.pager.page_top() + 1);
+            let top = self.pager.page_top();
+            let status = if self.spread {
+                // Spread k shows pages 2k and 2k + 1; page 1 stands alone.
+                match (top, (top + 1).min(pages)) {
+                    (0, _) => format!("1 / {pages}"),
+                    (left, right) if right > left => format!("{left}\u{2013}{right} / {pages}"),
+                    (left, _) => format!("{left} / {pages}"),
+                }
+            } else {
+                format!("{} / {pages}", top + 1)
+            };
             let status_w: f32 = face
                 .shape(&status, size, &[])
                 .map(|glyphs| glyphs.iter().map(|glyph| glyph.x_advance).sum())

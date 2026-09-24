@@ -84,6 +84,8 @@ pub struct Editor {
     caret_status: Option<(u32, f32, f32)>,
     /// Colors of the paint in progress.
     theme_now: Theme,
+    /// Two facing pages side by side.
+    spread: bool,
     /// A toolbar prompt taking typed text, when one is open.
     prompt: Option<Prompt>,
     /// Size of the last painted frame, for toolbar and pane hits.
@@ -133,6 +135,7 @@ impl Editor {
             fullscreen_request: None,
             caret_status: None,
             theme_now: PAPER,
+            spread: false,
             prompt: None,
             frame_width: 0,
             frame_height: 0,
@@ -370,38 +373,78 @@ impl Editor {
                 .max(1);
             (gap, page_w, page_h)
         };
-        let scroll = self.pager.scroll();
+        // In spread view a row holds a verso and a recto: pages 2|3, 4|5, ...,
+        // with page 1 alone on the right, as in a bound book.
+        let per_row = if self.spread && !self.fullscreen {
+            2
+        } else {
+            1
+        };
+        let page_w = if per_row == 2 {
+            page_w.min((content_w - 2 * gap) / 2).max(1)
+        } else {
+            page_w
+        };
+        let page_h = if per_row == 2 {
+            ((page_w as f32 * aspect) as i32).min(page_h)
+        } else {
+            page_h
+        };
+        let scroll = self.pager.scroll() / f64::from(per_row);
         let origin = bar + gap - (scroll.fract() * f64::from(page_h + gap)) as i32;
         let first = scroll.floor() as i32;
         let document = self.document.take();
         self.pages_painted = document.as_ref().map(|laid| laid.page_count()).unwrap_or(0);
+        let last_page = if document.is_some() {
+            self.pages_painted as i32
+        } else {
+            1
+        };
         let mut painter = pixelkit_raster::Painter::new(buffer);
         for slot in -1..4 {
-            let page_index = first + slot;
-            if page_index < 0 {
+            let row = first + slot;
+            if row < 0 {
                 continue;
             }
             let top = origin + slot * (page_h + gap);
-            let left = content_left + (content_w - page_w) / 2;
+            let row_left = content_left + (content_w - page_w * per_row) / 2;
             if self.fullscreen {
                 painter.fill_rect(
                     pixelkit_raster::Rect::new(0, top - gap, width, gap),
                     theme.rule,
                 );
             }
-            painter.fill_rect(
-                pixelkit_raster::Rect::new(left, top, page_w, page_h),
-                theme.page,
-            );
-            if let Some(document) = document.as_ref() {
-                self.paint_page(
-                    &mut painter,
-                    document,
-                    page_index as u32 + 1,
-                    left,
-                    top,
-                    page_w,
-                    page_h,
+            for column in 0..per_row {
+                let number = if per_row == 2 {
+                    row * 2 + column
+                } else {
+                    row + 1
+                };
+                if number < 1 || number > last_page {
+                    continue;
+                }
+                let left = row_left + column * page_w;
+                painter.fill_rect(
+                    pixelkit_raster::Rect::new(left, top, page_w, page_h),
+                    theme.page,
+                );
+                if let Some(document) = document.as_ref() {
+                    self.paint_page(
+                        &mut painter,
+                        document,
+                        number as u32,
+                        left,
+                        top,
+                        page_w,
+                        page_h,
+                    );
+                }
+            }
+            if per_row == 2 {
+                // The gutter between the two pages.
+                painter.fill_rect(
+                    pixelkit_raster::Rect::new(row_left + page_w - 1, top, 2, page_h),
+                    theme.rule,
                 );
             }
         }
@@ -476,8 +519,15 @@ impl Editor {
         };
         let page = focus_mark(&self.book, document)
             .and_then(|(paragraph, byte)| document.page_of(paragraph, byte));
+        let shown = |page: u32| {
+            if self.pager.is_spread() {
+                page / 2 == self.pager.page_top() / 2
+            } else {
+                self.pager.page_top() + 1 == page
+            }
+        };
         if let Some(page) = page
-            && self.pager.page_top() + 1 != page
+            && !shown(page)
         {
             self.pager.jump_to(page - 1);
         }
@@ -491,6 +541,25 @@ impl Editor {
     /// The laid-out book, as of the last paint or [`Self::refresh_layout`].
     pub fn document(&self) -> Option<&Document> {
         self.document.as_ref()
+    }
+
+    /// Show facing pages side by side (or one page at a time). PageUp and
+    /// PageDown then move a spread at a time.
+    pub fn set_spread(&mut self, on: bool) {
+        if self.spread == on {
+            return;
+        }
+        self.spread = on;
+        let top = self.pager.page_top();
+        let pages = self.pager.pages();
+        self.pager = Pager::new(pages, on);
+        self.pager.jump_to(top);
+        self.follow_caret = true;
+    }
+
+    /// Whether facing pages are shown side by side.
+    pub fn is_spread(&self) -> bool {
+        self.spread
     }
 
     /// Scroll so 1-based `page` is at the top of the view.

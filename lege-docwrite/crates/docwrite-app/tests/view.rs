@@ -96,3 +96,58 @@ fn full_screen_is_edge_to_edge_wordperfect_with_a_status_line() {
     painted(&mut editor);
     assert_eq!(editor.theme(), PAPER);
 }
+
+#[test]
+fn spread_view_shows_facing_pages_and_pages_by_spread() {
+    let mut editor = Editor::new();
+    let paragraph = "A paragraph long enough to wrap over a few lines of the page. ".repeat(4);
+    for _ in 0..40 {
+        editor.type_text(&format!("\n{paragraph}"));
+    }
+    let mut frame = pixelkit_raster::WindowBuffer::new(1400, 800);
+    editor.paint(&mut frame);
+    let pages = editor.pager().pages();
+    assert!(pages >= 4, "{pages} pages");
+    editor.set_spread(true);
+    editor.jump_to_page(1);
+    editor.paint(&mut frame);
+    assert_eq!(
+        editor.pager().scroll(),
+        0.0,
+        "page 1 stands alone, on the right"
+    );
+    editor.page_down();
+    assert_eq!(
+        editor.pager().scroll(),
+        2.0,
+        "then pages 2 and 3 face each other"
+    );
+    editor.page_down();
+    assert_eq!(editor.pager().scroll(), 4.0);
+    editor.page_up();
+    assert_eq!(editor.pager().scroll(), 2.0);
+    // Every page is reachable, the last included.
+    editor.jump_to_page(pages);
+    assert_eq!(editor.pager().scroll(), f64::from(pages / 2 * 2));
+    editor.paint(&mut frame);
+    // Two pages are drawn side by side: paper left and right of the middle.
+    editor.jump_to_page(2);
+    editor.paint(&mut frame);
+    let row = 400 * 1400;
+    let middle = 220 + (1400 - 220) / 2;
+    let paper = |from: usize, to: usize| {
+        (from..to)
+            .filter(|x| frame.pixels[row + x] == PAPER.page)
+            .count()
+    };
+    assert!(
+        paper(middle - 400, middle) > 300,
+        "the verso, left of the gutter"
+    );
+    assert!(
+        paper(middle, middle + 400) > 300,
+        "the recto, right of the gutter"
+    );
+    editor.set_spread(false);
+    assert!(!editor.is_spread());
+}
