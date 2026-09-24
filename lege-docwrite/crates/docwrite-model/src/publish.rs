@@ -83,58 +83,89 @@ impl Default for ParagraphStyle {
 /// Page master: geometry, folio, running head.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct PageMaster {
+    /// Master name; templates refer to it.
     pub name: String,
+    /// Trim width in points.
     pub width_pt: f32,
+    /// Trim height in points.
     pub height_pt: f32,
+    /// Top margin in points.
     pub margin_top: f32,
+    /// Bottom margin in points.
     pub margin_bottom: f32,
+    /// Inner (spine-side) margin in points.
     pub margin_inner: f32,
+    /// Outer margin in points.
     pub margin_outer: f32,
+    /// Print page numbers.
     pub folio: bool,
+    /// Print running heads.
     pub running_head: bool,
+    /// Facing pages: versos mirror the margins.
     pub facing: bool,
 }
 
 /// How a chapter opens.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ChapterStart {
+    /// Open on the next page.
     NextPage,
+    /// Open on the next right-hand page, leaving a blank verso if needed.
     NextRecto,
 }
 
 /// Chapter template. Chapters reference it by name.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ChapterTemplate {
+    /// Template name; chapters refer to it.
     pub name: String,
+    /// Name of the page master its pages use.
     pub master: String,
+    /// Label for its openers, such as "Chapter".
     pub opener: String,
+    /// Style of its title.
     pub title_style: String,
+    /// Style of its body text.
     pub body_style: String,
+    /// Style of its first paragraph.
     pub first_paragraph_style: String,
+    /// How it opens.
     pub start: ChapterStart,
+    /// Print the folio on its opener page.
     pub show_opener_folio: bool,
 }
 
 /// A passage captured from a source PDF.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SourceNote {
+    /// Stable id; citations refer to it.
     pub id: String,
+    /// Path of the source document.
     pub document: String,
+    /// 0-based page of the passage.
     pub page: u32,
     /// `[left, top, right, bottom]` rectangles of the passage.
     pub rects: Vec<[f32; 4]>,
+    /// The passage's text.
     pub passage: String,
+    /// How citations print it, such as "Smith 1999, 12".
     pub citation: String,
+    /// The writer's note on it.
     pub annotation: String,
 }
 
 /// One bibliography record, also the CSL/BibTeX shape we import.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct BibliographyEntry {
+    /// Citation key.
     pub key: String,
+    /// Kind, such as book or article.
     pub kind: String,
+    /// Title.
     pub title: String,
+    /// Author.
     pub author: String,
+    /// Date of issue.
     pub issued: String,
 }
 
@@ -151,7 +182,9 @@ pub struct CslRecord {
 /// An index term anchored in a block.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct IndexTerm {
+    /// The term.
     pub term: String,
+    /// The block it indexes.
     pub block: BlockId,
 }
 
@@ -219,14 +252,6 @@ impl Stylesheet {
 }
 
 impl Book {
-    pub(crate) fn stylesheet(&self) -> &Stylesheet {
-        &self.stylesheet
-    }
-
-    pub(crate) fn stylesheet_mut(&mut self) -> &mut Stylesheet {
-        &mut self.stylesheet
-    }
-
     /// Paragraph styles in definition order.
     pub fn paragraph_styles(&self) -> &[ParagraphStyle] {
         &self.stylesheet.paragraphs
@@ -248,6 +273,7 @@ impl Book {
         Ok(())
     }
 
+    /// Page masters in definition order.
     pub fn page_masters(&self) -> &[PageMaster] {
         &self.stylesheet.masters
     }
@@ -267,6 +293,7 @@ impl Book {
         Ok(())
     }
 
+    /// Chapter templates in definition order.
     pub fn chapter_templates(&self) -> &[ChapterTemplate] {
         &self.stylesheet.templates
     }
@@ -397,6 +424,7 @@ impl Book {
         Ok(())
     }
 
+    /// Keep a source note.
     pub fn add_source(&mut self, source: SourceNote) {
         self.stylesheet.sources.push(source);
     }
@@ -422,6 +450,7 @@ impl Book {
         &self.stylesheet.sources
     }
 
+    /// The source note with `id`.
     pub fn source(&self, id: &str) -> Option<&SourceNote> {
         self.stylesheet
             .sources
@@ -481,18 +510,22 @@ impl Book {
         self.source(&id)
     }
 
+    /// The source a citation key refers to.
     pub fn citation_target(&self, id: &str) -> Option<&SourceNote> {
         self.source(id)
     }
 
+    /// Add a bibliography entry.
     pub fn add_bibliography(&mut self, entry: BibliographyEntry) {
         self.stylesheet.bibliography.push(entry);
     }
 
+    /// The bibliography, in the order entries were added.
     pub fn bibliography(&self) -> &[BibliographyEntry] {
         &self.stylesheet.bibliography
     }
 
+    /// Index `term` at `block`.
     pub fn add_index_term(&mut self, term: impl Into<String>, block: BlockId) {
         self.stylesheet.index.push(IndexTerm {
             term: term.into(),
@@ -500,6 +533,7 @@ impl Book {
         });
     }
 
+    /// Index terms, in the order they were added.
     pub fn index_terms(&self) -> &[IndexTerm] {
         &self.stylesheet.index
     }
@@ -541,6 +575,7 @@ impl Book {
             .collect()
     }
 
+    /// Add bibliography entries from CSL JSON. Returns how many.
     pub fn import_csl_json(&mut self, json: &str) -> Result<usize, ModelError> {
         let records = parse_csl(json).map_err(|_| ModelError::Inconsistent("csl json"))?;
         let count = records.len();
@@ -556,6 +591,7 @@ impl Book {
         Ok(count)
     }
 
+    /// The bibliography as CSL JSON.
     pub fn export_csl_json(&self) -> String {
         let mut out = String::from("[\n");
         for (index, entry) in self.stylesheet.bibliography.iter().enumerate() {
@@ -575,6 +611,7 @@ impl Book {
         out
     }
 
+    /// Add bibliography entries from BibTeX. Returns how many.
     pub fn import_bibtex(&mut self, bibtex: &str) -> Result<usize, ModelError> {
         let records = parse_bibtex(bibtex);
         let count = records.len();
@@ -585,6 +622,7 @@ impl Book {
         Ok(count)
     }
 
+    /// The bibliography as BibTeX.
     pub fn export_bibtex(&self) -> String {
         let mut out = String::new();
         for entry in &self.stylesheet.bibliography {
@@ -604,10 +642,12 @@ impl Book {
         out
     }
 
+    /// Remember the caret, to restore when the book reopens.
     pub fn remember_position(&mut self) {
         self.stylesheet.saved_position = Some(self.selection().focus);
     }
 
+    /// The caret remembered with the book.
     pub fn saved_position(&self) -> Option<Position> {
         self.stylesheet.saved_position
     }

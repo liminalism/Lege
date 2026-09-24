@@ -6,6 +6,7 @@ use docwrite_model::Book;
 
 use crate::blocks_of;
 
+/// The book as an IDML package: styles, a parent spread, and one story.
 pub fn export_idml(book: &Book) -> Vec<u8> {
     let blocks = blocks_of(book);
     let mut story = String::from(

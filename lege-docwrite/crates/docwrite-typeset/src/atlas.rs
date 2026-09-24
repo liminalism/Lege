@@ -18,17 +18,24 @@ const MAX_PX: f32 = 1024.0;
 /// quarter pixel, and the face is part of the key.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct AtlasKey {
+    /// The face's identity.
     pub face: u64,
+    /// Glyph id.
     pub glyph: u16,
+    /// Size in quarter pixels.
     pub quarter_px: u32,
+    /// Subpixel offset in quarter pixels.
     pub subpixel: u8,
 }
 
 /// A rasterized glyph. Coverage is row-major, one byte per pixel.
 #[derive(Clone, Copy, Debug)]
 pub struct GlyphBitmap<'a> {
+    /// Coverage, row-major, one byte per pixel.
     pub coverage: &'a [u8],
+    /// Width in pixels.
     pub width: u32,
+    /// Height in pixels.
     pub height: u32,
     /// Pixels from the pen position to the bitmap's left edge.
     pub left: i32,
@@ -99,14 +106,14 @@ impl GlyphAtlas {
             quarter_px,
             subpixel,
         };
-        if !self.entries.contains_key(&key) {
+        if let std::collections::hash_map::Entry::Vacant(e) = self.entries.entry(key) {
             let entry = rasterize(
                 face,
                 glyph,
                 quarter_px as f32 / 4.0,
                 f32::from(subpixel) / 4.0,
             )?;
-            self.entries.insert(key, entry);
+            e.insert(entry);
         }
         match self.entries.get(&key) {
             Some(entry) => Ok(draw(GlyphBitmap {

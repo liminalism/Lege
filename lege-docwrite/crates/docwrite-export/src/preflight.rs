@@ -3,16 +3,23 @@
 
 use docwrite_model::Book;
 
+/// What preflight found before export.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct PreflightReport {
+    /// Fonts the book names that are not on this machine.
     pub missing_fonts: Vec<String>,
+    /// Fonts whose licence forbids embedding.
     pub unembeddable_fonts: Vec<String>,
+    /// Images below print resolution.
     pub low_resolution_images: Vec<String>,
+    /// Links and citations whose target is missing.
     pub broken_references: Vec<String>,
+    /// Other font embedding problems.
     pub font_embedding_warnings: Vec<String>,
 }
 
 impl PreflightReport {
+    /// Nothing to fix.
     pub fn is_clean(&self) -> bool {
         self.missing_fonts.is_empty()
             && self.unembeddable_fonts.is_empty()
@@ -21,14 +28,20 @@ impl PreflightReport {
     }
 }
 
+/// What preflight is told about the machine and the book's assets.
+#[derive(Debug)]
 pub struct AssetFacts<'a> {
+    /// Font names available on this machine.
     pub fonts_on_disk: &'a [String],
+    /// Font names that may be embedded.
     pub embeddable: &'a [String],
     /// Image name and pixels per inch.
     pub images: &'a [(&'a str, u32)],
+    /// Link and citation targets that exist.
     pub linked_targets_that_exist: &'a [String],
 }
 
+/// Check `book` for problems an export would carry.
 pub fn preflight(book: &Book, facts: &AssetFacts<'_>) -> PreflightReport {
     let mut report = PreflightReport::default();
     let mut wanted = vec!["Body".to_string()];

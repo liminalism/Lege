@@ -28,11 +28,15 @@ pub enum MapKind {
 /// One visible row. Hidden children of a collapsed part or chapter are absent.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MapRow {
+    /// What the row is.
     pub kind: MapKind,
+    /// Its title as shown.
     pub title: String,
     /// Chapter index in reading order, when this row is a chapter.
     pub chapter_index: Option<usize>,
+    /// The part it is in.
     pub part_id: Option<PartId>,
+    /// The chapter it is, or is in.
     pub chapter_id: Option<ChapterId>,
 }
 
@@ -44,6 +48,7 @@ pub struct BookMap {
 }
 
 impl BookMap {
+    /// A map with nothing folded.
     pub fn new() -> Self {
         Self::default()
     }
@@ -56,6 +61,7 @@ impl BookMap {
         )
     }
 
+    /// The row at a height in the map, for `nrows` rows.
     pub fn row_at(&self, x: f32, y: f32, nrows: usize) -> Option<usize> {
         // The caller decides whether the point is inside the (resizable)
         // sidebar; this only maps a height to a row.
@@ -70,6 +76,7 @@ impl BookMap {
         }
     }
 
+    /// The rows shown for `book`, folded parts and chapters left out.
     pub fn rows(&self, book: &Book) -> Vec<MapRow> {
         let mut rows = Vec::new();
         let mut chapter_index = 0usize;

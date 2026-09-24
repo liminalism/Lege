@@ -253,10 +253,15 @@ pub struct PaintedLine {
 pub struct Glyph {
     /// Which face of the document's family drew it: see [`FaceStyle`].
     pub face: u8,
+    /// Glyph id in its face.
     pub id: u16,
+    /// Byte offset of its text in the paragraph, or a marker cluster.
     pub cluster: u32,
+    /// Advance in pixels.
     pub x_advance: f32,
+    /// Horizontal offset from the pen.
     pub x_offset: f32,
+    /// Vertical offset from the baseline; positive is up.
     pub y_offset: f32,
     /// Em size used to draw this glyph. A drop cap is larger than the body.
     pub em: f32,
@@ -280,21 +285,31 @@ pub fn features_for(small_caps: bool, oldstyle: bool) -> Vec<Feature> {
 /// Page and type size. Lengths are in pixels (1px = 1pt at 72dpi for tests).
 #[derive(Clone, Copy, Debug)]
 pub struct Geometry {
+    /// Trim width.
     pub page_width: f32,
+    /// Trim height.
     pub page_height: f32,
+    /// Top margin.
     pub margin_top: f32,
+    /// Bottom margin.
     pub margin_bottom: f32,
+    /// Inner margin.
     pub margin_inner: f32,
+    /// Outer margin.
     pub margin_outer: f32,
+    /// Body type size.
     pub font_size: f32,
+    /// Body leading.
     pub leading: f32,
 }
 
 impl Geometry {
+    /// The measure: width less inner and outer margins.
     pub fn content_width(&self) -> f32 {
         (self.page_width - self.margin_inner - self.margin_outer).max(1.0)
     }
 
+    /// The text block's height.
     pub fn content_height(&self) -> f32 {
         (self.page_height - self.margin_top - self.margin_bottom).max(self.leading)
     }
@@ -317,14 +332,23 @@ impl Geometry {
 /// How a paragraph participates in pagination.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ParagraphStyle {
+    /// Hyphenate at line ends.
     pub hyphenate: bool,
+    /// Keep the last line with the next paragraph.
     pub keep_with_next: bool,
+    /// Keep short paragraphs on one page.
     pub keep_lines: bool,
+    /// Avoid widows and orphans.
     pub widow_orphan: bool,
+    /// Lines a drop cap spans.
     pub drop_cap_lines: u8,
+    /// Small capitals.
     pub small_caps: bool,
+    /// Old-style figures.
     pub oldstyle_figures: bool,
+    /// Space above.
     pub space_before: f32,
+    /// Space below.
     pub space_after: f32,
     /// Zero uses the document geometry.
     pub font_size: f32,
@@ -383,11 +407,15 @@ impl Default for ParagraphStyle {
 /// so this crate does not need to own the model type.
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct Paragraph {
+    /// Block id, or a generated paragraph's marker id.
     pub id: u64,
+    /// The text.
     pub text: String,
+    /// How it is set.
     pub style: ParagraphStyle,
     /// Footnote or endnote body anchored to this paragraph, if any.
     pub note: Option<String>,
+    /// The note is an endnote (set elsewhere, not at the foot).
     pub note_is_endnote: bool,
     /// Reference mark set in superscript after the paragraph's last
     /// character, such as a note number. Empty for none.
@@ -399,9 +427,13 @@ pub struct Paragraph {
 /// The faces of a family, as indices into [`Document::faces`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FaceStyle {
+    /// Regular.
     Regular = 0,
+    /// Bold.
     Bold = 1,
+    /// Italic.
     Italic = 2,
+    /// Bold italic.
     BoldItalic = 3,
 }
 
@@ -424,8 +456,11 @@ pub struct StyledRun {
     pub start: usize,
     /// First byte after the run.
     pub end: usize,
+    /// Bold face.
     pub bold: bool,
+    /// Italic face.
     pub italic: bool,
+    /// Small capitals.
     pub small_caps: bool,
     /// Positive for superscript, negative for subscript, zero on the baseline.
     pub script: i8,
@@ -434,7 +469,9 @@ pub struct StyledRun {
 /// A position in the line stream: which paragraph, which of its lines.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Cursor {
+    /// Paragraph index.
     pub paragraph: usize,
+    /// Line within the paragraph.
     pub line: u32,
 }
 
@@ -451,8 +488,6 @@ struct FlowLine {
     /// Glyph ids of this line, for the atlas and for PDF.
     /// Shared so a repeated paragraph does not allocate a new buffer per page.
     glyphs: Arc<Vec<Glyph>>,
-    /// Advance width.
-    width: f32,
     text: String,
     /// Drop-cap glyph is larger than the body size when set.
     drop_cap: bool,
@@ -551,13 +586,16 @@ pub(crate) struct PageRules {
 /// What an edit did to pagination. Page numbers are 1-based.
 #[derive(Clone, Debug)]
 pub struct EditReport {
+    /// Pages laid out again, 1-based.
     pub pages_laid_out: Vec<u32>,
+    /// Pages after the edit.
     pub page_count: u32,
     /// Paragraphs shaped and line-broken again by this edit.
     pub paragraphs_shaped: usize,
 }
 
 /// A shaped, paginated document.
+#[derive(Debug)]
 pub struct Document {
     /// Regular, bold, italic, bold italic; missing styles use regular.
     faces: Vec<Face>,
@@ -575,6 +613,7 @@ pub struct Document {
 }
 
 impl Document {
+    /// Lay out `paragraphs` on `geometry` with one face.
     pub fn new(
         face: Face,
         geometry: Geometry,
@@ -736,6 +775,7 @@ impl Document {
             .collect();
     }
 
+    /// Number of pages.
     pub fn page_count(&self) -> u32 {
         self.pages.len() as u32
     }
@@ -781,7 +821,7 @@ impl Document {
             .filter(|run| run.start < run.end && run.end <= text.len())
             .cloned()
             .collect::<Vec<_>>();
-        let mut emit = |glyphs: &mut Vec<Glyph>, run: &StyledRun| -> Result<(), TypesetError> {
+        let emit = |glyphs: &mut Vec<Glyph>, run: &StyledRun| -> Result<(), TypesetError> {
             let Some(slice) = text.get(run.start..run.end) else {
                 return Ok(());
             };
@@ -835,6 +875,7 @@ impl Document {
         Ok(glyphs)
     }
 
+    /// The page geometry.
     pub fn geometry(&self) -> Geometry {
         self.geometry
     }
@@ -847,6 +888,7 @@ impl Document {
             .unwrap_or_default()
     }
 
+    /// The footnote lines on 1-based `page`, as text.
     pub fn page_footnotes(&self, page: u32) -> Vec<String> {
         self.pages
             .get(page.saturating_sub(1) as usize)
@@ -1009,6 +1051,7 @@ impl Document {
         violations
     }
 
+    /// Whether 1-based `page` opens with a drop-cap line.
     pub fn first_line_is_drop_cap(&self, page: u32) -> bool {
         self.pages
             .get(page.saturating_sub(1) as usize)
@@ -1139,9 +1182,9 @@ impl Document {
         // Old paragraphs that no longer exist change the layout at the place
         // they used to occupy: right after their surviving predecessor.
         let mut place = 0;
-        for old in 0..old_paragraphs.len() {
-            match remap[old] {
-                Some(index) => place = index + 1,
+        for kept in &remap {
+            match kept {
+                Some(index) => place = *index + 1,
                 None => mark(place, &mut first_change),
             }
         }
@@ -1194,6 +1237,7 @@ impl Document {
             .collect())
     }
 
+    /// The paragraphs as laid out, in reading order.
     pub fn paragraphs(&self) -> &[Paragraph] {
         &self.paragraphs
     }
@@ -1496,7 +1540,7 @@ impl Document {
         Ok(broken
             .into_iter()
             .enumerate()
-            .map(|(line_index, mut line)| {
+            .map(|(line_index, line)| {
                 let mut height = leading
                     + if line_index == 0 {
                         paragraph.style.space_before
@@ -1525,7 +1569,6 @@ impl Document {
                     widow_orphan: paragraph.style.widow_orphan,
                     drop_cap,
                     glyphs: Arc::new(line.glyphs),
-                    width: line.width,
                     text: line.text,
                     indent: left
                         + offsets.get(line_index).copied().unwrap_or(0.0)
@@ -2112,13 +2155,6 @@ impl Document {
         }
     }
 
-    fn note_on_paragraph(&self, index: usize) -> bool {
-        self.paragraphs
-            .get(index)
-            .and_then(|paragraph| paragraph.note.as_ref())
-            .is_some()
-    }
-
     fn line_at(&self, cursor: Cursor) -> Option<&FlowLine> {
         self.lines
             .get(cursor.paragraph)
@@ -2346,7 +2382,7 @@ fn slice_line(
 /// When a page would open on a paragraph's last line, pull the previous
 /// line onto it if that line is still sitting at the bottom of the page
 /// we just closed.
-fn avoid_widow(pages: &mut Vec<Page>, mut page: Page) -> Page {
+fn avoid_widow(pages: &mut [Page], mut page: Page) -> Page {
     let widow = page
         .lines
         .first()

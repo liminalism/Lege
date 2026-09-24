@@ -42,7 +42,6 @@ struct PlacedLine {
     x: f32,
     /// Baseline, from the page's top edge.
     baseline: f32,
-    em: f32,
     glyphs: Vec<PlacedGlyph>,
 }
 
@@ -238,7 +237,6 @@ fn place_page(document: &Document, page: u32) -> Result<Vec<PlacedLine>, String>
         placed.push(PlacedLine {
             x: inset + line.indent,
             baseline: line.baseline,
-            em: line.em,
             glyphs: placed_glyphs(text, &line.glyphs, mark, line.em),
         });
     }
@@ -267,7 +265,6 @@ fn place_page(document: &Document, page: u32) -> Result<Vec<PlacedLine>, String>
         placed.push(PlacedLine {
             x: inset,
             baseline: note.baseline,
-            em: note.em,
             glyphs: placed_glyphs(&note.text, &note.glyphs, "", note.em),
         });
     }
@@ -289,7 +286,6 @@ fn set_line(
     Ok(PlacedLine {
         x,
         baseline,
-        em: size,
         glyphs: placed_glyphs(text, &glyphs, "", size),
     })
 }

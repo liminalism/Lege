@@ -52,11 +52,17 @@ impl std::fmt::Debug for Research {
 /// Something the pane's header can do.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SourceAction {
+    /// The previous page.
     Previous,
+    /// The next page.
     Next,
+    /// Keep the selected passage as a source note.
     Capture,
+    /// Quote the source at the caret.
     Quote,
+    /// Cite the source at the caret.
     Cite,
+    /// Close the pane.
     Close,
 }
 

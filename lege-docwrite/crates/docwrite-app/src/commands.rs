@@ -127,12 +127,14 @@ impl Editor {
         )
     }
 
+    /// Undo the last edit.
     pub fn undo(&mut self) {
         if self.book.undo().is_ok() {
             self.edited();
         }
     }
 
+    /// Redo the last undone edit.
     pub fn redo(&mut self) {
         if self.book.redo().is_ok() {
             self.edited();
@@ -164,6 +166,7 @@ impl Editor {
         }
     }
 
+    /// Delete the selection, or the character after the caret.
     pub fn delete_forward(&mut self) {
         if self.book.delete_forward().is_ok() {
             self.edited();

@@ -37,9 +37,13 @@ pub const SELECTION: u32 = PAPER.selection;
 /// Caret rectangle in window pixels, for the IME candidate window.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CaretRect {
+    /// Left edge.
     pub x: f64,
+    /// Top edge.
     pub y: f64,
+    /// Width.
     pub width: f64,
+    /// Height.
     pub height: f64,
 }
 
@@ -102,6 +106,7 @@ pub struct Editor {
 }
 
 impl Editor {
+    /// An editor on a new, one-paragraph book.
     pub fn new() -> Self {
         let mut book = Book::new("Untitled");
         let _ = book.insert("The book opens on a page.");
@@ -288,16 +293,19 @@ impl Editor {
         Ok(())
     }
 
+    /// Move the caret one character back.
     pub fn move_left(&mut self) {
         let _ = self.book.move_caret(Motion::Char(Direction::Backward));
         self.follow_caret = true;
     }
 
+    /// Move the caret one character on.
     pub fn move_right(&mut self) {
         let _ = self.book.move_caret(Motion::Char(Direction::Forward));
         self.follow_caret = true;
     }
 
+    /// Extend the selection one character back.
     pub fn extend_left(&mut self) {
         let _ = self
             .book
@@ -305,6 +313,7 @@ impl Editor {
         self.follow_caret = true;
     }
 
+    /// Extend the selection one character on.
     pub fn extend_right(&mut self) {
         let _ = self.book.extend_selection(Motion::Char(Direction::Forward));
         self.follow_caret = true;
@@ -596,6 +605,8 @@ impl Editor {
             .count()
     }
 
+    // A page's position and size, plus what to draw it with.
+    #[allow(clippy::too_many_arguments)]
     fn paint_page(
         &mut self,
         painter: &mut pixelkit_raster::Painter<'_>,
@@ -857,6 +868,7 @@ impl Editor {
         }
     }
 
+    /// The manuscript.
     pub fn book(&self) -> &Book {
         &self.book
     }
@@ -868,32 +880,51 @@ impl Editor {
         &mut self.book
     }
 
+    /// The page viewport.
     pub fn pager(&self) -> &Pager {
         &self.pager
     }
 
+    /// Insert `text` at the caret, replacing any selection. Newlines start paragraphs.
     pub fn type_text(&mut self, text: &str) {
         if self.book.insert(text).is_ok() {
             self.edited();
         }
     }
 
+    /// Delete the selection, or the character before the caret.
     pub fn backspace(&mut self) {
         if self.book.delete_backward().is_ok() {
             self.edited();
         }
     }
 
+    /// Show the next page (or spread).
     pub fn page_down(&mut self) {
         self.pager.page_down();
     }
 
+    /// Show the previous page (or spread).
     pub fn page_up(&mut self) {
         self.pager.page_up();
     }
 
+    /// Scroll by `delta` pages in a gesture; the view settles on a page when it ends.
     pub fn scroll_gesture(&mut self, delta: f64, phase: Phase) {
         self.pager.scroll_gesture(delta, phase);
+    }
+}
+
+impl std::fmt::Debug for Editor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Editor")
+            .field("bundle", &self.bundle)
+            .field("blocks", &self.book.block_ids().len())
+            .field("pages", &self.pages_painted)
+            .field("dirty", &self.dirty)
+            .field("fullscreen", &self.fullscreen)
+            .field("spread", &self.spread)
+            .finish_non_exhaustive()
     }
 }
 

@@ -7,9 +7,13 @@
 /// Gesture phase, matching the pixelkit scroll seam.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Phase {
+    /// A gesture began.
     Started,
+    /// It moved.
     Moved,
+    /// It ended: the view settles on a page.
     Ended,
+    /// The platform cancelled it: the view settles too.
     Cancelled,
 }
 
@@ -24,6 +28,7 @@ pub struct Pager {
 }
 
 impl Pager {
+    /// A pager over `pages` pages, by page or (with `spread`) by spread.
     pub fn new(pages: u32, spread: bool) -> Self {
         Self {
             pages: pages.max(1),
@@ -44,7 +49,7 @@ impl Pager {
     /// spread that holds it (spread `k` holds pages `2k` and `2k + 1`).
     pub fn jump_to(&mut self, index: u32) {
         let target = if self.spread {
-            f64::from((index + 1) / 2 * 2)
+            f64::from(index.div_ceil(2) * 2)
         } else {
             f64::from(index)
         };
@@ -62,19 +67,23 @@ impl Pager {
         self.pages
     }
 
+    /// The scroll position in pages from the top of the first page.
     pub fn scroll(&self) -> f64 {
         self.scroll
     }
 
+    /// The page (0-based) at the top of the view.
     pub fn page_top(&self) -> u32 {
         self.scroll.round().clamp(0.0, self.last()) as u32
     }
 
+    /// Go to the next page top, or next spread.
     pub fn page_down(&mut self) {
         self.scroll = self.forward_target();
         self.origin = None;
     }
 
+    /// Go to the previous page top, or previous spread.
     pub fn page_up(&mut self) {
         self.scroll = self.backward_target();
         self.origin = None;

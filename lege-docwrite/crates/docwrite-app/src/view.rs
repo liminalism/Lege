@@ -75,9 +75,13 @@ impl Default for Sidebar {
 /// The pointer shape the window should show.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PointerShape {
+    /// The platform arrow.
     Arrow,
+    /// An I-beam, over text.
     Text,
+    /// A hand, over something to click.
     Hand,
+    /// A column-resize arrow, over the Book Map's edge.
     ResizeColumn,
 }
 

@@ -212,6 +212,37 @@ pub(crate) fn runs_cover(runs: &[Run], len: usize) -> bool {
     at == len
 }
 
+/// `runs` with `edit` applied to the marks of characters `[from, to)`.
+pub(crate) fn edit_marks(
+    runs: &[Run],
+    from: usize,
+    to: usize,
+    edit: &dyn Fn(&mut RunMarks),
+) -> Vec<Run> {
+    let mut out = Vec::with_capacity(runs.len() + 2);
+    for run in runs {
+        let pieces = [
+            (run.start, run.end.min(from), false),
+            (run.start.max(from), run.end.min(to), true),
+            (run.start.max(to), run.end, false),
+        ];
+        for (start, end, inside) in pieces {
+            if start < end {
+                let mut marks = run.marks.clone();
+                if inside {
+                    edit(&mut marks);
+                }
+                out.push(Run::span(start, end, marks));
+            }
+        }
+    }
+    let empty = runs
+        .first()
+        .map(|run| run.marks.clone())
+        .unwrap_or_default();
+    coalesce(out, empty)
+}
+
 #[cfg(test)]
 #[allow(clippy::expect_used)]
 mod tests {
@@ -259,35 +290,4 @@ mod tests {
         let got = rewrite_runs(&old, 0, 4, &[]).expect("runs");
         assert_eq!(got, vec![Run::span(0, 0, bold)]);
     }
-}
-
-/// `runs` with `edit` applied to the marks of characters `[from, to)`.
-pub(crate) fn edit_marks(
-    runs: &[Run],
-    from: usize,
-    to: usize,
-    edit: &dyn Fn(&mut RunMarks),
-) -> Vec<Run> {
-    let mut out = Vec::with_capacity(runs.len() + 2);
-    for run in runs {
-        let pieces = [
-            (run.start, run.end.min(from), false),
-            (run.start.max(from), run.end.min(to), true),
-            (run.start.max(to), run.end, false),
-        ];
-        for (start, end, inside) in pieces {
-            if start < end {
-                let mut marks = run.marks.clone();
-                if inside {
-                    edit(&mut marks);
-                }
-                out.push(Run::span(start, end, marks));
-            }
-        }
-    }
-    let empty = runs
-        .first()
-        .map(|run| run.marks.clone())
-        .unwrap_or_default();
-    coalesce(out, empty)
 }

@@ -65,11 +65,21 @@ impl FrameMetrics {
 #[derive(Clone, Debug, PartialEq)]
 pub enum TraceCommand {
     /// Insert `text` at the paragraph that opens 1-based `page`.
-    Type { page: u32, text: String },
+    Type {
+        /// 1-based page.
+        page: u32,
+        /// What to type.
+        text: String,
+    },
     /// Move to the next page top.
     PageDown,
-    /// A scroll-gesture sample. `delta` is in pages.
-    Scroll { delta: f64, phase: Phase },
+    /// A scroll-gesture sample.
+    Scroll {
+        /// Movement in pages.
+        delta: f64,
+        /// Where in the gesture this sample falls.
+        phase: Phase,
+    },
 }
 
 /// A sequence of editor commands, replayed against a document and pager.

@@ -15,15 +15,23 @@ use docwrite_model::{BlockKind, Book};
 /// One exportable block, flattened from the book in reading order.
 #[derive(Clone, Debug)]
 pub struct ExportBlock {
+    /// Paragraph kind: heading, quote, image, caption or paragraph.
     pub kind: String,
+    /// The text.
     pub text: String,
+    /// Some run is bold.
     pub bold: bool,
+    /// Some run is italic.
     pub italic: bool,
+    /// The first link target, if any.
     pub link: Option<String>,
+    /// The note attached to the block, if any.
     pub note: Option<String>,
+    /// The chapter it is in.
     pub chapter: String,
 }
 
+/// Every block of the book, chapter titles included, in reading order.
 pub fn blocks_of(book: &Book) -> Vec<ExportBlock> {
     let mut out = Vec::new();
     for part in book.parts() {

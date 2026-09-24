@@ -71,11 +71,10 @@ fn run() -> Result<(), RunError> {
     let source = args
         .iter()
         .position(|arg| arg == "--source")
-        .map(|index| {
+        .and_then(|index| {
             args.remove(index);
             (index < args.len()).then(|| PathBuf::from(args.remove(index)))
-        })
-        .flatten();
+        });
     match args.as_slice() {
         [command, book, out] if command == "export" => export(Path::new(book), Path::new(out)),
         [] => open(PathBuf::from("Untitled.legebook"), fullscreen, source),

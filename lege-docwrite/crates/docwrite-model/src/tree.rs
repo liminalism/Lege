@@ -461,6 +461,7 @@ impl Book {
         Ok(())
     }
 
+    /// Add a part titled `title` after the last. Returns its id.
     pub fn add_part(&mut self, title: impl Into<String>) -> PartId {
         let id = self.ids.part();
         self.parts.push(Part {

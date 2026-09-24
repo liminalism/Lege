@@ -23,33 +23,50 @@ const KINDS: [(&str, BlockKind); 7] = [
 /// Something the toolbar can do.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Action {
+    /// Toggle a character mark.
     Mark(Mark),
+    /// Set the next paragraph style.
     CycleStyle,
+    /// Body text half a point smaller.
     Smaller,
+    /// Body text half a point larger.
     Larger,
+    /// Add a chapter.
     NewChapter,
+    /// Rename the caret's chapter.
     RenameChapter,
+    /// Attach a footnote.
     Footnote,
+    /// Attach an endnote.
     Endnote,
+    /// Open a source PDF.
     OpenSource,
+    /// Show facing pages.
     Spread,
+    /// Set or remove the table of contents.
     Contents,
 }
 
 /// What a prompt's text is for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PromptKind {
+    /// The title of a new chapter.
     NewChapter,
+    /// A new title for the caret's chapter.
     RenameChapter,
+    /// The text of a footnote.
     Footnote,
+    /// The text of an endnote.
     Endnote,
     /// The citation text for a source just captured.
     Citation,
     /// The path of a PDF to open beside the manuscript.
     OpenSource,
+    /// Text to find.
     Find,
     /// What to replace; the prompt then asks what with.
     Replace,
+    /// What to replace it with.
     ReplaceWith,
 }
 
@@ -72,19 +89,28 @@ impl PromptKind {
 /// A one-line text entry shown in the toolbar.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Prompt {
+    /// What the text is for.
     pub kind: PromptKind,
+    /// The text typed so far.
     pub text: String,
 }
 
 /// A toolbar button in window pixels.
 #[derive(Clone, Debug)]
 pub struct Button {
+    /// What it does.
     pub action: Action,
+    /// Its label.
     pub label: String,
+    /// Lit: the state it toggles is on.
     pub active: bool,
+    /// Left edge in window pixels.
     pub x: i32,
+    /// Top edge.
     pub y: i32,
+    /// Width.
     pub w: i32,
+    /// Height.
     pub h: i32,
 }
 
@@ -337,10 +363,10 @@ impl Editor {
                 self.new_chapter(&title);
             }
             PromptKind::RenameChapter => {
-                if let Some(id) = self.current_chapter() {
-                    if self.book.rename_chapter(id, text).is_ok() {
-                        self.edited();
-                    }
+                if let Some(id) = self.current_chapter()
+                    && self.book.rename_chapter(id, text).is_ok()
+                {
+                    self.edited();
                 }
             }
             PromptKind::Citation => self.set_last_citation(&text),

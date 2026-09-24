@@ -383,15 +383,6 @@ fn snapshot_name(name: &str) -> Result<String, BundleError> {
     Ok(trimmed.to_string())
 }
 
-fn encode_position(book: &Book, pos: crate::Position) -> String {
-    let index = book
-        .block_ids()
-        .iter()
-        .position(|id| *id == pos.block)
-        .unwrap_or(0);
-    format!("{index}:{}", pos.offset)
-}
-
 fn position_at(book: &Book, spec: &str) -> Option<crate::Position> {
     let mut parts = spec.split(':');
     let block_index: usize = parts.next()?.parse().ok()?;
