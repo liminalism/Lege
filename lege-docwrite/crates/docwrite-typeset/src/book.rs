@@ -51,6 +51,12 @@ pub fn update_from_book(document: &mut Document, book: &Book) -> Result<EditRepo
     Ok(report)
 }
 
+/// The Bibliography section's heading is this id; its entries add a number.
+pub const BIBLIOGRAPHY_ID: u64 = 1 << 59;
+
+/// The Index section's heading is this id; its entries add a number.
+pub const INDEX_ID: u64 = 1 << 58;
+
 /// The Contents section's heading is this id; each entry is this bit with
 /// its chapter's id. Block ids never set it.
 pub const CONTENTS_ID: u64 = 1 << 61;
@@ -62,7 +68,7 @@ fn settle_contents(
     document: &mut Document,
     book: &Book,
 ) -> Result<Option<EditReport>, TypesetError> {
-    if !book.has_contents() {
+    if !book.has_contents() && !has_index(book) {
         document.contents_pages.clear();
         return Ok(None);
     }
@@ -79,9 +85,30 @@ fn settle_contents(
     Ok(last)
 }
 
-/// The page each chapter opens on, by chapter id.
+/// Index entries' page numbers are keyed by this bit with the block's id.
+const INDEXED_BLOCK: u64 = 1 << 60;
+
+fn has_index(book: &Book) -> bool {
+    book.index_terms()
+        .iter()
+        .any(|term| !term.term.starts_with("cite:"))
+}
+
+/// The page each chapter opens on, by chapter id, and the page each indexed
+/// block starts on, by `INDEXED_BLOCK | block id`.
 fn chapter_pages(document: &Document, book: &Book) -> HashMap<u64, u32> {
     let mut pages = HashMap::new();
+    for term in book.index_terms() {
+        if term.term.starts_with("cite:") {
+            continue;
+        }
+        if let Some(page) = document
+            .paragraph_of(term.block.raw())
+            .and_then(|index| document.page_of(index, 0))
+        {
+            pages.insert(INDEXED_BLOCK | term.block.raw(), page);
+        }
+    }
     for chapter in book.parts().iter().flat_map(|part| part.chapters()) {
         let opener = document
             .paragraph_of(CHAPTER_TITLE_ID | chapter.id().raw())
@@ -334,6 +361,80 @@ fn layout_inputs(
             }
         }
     }
+    let mut back_matter: Vec<(u64, &str, Vec<Paragraph>)> = Vec::new();
+    if !book.bibliography().is_empty() {
+        // The bibliography: entries by author, the title in italic.
+        let entry = map_style(&named_style(book, "Bibliography Entry"));
+        let mut entries: Vec<_> = book.bibliography().iter().collect();
+        entries.sort_by_key(|entry| entry.author.to_lowercase());
+        let mut items = Vec::new();
+        for (number, record) in entries.into_iter().enumerate() {
+            let lead = if record.author.is_empty() {
+                String::new()
+            } else {
+                format!("{}. ", record.author.trim_end_matches('.'))
+            };
+            let title = record.title.trim_end_matches('.').to_string();
+            let tail = if record.issued.is_empty() {
+                ".".to_string()
+            } else {
+                format!(". {}.", record.issued)
+            };
+            let text = format!("{lead}{title}{tail}");
+            let runs = vec![StyledRun {
+                start: lead.len(),
+                end: lead.len() + title.len(),
+                italic: true,
+                ..StyledRun::default()
+            }];
+            items.push(Paragraph {
+                id: BIBLIOGRAPHY_ID | (number as u64 + 1),
+                text,
+                style: entry.clone(),
+                runs,
+                ..Paragraph::default()
+            });
+        }
+        back_matter.push((BIBLIOGRAPHY_ID, "Bibliography", items));
+    }
+    if has_index(book) {
+        // The index: each term, then the pages it is on, flush right.
+        let entry = map_style(&named_style(book, "Contents Entry"));
+        let mut terms: Vec<(String, Vec<u32>)> = Vec::new();
+        for term in book.index_terms() {
+            if term.term.starts_with("cite:") {
+                continue;
+            }
+            let page = contents_pages
+                .get(&(INDEXED_BLOCK | term.block.raw()))
+                .copied()
+                .unwrap_or(0);
+            match terms
+                .iter_mut()
+                .find(|(name, _)| name.eq_ignore_ascii_case(&term.term))
+            {
+                Some((_, pages)) => pages.push(page),
+                None => terms.push((term.term.clone(), vec![page])),
+            }
+        }
+        terms.sort_by_key(|(name, _)| name.to_lowercase());
+        let items = terms
+            .into_iter()
+            .enumerate()
+            .map(|(number, (name, mut pages))| {
+                pages.sort_unstable();
+                pages.dedup();
+                let list: Vec<String> = pages.iter().map(u32::to_string).collect();
+                Paragraph {
+                    id: INDEX_ID | (number as u64 + 1),
+                    text: format!("{name}\t{}", list.join(", ")),
+                    style: entry.clone(),
+                    ..Paragraph::default()
+                }
+            })
+            .collect();
+        back_matter.push((INDEX_ID, "Index", items));
+    }
     if !endnotes.is_empty() {
         // The Notes section: a heading that opens a page, then each endnote
         // as a paragraph, numbered as its reference mark is.
@@ -366,6 +467,30 @@ fn layout_inputs(
             break_at.push(false);
             master_at.push(notes_master);
             heads.push("Notes".into());
+        }
+    }
+    for (heading_id, heading, items) in back_matter {
+        let mut title = map_style(&named_style(book, "Chapter Title"));
+        title.name = "Chapter Title".into();
+        title.keep_with_next = true;
+        title.space_after = title.space_after.max(title.leading);
+        let section_master = master_at.last().copied().unwrap_or(default_master);
+        paragraphs.push(Paragraph {
+            id: heading_id,
+            text: heading.into(),
+            style: title,
+            ..Paragraph::default()
+        });
+        recto_at.push(false);
+        break_at.push(true);
+        master_at.push(section_master);
+        heads.push(heading.into());
+        for item in items {
+            paragraphs.push(item);
+            recto_at.push(false);
+            break_at.push(false);
+            master_at.push(section_master);
+            heads.push(heading.into());
         }
     }
     if paragraphs.is_empty() {

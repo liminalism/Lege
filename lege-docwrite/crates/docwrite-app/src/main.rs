@@ -195,8 +195,8 @@ impl EditorApp {
                 let outcome = self.editor.save_now().map(|()| "saved".to_string());
                 self.report(outcome);
             }
-            "KeyB" => self.editor.toggle_mark(Mark::Bold),
-            "KeyI" => self.editor.toggle_mark(Mark::Italic),
+            "KeyB" if !alt => self.editor.toggle_mark(Mark::Bold),
+            "KeyI" if !alt => self.editor.toggle_mark(Mark::Italic),
             "KeyH" if shift => self.editor.toggle_mark(Mark::SmallCaps),
             "Equal" if shift => self.editor.toggle_mark(Mark::Superscript),
             "Minus" if shift => self.editor.toggle_mark(Mark::Subscript),
@@ -211,6 +211,9 @@ impl EditorApp {
             "KeyF" if alt => self.editor.open_prompt(PromptKind::Replace),
             "KeyE" if alt => self.editor.open_prompt(PromptKind::Endnote),
             "KeyT" if alt => self.editor.toggle_contents(),
+            "KeyI" if alt => self.editor.open_prompt(PromptKind::IndexTerm),
+            "KeyB" if alt && shift => self.editor.open_prompt(PromptKind::ImportBibliography),
+            "KeyB" if alt => self.editor.open_prompt(PromptKind::BibliographyEntry),
             "KeyF" if shift => self.editor.toggle_fullscreen(),
             "KeyF" => self.editor.open_prompt(PromptKind::Find),
             "KeyG" => {

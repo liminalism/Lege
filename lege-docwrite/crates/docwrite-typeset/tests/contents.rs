@@ -100,3 +100,71 @@ fn numbers_follow_the_chapters_through_edits() {
         Some("Contents")
     );
 }
+
+#[test]
+fn bibliography_and_index_close_the_book() {
+    use docwrite_model::BibliographyEntry;
+    use docwrite_typeset::FaceStyle;
+    let mut book = book();
+    book.set_contents(false);
+    for (key, author, title, issued) in [
+        ("b", "Weber, Max", "Economy and Society", "1922"),
+        ("a", "Arendt, Hannah", "The Human Condition", "1958"),
+    ] {
+        book.add_bibliography(BibliographyEntry {
+            key: key.into(),
+            kind: "book".into(),
+            title: title.into(),
+            author: author.into(),
+            issued: issued.into(),
+        });
+    }
+    let ids = book.block_ids();
+    book.add_index_term("archive", ids[0]);
+    book.add_index_term("clerk", ids[2]);
+    book.add_index_term("Archive", ids[2]);
+    let document =
+        docwrite_typeset::from_book_with(&book, vec![face(), face(), face(), face()]).unwrap();
+    let find = |heading: &str| {
+        (1..=document.page_count())
+            .find(|page| {
+                document
+                    .page_texts(*page)
+                    .first()
+                    .is_some_and(|line| line == heading)
+            })
+            .unwrap_or_else(|| panic!("no {heading} page"))
+    };
+    let bibliography = find("Bibliography");
+    let texts = document.page_texts(bibliography);
+    assert!(
+        texts[1].starts_with("Arendt, Hannah. The Human Condition. 1958."),
+        "{texts:?}"
+    );
+    assert!(texts.iter().any(|line| line.starts_with("Weber, Max.")));
+    let title_glyph = document.page_painted_lines(bibliography)[1]
+        .glyphs
+        .iter()
+        .find(|glyph| glyph.cluster as usize == "Arendt, Hannah. ".len())
+        .unwrap()
+        .face;
+    assert_eq!(title_glyph, FaceStyle::Italic as u8, "titles are italic");
+
+    let index = find("Index");
+    assert!(index > bibliography, "the index comes last");
+    let entries = document.page_texts(index);
+    let page_of = |block: usize| {
+        (1..=document.page_count())
+            .find(|page| {
+                let paragraph = document.paragraph_of(ids[block].raw()).unwrap();
+                document.page_of(paragraph, 0) == Some(*page)
+            })
+            .unwrap()
+    };
+    assert_eq!(
+        entries[1],
+        format!("archive\t{}, {}", page_of(0), page_of(2)),
+        "terms merge regardless of case, pages in order"
+    );
+    assert_eq!(entries[2], format!("clerk\t{}", page_of(2)));
+}

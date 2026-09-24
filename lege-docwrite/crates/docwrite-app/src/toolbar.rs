@@ -68,6 +68,12 @@ pub enum PromptKind {
     Replace,
     /// What to replace it with.
     ReplaceWith,
+    /// A term to index the caret's paragraph under.
+    IndexTerm,
+    /// A bibliography entry as "Author; Title; Year".
+    BibliographyEntry,
+    /// A BibTeX (.bib) or CSL JSON file to import into the bibliography.
+    ImportBibliography,
 }
 
 impl PromptKind {
@@ -82,6 +88,9 @@ impl PromptKind {
             Self::Find => "Find:",
             Self::Replace => "Replace:",
             Self::ReplaceWith => "With:",
+            Self::IndexTerm => "Index term:",
+            Self::BibliographyEntry => "Author; Title; Year:",
+            Self::ImportBibliography => "Import .bib or CSL JSON file:",
         }
     }
 }
@@ -370,6 +379,59 @@ impl Editor {
                 }
             }
             PromptKind::Citation => self.set_last_citation(&text),
+            PromptKind::IndexTerm => {
+                if !text.is_empty() {
+                    let block = self.book.selection().focus.block;
+                    self.book.add_index_term(text, block);
+                    self.edited();
+                }
+            }
+            PromptKind::BibliographyEntry => {
+                let mut fields = text.split(';').map(str::trim);
+                let author = fields.next().unwrap_or("").to_string();
+                let title = fields.next().unwrap_or("").to_string();
+                let issued = fields.next().unwrap_or("").to_string();
+                if !title.is_empty() || !author.is_empty() {
+                    let key = format!(
+                        "{}{}",
+                        author
+                            .split([',', ' '])
+                            .next()
+                            .unwrap_or("ref")
+                            .to_lowercase(),
+                        issued
+                    );
+                    self.book
+                        .add_bibliography(docwrite_model::BibliographyEntry {
+                            key,
+                            kind: "book".into(),
+                            title,
+                            author,
+                            issued,
+                        });
+                    self.edited();
+                }
+            }
+            PromptKind::ImportBibliography => {
+                let path = text.trim_matches(|ch| ch == '"' || ch == '\'');
+                match std::fs::read_to_string(path) {
+                    Ok(content) => {
+                        let result = if path.ends_with(".bib") {
+                            self.book.import_bibtex(&content)
+                        } else {
+                            self.book.import_csl_json(&content)
+                        };
+                        match result {
+                            Ok(count) => {
+                                eprintln!("lege-docwrite: imported {count} bibliography entries");
+                                self.edited();
+                            }
+                            Err(err) => eprintln!("lege-docwrite: {path}: {err}"),
+                        }
+                    }
+                    Err(err) => eprintln!("lege-docwrite: {path}: {err}"),
+                }
+            }
             PromptKind::Find => {
                 if !text.is_empty() {
                     self.find(&text);

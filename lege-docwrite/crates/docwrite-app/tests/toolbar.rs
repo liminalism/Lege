@@ -164,3 +164,47 @@ fn a_chapter_row_in_the_book_map_goes_to_the_chapter() {
     let text = editor.book().block(focus).unwrap().text();
     assert!(text.starts_with("Second chapter"));
 }
+
+#[test]
+fn prompts_index_terms_and_build_the_bibliography() {
+    let mut editor = Editor::new();
+    editor.open_prompt(PromptKind::IndexTerm);
+    editor.prompt_type("opening");
+    editor.commit_prompt();
+    assert_eq!(editor.book().index_terms()[0].term, "opening");
+
+    editor.open_prompt(PromptKind::BibliographyEntry);
+    editor.prompt_type("Arendt, Hannah; The Human Condition; 1958");
+    editor.commit_prompt();
+    let entry = &editor.book().bibliography()[0];
+    assert_eq!(entry.author, "Arendt, Hannah");
+    assert_eq!(entry.title, "The Human Condition");
+    assert_eq!(entry.issued, "1958");
+    assert_eq!(entry.key, "arendt1958");
+
+    let dir = std::env::temp_dir().join(format!("docwrite-bib-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let bib = dir.join("refs.bib");
+    std::fs::write(
+        &bib,
+        "@book{weber1922,\n  author = {Weber, Max},\n  title = {Economy and Society},\n  year = {1922}\n}\n",
+    )
+    .unwrap();
+    editor.open_prompt(PromptKind::ImportBibliography);
+    editor.prompt_type(bib.to_str().unwrap());
+    editor.commit_prompt();
+    assert_eq!(
+        editor.book().bibliography().len(),
+        2,
+        "{:?}",
+        editor.book().bibliography()
+    );
+    frame(&mut editor);
+    let document = editor.document().unwrap();
+    let headings: Vec<String> = (1..=document.page_count())
+        .filter_map(|page| document.page_texts(page).first().cloned())
+        .collect();
+    assert!(headings.iter().any(|h| h == "Bibliography"), "{headings:?}");
+    assert!(headings.iter().any(|h| h == "Index"), "{headings:?}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
