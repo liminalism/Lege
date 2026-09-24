@@ -157,8 +157,8 @@ A chapter's sources are the ones it cites.
   rewritten in the current format on the next save.
 - **PDF** (Cmd-E, next to the book): the typeset pages exactly as laid out —
   visible, searchable text in subset TrueType fonts (one per face used), with
-  a ToUnicode map from the shaping, chapter bookmarks, `/Lang`, a structure
-  list, page labels and the footnote rules.
+  a ToUnicode map from the shaping, chapter bookmarks, `/Lang`, page labels
+  and the footnote rules.
 - **Markdown** (Cmd-Shift-E): headings per chapter, paragraphs, bold and
   italic runs, links, block quotes, images and footnotes; page geometry is
   dropped.
@@ -216,6 +216,8 @@ against an 8 ms budget); the book opens in about 40 ms. The gate is
   export says so. TrueType families work.
 - Links and citations are not clickable in the PDF; there is no colour or
   general vector drawing beyond gray rules.
+- The PDF is not really tagged: lege-pdf-write writes a placeholder structure
+  tree (one element per paragraph, not tied to the page content).
 - No EPUB export.
 - Named snapshots have no command in the window yet.
 - The window has been exercised through the editor's API, offscreen
