@@ -37,6 +37,38 @@ record docwrite.evidence.book-map-drag/1 : evidence {
         """
 }
 
+record docwrite.evidence.editor-commands/1 : evidence {
+    title "The window's commands work: clipboard, undo, line motion across pages, click, save, autosave, export, CLI export"
+    state verified
+    result pass
+    method command
+    observed_at git:bffd54a79de1aeac643880dc02c48c95b33aa77c
+    command "cargo test -p docwrite-app --test commands"
+    summary """
+        Four tests cover cut/copy/paste with undo/redo, Up/Down by typeset line across a
+        page turn, click-to-caret, and open_or_create + save_now + background autosave +
+        PDF/Markdown export + the headless 'lege-docwrite export' subcommand. The window
+        was also launched on macOS against a demo bundle and screenshot: the opener shows
+        its chapter title, the Book Map shows titles, and the page fills the view.
+        """
+}
+
+record docwrite.evidence.editor-latency-release/1 : evidence {
+    title "Typing through Editor into a 507-page book: one paragraph shaped, at most three pages laid out, p50 4.4 ms, max 4.9 ms (release)"
+    state verified
+    result pass
+    method command
+    observed_at git:bffd54a79de1aeac643880dc02c48c95b33aa77c
+    command "cargo test --release -p docwrite-app --test latency_gate -- --nocapture"
+    summary """
+        typing_into_the_editor_stays_inside_the_budget types at the start, middle and end
+        of a 507-page book through Editor::type_text + Editor::paint (1100x800). Every
+        keystroke shaped exactly one paragraph and laid out at most three pages; wall
+        clock p50 4.43 ms, max 4.95 ms against the 8 ms budget; opening the book 67 ms.
+        Debug builds assert the work counts only.
+        """
+}
+
 record docwrite.evidence.facing-recto/1 : evidence {
     title "Recto inset 54, verso inset 20. Blank verso page 2 keeps folio 2 and running head Chapter 1. With a 49-character footnote still pending, page 2 stays blank and Two. opens on page 3; the note reassembles after edit_page."
     state verified
@@ -205,6 +237,21 @@ record docwrite.evidence.head-toc/1 : evidence {
         """
 }
 
+record docwrite.evidence.incremental-matches-fresh/1 : evidence {
+    title "Incremental layout of real model edits matches a fresh layout page for page"
+    state verified
+    result pass
+    method command
+    observed_at git:bffd54a79de1aeac643880dc02c48c95b33aa77c
+    command "cargo test -p docwrite-typeset --test apply"
+    summary """
+        Typing, paragraph split and merge, a multi-page paste, undo/redo, a span delete,
+        emptying the last paragraph, chapter reorders and a chapter rename, applied
+        through update_from_book, each equal from_book of the same book (blank versos,
+        folios, running heads, lines, notes), with and without recto chapter starts.
+        """
+}
+
 record docwrite.evidence.m1-edit-basics/1 : evidence {
     title "Insert, delete, selection, word motion, cut/copy/paste and undo/redo round-trip across paragraphs and chapters."
     state verified
@@ -358,6 +405,21 @@ record docwrite.evidence.m5-preflight-current/1 : evidence {
     command "cargo test -p docwrite-export --test preflight"
     summary """
         On f19325d, preflight reports a missing face, an unembeddable font, a 72 dpi image, and a broken link.
+        """
+}
+
+record docwrite.evidence.pdf-renders-typeset-pages/1 : evidence {
+    title "Exported PDF renders the typeset pages with ink, one PDF page per layout page"
+    state verified
+    result pass
+    method command
+    observed_at git:bffd54a79de1aeac643880dc02c48c95b33aa77c
+    command "cargo test -p docwrite-export --test package"
+    summary """
+        pdf_pages_are_the_typeset_pages_and_visibly_inked renders page 1 of the export
+        through lege-pdf-read (over 2000 dark pixels), checks the PDF page count equals
+        the layout's, that page 1's text starts with the first typeset line in reading
+        order, and that the chapter bookmark exists.
         """
 }
 

@@ -1,6 +1,30 @@
 akr 0.1
 project lege-docwrite
 
+record docwrite.observation.milestones-closed-on-synthetic-paths/1 : observation {
+    title "M1–M5 were closed on synthetic test paths, not the editor"
+    state verified
+    statement """
+        At 8cc8d8f the ledger marked M1–M5 completed, but their evidence exercised
+        synthetic paths rather than the editor a writer uses. The window's Editor
+        cloned the Book and ran from_book on every paint and paged over a hardcoded
+        eight pages; the latency gate typed through Document::edit_page on a
+        one-line-per-page synthetic book. export_pdf put eight blocks per page, each
+        paragraph as one run in the invisible OCR text layer, so the PDF was
+        searchable but rendered blank. The one-line-per-page fast path put every
+        short paragraph on its own page whenever no chapter started recto. Chapter
+        titles never reached their openers or the Markdown/IDML exports, hyphenated
+        breaks drew no hyphen, and the binary could not open, save or export a book.
+        """
+    observed_at git:8cc8d8f763a1734effed5de24ea2d688f8076197
+    method manual
+    watches [
+        "lege-docwrite/crates/docwrite-app/src/**",
+        "lege-docwrite/crates/docwrite-export/src/pdf.rs",
+        "lege-docwrite/crates/docwrite-typeset/src/**"
+    ]
+}
+
 record docwrite.observation.no-shaping-in-workspace/1 : observation {
     title "Nothing in Lege-ecosystem shapes, breaks or hyphenates book text"
     state superseded

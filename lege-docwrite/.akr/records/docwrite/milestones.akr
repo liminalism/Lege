@@ -404,3 +404,43 @@ record docwrite.milestone.m5-interchange/2 : milestone {
     depends_on [ @docwrite.decision.export-formats, @lege.work.tagged-pdf ]
     supersedes [ @docwrite.milestone.m5-interchange/1 ]
 }
+
+record docwrite.milestone.m6-writer-ready/1 : milestone {
+    title "M6 — writer-ready: the gaps behind M1–M5"
+    state proposed
+    intent """
+        Close the gaps the 2026-09-24 review found behind the completed M1–M5 records, so a
+        writer can draft a real book in the window: measured footnotes, every chapter start
+        rule and page master honoured, real drop caps, a glyph cache that renders any size,
+        CFF fonts in PDF, and in-window commands for chapters and styles.
+        """
+    acceptance {
+        check chapter-rules {
+            statement """
+                A NextPage chapter starts a new page, a NextRecto chapter a new recto, and each
+                chapter lays out with its own template's page master.
+                """
+            method command
+            command "cargo test -p docwrite-typeset --test book_layout"
+        }
+        check measured-footnotes {
+            statement """
+                Footnotes are set at footnote size, reserve their measured height on the page of
+                their reference, and split by lines rather than by a character count; a fresh
+                and an incremental layout agree.
+                """
+            method command
+            command "cargo test -p docwrite-typeset --test footnotes"
+        }
+        check window-draft {
+            statement """
+                In the window, a writer can add, rename and reorder chapters, change the body
+                style, type across a page turn, save, reopen and export a PDF that matches the
+                screen.
+                """
+            method manual
+        }
+    }
+    after [ @docwrite.milestone.m5-interchange ]
+    depends_on [ @docwrite.observation.milestones-closed-on-synthetic-paths ]
+}

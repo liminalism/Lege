@@ -156,3 +156,57 @@ record docwrite.work.m2-styles-masters-templates/1 : work {
     }
     part_of [ @docwrite.milestone.m2-book-core ]
 }
+
+record docwrite.work.m6-chapter-start-and-masters/1 : work {
+    title "Honour NextPage starts and per-chapter page masters"
+    state proposed
+    intent """
+        Only NextRecto is a page break today and layout_inputs takes one geometry from the Chapter template; make every chapter start rule a break and let each chapter's template choose its master.
+        """
+    part_of [ @docwrite.milestone.m6-writer-ready ]
+}
+
+record docwrite.work.m6-docs-and-clippy/1 : work {
+    title "Document the public API and run clippy"
+    state proposed
+    intent """
+        About 170 missing_docs warnings remain across the crates, and clippy has not run because the pinned 1.97.1 toolchain lacks the component.
+        """
+    part_of [ @docwrite.milestone.m6-writer-ready ]
+}
+
+record docwrite.work.m6-drop-caps/1 : work {
+    title "Drop caps that span lines"
+    state proposed
+    intent """
+        A drop cap is a larger first glyph on the first baseline; set it across drop_cap_lines lines with the following lines indented around it, on screen and in PDF.
+        """
+    part_of [ @docwrite.milestone.m6-writer-ready ]
+}
+
+record docwrite.work.m6-glyph-atlas/1 : work {
+    title "Glyph atlas sized to the glyph, with the face in the key"
+    state proposed
+    intent """
+        GlyphAtlas rasterizes every glyph into a fixed 64x64 cell and the window draws it at baseline-48, so large sizes and descenders clip; size cells from the glyph bounds, keep the origin with the entry, and key on the face.
+        """
+    part_of [ @docwrite.milestone.m6-writer-ready ]
+}
+
+record docwrite.work.m6-measured-footnotes/1 : work {
+    title "Measure footnotes into the page"
+    state proposed
+    intent """
+        split_note cuts notes at 48 characters and fill_page reserves one body leading for them; shape notes at footnote size, reserve their measured height, split by lines, and keep incremental convergence exact.
+        """
+    part_of [ @docwrite.milestone.m6-writer-ready ]
+}
+
+record docwrite.work.m6-window-chapter-commands/1 : work {
+    title "Chapter and style commands in the window"
+    state proposed
+    intent """
+        The model can add, rename and reorder chapters and change styles, but the window only reorders by dragging; add new-chapter, rename and body-style commands, and a small toolbar.
+        """
+    part_of [ @docwrite.milestone.m6-writer-ready ]
+}
