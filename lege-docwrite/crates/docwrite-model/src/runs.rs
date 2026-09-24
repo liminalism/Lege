@@ -7,7 +7,7 @@
 use crate::error::ModelError;
 
 /// Vertical position of a run relative to the baseline.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Script {
     /// On the baseline.
     #[default]
@@ -20,7 +20,7 @@ pub enum Script {
 
 /// Marks carried by a run. Named paragraph and character styles are a later
 /// milestone; these are the direct marks stored with the text.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RunMarks {
     /// Bold.
     pub bold: bool,
@@ -39,7 +39,7 @@ pub struct RunMarks {
 }
 
 /// One styled span of a block.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Run {
     /// First character, inclusive.
     pub start: usize,

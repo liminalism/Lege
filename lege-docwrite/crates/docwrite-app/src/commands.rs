@@ -25,7 +25,7 @@ impl Editor {
     /// there on the first save.
     pub fn open_or_create(path: impl Into<PathBuf>) -> Result<Self, String> {
         let path = path.into();
-        let (book, fresh) = if path.join("manifest.txt").is_file() {
+        let (book, fresh) = if Book::is_bundle(&path) {
             (
                 Book::load_bundle(&path).map_err(|err| err.to_string())?,
                 false,

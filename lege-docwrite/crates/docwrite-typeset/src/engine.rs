@@ -335,11 +335,30 @@ impl NoteFlow {
 #[derive(Clone, Debug, PartialEq, Default)]
 pub(crate) struct LayoutHints {
     pub recto_at: Vec<bool>,
+    /// A chapter opener that starts a new page (NextPage or NextRecto).
+    pub break_at: Vec<bool>,
     pub heads: Vec<String>,
     pub folio: bool,
     pub hide_opener_folio: bool,
     pub running_head: bool,
     pub facing: bool,
+    /// Page rules by chapter template; `master_at` indexes it per paragraph.
+    /// Empty uses the geometry's margins and the flags above everywhere.
+    pub masters: Vec<PageRules>,
+    pub master_at: Vec<usize>,
+}
+
+/// Margins and furniture of one page master, as a chapter template uses it.
+/// The trim size is the book's; masters differ in what sits inside it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct PageRules {
+    pub margin_top: f32,
+    pub margin_bottom: f32,
+    pub margin_inner: f32,
+    pub margin_outer: f32,
+    pub folio: bool,
+    pub running_head: bool,
+    pub hide_opener_folio: bool,
 }
 
 /// What an edit did to pagination. Page numbers are 1-based.
@@ -474,6 +493,44 @@ impl Document {
         self.by_id.get(&id).copied()
     }
 
+    /// The page rules paragraph `index` is set under.
+    fn rules(&self, index: usize) -> PageRules {
+        self.hints
+            .master_at
+            .get(index)
+            .and_then(|master| self.hints.masters.get(*master))
+            .copied()
+            .unwrap_or(PageRules {
+                margin_top: self.geometry.margin_top,
+                margin_bottom: self.geometry.margin_bottom,
+                margin_inner: self.geometry.margin_inner,
+                margin_outer: self.geometry.margin_outer,
+                folio: self.hints.folio,
+                running_head: self.hints.running_head,
+                hide_opener_folio: self.hints.hide_opener_folio,
+            })
+    }
+
+    /// Line measure for paragraph `index`: the trim less its master's margins.
+    fn measure(&self, index: usize) -> f32 {
+        let rules = self.rules(index);
+        (self.geometry.page_width - rules.margin_inner - rules.margin_outer).max(1.0)
+    }
+
+    /// Text-block height of a page that starts on paragraph `index`.
+    fn block_height(&self, index: usize) -> f32 {
+        let rules = self.rules(index);
+        (self.geometry.page_height - rules.margin_top - rules.margin_bottom)
+            .max(self.geometry.leading)
+    }
+
+    /// The paragraph whose master a page follows: its first line's.
+    fn page_paragraph(page: &Page) -> usize {
+        page.lines
+            .first()
+            .map_or(page.start.paragraph, |line| line.paragraph)
+    }
+
     fn index_ids(&mut self) {
         self.by_id = self
             .paragraphs
@@ -532,7 +589,7 @@ impl Document {
         self.pages
             .get(page.saturating_sub(1) as usize)
             .map(|page| {
-                let mut top = self.geometry.margin_top;
+                let mut top = self.rules(Self::page_paragraph(page)).margin_top;
                 page.lines
                     .iter()
                     .map(|line| {
@@ -699,7 +756,8 @@ impl Document {
         let same_page_rules = self.hints.folio == hints.folio
             && self.hints.hide_opener_folio == hints.hide_opener_folio
             && self.hints.running_head == hints.running_head
-            && self.hints.facing == hints.facing;
+            && self.hints.facing == hints.facing
+            && self.hints.masters == hints.masters;
         if !same_geometry || !same_page_rules || self.pages.is_empty() {
             self.geometry = geometry;
             self.paragraphs = paragraphs;
@@ -751,6 +809,8 @@ impl Document {
                 .filter(|old| {
                     old_paragraphs.get(*old) == self.paragraphs.get(index)
                         && self.hints.recto_at.get(*old) == hints.recto_at.get(index)
+                        && self.hints.break_at.get(*old) == hints.break_at.get(index)
+                        && self.hints.master_at.get(*old) == hints.master_at.get(index)
                 });
             match reuse {
                 Some(old) => {
@@ -953,7 +1013,7 @@ impl Document {
         let mut broken = break_lines(
             &paragraph.text,
             &glyphs,
-            self.geometry.content_width(),
+            self.measure(index),
             indent,
             paragraph.style.hyphenate,
             self.hyphenator.as_ref(),
@@ -1194,7 +1254,7 @@ impl Document {
         let mut lines = Vec::new();
         let mut used = 0.0;
         let mut cursor = start;
-        let limit = self.geometry.content_height();
+        let limit = self.block_height(start.paragraph);
         let verso = (built + 1).is_multiple_of(2);
         let reserve_note = self.note_on_paragraph(start.paragraph);
         let note_reserve = if reserve_note {
@@ -1310,7 +1370,10 @@ impl Document {
     }
 
     fn each_paragraph_is_one_page(&self) -> bool {
-        if self.hints.recto_at.iter().any(|flag| *flag) {
+        if self.hints.recto_at.iter().any(|flag| *flag)
+            || self.hints.break_at.iter().any(|flag| *flag)
+            || self.hints.masters.len() > 1
+        {
             return false;
         }
         if self.paragraphs.iter().any(|paragraph| {
@@ -1371,19 +1434,17 @@ impl Document {
         })
     }
 
-    /// A recto chapter does not join a page that already has lines, and does
-    /// not open on an empty verso. [`page_decision`] is what emits the blank.
+    /// A chapter that starts a new page does not join a page that already
+    /// has lines, and a recto chapter does not open on an empty verso either.
+    /// [`page_decision`] is what emits the blank.
     fn refuses_recto(&self, line: &FlowLine, page_has_lines: bool, verso: bool) -> bool {
         if !line.is_first {
             return false;
         }
-        let recto = self
-            .hints
-            .recto_at
-            .get(line.paragraph)
-            .copied()
-            .unwrap_or(false);
-        recto && (page_has_lines || verso)
+        let flag = |flags: &[bool]| flags.get(line.paragraph).copied().unwrap_or(false);
+        let breaks = flag(&self.hints.break_at);
+        let recto = flag(&self.hints.recto_at);
+        ((breaks || recto) && page_has_lines) || (recto && verso)
     }
 
     fn note_page(&self, start: Cursor, footnotes: Vec<String>, flow: &NoteFlow) -> Page {
@@ -1417,15 +1478,23 @@ impl Document {
     }
 
     fn dress_pages(&mut self) {
-        let inner = self.geometry.margin_inner;
-        let outer = self.geometry.margin_outer;
         let facing = self.hints.facing;
         let mut carried = String::new();
+        let rules: Vec<PageRules> = self
+            .pages
+            .iter()
+            .map(|page| self.rules(Self::page_paragraph(page)))
+            .collect();
         for (index, page) in self.pages.iter_mut().enumerate() {
+            let rule = rules[index];
             let page_no = index as u32 + 1;
             let verso = facing && page_no.is_multiple_of(2);
-            page.content_inset = if verso { outer } else { inner };
-            if !self.hints.folio && !self.hints.running_head {
+            page.content_inset = if verso {
+                rule.margin_outer
+            } else {
+                rule.margin_inner
+            };
+            if !rule.folio && !rule.running_head {
                 continue;
             }
             if let Some(line) = page.lines.first()
@@ -1435,18 +1504,13 @@ impl Document {
                 carried = head.clone();
             }
             let opener = page.lines.first().is_some_and(|line| {
-                line.is_first
-                    && self
-                        .hints
-                        .recto_at
-                        .get(line.paragraph)
-                        .copied()
-                        .unwrap_or(false)
-            }) || (index == 0 && self.hints.hide_opener_folio);
-            if self.hints.folio && !(opener && self.hints.hide_opener_folio) {
+                let flag = |flags: &[bool]| flags.get(line.paragraph).copied().unwrap_or(false);
+                line.is_first && (flag(&self.hints.recto_at) || flag(&self.hints.break_at))
+            }) || (index == 0 && rule.hide_opener_folio);
+            if rule.folio && !(opener && rule.hide_opener_folio) {
                 page.folio = Some(page_no.to_string());
             }
-            if self.hints.running_head && !carried.is_empty() && !opener {
+            if rule.running_head && !carried.is_empty() && !opener {
                 page.running_head = Some(carried.clone());
             }
         }

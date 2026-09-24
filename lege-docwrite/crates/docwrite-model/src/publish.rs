@@ -8,7 +8,7 @@ use crate::ids::{BlockId, ChapterId};
 use crate::tree::{BlockKind, Book, Chapter, Position};
 
 /// Paragraph style. Appearance lives here; the block stores the style name.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ParagraphStyle {
     pub name: String,
     pub size_pt: f32,
@@ -21,7 +21,7 @@ pub struct ParagraphStyle {
 }
 
 /// Page master: geometry, folio, running head.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct PageMaster {
     pub name: String,
     pub width_pt: f32,
@@ -36,14 +36,14 @@ pub struct PageMaster {
 }
 
 /// How a chapter opens.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ChapterStart {
     NextPage,
     NextRecto,
 }
 
 /// Chapter template. Chapters reference it by name.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ChapterTemplate {
     pub name: String,
     pub master: String,
@@ -56,7 +56,7 @@ pub struct ChapterTemplate {
 }
 
 /// A passage captured from a source PDF.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SourceNote {
     pub id: String,
     pub document: String,
@@ -69,7 +69,7 @@ pub struct SourceNote {
 }
 
 /// One bibliography record, also the CSL/BibTeX shape we import.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct BibliographyEntry {
     pub key: String,
     pub kind: String,
@@ -89,13 +89,13 @@ pub struct CslRecord {
 }
 
 /// An index term anchored in a block.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct IndexTerm {
     pub term: String,
     pub block: BlockId,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub(crate) struct Stylesheet {
     pub paragraphs: Vec<ParagraphStyle>,
     pub masters: Vec<PageMaster>,
@@ -249,6 +249,54 @@ impl Book {
             return Err(ModelError::Inconsistent("unknown template"));
         };
         *slot = template;
+        Ok(())
+    }
+
+    /// Define a new chapter template. Its name must be new.
+    pub fn add_chapter_template(&mut self, template: ChapterTemplate) -> Result<(), ModelError> {
+        if self
+            .stylesheet
+            .templates
+            .iter()
+            .any(|existing| existing.name == template.name)
+        {
+            return Err(ModelError::Inconsistent("template name already used"));
+        }
+        self.stylesheet.templates.push(template);
+        Ok(())
+    }
+
+    /// Define a new page master. Its name must be new.
+    pub fn add_page_master(&mut self, master: PageMaster) -> Result<(), ModelError> {
+        if self
+            .stylesheet
+            .masters
+            .iter()
+            .any(|existing| existing.name == master.name)
+        {
+            return Err(ModelError::Inconsistent("master name already used"));
+        }
+        self.stylesheet.masters.push(master);
+        Ok(())
+    }
+
+    /// Set chapter `chapter` from the template named `template`.
+    pub fn apply_template(&mut self, chapter: ChapterId, template: &str) -> Result<(), ModelError> {
+        if !self
+            .stylesheet
+            .templates
+            .iter()
+            .any(|existing| existing.name == template)
+        {
+            return Err(ModelError::Inconsistent("unknown template"));
+        }
+        let target = self
+            .parts_mut()
+            .iter_mut()
+            .flat_map(|part| part.chapters_mut().iter_mut())
+            .find(|candidate| candidate.id() == chapter)
+            .ok_or(ModelError::UnknownChapter(chapter))?;
+        target.set_template(template.to_string());
         Ok(())
     }
 

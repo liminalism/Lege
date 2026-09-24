@@ -105,15 +105,20 @@ fn typing_does_not_write_the_bundle_until_autosave() {
     editor.open_bundle(&dir);
     editor.type_text(" Hello");
     assert!(
-        !dir.join("manifest.txt").exists(),
+        !docwrite_model::Book::is_bundle(&dir),
         "typing must not autosave"
     );
     editor.autosave().unwrap();
-    let saved = std::fs::read_to_string(dir.join("chapters/0000.txt")).unwrap();
+    let on_disk = || {
+        docwrite_model::Book::load_bundle(&dir)
+            .unwrap()
+            .plain_text()
+    };
+    let saved = on_disk();
     assert!(saved.contains("Hello"));
     editor.save_named_snapshot("dawn").unwrap();
     editor.type_text(" MORE");
-    let still = std::fs::read_to_string(dir.join("chapters/0000.txt")).unwrap();
+    let still = on_disk();
     assert!(
         !still.contains("MORE"),
         "the later keystrokes stay off the disk"

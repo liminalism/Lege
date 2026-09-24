@@ -2,7 +2,9 @@
 
 use docwrite_model::{BlockKind, Book, ChapterStart, NoteKind};
 
-use crate::engine::{Document, EditReport, Face, Geometry, LayoutHints, Paragraph, ParagraphStyle};
+use crate::engine::{
+    Document, EditReport, Face, Geometry, LayoutHints, PageRules, Paragraph, ParagraphStyle,
+};
 use crate::error::TypesetError;
 
 /// Paragraph ids with this bit set are chapter titles set from chapter
@@ -58,8 +60,37 @@ fn layout_inputs(book: &Book) -> (Geometry, Vec<Paragraph>, LayoutHints) {
         },
         None => Geometry::one_line_pages(),
     };
+    // One set of page rules per chapter template: its master's margins and
+    // furniture inside the book's trim, and its opener-folio choice.
+    let masters: Vec<PageRules> = book
+        .chapter_templates()
+        .iter()
+        .map(|template| {
+            let own = book
+                .page_masters()
+                .iter()
+                .find(|master| master.name == template.master)
+                .or(master);
+            PageRules {
+                margin_top: own.map_or(geometry.margin_top, |m| m.margin_top),
+                margin_bottom: own.map_or(geometry.margin_bottom, |m| m.margin_bottom),
+                margin_inner: own.map_or(geometry.margin_inner, |m| m.margin_inner),
+                margin_outer: own.map_or(geometry.margin_outer, |m| m.margin_outer),
+                folio: own.is_some_and(|m| m.folio),
+                running_head: own.is_some_and(|m| m.running_head),
+                hide_opener_folio: !template.show_opener_folio,
+            }
+        })
+        .collect();
+    let default_master = book
+        .chapter_templates()
+        .iter()
+        .position(|candidate| template.is_some_and(|template| template.name == candidate.name))
+        .unwrap_or(0);
     let mut paragraphs = Vec::new();
     let mut recto_at = Vec::new();
+    let mut break_at = Vec::new();
+    let mut master_at = Vec::new();
     let mut heads = Vec::new();
     for part in book.parts() {
         for chapter in part.chapters() {
@@ -68,6 +99,11 @@ fn layout_inputs(book: &Book) -> (Geometry, Vec<Paragraph>, LayoutHints) {
                 .iter()
                 .find(|template| template.name == chapter.template());
             let recto = template.is_some_and(|template| template.start == ChapterStart::NextRecto);
+            let master_index = book
+                .chapter_templates()
+                .iter()
+                .position(|candidate| candidate.name == chapter.template())
+                .unwrap_or(default_master);
             let head = chapter.title().to_string();
             let chapter_start = paragraphs.len();
             let mut first_body = true;
@@ -95,6 +131,8 @@ fn layout_inputs(book: &Book) -> (Geometry, Vec<Paragraph>, LayoutHints) {
                     note_is_endnote: false,
                 });
                 recto_at.push(false);
+                break_at.push(false);
+                master_at.push(master_index);
                 heads.push(head.clone());
             }
             for section in chapter.sections() {
@@ -138,8 +176,16 @@ fn layout_inputs(book: &Book) -> (Geometry, Vec<Paragraph>, LayoutHints) {
                         note_is_endnote,
                     });
                     recto_at.push(false);
+                    break_at.push(false);
+                    master_at.push(master_index);
                     heads.push(head.clone());
                 }
+            }
+            // Every chapter opens a page; NextRecto also skips to a recto.
+            if chapter_start > 0
+                && let Some(flag) = break_at.get_mut(chapter_start)
+            {
+                *flag = true;
             }
             if recto && let Some(flag) = recto_at.get_mut(chapter_start) {
                 *flag = true;
@@ -155,10 +201,15 @@ fn layout_inputs(book: &Book) -> (Geometry, Vec<Paragraph>, LayoutHints) {
             note_is_endnote: false,
         });
         recto_at.push(false);
+        break_at.push(false);
+        master_at.push(default_master);
         heads.push(String::new());
     }
     let hints = LayoutHints {
         recto_at,
+        break_at,
+        masters,
+        master_at,
         heads,
         folio: master.is_some_and(|master| master.folio),
         hide_opener_folio: template.is_some_and(|template| !template.show_opener_folio),

@@ -77,7 +77,7 @@ fn run() -> Result<(), RunError> {
 }
 
 fn export(book: &Path, out: &Path) -> Result<(), RunError> {
-    if !book.join("manifest.txt").is_file() {
+    if !docwrite_model::Book::is_bundle(book) {
         return Err(RunError::other(format!("{} is not a book", book.display())));
     }
     let editor = docwrite_app::Editor::open_or_create(book).map_err(RunError::other)?;

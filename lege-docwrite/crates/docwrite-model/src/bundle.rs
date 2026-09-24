@@ -1,12 +1,23 @@
-//! `.legebook` directory bundle. Writes are temp-file then rename.
+//! `.legebook` directory bundle.
+//!
+//! Format 2 is lossless: `book.json` holds the title, id allocator, styles,
+//! page masters, chapter templates, research records, notes, selection and
+//! the parts with their chapters in order; `chapters/<id>.json` holds each
+//! chapter's sections and blocks (kind, text, runs with every mark, note
+//! link). Ids survive a round trip, and reordering chapters rewrites only
+//! `book.json`. Format 1 bundles (`manifest.txt` plus text chapters) still
+//! open. A save writes a whole new directory beside the old one and swaps it
+//! in, so a crash leaves either the old bundle or the new one.
 
 use std::fs;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+
+use std::collections::HashMap;
 
 use crate::error::ModelError;
 use crate::publish::{BibliographyEntry, SourceNote};
-use crate::tree::{BlockKind, Book};
+use crate::tree::{Book, BookManifest, Chapter};
 
 /// Failure while saving or opening a bundle.
 #[derive(Debug)]
@@ -73,7 +84,7 @@ impl Book {
     /// replace it. `name` is one path segment.
     pub fn save_snapshot(&mut self, directory: &Path, name: &str) -> Result<(), BundleError> {
         let name = snapshot_name(name)?;
-        if !directory.join("manifest.txt").is_file() {
+        if !Self::is_bundle(directory) {
             self.save_bundle(directory)?;
         }
         let dest = directory.join("snapshots").join(name);
@@ -97,26 +108,85 @@ impl Book {
             message: "bundle path has no name".into(),
         })?;
         let temp = parent.join(format!(".{}.tmp", file_name.to_string_lossy()));
+        let old = parent.join(format!(".{}.old", file_name.to_string_lossy()));
         if temp.exists() {
             fs::remove_dir_all(&temp)?;
         }
         fs::create_dir_all(temp.join("chapters"))?;
-        fs::write(temp.join("manifest.txt"), self.manifest_text())?;
-        for (index, chapter) in self.chapter_records().into_iter().enumerate() {
-            fs::write(
-                temp.join("chapters").join(format!("{index:04}.txt")),
-                chapter,
-            )?;
+        let (manifest, chapters) = self.to_manifest();
+        for chapter in chapters {
+            let json = serde_json::to_string_pretty(chapter).map_err(json_error)?;
+            fs::write(temp.join("chapters").join(chapter_file(chapter)), json)?;
+        }
+        // The manifest goes last: a bundle without one is not a bundle.
+        let json = serde_json::to_string_pretty(&manifest).map_err(json_error)?;
+        fs::write(temp.join("book.json"), json)?;
+        // Swap: the old bundle steps aside before the new one takes its
+        // name, and is only deleted once the new one is in place.
+        if old.exists() {
+            fs::remove_dir_all(&old)?;
         }
         if directory.exists() {
-            fs::remove_dir_all(directory)?;
+            fs::rename(directory, &old)?;
         }
         fs::rename(&temp, directory)?;
+        if old.exists() {
+            fs::remove_dir_all(&old)?;
+        }
         Ok(())
     }
 
-    /// Open a bundle written by [`Self::save_bundle`].
+    /// Whether `directory` holds a bundle of either format.
+    pub fn is_bundle(directory: &Path) -> bool {
+        directory.join("book.json").is_file() || directory.join("manifest.txt").is_file()
+    }
+
+    /// Open a bundle written by [`Self::save_bundle`]. If a save was
+    /// interrupted after the old bundle stepped aside, the old one is opened.
     pub fn load_bundle(directory: &Path) -> Result<Self, BundleError> {
+        if !Self::is_bundle(directory) {
+            let old = bundle_parent(directory).join(format!(
+                ".{}.old",
+                directory
+                    .file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+                    .unwrap_or_default()
+            ));
+            if Self::is_bundle(&old) {
+                return Self::load_bundle(&old);
+            }
+        }
+        if !directory.join("book.json").is_file() {
+            return Self::load_format_1(directory);
+        }
+        let manifest: BookManifest =
+            serde_json::from_str(&fs::read_to_string(directory.join("book.json"))?)
+                .map_err(json_error)?;
+        if manifest.format != 2 {
+            return Err(BundleError {
+                message: format!(
+                    "bundle format {} is newer than this editor",
+                    manifest.format
+                ),
+            });
+        }
+        let mut chapters = HashMap::new();
+        for entry in fs::read_dir(directory.join("chapters"))? {
+            let path = entry?.path();
+            if path.extension().is_some_and(|ext| ext == "json") {
+                let chapter: Chapter =
+                    serde_json::from_str(&fs::read_to_string(&path)?).map_err(json_error)?;
+                chapters.insert(chapter.id(), chapter);
+            }
+        }
+        let mut book = Book::from_manifest(manifest, chapters)?;
+        book.remember_position();
+        Ok(book)
+    }
+
+    /// Open a format-1 bundle: `manifest.txt` and text chapters. Block
+    /// kinds, marks and notes were not stored in that format.
+    fn load_format_1(directory: &Path) -> Result<Self, BundleError> {
         let manifest = fs::read_to_string(directory.join("manifest.txt"))?;
         let mut book = Book::new(field(&manifest, "title").unwrap_or_else(|| "Untitled".into()));
         if let Some(size) = field(&manifest, "body-size")
@@ -207,65 +277,6 @@ impl Book {
             }
         }
         Ok(book)
-    }
-
-    fn manifest_text(&self) -> String {
-        let body = self
-            .paragraph_styles()
-            .iter()
-            .find(|style| style.name == "Body")
-            .map(|style| style.size_pt)
-            .unwrap_or(12.0);
-        let opener = self
-            .chapter_templates()
-            .iter()
-            .find(|template| template.name == "Chapter")
-            .map(|template| template.opener.as_str())
-            .unwrap_or("Chapter");
-        let caret = self.saved_position().map(|pos| encode_position(self, pos));
-        let selection = self.selection();
-        let selection = format!(
-            "{} {}",
-            encode_position(self, selection.anchor),
-            encode_position(self, selection.focus)
-        );
-        let mut text = format!(
-            "title {}\nbody-size {body}\ntemplate-opener {opener}\ncaret {}\nselection {selection}\n",
-            self.title().replace('\n', " "),
-            caret.unwrap_or_else(|| "0:0".into())
-        );
-        for source in self.stylesheet().sources.iter() {
-            text.push_str(&format!(
-                "source {}\t{}\t{}\t{}\n",
-                source.id,
-                source.document,
-                source.page,
-                source.passage.replace('\n', " ")
-            ));
-        }
-        for entry in self.bibliography() {
-            text.push_str(&format!(
-                "bib {}\t{}\t{}\t{}\t{}\n",
-                entry.key, entry.kind, entry.title, entry.author, entry.issued
-            ));
-        }
-        text
-    }
-
-    fn chapter_records(&self) -> Vec<String> {
-        let mut records = Vec::new();
-        for part in self.parts() {
-            for chapter in part.chapters() {
-                let mut body = format!("# {}\n@template {}\n", chapter.title(), chapter.template());
-                for section in chapter.sections() {
-                    for block in section.blocks() {
-                        body.push_str(&format!("@block {:?}\n{}\n", block.kind(), block.text()));
-                    }
-                }
-                records.push(body);
-            }
-        }
-        records
     }
 
     fn load_chapters(&mut self, chapters: &[String]) -> Result<(), BundleError> {
@@ -399,25 +410,12 @@ fn field(manifest: &str, name: &str) -> Option<String> {
     })
 }
 
-/// Path helper for tests.
-pub fn bundle_path(root: &Path, name: &str) -> PathBuf {
-    root.join(format!("{name}.legebook"))
+fn chapter_file(chapter: &Chapter) -> String {
+    format!("{}.json", chapter.id().raw())
 }
 
-impl BlockKind {
-    /// Stable label stored in a chapter file.
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::Body => "body",
-            Self::ChapterTitle => "chapter-title",
-            Self::Subhead => "subhead",
-            Self::BlockQuote => "quote",
-            Self::Epigraph => "epigraph",
-            Self::Image { .. } => "image",
-            Self::Caption => "caption",
-            Self::Verse => "verse",
-            Self::BibliographyEntry => "bibliography",
-            Self::SceneBreak => "break",
-        }
+fn json_error(err: serde_json::Error) -> BundleError {
+    BundleError {
+        message: format!("bundle JSON: {err}"),
     }
 }

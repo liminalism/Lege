@@ -377,3 +377,79 @@ fn note_text(document: &docwrite_typeset::Document) -> String {
     }
     joined
 }
+
+#[test]
+fn next_page_chapters_start_a_page_and_templates_bring_their_masters() {
+    use docwrite_model::ChapterStart;
+    let mut book = Book::new("Rules");
+    let mut template = book.chapter_templates()[0].clone();
+    template.start = ChapterStart::NextPage;
+    book.set_chapter_template(template).unwrap();
+    book.insert("A short first chapter.").unwrap();
+    let part = book.parts()[0].id();
+    book.add_chapter(part, "Second").unwrap();
+    let fresh = *book.block_ids().last().unwrap();
+    book.set_selection(Selection::collapsed(Position::new(fresh, 0)))
+        .unwrap();
+    book.insert("The second chapter.").unwrap();
+
+    let document = from_book(&book, face()).unwrap();
+    let second = page_with(&document, "Second");
+    assert_eq!(second, 2, "a NextPage chapter starts the very next page");
+    assert!(!document.is_blank_page(1));
+
+    // An appendix template on its own master: wider inner margin, no heads.
+    let mut master = book.page_masters()[0].clone();
+    master.name = "Appendix Body".into();
+    master.margin_inner = 100.0;
+    master.margin_outer = 60.0;
+    master.running_head = false;
+    book.add_page_master(master).unwrap();
+    let mut appendix = book.chapter_templates()[0].clone();
+    appendix.name = "Appendix".into();
+    appendix.master = "Appendix Body".into();
+    book.add_chapter_template(appendix).unwrap();
+    let chapter = book.parts()[0].chapters()[1].id();
+    book.apply_template(chapter, "Appendix").unwrap();
+    let fresh_block = *book.block_ids().last().unwrap();
+    book.set_selection(Selection::collapsed(Position::new(fresh_block, 0)))
+        .unwrap();
+    book.insert(&"Appendix words run on and on. ".repeat(120))
+        .unwrap();
+
+    let document = from_book(&book, face()).unwrap();
+    assert_eq!(
+        document.page_content_inset(1),
+        54.0,
+        "chapter one keeps its master"
+    );
+    // Facing pages: the inner margin is on the left of a recto (odd page)
+    // and on the right of a verso, where the outer margin is on the left.
+    let inset = |page: u32| if page % 2 == 1 { 100.0 } else { 60.0 };
+    let appendix_page = page_with(&document, "Second");
+    assert_eq!(
+        document.page_content_inset(appendix_page),
+        inset(appendix_page)
+    );
+    let later = appendix_page + 2;
+    assert!(later <= document.page_count(), "the appendix runs on");
+    assert_eq!(document.page_content_inset(later), inset(later));
+    assert_eq!(
+        document.page_running_head(later),
+        None,
+        "its master has no running head"
+    );
+    assert!(document.page_folio(later).is_some(), "but keeps folios");
+    let widest = |page: u32| {
+        document
+            .page_painted_lines(page)
+            .iter()
+            .map(|line| line.glyphs.iter().map(|glyph| glyph.x_advance).sum::<f32>())
+            .fold(0.0_f32, f32::max)
+    };
+    assert!(
+        widest(later) <= 432.0 - 100.0 - 60.0 + 0.5,
+        "appendix lines fit its narrower measure: {}",
+        widest(later)
+    );
+}

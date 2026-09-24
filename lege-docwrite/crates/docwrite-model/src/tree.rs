@@ -23,7 +23,7 @@ pub(crate) struct BlockLoc {
 
 /// Kind of block. Footnote and endnote *references* use [`Block::note`];
 /// the body of the note is a [`Note`] on the book.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum BlockKind {
     /// A body paragraph.
     #[default]
@@ -52,7 +52,7 @@ pub enum BlockKind {
 }
 
 /// Footnote or endnote.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum NoteKind {
     /// Placed on the page that references it, and continued when it does not fit.
     Footnote,
@@ -61,10 +61,11 @@ pub enum NoteKind {
 }
 
 /// A note body. Pagination reads it through `from_book`.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Note {
     id: NoteId,
     kind: NoteKind,
+    #[serde(with = "rope_text")]
     text: Rope,
 }
 
@@ -94,10 +95,11 @@ impl Note {
 }
 
 /// One block: a rope of text, the runs over it, and an optional note slot.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Block {
     id: BlockId,
     kind: BlockKind,
+    #[serde(with = "rope_text")]
     text: Rope,
     runs: Vec<Run>,
     note: Option<NoteId>,
@@ -170,7 +172,7 @@ impl Block {
 }
 
 /// A section: an optional heading and the blocks under it.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Section {
     id: SectionId,
     heading: String,
@@ -199,7 +201,7 @@ impl Section {
 }
 
 /// A chapter.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Chapter {
     id: ChapterId,
     title: String,
@@ -232,10 +234,14 @@ impl Chapter {
     pub(crate) fn set_title(&mut self, title: String) {
         self.title = title;
     }
+
+    pub(crate) fn set_template(&mut self, template: String) {
+        self.template = template;
+    }
 }
 
 /// A part. Front matter, body and back matter are parts.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Part {
     id: PartId,
     title: String,
@@ -265,7 +271,7 @@ impl Part {
 
 /// A caret position. `offset` is a character index into the block, and may
 /// equal the block length (the caret sits after the last character).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Position {
     /// Block that contains the caret.
     pub block: BlockId,
@@ -281,7 +287,7 @@ impl Position {
 }
 
 /// An anchor and a focus. The focus is the end that motions move.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Selection {
     /// The end that stays put while the selection is extended.
     pub anchor: Position,
@@ -695,5 +701,117 @@ impl Book {
             }
         }
         Err(ModelError::UnknownChapter(id))
+    }
+}
+
+/// Ropes are stored in a bundle as plain strings.
+mod rope_text {
+    use ropey::Rope;
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(rope: &Rope, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&rope.to_string())
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Rope, D::Error> {
+        Ok(Rope::from_str(&String::deserialize(deserializer)?))
+    }
+}
+
+/// Everything in a book except its chapters' contents: the bundle's
+/// `book.json`. Chapters are stored one per file and listed here in order.
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub(crate) struct BookManifest {
+    pub format: u32,
+    pub title: String,
+    pub ids: IdGen,
+    pub stylesheet: crate::publish::Stylesheet,
+    pub notes: Vec<Note>,
+    pub selection: Selection,
+    pub parts: Vec<PartEntry>,
+}
+
+/// A part in the manifest: its chapters by id, in reading order.
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub(crate) struct PartEntry {
+    pub id: PartId,
+    pub title: String,
+    pub chapters: Vec<ChapterId>,
+}
+
+impl Book {
+    /// The manifest and the chapters it lists, for writing a bundle.
+    pub(crate) fn to_manifest(&self) -> (BookManifest, Vec<&Chapter>) {
+        let manifest = BookManifest {
+            format: 2,
+            title: self.title.clone(),
+            ids: self.ids.clone(),
+            stylesheet: self.stylesheet.clone(),
+            notes: self.notes.values().cloned().collect(),
+            selection: self.selection,
+            parts: self
+                .parts
+                .iter()
+                .map(|part| PartEntry {
+                    id: part.id,
+                    title: part.title.clone(),
+                    chapters: part.chapters.iter().map(|chapter| chapter.id).collect(),
+                })
+                .collect(),
+        };
+        let chapters = self
+            .parts
+            .iter()
+            .flat_map(|part| part.chapters.iter())
+            .collect();
+        (manifest, chapters)
+    }
+
+    /// Rebuild a book from a manifest and its chapters. Undo history starts
+    /// empty; a selection that no longer fits is moved to the first block.
+    pub(crate) fn from_manifest(
+        manifest: BookManifest,
+        mut chapters: HashMap<ChapterId, Chapter>,
+    ) -> Result<Self, ModelError> {
+        let mut parts = Vec::with_capacity(manifest.parts.len());
+        for entry in manifest.parts {
+            let mut part = Part {
+                id: entry.id,
+                title: entry.title,
+                chapters: Vec::with_capacity(entry.chapters.len()),
+            };
+            for id in entry.chapters {
+                let chapter = chapters
+                    .remove(&id)
+                    .ok_or(ModelError::Inconsistent("manifest lists a missing chapter"))?;
+                part.chapters.push(chapter);
+            }
+            parts.push(part);
+        }
+        let mut book = Self {
+            title: manifest.title,
+            ids: manifest.ids,
+            parts,
+            stylesheet: manifest.stylesheet,
+            notes: manifest
+                .notes
+                .into_iter()
+                .map(|note| (note.id, note))
+                .collect(),
+            index: HashMap::new(),
+            selection: manifest.selection,
+            undo: Vec::new(),
+            redo: Vec::new(),
+        };
+        book.reindex();
+        book.check_consistency()?;
+        if book.set_selection(manifest.selection).is_err() {
+            let first = *book
+                .block_ids()
+                .first()
+                .ok_or(ModelError::Inconsistent("book has no blocks"))?;
+            book.selection = Selection::collapsed(Position::new(first, 0));
+        }
+        Ok(book)
     }
 }
