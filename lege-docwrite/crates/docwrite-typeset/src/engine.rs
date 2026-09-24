@@ -17,6 +17,8 @@ pub struct Face {
     /// Identity of the font bytes, so caches keyed by face tell fonts apart.
     id: u64,
     cap_ratio: f32,
+    /// The font has real small capitals (`smcp` changes glyphs).
+    real_small_caps: bool,
 }
 
 impl std::fmt::Debug for Face {
@@ -59,13 +61,20 @@ impl Face {
                 .filter(|ratio| *ratio > 0.3 && *ratio < 1.0)
                 .unwrap_or(0.7)
         };
-        Ok(Self {
+        let mut face = Self {
             data: bytes,
             upem,
             shaper,
             id,
             cap_ratio,
-        })
+            real_small_caps: false,
+        };
+        // A font has small caps when `smcp` changes what "x" shapes to.
+        let plain = face.shape("x", 10.0, &[])?;
+        let caps = face.shape("x", 10.0, &features_for(true, false))?;
+        face.real_small_caps =
+            plain.first().map(|glyph| glyph.id) != caps.first().map(|glyph| glyph.id);
+        Ok(face)
     }
 
     /// Shape `text` at `size_px`. `features` are OpenType tags such as `smcp`.
@@ -86,6 +95,68 @@ impl Face {
         buffer.guess_segment_properties();
         let glyphs = shaper.shape(buffer, ShapeOptions::new().features(features));
         Ok(scale_glyphs(&glyphs, size_px, self.upem))
+    }
+
+    /// Shape `text` with small capitals when asked: the font's own (`smcp`)
+    /// if it has them, otherwise capitals set at 78% for lowercase letters.
+    /// Clusters stay byte offsets into `text`.
+    pub fn shape_small_caps(
+        &self,
+        text: &str,
+        size_px: f32,
+        small_caps: bool,
+        oldstyle: bool,
+    ) -> Result<Vec<Glyph>, TypesetError> {
+        if !small_caps || self.real_small_caps {
+            return self.shape(text, size_px, &features_for(small_caps, oldstyle));
+        }
+        let features = features_for(false, oldstyle);
+        let mut glyphs = Vec::new();
+        let mut chars = text.char_indices().peekable();
+        while let Some((at, ch)) = chars.next() {
+            let lower = ch.is_lowercase();
+            let mut end = at + ch.len_utf8();
+            while let Some((next_at, next)) = chars.peek().copied() {
+                if next.is_lowercase() != lower {
+                    break;
+                }
+                end = next_at + next.len_utf8();
+                chars.next();
+            }
+            let start = at;
+            let segment = &text[start..end];
+            if lower {
+                // Each lowercase letter becomes its capital, shaped small;
+                // clusters map back to the letter it came from.
+                let mut upper = String::new();
+                let mut origin = Vec::new();
+                for (offset, letter) in segment.char_indices() {
+                    for capital in letter.to_uppercase() {
+                        origin.push((upper.len(), start + offset));
+                        upper.push(capital);
+                    }
+                }
+                for glyph in self.shape(&upper, size_px * 0.78, &features)? {
+                    let cluster = origin
+                        .iter()
+                        .rev()
+                        .find(|(upper_at, _)| *upper_at <= glyph.cluster as usize)
+                        .map_or(start, |(_, text_at)| *text_at);
+                    glyphs.push(Glyph {
+                        cluster: cluster as u32,
+                        ..glyph
+                    });
+                }
+            } else {
+                for glyph in self.shape(segment, size_px, &features)? {
+                    glyphs.push(Glyph {
+                        cluster: glyph.cluster + start as u32,
+                        ..glyph
+                    });
+                }
+            }
+        }
+        Ok(glyphs)
     }
 
     /// A second face over the same font bytes. Pagination owns one; the
@@ -698,7 +769,7 @@ impl Document {
         if plain {
             return self
                 .face()
-                .shape(text, size, &features_for(small_caps, oldstyle));
+                .shape_small_caps(text, size, small_caps, oldstyle);
         }
         let mut glyphs = Vec::new();
         let mut covered = 0;
@@ -723,8 +794,7 @@ impl Document {
                 s if s < 0 => (size * 0.65, -size * 0.15),
                 _ => (size, 0.0),
             };
-            let features = features_for(small_caps || run.small_caps, oldstyle);
-            for glyph in face.shape(slice, em, &features)? {
+            for glyph in face.shape_small_caps(slice, em, small_caps || run.small_caps, oldstyle)? {
                 glyphs.push(Glyph {
                     face: face_index,
                     cluster: glyph.cluster + run.start as u32,

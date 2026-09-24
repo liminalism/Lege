@@ -103,9 +103,15 @@ impl BookMap {
                 if self.collapsed_chapters.contains(&chapter.id()) {
                     continue;
                 }
-                for section in chapter.sections() {
+                // A chapter's one unnamed section is implicit; list sections
+                // only when they are named or there are several.
+                let several = chapter.sections().len() > 1;
+                for (number, section) in chapter.sections().iter().enumerate() {
+                    if section.heading().is_empty() && !several {
+                        continue;
+                    }
                     let title = if section.heading().is_empty() {
-                        "Section".to_string()
+                        format!("Section {}", number + 1)
                     } else {
                         section.heading().to_string()
                     };

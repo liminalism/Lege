@@ -3,6 +3,7 @@
 mod commands;
 mod map;
 mod nav;
+mod toolbar;
 mod trace;
 mod view;
 
@@ -15,6 +16,7 @@ use commands::PageSlot;
 
 pub use map::{BookMap, MapKind, MapRow, SIDEBAR_W};
 pub use nav::{Pager, Phase};
+pub use toolbar::{Action, Button, Prompt, PromptKind, TOOLBAR_H};
 pub use trace::{FrameMetrics, InputTrace, ReplayStep, TraceCommand};
 use view::Sidebar;
 pub use view::{PAPER, PointerShape, Theme, WORDPERFECT};
@@ -80,6 +82,10 @@ pub struct Editor {
     caret_status: Option<(u32, f32, f32)>,
     /// Colors of the paint in progress.
     theme_now: Theme,
+    /// A toolbar prompt taking typed text, when one is open.
+    prompt: Option<Prompt>,
+    /// Width of the last painted frame, for toolbar hits.
+    frame_width: i32,
     /// Page count of the document the last [`Self::paint`] laid out.
     pages_painted: u32,
 }
@@ -122,6 +128,8 @@ impl Editor {
             fullscreen_request: None,
             caret_status: None,
             theme_now: PAPER,
+            prompt: None,
+            frame_width: 0,
             pages_painted: 0,
         }
     }
@@ -168,7 +176,15 @@ impl Editor {
         }
         if self.cursor.0 >= self.sidebar_width() as f32 {
             if pressed {
-                self.click_at(self.cursor.0, self.cursor.1, false);
+                if (self.cursor.1 as i32) < self.toolbar_height() {
+                    if let Some(action) =
+                        self.button_at(self.cursor.0, self.cursor.1, self.frame_width)
+                    {
+                        self.run_action(action);
+                    }
+                } else {
+                    self.click_at(self.cursor.0, self.cursor.1, false);
+                }
             }
             return;
         }
@@ -189,7 +205,15 @@ impl Editor {
             return;
         };
         if from == to {
-            self.map.activate(&self.book, from);
+            // A chapter row takes you to the chapter; a part row folds.
+            let chapter = rows
+                .get(from)
+                .filter(|row| row.kind == MapKind::Chapter)
+                .and_then(|row| row.chapter_id);
+            match chapter {
+                Some(id) => self.go_to_chapter(id),
+                None => self.map.activate(&self.book, from),
+            }
         } else if self.map.drag_chapter(&mut self.book, from, to).is_ok() {
             self.edited();
         }
@@ -315,6 +339,8 @@ impl Editor {
             .map_or(1.5, |geometry| {
                 geometry.page_height / geometry.page_width.max(1.0)
             });
+        self.frame_width = width;
+        let bar = self.toolbar_height();
         let (gap, page_w, page_h) = if self.fullscreen {
             // Full screen: the page runs edge to edge across the screen;
             // pages scroll past with a thin rule between them.
@@ -325,14 +351,14 @@ impl Editor {
             // The page in view fills the window's height, one gap from the
             // top; the next page starts one gap below it.
             let gap = (16.0 * self.ui_scale).round() as i32;
-            let page_h = (height - 2 * gap).max(1);
+            let page_h = (height - bar - 2 * gap).max(1);
             let page_w = ((page_h as f32 / aspect) as i32)
                 .min(content_w - 2 * gap)
                 .max(1);
             (gap, page_w, page_h)
         };
         let scroll = self.pager.scroll();
-        let origin = gap - (scroll.fract() * f64::from(page_h + gap)) as i32;
+        let origin = bar + gap - (scroll.fract() * f64::from(page_h + gap)) as i32;
         let first = scroll.floor() as i32;
         let document = self.document.take();
         self.pages_painted = document.as_ref().map(|laid| laid.page_count()).unwrap_or(0);
@@ -371,10 +397,16 @@ impl Editor {
             if let Some(face) = face {
                 self.paint_status_line(&mut painter, face, width, height);
             }
-        } else if self.sidebar.collapsed {
-            self.paint_tab(&mut painter);
         } else {
-            self.paint_sidebar(&mut painter, height, face);
+            if let Some(face) = face {
+                let pages = self.pages_painted;
+                self.paint_toolbar(&mut painter, face, width, pages);
+            }
+            if self.sidebar.collapsed {
+                self.paint_tab(&mut painter);
+            } else {
+                self.paint_sidebar(&mut painter, height, face);
+            }
         }
         self.document = document;
     }

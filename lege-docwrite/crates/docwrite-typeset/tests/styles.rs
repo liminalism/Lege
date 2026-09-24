@@ -139,3 +139,36 @@ fn bold_and_italic_runs_and_styles_choose_their_faces() {
     );
     assert_eq!(lines[0].indent, 96.0, "epigraphs hang in from the left");
 }
+
+#[test]
+fn small_caps_are_synthesized_when_the_font_has_none() {
+    // Georgia (macOS) has no smcp; Noto Sans has real small caps.
+    let georgia = std::path::Path::new("/System/Library/Fonts/Supplemental/Georgia.ttf");
+    let fonts: Vec<Face> = [
+        Some(face()),
+        std::fs::read(georgia)
+            .ok()
+            .and_then(|bytes| Face::parse(bytes).ok()),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    for font in fonts {
+        let plain = font
+            .shape_small_caps("Archive", 20.0, false, false)
+            .unwrap();
+        let caps = font.shape_small_caps("Archive", 20.0, true, false).unwrap();
+        assert_eq!(caps.len(), plain.len(), "one glyph per letter here");
+        assert_eq!(caps[0].id, plain[0].id, "the capital A is unchanged");
+        assert_ne!(
+            caps[1].id, plain[1].id,
+            "lowercase r becomes a small capital"
+        );
+        let clusters: Vec<u32> = caps.iter().map(|glyph| glyph.cluster).collect();
+        assert_eq!(
+            clusters,
+            vec![0, 1, 2, 3, 4, 5, 6],
+            "clusters point into the text"
+        );
+    }
+}

@@ -11,6 +11,8 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use docwrite_app::PromptKind;
+use docwrite_model::Mark;
 use pixelkit_shell::clipboard::Clipboard;
 use pixelkit_shell::{KeyEvent, KeyInput};
 
@@ -155,40 +157,77 @@ impl EditorApp {
         self.report(result.map(|()| format!("exported {}", out.display())));
     }
 
-    /// Commands bound to the platform accelerator (Cmd on macOS, Ctrl elsewhere).
+    /// Commands bound to the platform accelerator (Cmd on macOS, Ctrl
+    /// elsewhere), matched by physical key so Option does not change them.
     fn accelerator(&mut self, event: &KeyEvent) -> bool {
         let shift = event.modifiers.shift;
-        let KeyInput::Character(ch) = event.key else {
-            return false;
-        };
-        match ch.to_ascii_lowercase() {
-            'z' if shift => self.editor.redo(),
-            'z' => self.editor.undo(),
-            'y' => self.editor.redo(),
-            'c' => {
+        let alt = event.modifiers.alt;
+        match event.physical.as_str() {
+            "KeyZ" if shift => self.editor.redo(),
+            "KeyZ" => self.editor.undo(),
+            "KeyY" => self.editor.redo(),
+            "KeyC" => {
                 if let Some(text) = self.editor.copy_text() {
                     self.clipboard.set_text(text);
                 }
             }
-            'x' => {
+            "KeyX" => {
                 if let Some(text) = self.editor.cut_text() {
                     self.clipboard.set_text(text);
                 }
             }
-            'v' => {
+            "KeyV" => {
                 if let Some(text) = self.clipboard.text() {
                     self.editor.paste_text(&text);
                 }
             }
-            's' => {
+            "KeyS" => {
                 let outcome = self.editor.save_now().map(|()| "saved".to_string());
                 self.report(outcome);
             }
-            'f' if shift => self.editor.toggle_fullscreen(),
-            '\\' => self.editor.toggle_sidebar(),
-            'e' if shift => self.export_next_to_bundle("md"),
-            'e' => self.export_next_to_bundle("pdf"),
+            "KeyB" => self.editor.toggle_mark(Mark::Bold),
+            "KeyI" => self.editor.toggle_mark(Mark::Italic),
+            "KeyH" if shift => self.editor.toggle_mark(Mark::SmallCaps),
+            "Equal" if shift => self.editor.toggle_mark(Mark::Superscript),
+            "Minus" if shift => self.editor.toggle_mark(Mark::Subscript),
+            "KeyN" if shift => self.editor.open_prompt(PromptKind::NewChapter),
+            "KeyR" if shift => self.editor.open_prompt(PromptKind::RenameChapter),
+            "KeyF" if alt => self.editor.open_prompt(PromptKind::Footnote),
+            "KeyE" if alt => self.editor.open_prompt(PromptKind::Endnote),
+            "KeyF" if shift => self.editor.toggle_fullscreen(),
+            "Backslash" => self.editor.toggle_sidebar(),
+            "KeyE" if shift => self.export_next_to_bundle("md"),
+            "KeyE" => self.export_next_to_bundle("pdf"),
+            digit if alt && digit.starts_with("Digit") => {
+                if let Ok(number) = digit.trim_start_matches("Digit").parse::<usize>() {
+                    self.editor.set_block_kind_number(number);
+                }
+            }
             _ => return false,
+        }
+        true
+    }
+
+    /// Keys while a toolbar prompt is open. Returns whether the key was used.
+    fn prompt_key(&mut self, event: &KeyEvent) -> bool {
+        if self.editor.prompt().is_none() {
+            return false;
+        }
+        match event.key {
+            KeyInput::Enter => {
+                self.editor.commit_prompt();
+            }
+            KeyInput::Escape => {
+                self.editor.cancel_prompt();
+            }
+            KeyInput::Backspace => {
+                self.editor.prompt_backspace();
+            }
+            _ if !event.text.is_empty() && !event.modifiers.accel() => {
+                let text: String = event.text.chars().filter(|ch| !ch.is_control()).collect();
+                self.editor.prompt_type(&text);
+            }
+            _ => {}
         }
         true
     }
@@ -245,6 +284,9 @@ impl pixelkit_shell::PixelApp for EditorApp {
 
     fn on_key_event(&mut self, event: &KeyEvent) {
         if !event.pressed {
+            return;
+        }
+        if self.prompt_key(event) {
             return;
         }
         let modifiers = event.modifiers;

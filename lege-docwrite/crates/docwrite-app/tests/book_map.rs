@@ -33,7 +33,8 @@ fn release(editor: &mut Editor, index: usize) {
 fn the_map_lists_matter_and_a_drag_reorders_chapters() {
     let mut editor = Editor::new();
     let body = editor.book().parts()[0].id();
-    editor.book_mut().add_chapter(body, "Alpha").unwrap();
+    let alpha = editor.book_mut().add_chapter(body, "Alpha").unwrap();
+    editor.book_mut().add_section(alpha, "Interlude").unwrap();
     editor.book_mut().add_chapter(body, "Beta").unwrap();
     let front = editor.book_mut().add_part("Front matter");
     editor.book_mut().add_chapter(front, "Preface").unwrap();
@@ -53,7 +54,14 @@ fn the_map_lists_matter_and_a_drag_reorders_chapters() {
         rows.iter()
             .any(|row| row.kind == MapKind::Chapter && row.title == "Alpha")
     );
-    assert!(rows.iter().any(|row| row.kind == MapKind::Section));
+    assert!(
+        rows.iter()
+            .any(|row| row.kind == MapKind::Section && row.title == "Interlude")
+    );
+    assert!(
+        rows.iter().all(|row| row.title != "Section"),
+        "a chapter's one implicit section is not listed"
+    );
 
     let body_row = rows
         .iter()
