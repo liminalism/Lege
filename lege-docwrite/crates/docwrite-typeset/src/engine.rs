@@ -14,6 +14,17 @@ pub struct Face {
     data: Vec<u8>,
     upem: i32,
     shaper: ShaperData,
+    /// Identity of the font bytes, so caches keyed by face tell fonts apart.
+    id: u64,
+}
+
+impl std::fmt::Debug for Face {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Face")
+            .field("bytes", &self.data.len())
+            .field("upem", &self.upem)
+            .finish_non_exhaustive()
+    }
 }
 
 impl Face {
@@ -26,10 +37,17 @@ impl Face {
         if upem <= 0 {
             return Err(TypesetError::Font("units per em is zero".into()));
         }
+        let id = {
+            use std::hash::{Hash, Hasher};
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            bytes.hash(&mut hasher);
+            hasher.finish()
+        };
         Ok(Self {
             data: bytes,
             upem,
             shaper,
+            id,
         })
     }
 
@@ -64,8 +82,9 @@ impl Face {
         &self.data
     }
 
-    pub(crate) fn upem(&self) -> i32 {
-        self.upem
+    /// Identity of the font bytes; equal for a [`Self::duplicate`].
+    pub fn id(&self) -> u64 {
+        self.id
     }
 }
 
@@ -313,7 +332,7 @@ impl NoteFlow {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Default)]
 pub(crate) struct LayoutHints {
     pub recto_at: Vec<bool>,
     pub heads: Vec<String>,
@@ -321,19 +340,6 @@ pub(crate) struct LayoutHints {
     pub hide_opener_folio: bool,
     pub running_head: bool,
     pub facing: bool,
-}
-
-impl Default for LayoutHints {
-    fn default() -> Self {
-        Self {
-            recto_at: Vec::new(),
-            heads: Vec::new(),
-            folio: false,
-            hide_opener_folio: false,
-            running_head: false,
-            facing: false,
-        }
-    }
 }
 
 /// What an edit did to pagination. Page numbers are 1-based.
@@ -913,10 +919,11 @@ impl Document {
         for index in 0..self.paragraphs.len().saturating_sub(1) {
             let image = self.paragraphs[index].style.name == "Image";
             let caption = self.paragraphs[index + 1].style.name == "Caption";
-            if image && caption {
-                if let Some(last) = self.lines.get_mut(index).and_then(|lines| lines.last_mut()) {
-                    last.keep_with_next = true;
-                }
+            if image
+                && caption
+                && let Some(last) = self.lines.get_mut(index).and_then(|lines| lines.last_mut())
+            {
+                last.keep_with_next = true;
             }
         }
     }
@@ -1216,14 +1223,13 @@ impl Document {
             }
             if style.widow_orphan && !lines.is_empty() && !line.is_last {
                 let next = step(cursor, &self.lines);
-                if let Some(next_line) = self.line_at(next) {
-                    if next_line.is_last
-                        && next_line.paragraph == line.paragraph
-                        && used + line.height + next_line.height + note_reserve > limit
-                    {
-                        // Widow: keep the last two lines together on the next page.
-                        break;
-                    }
+                if let Some(next_line) = self.line_at(next)
+                    && next_line.is_last
+                    && next_line.paragraph == line.paragraph
+                    && used + line.height + next_line.height + note_reserve > limit
+                {
+                    // Widow: keep the last two lines together on the next page.
+                    break;
                 }
             }
             if line.keep_with_next && !lines.is_empty() {
@@ -1247,13 +1253,13 @@ impl Document {
             lines.push(line.clone());
             cursor = next;
         }
-        if lines.is_empty() {
-            if let Some(line) = self.line_at(start) {
-                // Do not undo a recto refusal: an empty verso must stay empty
-                // of the chapter that is waiting for an odd page.
-                if !self.refuses_recto(line, false, verso) {
-                    lines.push(line.clone());
-                }
+        if lines.is_empty()
+            && let Some(line) = self.line_at(start)
+        {
+            // Do not undo a recto refusal: an empty verso must stay empty
+            // of the chapter that is waiting for an odd page.
+            if !self.refuses_recto(line, false, verso) {
+                lines.push(line.clone());
             }
         }
         let (footnotes, flow) = self.place_notes(&lines, flow);
@@ -1422,12 +1428,11 @@ impl Document {
             if !self.hints.folio && !self.hints.running_head {
                 continue;
             }
-            if let Some(line) = page.lines.first() {
-                if let Some(head) = self.hints.heads.get(line.paragraph) {
-                    if !head.is_empty() {
-                        carried = head.clone();
-                    }
-                }
+            if let Some(line) = page.lines.first()
+                && let Some(head) = self.hints.heads.get(line.paragraph)
+                && !head.is_empty()
+            {
+                carried = head.clone();
             }
             let opener = page.lines.first().is_some_and(|line| {
                 line.is_first
@@ -1552,21 +1557,21 @@ fn break_lines(
     let mut limit = (measure - first_indent).max(1.0);
     for (index, glyph) in glyphs.iter().enumerate() {
         let cluster = glyph.cluster as usize;
-        if index > start {
-            if let Some(opportunity) = breaks.get(&cluster) {
-                if matches!(
-                    opportunity,
-                    BreakOpportunity::Mandatory | BreakOpportunity::Allowed
-                ) {
-                    last_break = Some(index);
-                }
-                if matches!(opportunity, BreakOpportunity::Mandatory) {
-                    lines.push(slice_line(text, glyphs, start, index, width, false));
-                    start = index;
-                    width = 0.0;
-                    last_break = None;
-                    limit = measure;
-                }
+        if index > start
+            && let Some(opportunity) = breaks.get(&cluster)
+        {
+            if matches!(
+                opportunity,
+                BreakOpportunity::Mandatory | BreakOpportunity::Allowed
+            ) {
+                last_break = Some(index);
+            }
+            if matches!(opportunity, BreakOpportunity::Mandatory) {
+                lines.push(slice_line(text, glyphs, start, index, width, false));
+                start = index;
+                width = 0.0;
+                last_break = None;
+                limit = measure;
             }
         }
         if width + glyph.x_advance > limit && index > start {

@@ -2,7 +2,7 @@
 //! `cargo run -p docwrite-app --example demo_book -- Demo.legebook`
 //! then `cargo run -p docwrite-app -- Demo.legebook`.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use docwrite_model::{Book, Position, Selection};
 

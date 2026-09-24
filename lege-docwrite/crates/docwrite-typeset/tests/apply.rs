@@ -4,7 +4,7 @@
 //! [`update_from_book`]; the result must equal [`from_book`] of the same
 //! book, page for page, while touching only the pages the edit reaches.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::path::PathBuf;
 

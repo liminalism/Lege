@@ -1,6 +1,6 @@
 //! The table of contents follows a chapter that moves onto another page.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::path::PathBuf;
 
@@ -37,7 +37,7 @@ fn body(id: u64) -> Paragraph {
 
 #[test]
 fn contents_page_numbers_follow_a_chapter_that_moves() {
-    let mut paragraphs = vec![title(1, "One"), body(2), title(3, "Two"), body(4)];
+    let paragraphs = vec![title(1, "One"), body(2), title(3, "Two"), body(4)];
     let mut document =
         Document::new(face(), Geometry::one_line_pages(), paragraphs.clone()).unwrap();
     let before = document.contents();

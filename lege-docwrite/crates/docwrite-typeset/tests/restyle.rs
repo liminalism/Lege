@@ -1,6 +1,6 @@
 //! Changing Body and laying out again matches a fresh layout of the same text.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::path::PathBuf;
 

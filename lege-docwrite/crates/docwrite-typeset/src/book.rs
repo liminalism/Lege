@@ -124,11 +124,11 @@ fn layout_inputs(book: &Book) -> (Geometry, Vec<Paragraph>, LayoutHints) {
                     }
                     let mut note = None;
                     let mut note_is_endnote = false;
-                    if let Some(id) = block.note() {
-                        if let Ok(body) = book.note(id) {
-                            note_is_endnote = body.kind() == NoteKind::Endnote;
-                            note = Some(body.text());
-                        }
+                    if let Some(id) = block.note()
+                        && let Ok(body) = book.note(id)
+                    {
+                        note_is_endnote = body.kind() == NoteKind::Endnote;
+                        note = Some(body.text());
                     }
                     paragraphs.push(Paragraph {
                         id: block.id().raw(),
@@ -141,10 +141,8 @@ fn layout_inputs(book: &Book) -> (Geometry, Vec<Paragraph>, LayoutHints) {
                     heads.push(head.clone());
                 }
             }
-            if recto {
-                if let Some(flag) = recto_at.get_mut(chapter_start) {
-                    *flag = true;
-                }
+            if recto && let Some(flag) = recto_at.get_mut(chapter_start) {
+                *flag = true;
             }
         }
     }

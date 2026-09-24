@@ -1,6 +1,6 @@
 //! Short paragraphs share a page; one line is not one page.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::path::PathBuf;
 

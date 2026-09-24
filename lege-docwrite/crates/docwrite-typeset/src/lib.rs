@@ -10,7 +10,7 @@ mod book;
 mod engine;
 mod error;
 
-pub use atlas::{AtlasKey, GlyphAtlas};
+pub use atlas::{AtlasKey, GlyphAtlas, GlyphBitmap};
 pub use book::{CHAPTER_TITLE_ID, from_book, update_from_book};
 pub use engine::{
     Cursor, Document, EditReport, Face, Geometry, Glyph, HYPHEN_CLUSTER, PaintedLine, Paragraph,

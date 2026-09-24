@@ -17,7 +17,9 @@ pub use nav::{Pager, Phase};
 pub use trace::{FrameMetrics, InputTrace, ReplayStep, TraceCommand};
 
 use docwrite_model::{Book, Direction, Motion};
-use docwrite_typeset::{Document, EditReport, Face, GlyphAtlas, from_book, update_from_book};
+use docwrite_typeset::{
+    Document, EditReport, Face, GlyphAtlas, HYPHEN_CLUSTER, from_book, update_from_book,
+};
 use map::BookMap as Map;
 
 const DESK: u32 = 0x00E6_E1D6;
@@ -375,10 +377,10 @@ impl Editor {
         };
         let page = focus_mark(&self.book, document)
             .and_then(|(paragraph, byte)| document.page_of(paragraph, byte));
-        if let Some(page) = page {
-            if self.pager.page_top() + 1 != page {
-                self.pager.jump_to(page - 1);
-            }
+        if let Some(page) = page
+            && self.pager.page_top() + 1 != page
+        {
+            self.pager.jump_to(page - 1);
         }
     }
 
@@ -476,29 +478,39 @@ impl Editor {
         let face = document.face();
         for line in lines.iter() {
             let baseline = top + (line.baseline * scale) as i32;
-            let mut pen = left + ((inset + line.indent) * scale) as i32;
-            if let Some((paragraph, focus_byte)) = focus {
-                if paragraph == line.paragraph {
-                    saw_focus = true;
-                    let mut mark = pen;
-                    for glyph in &line.glyphs {
-                        if glyph.cluster as usize >= focus_byte {
-                            break;
-                        }
-                        mark += (glyph.x_advance * scale).round() as i32;
-                    }
-                    caret_x = mark;
-                    caret_y = baseline - (geometry.font_size * scale) as i32;
-                }
+            let start_x = left as f32 + (inset + line.indent) * scale;
+            let line_start = line
+                .glyphs
+                .iter()
+                .filter(|glyph| glyph.cluster != HYPHEN_CLUSTER)
+                .map(|glyph| glyph.cluster as usize)
+                .min()
+                .unwrap_or(0);
+            if let Some((paragraph, focus_byte)) = focus
+                && paragraph == line.paragraph
+                && line_start <= focus_byte
+            {
+                // Lines come in order, so the last line of the paragraph that
+                // starts at or before the caret is the caret's line.
+                saw_focus = true;
+                let before: f32 = line
+                    .glyphs
+                    .iter()
+                    .filter(|glyph| (glyph.cluster as usize) < focus_byte)
+                    .map(|glyph| glyph.x_advance * scale)
+                    .sum();
+                caret_x = (start_x + before).round() as i32;
+                caret_y = baseline - (line.em * scale) as i32;
             }
+            let mut pen = start_x;
             for glyph in &line.glyphs {
-                let advance = (glyph.x_advance * scale).round() as i32;
+                let advance = glyph.x_advance * scale;
                 if span_covers(&selected, line.paragraph, glyph.cluster as usize) {
                     painter.fill_rect(
                         pixelkit_raster::Rect::new(
-                            pen,
-                            baseline - (geometry.font_size * scale) as i32,
-                            advance.max(1),
+                            pen.round() as i32,
+                            baseline - (line.em * scale) as i32,
+                            (advance.round() as i32).max(1),
                             (geometry.leading * scale).max(1.0) as i32,
                         ),
                         SELECTION,
@@ -509,27 +521,16 @@ impl Editor {
                 } else {
                     geometry.font_size
                 }) * scale;
-                let origin_y = baseline - 48;
-                let _ = self
-                    .atlas
-                    .with_coverage(face, glyph.id, size, 0.0, |coverage, stride| {
-                        if stride == 0 {
-                            return;
-                        }
-                        let rows = coverage.len() as u32 / stride;
-                        for row in 0..rows {
-                            let start = (row * stride) as usize;
-                            let end = start + stride as usize;
-                            if end <= coverage.len() {
-                                painter.blend_coverage_row(
-                                    pen,
-                                    origin_y + row as i32,
-                                    INK,
-                                    &coverage[start..end],
-                                );
-                            }
-                        }
-                    });
+                draw_glyph(
+                    &mut self.atlas,
+                    painter,
+                    face,
+                    glyph.id,
+                    size,
+                    pen + glyph.x_offset * scale,
+                    baseline - (glyph.y_offset * scale).round() as i32,
+                    INK,
+                );
                 pen += advance;
             }
         }
@@ -544,24 +545,15 @@ impl Editor {
                 let baseline = caret_y + height;
                 if let Ok(glyphs) = face.shape(&preedit, size.max(1.0), &[]) {
                     for glyph in glyphs {
-                        let _ = self.atlas.with_coverage(
+                        draw_glyph(
+                            &mut self.atlas,
+                            painter,
                             face,
                             glyph.id,
                             size.max(1.0),
-                            0.0,
-                            |coverage, stride| {
-                                if stride == 0 {
-                                    return;
-                                }
-                                for (row, cells) in coverage.chunks(stride as usize).enumerate() {
-                                    painter.blend_coverage_row(
-                                        caret_x,
-                                        baseline - 48 + row as i32,
-                                        INK,
-                                        cells,
-                                    );
-                                }
-                            },
+                            caret_x as f32,
+                            baseline,
+                            INK,
                         );
                         caret_x += glyph.x_advance.round() as i32;
                     }
@@ -596,27 +588,16 @@ impl Editor {
         };
         let mut pen = x;
         for glyph in glyphs {
-            let origin_y = y - 48;
-            let _ =
-                self.atlas
-                    .with_coverage(face, glyph.id, size.max(1.0), 0.0, |coverage, stride| {
-                        if stride == 0 {
-                            return;
-                        }
-                        let rows = coverage.len() as u32 / stride;
-                        for row in 0..rows {
-                            let start = (row * stride) as usize;
-                            let end = start + stride as usize;
-                            if end <= coverage.len() {
-                                painter.blend_coverage_row(
-                                    pen,
-                                    origin_y + row as i32,
-                                    INK,
-                                    &coverage[start..end],
-                                );
-                            }
-                        }
-                    });
+            draw_glyph(
+                &mut self.atlas,
+                painter,
+                face,
+                glyph.id,
+                size.max(1.0),
+                pen as f32,
+                y,
+                INK,
+            );
             pen += glyph.x_advance.round() as i32;
         }
     }
@@ -711,6 +692,35 @@ impl Default for Editor {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Blend one glyph with its pen at `x` on `baseline`. The fractional part of
+/// `x` selects a subpixel raster.
+#[allow(clippy::too_many_arguments)]
+fn draw_glyph(
+    atlas: &mut GlyphAtlas,
+    painter: &mut pixelkit_raster::Painter<'_>,
+    face: &Face,
+    glyph: u16,
+    size: f32,
+    x: f32,
+    baseline: i32,
+    color: u32,
+) {
+    let whole = x.floor();
+    let _ = atlas.with_glyph(face, glyph, size, x - whole, |bitmap| {
+        if bitmap.width == 0 {
+            return;
+        }
+        for (row, cells) in bitmap.coverage.chunks(bitmap.width as usize).enumerate() {
+            painter.blend_coverage_row(
+                whole as i32 + bitmap.left,
+                baseline - bitmap.top + row as i32,
+                color,
+                cells,
+            );
+        }
+    });
 }
 
 /// Keypress-to-present budget. A few milliseconds, inside one 60 Hz frame.

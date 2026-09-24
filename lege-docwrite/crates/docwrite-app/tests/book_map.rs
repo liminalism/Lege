@@ -1,6 +1,6 @@
 //! The sidebar the window hit-tests: collapse, and a drag that reorders chapters.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use docwrite_app::{Editor, MapKind};
 

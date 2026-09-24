@@ -6,7 +6,7 @@
 //! debug build is not what a writer types into:
 //! `cargo test --release -p docwrite-app --test latency_gate -- --nocapture`.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::path::PathBuf;
 use std::time::Instant;

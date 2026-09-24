@@ -1,7 +1,7 @@
 //! Reopen restores the manuscript, styles, and caret. One template edit
 //! changes every chapter that uses it. Drag reorder changes book order.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::env;
 

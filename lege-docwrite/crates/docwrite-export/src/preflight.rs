@@ -61,14 +61,13 @@ pub fn preflight(book: &Book, facts: &AssetFacts<'_>) -> PreflightReport {
         }
     }
     for block in crate::blocks_of(book) {
-        if let Some(link) = block.link {
-            if !facts
+        if let Some(link) = block.link
+            && !facts
                 .linked_targets_that_exist
                 .iter()
                 .any(|target| target == &link)
-            {
-                report.broken_references.push(link);
-            }
+        {
+            report.broken_references.push(link);
         }
     }
     for source in book_sources(book) {

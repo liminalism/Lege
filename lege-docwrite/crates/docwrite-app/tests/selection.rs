@@ -1,6 +1,6 @@
 //! A shifted caret paints a highlight. The same motion the window's key handler calls.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use docwrite_app::{Editor, SELECTION};
 

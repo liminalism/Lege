@@ -1,6 +1,6 @@
 //! Masters, styles, and notes travel from the book into pagination.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::path::PathBuf;
 
@@ -128,7 +128,10 @@ fn body_style_metrics_reflow_and_match_a_fresh_layout() {
         .map(|page| fresh.page_texts(page))
         .collect();
     assert_eq!(large_pages, fresh_pages);
-    let opener = large.paragraph_em(0).unwrap();
+    let opener_block = book.block_ids()[0].raw();
+    let opener = large
+        .paragraph_em(large.paragraph_of(opener_block).unwrap())
+        .unwrap();
     assert!(
         (opener - 24.0).abs() < 0.1,
         "first paragraph keeps its drop cap, em {opener}"

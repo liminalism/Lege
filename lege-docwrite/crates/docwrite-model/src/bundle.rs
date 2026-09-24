@@ -119,19 +119,19 @@ impl Book {
     pub fn load_bundle(directory: &Path) -> Result<Self, BundleError> {
         let manifest = fs::read_to_string(directory.join("manifest.txt"))?;
         let mut book = Book::new(field(&manifest, "title").unwrap_or_else(|| "Untitled".into()));
-        if let Some(size) = field(&manifest, "body-size") {
-            if let Ok(size_pt) = size.parse::<f32>() {
-                let mut style = book
-                    .paragraph_styles()
-                    .iter()
-                    .find(|style| style.name == "Body")
-                    .cloned()
-                    .ok_or_else(|| BundleError {
-                        message: "missing Body".into(),
-                    })?;
-                style.size_pt = size_pt;
-                book.set_paragraph_style(style)?;
-            }
+        if let Some(size) = field(&manifest, "body-size")
+            && let Ok(size_pt) = size.parse::<f32>()
+        {
+            let mut style = book
+                .paragraph_styles()
+                .iter()
+                .find(|style| style.name == "Body")
+                .cloned()
+                .ok_or_else(|| BundleError {
+                    message: "missing Body".into(),
+                })?;
+            style.size_pt = size_pt;
+            book.set_paragraph_style(style)?;
         }
         if let Some(opener) = field(&manifest, "template-opener") {
             let mut template = book
@@ -161,11 +161,11 @@ impl Book {
             });
         }
         book.load_chapters(&chapters)?;
-        if let Some(pos) = field(&manifest, "caret") {
-            if let Some(focus) = position_at(&book, &pos) {
-                let _ = book.set_selection(crate::Selection::collapsed(focus));
-                book.remember_position();
-            }
+        if let Some(pos) = field(&manifest, "caret")
+            && let Some(focus) = position_at(&book, &pos)
+        {
+            let _ = book.set_selection(crate::Selection::collapsed(focus));
+            book.remember_position();
         }
         if let Some(spec) = field(&manifest, "selection") {
             let mut ends = spec.split_whitespace();

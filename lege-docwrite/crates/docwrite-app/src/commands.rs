@@ -83,10 +83,10 @@ impl Editor {
         saving.store(true, Ordering::Release);
         self.dirty = false;
         std::thread::spawn(move || {
-            if let Err(err) = copy.save_bundle(&path) {
-                if let Ok(mut slot) = error.lock() {
-                    *slot = Some(err.to_string());
-                }
+            if let Err(err) = copy.save_bundle(&path)
+                && let Ok(mut slot) = error.lock()
+            {
+                *slot = Some(err.to_string());
             }
             saving.store(false, Ordering::Release);
         });

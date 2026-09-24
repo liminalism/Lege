@@ -1,6 +1,6 @@
 //! A footnote is placed on the page of its reference and survives a repagination.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::path::PathBuf;
 

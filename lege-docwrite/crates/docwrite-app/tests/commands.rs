@@ -1,7 +1,7 @@
 //! The commands the window binds: clipboard, undo, caret motion by line and
 //! by pointer, files, autosave and export.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::time::Duration;
 
@@ -199,4 +199,24 @@ fn a_new_book_saves_reopens_autosaves_and_exports() {
     assert!(status.success());
     assert!(std::fs::read(&cli_pdf).unwrap().starts_with(b"%PDF"));
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn the_caret_is_drawn_on_its_own_line_of_a_wrapped_paragraph() {
+    let mut editor = editor_with(1);
+    let first = editor.book().block_ids()[0];
+    let mut frame = pixelkit_raster::WindowBuffer::new(1100, 800);
+    editor
+        .book_mut()
+        .set_selection(Selection::collapsed(Position::new(first, 2)))
+        .unwrap();
+    editor.paint(&mut frame);
+    let early = editor.caret_area().unwrap();
+    editor.move_end(false);
+    editor.paint(&mut frame);
+    let late = editor.caret_area().unwrap();
+    assert!(
+        late.y > early.y + 10.0,
+        "the paragraph's start and end are on different lines: {early:?} {late:?}"
+    );
 }

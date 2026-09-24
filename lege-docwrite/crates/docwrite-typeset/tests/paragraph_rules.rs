@@ -2,7 +2,7 @@
 //! around them: hyphenation, drop caps, quotes, epigraphs, images, matter,
 //! small caps and old-style figures.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::path::PathBuf;
 
@@ -37,7 +37,7 @@ fn keep_rules_hold_and_prose_features_shape() {
         keep_with_next: false,
         ..ParagraphStyle::default()
     };
-    let mut paragraphs = vec![
+    let paragraphs = vec![
         Paragraph {
             id: 1,
             text: "Front matter".into(),

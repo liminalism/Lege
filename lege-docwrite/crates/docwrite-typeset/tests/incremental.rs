@@ -1,7 +1,7 @@
 //! The M1 convergence gate: an edit on page 147 of 400 does not lay out
 //! pages 149–400.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::path::PathBuf;
 

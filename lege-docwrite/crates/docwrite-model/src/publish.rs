@@ -321,7 +321,7 @@ impl Book {
     pub fn cite(&mut self, id: &str) -> Result<(), ModelError> {
         let source = self
             .source(id)
-            .ok_or_else(|| ModelError::Inconsistent("unknown source"))?
+            .ok_or(ModelError::Inconsistent("unknown source"))?
             .clone();
         let block = self.selection().focus.block;
         self.insert(&source.passage)?;
@@ -501,10 +501,10 @@ fn split_objects(json: &str) -> Vec<String> {
             }
             '}' => {
                 depth -= 1;
-                if depth == 0 {
-                    if let Some(start) = start.take() {
-                        objects.push(json[start..=index].to_string());
-                    }
+                if depth == 0
+                    && let Some(start) = start.take()
+                {
+                    objects.push(json[start..=index].to_string());
                 }
             }
             _ => {}
