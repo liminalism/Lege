@@ -47,6 +47,7 @@ fn keep_rules_hold_and_prose_features_shape() {
             },
             note: None,
             note_is_endnote: false,
+            note_mark: String::new(),
         },
         Paragraph {
             id: 2,
@@ -54,6 +55,7 @@ fn keep_rules_hold_and_prose_features_shape() {
             style: style.clone(),
             note: None,
             note_is_endnote: false,
+            note_mark: String::new(),
         },
         Paragraph {
             id: 3,
@@ -66,6 +68,7 @@ fn keep_rules_hold_and_prose_features_shape() {
             },
             note: None,
             note_is_endnote: false,
+            note_mark: String::new(),
         },
         Paragraph {
             id: 4,
@@ -73,6 +76,7 @@ fn keep_rules_hold_and_prose_features_shape() {
             style: style.clone(),
             note: None,
             note_is_endnote: false,
+            note_mark: String::new(),
         },
         Paragraph {
             id: 5,
@@ -83,6 +87,7 @@ fn keep_rules_hold_and_prose_features_shape() {
             },
             note: None,
             note_is_endnote: false,
+            note_mark: String::new(),
         },
         Paragraph {
             id: 6,
@@ -93,6 +98,7 @@ fn keep_rules_hold_and_prose_features_shape() {
             },
             note: None,
             note_is_endnote: false,
+            note_mark: String::new(),
         },
         Paragraph {
             id: 7,
@@ -103,6 +109,7 @@ fn keep_rules_hold_and_prose_features_shape() {
             },
             note: None,
             note_is_endnote: false,
+            note_mark: String::new(),
         },
         Paragraph {
             id: 8,
@@ -114,6 +121,7 @@ fn keep_rules_hold_and_prose_features_shape() {
             },
             note: None,
             note_is_endnote: false,
+            note_mark: String::new(),
         },
         Paragraph {
             id: 9,
@@ -125,6 +133,7 @@ fn keep_rules_hold_and_prose_features_shape() {
             },
             note: None,
             note_is_endnote: false,
+            note_mark: String::new(),
         },
         Paragraph {
             id: 10,
@@ -137,6 +146,7 @@ fn keep_rules_hold_and_prose_features_shape() {
             },
             note: None,
             note_is_endnote: false,
+            note_mark: String::new(),
         },
     ];
     let document = Document::new(face(), geometry, paragraphs.clone()).unwrap();
@@ -194,6 +204,7 @@ fn layout(text: &str, geometry: Geometry, control: bool) -> Document {
             style,
             note: None,
             note_is_endnote: false,
+            note_mark: String::new(),
         }],
     )
     .unwrap()
@@ -269,6 +280,7 @@ fn a_long_word_breaks_with_a_visible_hyphen() {
             },
             note: None,
             note_is_endnote: false,
+            note_mark: String::new(),
         }],
     )
     .unwrap();
@@ -300,6 +312,7 @@ fn an_image_stays_on_the_same_page_as_its_caption() {
         style: ParagraphStyle::default(),
         note: None,
         note_is_endnote: false,
+        note_mark: String::new(),
     };
     let image = Paragraph {
         id: 2,
@@ -310,6 +323,7 @@ fn an_image_stays_on_the_same_page_as_its_caption() {
         },
         note: None,
         note_is_endnote: false,
+        note_mark: String::new(),
     };
     let caption = Paragraph {
         id: 3,
@@ -320,6 +334,7 @@ fn an_image_stays_on_the_same_page_as_its_caption() {
         },
         note: None,
         note_is_endnote: false,
+        note_mark: String::new(),
     };
     let document = Document::new(face(), geometry, vec![lead, image, caption]).unwrap();
     let page_of = |needle: &str| {
@@ -368,6 +383,7 @@ fn first_line_indent_shortens_the_opening_line() {
             style: indented,
             note: None,
             note_is_endnote: false,
+            note_mark: String::new(),
         }],
     )
     .unwrap();
@@ -380,6 +396,7 @@ fn first_line_indent_shortens_the_opening_line() {
             style: flush,
             note: None,
             note_is_endnote: false,
+            note_mark: String::new(),
         }],
     )
     .unwrap();

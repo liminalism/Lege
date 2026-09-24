@@ -7,6 +7,10 @@ use crate::engine::{
 };
 use crate::error::TypesetError;
 
+/// The Notes section's paragraphs: its heading is this id, and each endnote
+/// is this bit with the note's id. Block ids never set it.
+pub const ENDNOTES_ID: u64 = 1 << 62;
+
 /// Paragraph ids with this bit set are chapter titles set from chapter
 /// metadata; the rest of the id is the chapter's id. Block ids never set it.
 pub const CHAPTER_TITLE_ID: u64 = 1 << 63;
@@ -92,6 +96,8 @@ fn layout_inputs(book: &Book) -> (Geometry, Vec<Paragraph>, LayoutHints) {
     let mut break_at = Vec::new();
     let mut master_at = Vec::new();
     let mut heads = Vec::new();
+    let mut footnote_count = 0usize;
+    let mut endnotes: Vec<(u64, String)> = Vec::new();
     for part in book.parts() {
         for chapter in part.chapters() {
             let template = book
@@ -129,6 +135,7 @@ fn layout_inputs(book: &Book) -> (Geometry, Vec<Paragraph>, LayoutHints) {
                     style,
                     note: None,
                     note_is_endnote: false,
+                    note_mark: String::new(),
                 });
                 recto_at.push(false);
                 break_at.push(false);
@@ -160,20 +167,30 @@ fn layout_inputs(book: &Book) -> (Geometry, Vec<Paragraph>, LayoutHints) {
                     if matches!(block.kind(), BlockKind::Caption) {
                         style.name = "Caption".into();
                     }
+                    // Footnotes are numbered through the book and set at the
+                    // foot of their page; endnotes are numbered separately and
+                    // set in the Notes section after the last chapter.
                     let mut note = None;
-                    let mut note_is_endnote = false;
+                    let mut note_mark = String::new();
                     if let Some(id) = block.note()
                         && let Ok(body) = book.note(id)
                     {
-                        note_is_endnote = body.kind() == NoteKind::Endnote;
-                        note = Some(body.text());
+                        if body.kind() == NoteKind::Endnote {
+                            endnotes.push((id.raw(), body.text()));
+                            note_mark = endnotes.len().to_string();
+                        } else {
+                            footnote_count += 1;
+                            note_mark = footnote_count.to_string();
+                            note = Some(format!("{footnote_count}\u{2002}{}", body.text()));
+                        }
                     }
                     paragraphs.push(Paragraph {
                         id: block.id().raw(),
                         text: block.text(),
                         style,
                         note,
-                        note_is_endnote,
+                        note_is_endnote: false,
+                        note_mark,
                     });
                     recto_at.push(false);
                     break_at.push(false);
@@ -192,13 +209,46 @@ fn layout_inputs(book: &Book) -> (Geometry, Vec<Paragraph>, LayoutHints) {
             }
         }
     }
+    if !endnotes.is_empty() {
+        // The Notes section: a heading that opens a page, then each endnote
+        // as a paragraph, numbered as its reference mark is.
+        let mut title = map_style(&named_style(book, "Chapter Title"));
+        title.name = "Chapter Title".into();
+        title.keep_with_next = true;
+        title.space_after = title.space_after.max(title.leading);
+        let notes_master = master_at.last().copied().unwrap_or(default_master);
+        paragraphs.push(Paragraph {
+            id: ENDNOTES_ID,
+            text: "Notes".into(),
+            style: title,
+            ..Paragraph::default()
+        });
+        recto_at.push(false);
+        break_at.push(true);
+        master_at.push(notes_master);
+        heads.push("Notes".into());
+        let mut entry = map_style(&body);
+        entry.first_indent = 0.0;
+        entry.hyphenate = false;
+        for (number, (id, text)) in endnotes.iter().enumerate() {
+            paragraphs.push(Paragraph {
+                id: ENDNOTES_ID | id,
+                text: format!("{}. {text}", number + 1),
+                style: entry.clone(),
+                ..Paragraph::default()
+            });
+            recto_at.push(false);
+            break_at.push(false);
+            master_at.push(notes_master);
+            heads.push("Notes".into());
+        }
+    }
     if paragraphs.is_empty() {
         paragraphs.push(Paragraph {
             id: u64::MAX,
             text: String::new(),
             style: map_style(&body),
-            note: None,
-            note_is_endnote: false,
+            ..Paragraph::default()
         });
         recto_at.push(false);
         break_at.push(false);

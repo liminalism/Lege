@@ -110,6 +110,32 @@ fn scale_glyphs(glyphs: &GlyphBuffer, size_px: f32, upem: i32) -> Vec<Glyph> {
 /// at no byte of the paragraph; its text is "-".
 pub const HYPHEN_CLUSTER: u32 = u32::MAX;
 
+/// Cluster of a footnote or endnote reference mark set after a paragraph.
+/// It points at no byte of the paragraph; its text is the note number.
+pub const NOTE_MARK_CLUSTER: u32 = u32::MAX - 1;
+
+/// One line of a footnote, shaped at footnote size.
+#[derive(Clone, Debug, PartialEq)]
+pub struct NoteLine {
+    /// The line's text, number included on a note's first line.
+    pub text: String,
+    /// Glyphs in visual order; clusters are byte offsets into `text`.
+    pub glyphs: Arc<Vec<Glyph>>,
+}
+
+/// A footnote line placed on a page.
+#[derive(Clone, Debug)]
+pub struct FootnoteLine {
+    /// The line's text.
+    pub text: String,
+    /// Glyphs; clusters are byte offsets into `text`.
+    pub glyphs: Vec<Glyph>,
+    /// Baseline, down from the top of the page.
+    pub baseline: f32,
+    /// Footnote em size.
+    pub em: f32,
+}
+
 /// One shaped line, tied back to the paragraph it was broken from.
 #[derive(Clone, Debug)]
 pub struct PaintedLine {
@@ -129,7 +155,7 @@ pub struct PaintedLine {
 }
 
 /// One shaped glyph in pixels.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Glyph {
     pub id: u16,
     pub cluster: u32,
@@ -236,7 +262,7 @@ impl Default for ParagraphStyle {
 
 /// A paragraph the paginator can see. `id` is the model's block id as a number
 /// so this crate does not need to own the model type.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Default)]
 pub struct Paragraph {
     pub id: u64,
     pub text: String,
@@ -244,6 +270,9 @@ pub struct Paragraph {
     /// Footnote or endnote body anchored to this paragraph, if any.
     pub note: Option<String>,
     pub note_is_endnote: bool,
+    /// Reference mark set in superscript after the paragraph's last
+    /// character, such as a note number. Empty for none.
+    pub note_mark: String,
 }
 
 /// A position in the line stream: which paragraph, which of its lines.
@@ -273,18 +302,20 @@ struct FlowLine {
     drop_cap: bool,
     /// First-line indent in the same units as the geometry.
     indent: f32,
+    /// On a paragraph's first line: its footnote, broken into lines.
+    note: Option<Arc<Vec<NoteLine>>>,
 }
 
 #[derive(Clone, Debug)]
 struct Page {
     start: Cursor,
     lines: Vec<FlowLine>,
-    /// Footnote text placed on this page, possibly a slice of a longer note.
-    footnotes: Vec<String>,
-    /// Tail of a note that did not fit, carried onto the next page.
-    note_carry: Option<String>,
-    /// Note bodies that start on this page but could not be placed yet.
-    note_waiting: Vec<String>,
+    /// Footnote lines placed on this page, possibly part of a longer note.
+    footnotes: Vec<NoteLine>,
+    /// Lines of a note that did not fit, carried onto the next page.
+    note_carry: Vec<NoteLine>,
+    /// Notes referenced by now whose lines have not started yet.
+    note_waiting: Vec<Arc<Vec<NoteLine>>>,
     /// A verso left empty so the next chapter can open on a recto.
     blank: bool,
     folio: Option<String>,
@@ -293,14 +324,14 @@ struct Page {
     content_inset: f32,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 struct NoteFlow {
-    carry: Option<String>,
-    waiting: Vec<String>,
+    carry: Vec<NoteLine>,
+    waiting: Vec<Arc<Vec<NoteLine>>>,
 }
 
 /// What the next page is, before any line is placed.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 enum PageStep {
     /// Empty verso. `outgoing` is the incoming flow, notes unconsumed.
     Blank { outgoing: NoteFlow },
@@ -328,7 +359,7 @@ fn page_decision(built: usize, recto_opener: bool, at_end: bool, flow: &NoteFlow
 
 impl NoteFlow {
     fn pending(&self) -> bool {
-        self.carry.is_some() || !self.waiting.is_empty()
+        !self.carry.is_empty() || !self.waiting.is_empty()
     }
 }
 
@@ -563,7 +594,12 @@ impl Document {
     pub fn page_footnotes(&self, page: u32) -> Vec<String> {
         self.pages
             .get(page.saturating_sub(1) as usize)
-            .map(|page| page.footnotes.clone())
+            .map(|page| {
+                page.footnotes
+                    .iter()
+                    .map(|line| line.text.clone())
+                    .collect()
+            })
             .unwrap_or_default()
     }
 
@@ -941,6 +977,7 @@ impl Document {
                     style: style.clone(),
                     note: None,
                     note_is_endnote: false,
+                    note_mark: String::new(),
                 },
             );
         }
@@ -1040,6 +1077,26 @@ impl Document {
                 }
             }
         }
+        if !paragraph.note_mark.is_empty()
+            && let Some(last_line) = broken.last_mut()
+        {
+            // The reference mark: superscript, after the last character.
+            let mark_em = size * 0.6;
+            for glyph in self.face.shape(&paragraph.note_mark, mark_em, &features)? {
+                last_line.width += glyph.x_advance;
+                last_line.glyphs.push(Glyph {
+                    cluster: NOTE_MARK_CLUSTER,
+                    y_offset: glyph.y_offset + size * 0.35,
+                    ..glyph
+                });
+            }
+        }
+        let note = match paragraph.note.as_ref() {
+            Some(text) if !paragraph.note_is_endnote => {
+                Some(Arc::new(self.note_lines(text, index)?))
+            }
+            _ => None,
+        };
         let last = broken.len().saturating_sub(1) as u32;
         let keep_together = paragraph.style.keep_lines && broken.len() <= 3;
         let drop = paragraph.style.drop_cap_lines > 0;
@@ -1081,9 +1138,96 @@ impl Document {
                     width: line.width,
                     text: line.text,
                     indent: if line_index == 0 { indent } else { 0.0 },
+                    note: if line_index == 0 { note.clone() } else { None },
                 }
             })
             .collect())
+    }
+
+    /// A footnote broken into lines at footnote size on its paragraph's measure.
+    fn note_lines(&self, text: &str, index: usize) -> Result<Vec<NoteLine>, TypesetError> {
+        let em = self.note_em();
+        let glyphs = self.face.shape(text, em, &features_for(false, false))?;
+        let broken = break_lines(text, &glyphs, self.measure(index), 0.0, false, None);
+        let mut lines = Vec::with_capacity(broken.len().max(1));
+        for line in broken {
+            // Clusters are rebased so each line's glyphs index its own text.
+            let base = line
+                .glyphs
+                .iter()
+                .map(|glyph| glyph.cluster)
+                .min()
+                .unwrap_or(0);
+            let end = line
+                .glyphs
+                .iter()
+                .map(|glyph| glyph.cluster as usize)
+                .max()
+                .map_or(base as usize, |last| {
+                    text.get(last..)
+                        .and_then(|rest| rest.chars().next())
+                        .map_or(last, |ch| last + ch.len_utf8())
+                });
+            let own = text.get(base as usize..end).unwrap_or("").to_string();
+            let glyphs = line
+                .glyphs
+                .into_iter()
+                .map(|glyph| Glyph {
+                    cluster: glyph.cluster - base,
+                    ..glyph
+                })
+                .collect();
+            lines.push(NoteLine {
+                text: own,
+                glyphs: Arc::new(glyphs),
+            });
+        }
+        if lines.is_empty() {
+            lines.push(NoteLine {
+                text: String::new(),
+                glyphs: Arc::new(Vec::new()),
+            });
+        }
+        Ok(lines)
+    }
+
+    /// Footnote lines on 1-based `page`, with baselines: set from the
+    /// bottom of the text block up, below a short rule.
+    pub fn page_footnote_lines(&self, page: u32) -> Vec<FootnoteLine> {
+        let Some(page) = self.pages.get(page.saturating_sub(1) as usize) else {
+            return Vec::new();
+        };
+        let rules = self.rules(Self::page_paragraph(page));
+        let bottom = self.geometry.page_height - rules.margin_bottom;
+        let em = self.note_em();
+        let leading = self.note_leading();
+        let count = page.footnotes.len();
+        page.footnotes
+            .iter()
+            .enumerate()
+            .map(|(index, line)| FootnoteLine {
+                text: line.text.clone(),
+                glyphs: line.glyphs.as_ref().clone(),
+                baseline: bottom - leading * (count - 1 - index) as f32 - em * 0.25,
+                em,
+            })
+            .collect()
+    }
+
+    /// Where the rule above 1-based `page`'s footnotes sits, down from the
+    /// page top, and how long it is. `None` when the page has no footnotes.
+    pub fn page_footnote_rule(&self, page: u32) -> Option<(f32, f32)> {
+        let index = page.saturating_sub(1) as usize;
+        let data = self.pages.get(index)?;
+        if data.footnotes.is_empty() {
+            return None;
+        }
+        let rules = self.rules(Self::page_paragraph(data));
+        let top = self.geometry.page_height
+            - rules.margin_bottom
+            - self.notes_height(data.footnotes.len())
+            + self.note_leading() * 0.3;
+        Some((top, self.measure(Self::page_paragraph(data)) / 3.0))
     }
 
     fn paginate_all(&mut self) {
@@ -1108,7 +1252,7 @@ impl Document {
                     },
                     lines: lines.clone(),
                     footnotes: Vec::new(),
-                    note_carry: None,
+                    note_carry: Vec::new(),
                     blank: false,
                     folio: None,
                     running_head: None,
@@ -1209,7 +1353,7 @@ impl Document {
                 let old_quiet = at
                     .checked_sub(1)
                     .and_then(|index| old_tail.get(index))
-                    .is_some_and(|page| page.note_carry.is_none() && page.note_waiting.is_empty());
+                    .is_some_and(|page| page.note_carry.is_empty() && page.note_waiting.is_empty());
                 if !flow.pending()
                     && old_quiet
                     && following.paragraph > last_change
@@ -1250,18 +1394,67 @@ impl Document {
         }
     }
 
+    /// Footnote em and leading, from the body's.
+    fn note_em(&self) -> f32 {
+        self.geometry.font_size * 0.8
+    }
+
+    fn note_leading(&self) -> f32 {
+        self.geometry.leading * 0.8
+    }
+
+    /// Height of `count` footnote lines with the rule above them.
+    fn notes_height(&self, count: usize) -> f32 {
+        if count == 0 {
+            0.0
+        } else {
+            self.note_leading() * (count as f32 + 0.6)
+        }
+    }
+
+    /// Move pending note lines onto the page, carried lines first, while
+    /// the footnote area stays within `max_height`.
+    fn pour_notes(&self, flow: &mut NoteFlow, placed: &mut Vec<NoteLine>, max_height: f32) {
+        loop {
+            if flow.carry.is_empty() {
+                if flow.waiting.is_empty() {
+                    return;
+                }
+                let next = flow.waiting.remove(0);
+                flow.carry = next.as_ref().clone();
+            }
+            if self.notes_height(placed.len() + 1) > max_height {
+                return;
+            }
+            placed.push(flow.carry.remove(0));
+        }
+    }
+
+    /// Fill one page from `start`. Body lines go on while they, and the
+    /// footnotes their paragraphs reference, fit the text block. A footnote
+    /// needs room for at least its first line on its reference page; the
+    /// rest carries over. Notes carried from earlier pages come first, up to
+    /// half the block, so the body still moves on.
     fn fill_page(&self, start: Cursor, flow: NoteFlow, built: usize) -> (Page, NoteFlow) {
         let mut lines = Vec::new();
         let mut used = 0.0;
         let mut cursor = start;
         let limit = self.block_height(start.paragraph);
         let verso = (built + 1).is_multiple_of(2);
-        let reserve_note = self.note_on_paragraph(start.paragraph);
-        let note_reserve = if reserve_note {
-            self.geometry.leading
-        } else {
-            0.0
-        };
+        let mut flow = flow;
+        let mut notes: Vec<NoteLine> = Vec::new();
+        self.pour_notes(&mut flow, &mut notes, limit / 2.0);
+        if notes.is_empty() && flow.pending() {
+            // Carried notes always move on by at least a line, so a note
+            // cannot be deferred forever by a page too small for half of it.
+            if flow.carry.is_empty() && !flow.waiting.is_empty() {
+                let next = flow.waiting.remove(0);
+                flow.carry = next.as_ref().clone();
+            }
+            if !flow.carry.is_empty() {
+                notes.push(flow.carry.remove(0));
+            }
+        }
         while !self.at_end(cursor) {
             let Some(line) = self.line_at(cursor) else {
                 break;
@@ -1270,12 +1463,24 @@ impl Document {
             if self.refuses_recto(line, !lines.is_empty(), verso) {
                 break;
             }
-            if used + line.height + note_reserve > limit && !lines.is_empty() {
+            let note_h = self.notes_height(notes.len());
+            let brings_note = line.is_first && line.note.is_some();
+            // A new note needs its first line on this page, unless earlier
+            // notes are still waiting, in which case it queues behind them.
+            let note_need = if brings_note && !flow.pending() {
+                self.notes_height(notes.len() + 1) - note_h
+            } else {
+                0.0
+            };
+            if used + line.height + note_h + note_need > limit && !lines.is_empty() {
                 break;
             }
             if style.widow_orphan && line.is_first && !line.is_last {
                 let rest = self.paragraph_rest_height(cursor);
-                if used > 0.0 && used + line.height + note_reserve <= limit && used + rest > limit {
+                if used > 0.0
+                    && used + line.height + note_h + note_need <= limit
+                    && used + rest + note_h > limit
+                {
                     // Orphan: do not leave the first line of a paragraph alone
                     // at the bottom of the page.
                     break;
@@ -1286,7 +1491,7 @@ impl Document {
                 if let Some(next_line) = self.line_at(next)
                     && next_line.is_last
                     && next_line.paragraph == line.paragraph
-                    && used + line.height + next_line.height + note_reserve > limit
+                    && used + line.height + next_line.height + note_h > limit
                 {
                     // Widow: keep the last two lines together on the next page.
                     break;
@@ -1298,13 +1503,13 @@ impl Document {
                     .line_at(next)
                     .map(|next_line| next_line.height)
                     .unwrap_or(self.geometry.leading);
-                if used + line.height + next_height + note_reserve > limit {
+                if used + line.height + next_height + note_h > limit {
                     break;
                 }
             }
             if line.keep_together && line.is_first {
                 let rest = self.paragraph_rest_height(cursor);
-                if used > 0.0 && used + rest > limit {
+                if used > 0.0 && used + rest + note_h > limit {
                     break;
                 }
             }
@@ -1312,6 +1517,10 @@ impl Document {
             let next = step(cursor, &self.lines);
             lines.push(line.clone());
             cursor = next;
+            if let Some(note) = line.note.as_ref().filter(|_| line.is_first) {
+                flow.waiting.push(note.clone());
+                self.pour_notes(&mut flow, &mut notes, limit - used);
+            }
         }
         if lines.is_empty()
             && let Some(line) = self.line_at(start)
@@ -1320,14 +1529,17 @@ impl Document {
             // of the chapter that is waiting for an odd page.
             if !self.refuses_recto(line, false, verso) {
                 lines.push(line.clone());
+                if let Some(note) = line.note.as_ref().filter(|_| line.is_first) {
+                    flow.waiting.push(note.clone());
+                    self.pour_notes(&mut flow, &mut notes, limit - line.height);
+                }
             }
         }
-        let (footnotes, flow) = self.place_notes(&lines, flow);
         (
             Page {
                 start,
                 lines,
-                footnotes,
+                footnotes: notes,
                 note_carry: flow.carry.clone(),
                 note_waiting: flow.waiting.clone(),
                 blank: false,
@@ -1337,36 +1549,6 @@ impl Document {
             },
             flow,
         )
-    }
-
-    fn place_notes(&self, lines: &[FlowLine], mut flow: NoteFlow) -> (Vec<String>, NoteFlow) {
-        let mut queue = Vec::new();
-        if let Some(rest) = flow.carry.take() {
-            queue.push(rest);
-        }
-        queue.append(&mut flow.waiting);
-        for line in lines.iter().filter(|line| line.is_first) {
-            if let Some(note) = self
-                .paragraphs
-                .get(line.paragraph)
-                .and_then(|paragraph| paragraph.note.clone())
-            {
-                queue.push(note);
-            }
-        }
-        let mut footnotes = Vec::new();
-        let mut carry = None;
-        let mut waiting = Vec::new();
-        for note in queue {
-            if carry.is_some() {
-                waiting.push(note);
-                continue;
-            }
-            let (head, tail) = split_note(&note);
-            footnotes.push(head);
-            carry = tail;
-        }
-        (footnotes, NoteFlow { carry, waiting })
     }
 
     fn each_paragraph_is_one_page(&self) -> bool {
@@ -1411,7 +1593,21 @@ impl Document {
                 (page, outgoing, false)
             }
             PageStep::NotesOnly => {
-                let (footnotes, next) = self.place_notes(&[], flow);
+                let mut next = flow;
+                let mut footnotes = Vec::new();
+                let last = self.paragraphs.len().saturating_sub(1);
+                let limit = self.block_height(cursor.paragraph.min(last));
+                self.pour_notes(&mut next, &mut footnotes, limit);
+                if footnotes.is_empty() {
+                    // A note line taller than the block still has to go somewhere.
+                    if next.carry.is_empty() && !next.waiting.is_empty() {
+                        let first = next.waiting.remove(0);
+                        next.carry = first.as_ref().clone();
+                    }
+                    if !next.carry.is_empty() {
+                        footnotes.push(next.carry.remove(0));
+                    }
+                }
                 let page = self.note_page(cursor, footnotes, &next);
                 (page, next, false)
             }
@@ -1447,7 +1643,7 @@ impl Document {
         ((breaks || recto) && page_has_lines) || (recto && verso)
     }
 
-    fn note_page(&self, start: Cursor, footnotes: Vec<String>, flow: &NoteFlow) -> Page {
+    fn note_page(&self, start: Cursor, footnotes: Vec<NoteLine>, flow: &NoteFlow) -> Page {
         Page {
             start,
             lines: Vec::new(),
@@ -1541,18 +1737,6 @@ impl Document {
             })
             .unwrap_or(0.0)
     }
-}
-
-/// Notes longer than one footnote line continue on the next page.
-fn split_note(note: &str) -> (String, Option<String>) {
-    const BUDGET: usize = 48;
-    let count = note.chars().count();
-    if count <= BUDGET {
-        return (note.to_string(), None);
-    }
-    let head: String = note.chars().take(BUDGET).collect();
-    let tail: String = note.chars().skip(BUDGET).collect();
-    (head, Some(tail))
 }
 
 fn step(cursor: Cursor, lines: &[Vec<FlowLine>]) -> Cursor {
@@ -1814,6 +1998,7 @@ pub fn book_of_repeated_line(face: Face, pages: u32, text: &str) -> Result<Docum
             style: ParagraphStyle::default(),
             note: None,
             note_is_endnote: false,
+            note_mark: String::new(),
         })
         .collect();
     Document::new(face, Geometry::one_line_pages(), paragraphs)
@@ -1828,6 +2013,7 @@ pub fn book_of_pages(face: Face, pages: u32, seed: &str) -> Result<Document, Typ
             style: ParagraphStyle::default(),
             note: None,
             note_is_endnote: false,
+            note_mark: String::new(),
         })
         .collect();
     Document::new(face, Geometry::one_line_pages(), paragraphs)
@@ -1839,9 +2025,13 @@ mod page_decision_tests {
 
     #[test]
     fn a_verso_stays_blank_while_a_note_carry_is_pending() {
+        let line = |text: &str| super::NoteLine {
+            text: text.to_string(),
+            glyphs: std::sync::Arc::new(Vec::new()),
+        };
         let pending = NoteFlow {
-            carry: Some("N".to_string()),
-            waiting: vec!["Second note body.".to_string()],
+            carry: vec![line("N")],
+            waiting: vec![std::sync::Arc::new(vec![line("Second note body.")])],
         };
         let idle = NoteFlow::default();
         let cases = [

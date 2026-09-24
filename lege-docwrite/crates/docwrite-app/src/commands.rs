@@ -5,7 +5,7 @@ use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
 use docwrite_model::{Book, Direction, Motion, Position, Selection};
-use docwrite_typeset::{HYPHEN_CLUSTER, PaintedLine};
+use docwrite_typeset::{NOTE_MARK_CLUSTER, PaintedLine};
 
 use crate::{Editor, focus_mark};
 
@@ -344,7 +344,7 @@ fn last_line_before(document: &docwrite_typeset::Document, page: u32) -> Option<
 fn line_start(line: &PaintedLine) -> usize {
     line.glyphs
         .iter()
-        .filter(|glyph| glyph.cluster != HYPHEN_CLUSTER)
+        .filter(|glyph| glyph.cluster < NOTE_MARK_CLUSTER)
         .map(|glyph| glyph.cluster as usize)
         .min()
         .unwrap_or(0)
@@ -354,7 +354,7 @@ fn line_start(line: &PaintedLine) -> usize {
 fn x_of(line: &PaintedLine, byte: usize) -> f32 {
     line.glyphs
         .iter()
-        .filter(|glyph| glyph.cluster != HYPHEN_CLUSTER && (glyph.cluster as usize) < byte)
+        .filter(|glyph| glyph.cluster < NOTE_MARK_CLUSTER && (glyph.cluster as usize) < byte)
         .map(|glyph| glyph.x_advance)
         .sum()
 }
@@ -367,7 +367,7 @@ fn byte_at_x(line: &PaintedLine, x: f32, len: usize) -> usize {
     for glyph in line
         .glyphs
         .iter()
-        .filter(|glyph| glyph.cluster != HYPHEN_CLUSTER)
+        .filter(|glyph| glyph.cluster < NOTE_MARK_CLUSTER)
     {
         if pen + glyph.x_advance / 2.0 > x {
             return glyph.cluster as usize;

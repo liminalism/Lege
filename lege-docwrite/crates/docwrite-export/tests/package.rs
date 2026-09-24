@@ -241,3 +241,28 @@ fn markdown_heads_each_chapter_with_its_title() {
     assert!(markdown.contains("# The Second"), "{markdown}");
     assert!(markdown.find("# Chapter 1") < markdown.find("First words."));
 }
+
+#[test]
+fn pdf_sets_footnotes_at_the_foot_of_their_page() {
+    use docwrite_model::NoteKind;
+    let mut book = Book::new("Notes");
+    book.insert("A sentence with a note.").unwrap();
+    book.attach_note(NoteKind::Footnote, "The footnote itself.")
+        .unwrap();
+    let exported = export_pdf(&book, &font()).unwrap();
+    let session = RenderSession::open(Arc::from(exported.bytes), None).unwrap();
+    let text = page_text(&session, 0).unwrap();
+    let squashed = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    // The mark is its own smaller, raised run; extraction may space it off.
+    assert!(
+        squashed.contains("note.1") || squashed.contains("note. 1"),
+        "the reference mark follows the text: {squashed}"
+    );
+    assert!(
+        squashed.contains("1 The footnote itself."),
+        "the numbered footnote is on the page: {squashed}"
+    );
+    let body = squashed.find("A sentence").unwrap();
+    let foot = squashed.find("The footnote").unwrap();
+    assert!(body < foot, "the footnote reads after the body");
+}

@@ -4,7 +4,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use docwrite_model::{Book, Position, Selection};
+use docwrite_model::{Book, NoteKind, Position, Selection};
 
 const PROSE: &str = "The archive kept its letters in bundles tied with string, and each \
 bundle carried a date in a hand that changed over the years from careful to hurried. \
@@ -23,6 +23,26 @@ fn main() {
             .join("\n")
     };
     book.insert(&chapter(1)).expect("insert");
+    let second = book.block_ids()[1];
+    book.set_selection(Selection::collapsed(Position::new(second, 0)))
+        .expect("select");
+    book.attach_note(
+        NoteKind::Footnote,
+        "The bundles were catalogued in 1911, though the string is older than the catalogue.",
+    )
+    .expect("note");
+    let fourth = book.block_ids()[3];
+    book.set_selection(Selection::collapsed(Position::new(fourth, 0)))
+        .expect("select");
+    book.attach_note(
+        NoteKind::Endnote,
+        "See the clerk's own index, which disagrees with the dates.",
+    )
+    .expect("endnote");
+    let last = *book.block_ids().last().expect("block");
+    let len = book.block_len(last).expect("len");
+    book.set_selection(Selection::collapsed(Position::new(last, len)))
+        .expect("select");
     let part = book.parts()[0].id();
     for (n, title) in ["The Clerk", "Bundles", "Mid-sentence"].iter().enumerate() {
         book.add_chapter(part, *title).expect("chapter");

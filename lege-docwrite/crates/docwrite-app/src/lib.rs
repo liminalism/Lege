@@ -21,7 +21,7 @@ pub use view::{PAPER, PointerShape, Theme, WORDPERFECT};
 
 use docwrite_model::{Book, Direction, Motion};
 use docwrite_typeset::{
-    Document, EditReport, Face, GlyphAtlas, HYPHEN_CLUSTER, from_book, update_from_book,
+    Document, EditReport, Face, GlyphAtlas, NOTE_MARK_CLUSTER, from_book, update_from_book,
 };
 use map::BookMap as Map;
 
@@ -533,7 +533,7 @@ impl Editor {
             let line_start = line
                 .glyphs
                 .iter()
-                .filter(|glyph| glyph.cluster != HYPHEN_CLUSTER)
+                .filter(|glyph| glyph.cluster < NOTE_MARK_CLUSTER)
                 .map(|glyph| glyph.cluster as usize)
                 .min()
                 .unwrap_or(0);
@@ -627,6 +627,35 @@ impl Editor {
             let inches = |pixels: i32| pixels as f32 / scale / 72.0;
             self.caret_status =
                 Some((page, inches(caret_y + height - top), inches(caret_x - left)));
+        }
+        // Footnotes: a short rule, then the lines at footnote size.
+        if let Some((rule_y, rule_w)) = document.page_footnote_rule(page) {
+            painter.fill_rect(
+                pixelkit_raster::Rect::new(
+                    left + (inset * scale) as i32,
+                    top + (rule_y * scale) as i32,
+                    (rule_w * scale) as i32,
+                    (0.6 * scale).max(1.0) as i32,
+                ),
+                self.theme_now.ink,
+            );
+        }
+        for note in document.page_footnote_lines(page) {
+            let mut pen = left as f32 + inset * scale;
+            let baseline = top + (note.baseline * scale) as i32;
+            for glyph in &note.glyphs {
+                draw_glyph(
+                    &mut self.atlas,
+                    painter,
+                    face,
+                    glyph.id,
+                    glyph.em * scale,
+                    pen + glyph.x_offset * scale,
+                    baseline - (glyph.y_offset * scale).round() as i32,
+                    self.theme_now.ink,
+                );
+                pen += glyph.x_advance * scale;
+            }
         }
         painter.pop_clip();
     }

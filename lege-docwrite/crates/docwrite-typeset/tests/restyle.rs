@@ -20,6 +20,7 @@ fn paras(text: &str) -> Vec<Paragraph> {
             style: ParagraphStyle::default(),
             note: None,
             note_is_endnote: false,
+            note_mark: String::new(),
         })
         .collect()
 }

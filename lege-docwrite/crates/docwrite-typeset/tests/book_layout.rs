@@ -172,38 +172,27 @@ fn footnotes_and_endnotes_come_from_the_book() {
             .any(|line| line.contains("reference")),
         "footnote shares the reference page"
     );
-    let mut body_page = None;
-    for page in 1..=document.page_count() {
-        if document
-            .page_texts(page)
+    // The endnote is not at the foot of its page: it is in the Notes section
+    // after the last chapter, numbered as its reference mark is.
+    let body_page = page_with(&document, "Chapter body");
+    assert!(
+        !document
+            .page_footnotes(body_page)
             .iter()
-            .any(|line| line.contains("Chapter body"))
-        {
-            body_page = Some(page);
-        }
-    }
-    let body_page = body_page.expect("chapter body is on a page");
-    let mut acc = String::new();
-    let mut end_page = None;
-    for page in 1..=document.page_count() {
-        for note in document.page_footnotes(page) {
-            let next = format!("{acc}{note}");
-            if long.starts_with(&next) {
-                if end_page.is_none() {
-                    end_page = Some(page);
-                }
-                acc = next;
-            }
-        }
-    }
-    assert_eq!(acc, long, "endnote pieces did not reassemble");
-    assert_eq!(
-        end_page,
-        Some(body_page),
-        "endnote did not start on the reference page"
+            .any(|note| note.contains("Endnote")),
+        "an endnote is not a footnote"
     );
-    println!(
-        "footnote on page {footnote_page}; endnote starts on reference page {body_page} and reassembles"
+    let notes_page = page_with(&document, "Notes");
+    assert!(notes_page > body_page, "Notes follows the last chapter");
+    let texts: Vec<String> = (notes_page..=document.page_count())
+        .flat_map(|page| document.page_texts(page))
+        .collect();
+    let joined = texts.join(" ");
+    assert!(joined.starts_with("Notes 1. Endnote body"), "{joined}");
+    assert_eq!(
+        joined.split_whitespace().skip(2).collect::<Vec<_>>(),
+        long.split_whitespace().collect::<Vec<_>>(),
+        "the endnote is set whole"
     );
 }
 
@@ -299,11 +288,11 @@ fn a_pending_footnote_still_blanks_the_verso_before_the_next_recto() {
     // take one of these tiny pages' lines.
     let opening = book.parts()[0].chapters()[0].id();
     book.rename_chapter(opening, "").unwrap();
-    let first = "N".repeat(49);
+    // A footnote far longer than the small page's foot: most of it is still
+    // pending when chapter two wants to open on the next recto.
+    let first = "Carried footnote words run on. ".repeat(14);
     book.insert("One.").unwrap();
-    book.attach_note(NoteKind::Footnote, &first).unwrap();
-    book.insert("\nSecond reference.").unwrap();
-    book.attach_note(NoteKind::Footnote, "Second note body.")
+    book.attach_note(NoteKind::Footnote, first.trim_end())
         .unwrap();
     let part = book.parts()[0].id();
     book.add_chapter(part, "").unwrap();
@@ -359,12 +348,17 @@ fn assert_note_recto(document: &docwrite_typeset::Document, first: &str) {
     assert!(two > 2, "Two. is on page {two}");
     let joined = note_text(document);
     assert!(
-        joined.contains(first),
-        "footnote did not reassemble: {joined:?}"
+        joined.starts_with("1\u{2002}Carried footnote"),
+        "the note is numbered: {joined:?}"
+    );
+    assert_eq!(
+        joined.split_whitespace().skip(1).collect::<Vec<_>>(),
+        first.split_whitespace().collect::<Vec<_>>(),
+        "footnote did not reassemble"
     );
     assert!(
-        joined.contains("Second note body."),
-        "second note missing from {joined:?}"
+        !document.page_footnotes(1).is_empty() && !document.page_footnotes(3).is_empty(),
+        "the note starts on its reference page and continues after the blank verso"
     );
 }
 

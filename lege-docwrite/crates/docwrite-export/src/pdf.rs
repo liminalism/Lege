@@ -12,7 +12,8 @@ use std::sync::Arc;
 
 use docwrite_model::Book;
 use docwrite_typeset::{
-    CHAPTER_TITLE_ID, Document, Face, Glyph, HYPHEN_CLUSTER, features_for, from_book,
+    CHAPTER_TITLE_ID, Document, Face, Glyph, HYPHEN_CLUSTER, NOTE_MARK_CLUSTER, features_for,
+    from_book,
 };
 use lege_pdf_write::artifact::{
     GlyphItem, GlyphLine, PageRotation, PdfPageArtifact, PreparedGlyphLayer,
@@ -32,9 +33,8 @@ pub struct PdfExport {
     pub font_bytes: usize,
 }
 
-/// Running heads and folios are set this size, footnotes smaller.
+/// Running heads and folios are set this size.
 const APPARATUS_PT: f32 = 9.0;
-const FOOTNOTE_PT: f32 = 8.0;
 
 /// A glyph run placed on a page, before glyph ids are remapped into the subset.
 struct PlacedLine {
@@ -50,6 +50,8 @@ struct PlacedGlyph {
     gid: u16,
     advance: f32,
     rise: f32,
+    /// Em size this glyph is set at: the line's, or smaller for a mark.
+    em: f32,
     /// Text this glyph stands for; empty when an earlier glyph of the same
     /// cluster already carries it.
     text: String,
@@ -90,7 +92,7 @@ pub fn export_pdf(book: &Book, font: &[u8]) -> Result<PdfExport, String> {
             };
             widths
                 .entry(gid)
-                .or_insert_with(|| thousandths(glyph.advance, line.em).clamp(0, 65_535) as u16);
+                .or_insert_with(|| thousandths(glyph.advance, glyph.em).clamp(0, 65_535) as u16);
             if !glyph.text.is_empty() {
                 unicode.entry(gid).or_insert_with(|| glyph.text.clone());
             }
@@ -111,7 +113,7 @@ pub fn export_pdf(book: &Book, font: &[u8]) -> Result<PdfExport, String> {
         let glyph_lines: Vec<GlyphLine> = lines
             .iter()
             .filter(|line| !line.glyphs.is_empty())
-            .map(|line| glyph_line(line, &mapper, &widths, page_height))
+            .flat_map(|line| glyph_lines(line, &mapper, &widths, page_height))
             .collect();
         writer
             .add_page(&PdfPageArtifact {
@@ -161,11 +163,15 @@ fn place_page(document: &Document, page: u32) -> Result<Vec<PlacedLine>, String>
             .get(line.paragraph)
             .map(|paragraph| paragraph.text.as_str())
             .unwrap_or("");
+        let mark = document
+            .paragraphs()
+            .get(line.paragraph)
+            .map_or("", |paragraph| paragraph.note_mark.as_str());
         placed.push(PlacedLine {
             x: inset + line.indent,
             baseline: line.baseline,
             em: line.em,
-            glyphs: placed_glyphs(text, &line.glyphs),
+            glyphs: placed_glyphs(text, &line.glyphs, mark, line.em),
         });
     }
     if let Some(head) = document.page_running_head(page) {
@@ -189,11 +195,13 @@ fn place_page(document: &Document, page: u32) -> Result<Vec<PlacedLine>, String>
         line.x = (geometry.page_width - width) / 2.0;
         placed.push(line);
     }
-    let notes = document.page_footnotes(page);
-    for (index, note) in notes.iter().enumerate() {
-        let baseline = geometry.page_height - geometry.margin_bottom
-            + FOOTNOTE_PT * 1.4 * (index as f32 + 1.0);
-        placed.push(set_line(document, note, FOOTNOTE_PT, inset, baseline)?);
+    for note in document.page_footnote_lines(page) {
+        placed.push(PlacedLine {
+            x: inset,
+            baseline: note.baseline,
+            em: note.em,
+            glyphs: placed_glyphs(&note.text, &note.glyphs, "", note.em),
+        });
     }
     Ok(placed)
 }
@@ -214,19 +222,21 @@ fn set_line(
         x,
         baseline,
         em: size,
-        glyphs: placed_glyphs(text, &glyphs),
+        glyphs: placed_glyphs(text, &glyphs, "", size),
     })
 }
 
 /// Pair each glyph with the text of its cluster. Clusters are byte offsets
-/// into `text`; a cluster spans to the next larger cluster in the line.
-fn placed_glyphs(text: &str, glyphs: &[Glyph]) -> Vec<PlacedGlyph> {
+/// into `text`; a cluster spans to the next larger cluster in the line. An
+/// inserted hyphen stands for "-", and a note mark for `mark`.
+fn placed_glyphs(text: &str, glyphs: &[Glyph], mark: &str, line_em: f32) -> Vec<PlacedGlyph> {
     let mut starts: Vec<usize> = glyphs
         .iter()
         .map(|glyph| glyph.cluster)
-        .filter(|cluster| *cluster != HYPHEN_CLUSTER)
+        .filter(|cluster| *cluster < NOTE_MARK_CLUSTER)
         .map(|cluster| cluster as usize)
         .collect();
+    let mut mark_text = Some(mark.to_string());
     starts.sort_unstable();
     starts.dedup();
     let mut claimed = std::collections::HashSet::new();
@@ -235,6 +245,8 @@ fn placed_glyphs(text: &str, glyphs: &[Glyph]) -> Vec<PlacedGlyph> {
         .map(|glyph| {
             let text = if glyph.cluster == HYPHEN_CLUSTER {
                 "-".to_string()
+            } else if glyph.cluster == NOTE_MARK_CLUSTER {
+                mark_text.take().unwrap_or_default()
             } else {
                 let start = glyph.cluster as usize;
                 if claimed.insert(start) {
@@ -252,6 +264,7 @@ fn placed_glyphs(text: &str, glyphs: &[Glyph]) -> Vec<PlacedGlyph> {
                 gid: glyph.id,
                 advance: glyph.x_advance,
                 rise: glyph.y_offset,
+                em: if glyph.em > 0.0 { glyph.em } else { line_em },
                 text,
             }
         })
@@ -265,37 +278,53 @@ fn char_end(text: &str, start: usize) -> usize {
         .map_or(start, |ch| start + ch.len_utf8())
 }
 
-/// A PDF text line: the matrix scales the size-1 font to the line's em and
-/// puts the pen on the baseline; `TJ` adjustments turn each subset glyph's
-/// nominal width into its shaped advance, kerning included.
-fn glyph_line(
+/// PDF text lines for one placed line: one per run of glyphs set at the
+/// same size (a drop cap or a note mark starts its own). Each matrix scales
+/// the size-1 font to its run's em and puts the pen where the run starts on
+/// the baseline; `TJ` adjustments turn each subset glyph's nominal width into
+/// its shaped advance, kerning included.
+fn glyph_lines(
     line: &PlacedLine,
     mapper: &GlyphRemapper,
     widths: &BTreeMap<u16, u16>,
     page_height: f64,
-) -> GlyphLine {
-    let em = f64::from(line.em.max(0.1));
-    let mut items = Vec::with_capacity(line.glyphs.len());
-    let mut correction = 0;
-    for glyph in &line.glyphs {
-        let gid = mapper.get(glyph.gid).unwrap_or(0);
-        items.push(GlyphItem {
-            gid,
-            adjust: correction,
-            rise: thousandths(glyph.rise, line.em),
+) -> Vec<GlyphLine> {
+    let mut out = Vec::new();
+    let mut x = f64::from(line.x);
+    let mut start = 0;
+    while start < line.glyphs.len() {
+        let em = line.glyphs[start].em.max(0.1);
+        let end = line.glyphs[start..]
+            .iter()
+            .position(|glyph| (glyph.em - em).abs() > 0.01)
+            .map_or(line.glyphs.len(), |offset| start + offset);
+        let mut items = Vec::with_capacity(end - start);
+        let mut correction = 0;
+        let mut run_width = 0.0;
+        for glyph in &line.glyphs[start..end] {
+            let gid = mapper.get(glyph.gid).unwrap_or(0);
+            items.push(GlyphItem {
+                gid,
+                adjust: correction,
+                rise: thousandths(glyph.rise, em),
+            });
+            let nominal = widths.get(&gid).copied().map_or(0, i32::from);
+            correction = nominal - thousandths(glyph.advance, em);
+            run_width += f64::from(glyph.advance);
+        }
+        out.push(GlyphLine {
+            matrix: Affine::scale_translate(
+                f64::from(em),
+                f64::from(em),
+                x,
+                page_height - f64::from(line.baseline),
+            ),
+            items: items.into_boxed_slice(),
         });
-        let nominal = widths.get(&gid).copied().map_or(0, i32::from);
-        correction = nominal - thousandths(glyph.advance, line.em);
+        x += run_width;
+        start = end;
     }
-    GlyphLine {
-        matrix: Affine::scale_translate(
-            em,
-            em,
-            f64::from(line.x),
-            page_height - f64::from(line.baseline),
-        ),
-        items: items.into_boxed_slice(),
-    }
+    out
 }
 
 fn thousandths(length: f32, em: f32) -> i32 {
