@@ -16,6 +16,7 @@ pub struct Face {
     shaper: ShaperData,
     /// Identity of the font bytes, so caches keyed by face tell fonts apart.
     id: u64,
+    cap_ratio: f32,
 }
 
 impl std::fmt::Debug for Face {
@@ -43,11 +44,27 @@ impl Face {
             bytes.hash(&mut hasher);
             hasher.finish()
         };
+        let cap_ratio = {
+            use skrifa::MetadataProvider;
+            skrifa::FontRef::from_index(&bytes, 0)
+                .ok()
+                .and_then(|font| {
+                    font.metrics(
+                        skrifa::instance::Size::unscaled(),
+                        skrifa::instance::LocationRef::default(),
+                    )
+                    .cap_height
+                    .map(|cap| cap / upem as f32)
+                })
+                .filter(|ratio| *ratio > 0.3 && *ratio < 1.0)
+                .unwrap_or(0.7)
+        };
         Ok(Self {
             data: bytes,
             upem,
             shaper,
             id,
+            cap_ratio,
         })
     }
 
@@ -80,6 +97,11 @@ impl Face {
 
     pub(crate) fn bytes(&self) -> &[u8] {
         &self.data
+    }
+
+    /// Cap height as a fraction of the em, from the font's metrics.
+    pub fn cap_height_ratio(&self) -> f32 {
+        self.cap_ratio
     }
 
     /// Identity of the font bytes; equal for a [`Self::duplicate`].
@@ -1046,15 +1068,78 @@ impl Document {
             self.geometry.leading
         };
         let indent = paragraph.style.first_indent.max(0.0);
-        let glyphs = self.face.shape(&paragraph.text, size, &features)?;
+        let mut glyphs = self.face.shape(&paragraph.text, size, &features)?;
+        // A drop cap: the first letter, sized so its cap height reaches from
+        // the baseline of line `drop_lines` up to the cap height of line one,
+        // set on that lower baseline, with the lines beside it indented.
+        let drop_lines = usize::from(paragraph.style.drop_cap_lines);
+        let drop = if drop_lines >= 2 {
+            let first_len = paragraph.text.chars().next().map_or(0, char::len_utf8);
+            let ratio = self.face.cap_height_ratio();
+            let cap_em = ((drop_lines - 1) as f32 * leading + size * ratio) / ratio;
+            let cap_text = paragraph.text.get(..first_len).unwrap_or("");
+            let cap: Vec<Glyph> = self
+                .face
+                .shape(cap_text, cap_em, &features)?
+                .into_iter()
+                .map(|glyph| Glyph {
+                    em: cap_em,
+                    y_offset: -((drop_lines - 1) as f32) * leading,
+                    ..glyph
+                })
+                .collect();
+            if cap.is_empty() || first_len == 0 {
+                None
+            } else {
+                glyphs.retain(|glyph| glyph.cluster as usize >= first_len);
+                let width = cap.iter().map(|glyph| glyph.x_advance).sum::<f32>() + size * 0.2;
+                Some((cap, width))
+            }
+        } else {
+            None
+        };
+        let hang = drop.as_ref().map_or(0.0, |(_, width)| *width);
+        let line_indent = |line: usize| {
+            if drop.is_some() {
+                if line < drop_lines { hang } else { 0.0 }
+            } else if line == 0 {
+                indent
+            } else {
+                0.0
+            }
+        };
         let mut broken = break_lines(
             &paragraph.text,
             &glyphs,
             self.measure(index),
-            indent,
+            &line_indent,
             paragraph.style.hyphenate,
             self.hyphenator.as_ref(),
         );
+        if let Some((cap, width)) = drop.as_ref() {
+            // The cap leads line one; its advance is the hang, so line one's
+            // text starts where the indented lines below it start.
+            if broken.is_empty() {
+                broken.push(Broken {
+                    glyphs: Vec::new(),
+                    width: 0.0,
+                    text: String::new(),
+                    hyphenated: false,
+                });
+            }
+            if let Some(first) = broken.first_mut() {
+                let mut lead: Vec<Glyph> = cap.clone();
+                let drawn: f32 = cap.iter().map(|glyph| glyph.x_advance).sum();
+                if let Some(last) = lead.last_mut() {
+                    last.x_advance += width - drawn;
+                }
+                lead.append(&mut first.glyphs);
+                first.glyphs = lead;
+                first.width += width;
+                let cap_text: String = paragraph.text.chars().take(1).collect();
+                first.text = format!("{cap_text}{}", first.text);
+            }
+        }
         if broken.is_empty() {
             broken.push(Broken {
                 glyphs: Vec::new(),
@@ -1099,8 +1184,13 @@ impl Document {
         };
         let last = broken.len().saturating_sub(1) as u32;
         let keep_together = paragraph.style.keep_lines && broken.len() <= 3;
-        let drop = paragraph.style.drop_cap_lines > 0;
-        let factor = (paragraph.style.drop_cap_lines as f32).max(1.0);
+        let has_cap = drop.is_some();
+        // A paragraph shorter than its drop cap still makes room for it.
+        let cap_room = if has_cap && broken.len() < drop_lines {
+            (drop_lines - broken.len()) as f32 * leading
+        } else {
+            0.0
+        };
         Ok(broken
             .into_iter()
             .enumerate()
@@ -1116,13 +1206,9 @@ impl Document {
                     } else {
                         0.0
                     };
-                let drop_cap = drop && line_index == 0 && !line.glyphs.is_empty();
-                if drop_cap {
-                    if let Some(glyph) = line.glyphs.first_mut() {
-                        glyph.x_advance *= factor;
-                        glyph.em *= factor;
-                    }
-                    height += leading * (factor - 1.0);
+                let drop_cap = has_cap && line_index == 0;
+                if line_index as u32 == last {
+                    height += cap_room;
                 }
                 FlowLine {
                     paragraph: index,
@@ -1130,14 +1216,26 @@ impl Document {
                     height,
                     is_first: line_index == 0,
                     is_last: line_index as u32 == last,
-                    keep_with_next: paragraph.style.keep_with_next && line_index as u32 == last,
+                    // The lines beside a drop cap stay on one page with it.
+                    keep_with_next: (paragraph.style.keep_with_next && line_index as u32 == last)
+                        || (has_cap && line_index + 1 < drop_lines && (line_index as u32) < last),
                     keep_together,
                     widow_orphan: paragraph.style.widow_orphan,
                     drop_cap,
                     glyphs: Arc::new(line.glyphs),
                     width: line.width,
                     text: line.text,
-                    indent: if line_index == 0 { indent } else { 0.0 },
+                    indent: if has_cap {
+                        if line_index > 0 && line_index < drop_lines {
+                            hang
+                        } else {
+                            0.0
+                        }
+                    } else if line_index == 0 {
+                        indent
+                    } else {
+                        0.0
+                    },
                     note: if line_index == 0 { note.clone() } else { None },
                 }
             })
@@ -1148,7 +1246,7 @@ impl Document {
     fn note_lines(&self, text: &str, index: usize) -> Result<Vec<NoteLine>, TypesetError> {
         let em = self.note_em();
         let glyphs = self.face.shape(text, em, &features_for(false, false))?;
-        let broken = break_lines(text, &glyphs, self.measure(index), 0.0, false, None);
+        let broken = break_lines(text, &glyphs, self.measure(index), &|_| 0.0, false, None);
         let mut lines = Vec::with_capacity(broken.len().max(1));
         for line in broken {
             // Clusters are rebased so each line's glyphs index its own text.
@@ -1783,11 +1881,12 @@ struct Broken {
     hyphenated: bool,
 }
 
+/// Break `glyphs` into lines of `measure`, less `indent(n)` on line `n`.
 fn break_lines(
     text: &str,
     glyphs: &[Glyph],
     measure: f32,
-    first_indent: f32,
+    indent: &dyn Fn(usize) -> f32,
     hyphenate: bool,
     hyphenator: Option<&Standard>,
 ) -> Vec<Broken> {
@@ -1802,7 +1901,7 @@ fn break_lines(
     let mut start = 0usize;
     let mut width = 0.0;
     let mut last_break: Option<usize> = None;
-    let mut limit = (measure - first_indent).max(1.0);
+    let mut limit = (measure - indent(0)).max(1.0);
     for (index, glyph) in glyphs.iter().enumerate() {
         let cluster = glyph.cluster as usize;
         if index > start
@@ -1819,7 +1918,7 @@ fn break_lines(
                 start = index;
                 width = 0.0;
                 last_break = None;
-                limit = measure;
+                limit = (measure - indent(lines.len())).max(1.0);
             }
         }
         if width + glyph.x_advance > limit && index > start {
@@ -1840,7 +1939,7 @@ fn break_lines(
                 width_of(&glyphs[start..at]),
                 hyphen,
             ));
-            limit = measure;
+            limit = (measure - indent(lines.len())).max(1.0);
             start = at;
             width = width_of(&glyphs[start..index]);
             last_break = None;

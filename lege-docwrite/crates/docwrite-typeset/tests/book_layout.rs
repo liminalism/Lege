@@ -132,9 +132,13 @@ fn body_style_metrics_reflow_and_match_a_fresh_layout() {
     let opener = large
         .paragraph_em(large.paragraph_of(opener_block).unwrap())
         .unwrap();
+    // A two-line drop cap on the 12/16 First Paragraph style: its cap
+    // height spans one leading plus the body's cap height.
+    let ratio = face().cap_height_ratio();
+    let expected = (16.0 + 12.0 * ratio) / ratio;
     assert!(
-        (opener - 24.0).abs() < 0.1,
-        "first paragraph keeps its drop cap, em {opener}"
+        (opener - expected).abs() < 0.1,
+        "first paragraph keeps its two-line drop cap, em {opener} (expected {expected})"
     );
     println!("body em {small_em} -> {large_em}; first paragraph em {opener}");
 }

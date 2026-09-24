@@ -409,3 +409,38 @@ fn first_line_indent_shortens_the_opening_line() {
     assert!((narrow.line_indents(1)[0] - 48.0).abs() < 0.1);
     println!("first line chars indented {narrow_first} < flush {wide_first}");
 }
+
+#[test]
+fn a_drop_cap_spans_its_lines_and_the_lines_beside_it_are_indented() {
+    use docwrite_model::Book;
+    let mut book = Book::new("Caps");
+    book.insert(&"Once the archive was opened, the letters came out in bundles. ".repeat(6))
+        .unwrap();
+    let document = docwrite_typeset::from_book(&book, face()).unwrap();
+    // Page 1 opens with the chapter title; the body's first line follows.
+    let lines = document.page_painted_lines(1);
+    let first = lines
+        .iter()
+        .position(|line| {
+            line.glyphs
+                .first()
+                .is_some_and(|glyph| glyph.em > line.em * 2.0)
+        })
+        .expect("a line leads with the drop cap");
+    let cap = &lines[first].glyphs[0];
+    assert!(cap.y_offset < 0.0, "the cap sits on a lower baseline");
+    let second = &lines[first + 1];
+    assert!(second.indent > 0.0, "the line beside the cap is indented");
+    assert!(
+        (second.indent - cap.x_advance).abs() < 0.01,
+        "and indented by the cap's width: {} vs {}",
+        second.indent,
+        cap.x_advance
+    );
+    let third = &lines[first + 2];
+    assert_eq!(third.indent, 0.0, "a two-line cap indents two lines only");
+    assert!(
+        (second.baseline - lines[first].baseline + cap.y_offset).abs() < 0.5,
+        "the cap's baseline is the second line's"
+    );
+}
