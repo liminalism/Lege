@@ -1,11 +1,16 @@
 //! Editor behavior the window hosts: paging, snap, painting, and the latency budget.
 
+mod commands;
 mod map;
 mod nav;
 mod trace;
 
 use std::path::PathBuf;
-use std::time::Duration;
+use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+
+use commands::PageSlot;
 
 pub use map::{BookMap, MapKind, MapRow, SIDEBAR_W};
 pub use nav::{Pager, Phase};
@@ -50,6 +55,17 @@ pub struct Editor {
     pressed_row: Option<usize>,
     bundle: Option<PathBuf>,
     dirty: bool,
+    /// When the last edit landed; autosave waits for typing to pause.
+    last_edit: Option<Instant>,
+    /// A background save is writing the bundle.
+    saving: Arc<AtomicBool>,
+    save_error: Arc<Mutex<Option<String>>>,
+    /// The font file the face was parsed from, for PDF export.
+    font_bytes: Option<Vec<u8>>,
+    /// Where the last paint put each visible page, for pointer hits.
+    slots: Vec<PageSlot>,
+    /// Physical pixels per logical pixel. Chrome is sized in logical pixels.
+    ui_scale: f32,
     /// Page count of the document the last [`Self::paint`] laid out.
     pages_painted: u32,
 }
@@ -63,10 +79,14 @@ impl Editor {
 
     /// Open `book` in the editor. Layout happens on the first paint.
     pub fn with_book(book: Book) -> Self {
+        let (face, font_bytes) = match load_face() {
+            Some((face, bytes)) => (Some(face), Some(bytes)),
+            None => (None, None),
+        };
         Self {
             book,
             pager: Pager::new(1, false),
-            face: load_face(),
+            face,
             document: None,
             layout_stale: true,
             follow_caret: false,
@@ -79,6 +99,12 @@ impl Editor {
             pressed_row: None,
             bundle: None,
             dirty: false,
+            last_edit: None,
+            saving: Arc::new(AtomicBool::new(false)),
+            save_error: Arc::new(Mutex::new(None)),
+            font_bytes,
+            slots: Vec::new(),
+            ui_scale: 1.0,
             pages_painted: 0,
         }
     }
@@ -105,7 +131,17 @@ impl Editor {
         (desk, page, ink)
     }
 
-    /// Remember where the pointer is. The window calls this on cursor motion.
+    /// Physical pixels per logical pixel on the window's display.
+    pub fn set_ui_scale(&mut self, scale: f32) {
+        self.ui_scale = scale.max(0.5);
+    }
+
+    fn sidebar_width(&self) -> i32 {
+        (SIDEBAR_W as f32 * self.ui_scale).round() as i32
+    }
+
+    /// Remember where the pointer is, in window pixels. The window calls
+    /// this on cursor motion.
     pub fn hover(&mut self, x: f32, y: f32) {
         self.cursor = (x, y);
     }
@@ -113,8 +149,18 @@ impl Editor {
     /// Press or release the pointer. A drag from one chapter row to another
     /// reorders the book. A click collapses the part or chapter under the pointer.
     pub fn pointer(&mut self, pressed: bool) {
+        if self.cursor.0 >= self.sidebar_width() as f32 {
+            if pressed {
+                self.click_at(self.cursor.0, self.cursor.1, false);
+            }
+            return;
+        }
         let rows = self.map.rows(&self.book);
-        let hit = self.map.row_at(self.cursor.0, self.cursor.1, rows.len());
+        let hit = self.map.row_at(
+            self.cursor.0 / self.ui_scale,
+            self.cursor.1 / self.ui_scale,
+            rows.len(),
+        );
         if pressed {
             self.pressed_row = hit;
             return;
@@ -128,8 +174,7 @@ impl Editor {
         if from == to {
             self.map.activate(&self.book, from);
         } else if self.map.drag_chapter(&mut self.book, from, to).is_ok() {
-            self.dirty = true;
-            self.layout_stale = true;
+            self.edited();
         }
     }
 
@@ -166,6 +211,7 @@ impl Editor {
     /// Store a named snapshot of the manuscript as it is now.
     pub fn save_named_snapshot(&mut self, name: &str) -> Result<(), String> {
         let path = self.bundle.clone().ok_or_else(|| "no bundle".to_string())?;
+        self.wait_for_background_save();
         self.book
             .save_snapshot(&path, name)
             .map_err(|err| err.to_string())
@@ -174,6 +220,7 @@ impl Editor {
     /// Replace the open manuscript with a named snapshot.
     pub fn restore_named_snapshot(&mut self, name: &str) -> Result<(), String> {
         let path = self.bundle.clone().ok_or_else(|| "no bundle".to_string())?;
+        self.wait_for_background_save();
         self.book = Book::load_snapshot(&path, name).map_err(|err| err.to_string())?;
         self.dirty = false;
         self.layout_stale = true;
@@ -182,30 +229,31 @@ impl Editor {
 
     pub fn move_left(&mut self) {
         let _ = self.book.move_caret(Motion::Char(Direction::Backward));
+        self.follow_caret = true;
     }
 
     pub fn move_right(&mut self) {
         let _ = self.book.move_caret(Motion::Char(Direction::Forward));
+        self.follow_caret = true;
     }
 
     pub fn extend_left(&mut self) {
         let _ = self
             .book
             .extend_selection(Motion::Char(Direction::Backward));
+        self.follow_caret = true;
     }
 
     pub fn extend_right(&mut self) {
         let _ = self.book.extend_selection(Motion::Char(Direction::Forward));
+        self.follow_caret = true;
     }
 
     /// Insert text the input method finished composing.
     pub fn commit_ime(&mut self, text: &str) {
         self.preedit.clear();
-        if !text.is_empty() {
-            let _ = self.book.insert(text);
-            self.dirty = true;
-            self.layout_stale = true;
-            self.follow_caret = true;
+        if !text.is_empty() && self.book.insert(text).is_ok() {
+            self.edited();
         }
     }
 
@@ -229,6 +277,7 @@ impl Editor {
         // Layout first: it can move the view to follow the caret.
         self.refresh_layout();
         self.caret = None;
+        self.slots.clear();
         for pixel in buffer.pixels.iter_mut() {
             *pixel = DESK;
         }
@@ -237,13 +286,15 @@ impl Editor {
         if width <= 0 || height <= 0 {
             return;
         }
-        let content_left = SIDEBAR_W.min(width - 1);
+        let content_left = self.sidebar_width().min(width - 1);
         let content_w = (width - content_left).max(1);
-        let page_h = (height * 7 / 10).max(1);
-        let page_w = (page_h * 2 / 3).min(content_w - 16).max(1);
-        let gap = 24;
+        // The page in view fills the window's height, one gap from the top;
+        // the next page starts one gap below it.
+        let gap = (16.0 * self.ui_scale).round() as i32;
+        let page_h = (height - 2 * gap).max(1);
+        let page_w = (page_h * 2 / 3).min(content_w - 2 * gap).max(1);
         let scroll = self.pager.scroll();
-        let origin = (height / 2) - ((scroll.fract() * page_h as f64) as i32);
+        let origin = gap - (scroll.fract() * f64::from(page_h + gap)) as i32;
         let first = scroll.floor() as i32;
         let document = self.document.take();
         self.pages_painted = document.as_ref().map(|laid| laid.page_count()).unwrap_or(0);
@@ -271,7 +322,8 @@ impl Editor {
                 );
             }
         }
-        self.paint_sidebar(&mut painter, height);
+        let face = document.as_ref().map(|document| document.face());
+        self.paint_sidebar(&mut painter, height, face);
         self.document = document;
     }
 
@@ -280,6 +332,7 @@ impl Editor {
     /// again, and pagination stops where the old page breaks line up.
     pub fn refresh_layout(&mut self) {
         if !self.layout_stale && self.document.is_some() {
+            self.follow_caret_now();
             return;
         }
         let report = match self.document.as_mut() {
@@ -306,18 +359,27 @@ impl Editor {
         };
         if let Some(document) = self.document.as_ref() {
             self.pager.set_pages(document.page_count());
-            if std::mem::take(&mut self.follow_caret) {
-                let page = focus_mark(&self.book)
-                    .and_then(|(paragraph, byte)| document.page_of(paragraph, byte));
-                if let Some(page) = page {
-                    if self.pager.page_top() + 1 != page {
-                        self.pager.jump_to(page - 1);
-                    }
-                }
-            }
         }
         self.last_layout = report;
         self.layout_stale = false;
+        self.follow_caret_now();
+    }
+
+    /// Scroll to the caret's page if an edit or caret move asked for it.
+    fn follow_caret_now(&mut self) {
+        if !std::mem::take(&mut self.follow_caret) {
+            return;
+        }
+        let Some(document) = self.document.as_ref() else {
+            return;
+        };
+        let page =
+            focus_mark(&self.book).and_then(|(paragraph, byte)| document.page_of(paragraph, byte));
+        if let Some(page) = page {
+            if self.pager.page_top() + 1 != page {
+                self.pager.jump_to(page - 1);
+            }
+        }
     }
 
     /// What the most recent layout refresh did.
@@ -375,6 +437,14 @@ impl Editor {
         let scale = (page_w as f32 / geometry.page_width.max(1.0))
             .min(page_h as f32 / geometry.page_height.max(1.0))
             .max(0.05);
+        self.slots.push(PageSlot {
+            page,
+            left,
+            top,
+            width: page_w,
+            height: page_h,
+            scale,
+        });
         painter.push_clip(pixelkit_raster::Rect::new(left, top, page_w, page_h));
         if let Some(head) = document.page_running_head(page) {
             self.paint_label(
@@ -551,22 +621,49 @@ impl Editor {
         }
     }
 
-    fn paint_sidebar(&self, painter: &mut pixelkit_raster::Painter<'_>, height: i32) {
-        painter.fill_rect(
-            pixelkit_raster::Rect::new(0, 0, SIDEBAR_W, height),
-            0x00DD_D4C8,
-        );
+    fn paint_sidebar(
+        &mut self,
+        painter: &mut pixelkit_raster::Painter<'_>,
+        height: i32,
+        face: Option<&Face>,
+    ) {
+        let s = self.ui_scale;
+        let width = self.sidebar_width();
+        painter.fill_rect(pixelkit_raster::Rect::new(0, 0, width, height), 0x00DD_D4C8);
         for (index, row) in self.map.rows(&self.book).iter().enumerate() {
             let (_, y) = BookMap::row_center(index);
-            let color = match row.kind {
-                MapKind::Chapter => 0x00EF_E8DC,
-                MapKind::Section => 0x00F6_F1E8,
-                MapKind::FrontMatter | MapKind::Part | MapKind::BackMatter => 0x00D0_C6B8,
+            let y = y * s;
+            let (color, indent) = match row.kind {
+                MapKind::Chapter => (0x00EF_E8DC, 16.0),
+                MapKind::Section => (0x00F6_F1E8, 28.0),
+                MapKind::FrontMatter | MapKind::Part | MapKind::BackMatter => (0x00D0_C6B8, 8.0),
             };
             painter.fill_rect(
-                pixelkit_raster::Rect::new(8, y as i32 - 12, SIDEBAR_W - 16, 24),
+                pixelkit_raster::Rect::new(
+                    (8.0 * s) as i32,
+                    (y - 12.0 * s) as i32,
+                    width - (16.0 * s) as i32,
+                    (24.0 * s) as i32,
+                ),
                 color,
             );
+            if let Some(face) = face {
+                painter.push_clip(pixelkit_raster::Rect::new(
+                    0,
+                    0,
+                    width - (12.0 * s) as i32,
+                    height,
+                ));
+                self.paint_label(
+                    painter,
+                    face,
+                    &row.title,
+                    (indent * s) as i32,
+                    (y + 5.0 * s) as i32,
+                    13.0 * s,
+                );
+                painter.pop_clip();
+            }
         }
     }
 
@@ -577,8 +674,7 @@ impl Editor {
     /// Mutable access to the manuscript. The layout is refreshed on the
     /// next paint.
     pub fn book_mut(&mut self) -> &mut Book {
-        self.layout_stale = true;
-        self.dirty = true;
+        self.edited();
         &mut self.book
     }
 
@@ -587,17 +683,15 @@ impl Editor {
     }
 
     pub fn type_text(&mut self, text: &str) {
-        let _ = self.book.insert(text);
-        self.dirty = true;
-        self.layout_stale = true;
-        self.follow_caret = true;
+        if self.book.insert(text).is_ok() {
+            self.edited();
+        }
     }
 
     pub fn backspace(&mut self) {
-        let _ = self.book.delete_backward();
-        self.dirty = true;
-        self.layout_stale = true;
-        self.follow_caret = true;
+        if self.book.delete_backward().is_ok() {
+            self.edited();
+        }
     }
 
     pub fn page_down(&mut self) {
@@ -622,7 +716,7 @@ impl Default for Editor {
 /// Keypress-to-present budget. A few milliseconds, inside one 60 Hz frame.
 pub const KEYPRESS_BUDGET: Duration = Duration::from_millis(8);
 
-fn load_face() -> Option<Face> {
+fn load_face() -> Option<(Face, Vec<u8>)> {
     let mut paths = Vec::new();
     if let Some(path) = std::env::var_os("LEGE_DOCWRITE_FONT") {
         paths.push(std::path::PathBuf::from(path));
@@ -642,8 +736,8 @@ fn load_face() -> Option<Face> {
         let Ok(bytes) = std::fs::read(&path) else {
             continue;
         };
-        if let Ok(face) = Face::parse(bytes) {
-            return Some(face);
+        if let Ok(face) = Face::parse(bytes.clone()) {
+            return Some((face, bytes));
         }
     }
     None

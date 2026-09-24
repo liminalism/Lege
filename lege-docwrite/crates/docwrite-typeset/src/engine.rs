@@ -105,6 +105,8 @@ pub struct PaintedLine {
     pub baseline: f32,
     /// Em size of the paragraph's body text.
     pub em: f32,
+    /// This is the paragraph's last line.
+    pub ends_paragraph: bool,
 }
 
 /// One shaped glyph in pixels.
@@ -534,6 +536,7 @@ impl Document {
                             indent: line.indent,
                             baseline,
                             em,
+                            ends_paragraph: line.is_last,
                         }
                     })
                     .collect()
