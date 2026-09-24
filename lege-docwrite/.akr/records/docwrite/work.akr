@@ -159,7 +159,7 @@ record docwrite.work.m2-styles-masters-templates/1 : work {
 
 record docwrite.work.m6-chapter-start-and-masters/1 : work {
     title "Honour NextPage starts and per-chapter page masters"
-    state proposed
+    state completed
     intent """
         Only NextRecto is a page break today and layout_inputs takes one geometry from the Chapter template; make every chapter start rule a break and let each chapter's template choose its master.
         """
@@ -168,7 +168,7 @@ record docwrite.work.m6-chapter-start-and-masters/1 : work {
 
 record docwrite.work.m6-docs-and-clippy/1 : work {
     title "Document the public API and run clippy"
-    state proposed
+    state completed
     intent """
         About 170 missing_docs warnings remain across the crates, and clippy has not run because the pinned 1.97.1 toolchain lacks the component.
         """
@@ -177,7 +177,7 @@ record docwrite.work.m6-docs-and-clippy/1 : work {
 
 record docwrite.work.m6-drop-caps/1 : work {
     title "Drop caps that span lines"
-    state proposed
+    state completed
     intent """
         A drop cap is a larger first glyph on the first baseline; set it across drop_cap_lines lines with the following lines indented around it, on screen and in PDF.
         """
@@ -186,7 +186,7 @@ record docwrite.work.m6-drop-caps/1 : work {
 
 record docwrite.work.m6-glyph-atlas/1 : work {
     title "Glyph atlas sized to the glyph, with the face in the key"
-    state proposed
+    state completed
     intent """
         GlyphAtlas rasterizes every glyph into a fixed 64x64 cell and the window draws it at baseline-48, so large sizes and descenders clip; size cells from the glyph bounds, keep the origin with the entry, and key on the face.
         """
@@ -195,7 +195,7 @@ record docwrite.work.m6-glyph-atlas/1 : work {
 
 record docwrite.work.m6-measured-footnotes/1 : work {
     title "Measure footnotes into the page"
-    state proposed
+    state completed
     intent """
         split_note cuts notes at 48 characters and fill_page reserves one body leading for them; shape notes at footnote size, reserve their measured height, split by lines, and keep incremental convergence exact.
         """
@@ -204,9 +204,54 @@ record docwrite.work.m6-measured-footnotes/1 : work {
 
 record docwrite.work.m6-window-chapter-commands/1 : work {
     title "Chapter and style commands in the window"
-    state proposed
+    state completed
     intent """
         The model can add, rename and reorder chapters and change styles, but the window only reorders by dragging; add new-chapter, rename and body-style commands, and a small toolbar.
         """
     part_of [ @docwrite.milestone.m6-writer-ready ]
+}
+
+record docwrite.work.m7-bidi/1 : work {
+    title "Right-to-left and mixed-direction text"
+    state proposed
+    intent """
+        unicode-bidi is a dependency but paragraphs are shaped left to right; resolve embedding levels, shape runs in their direction and reorder lines for display, caret and PDF.
+        """
+    part_of [ @docwrite.milestone.m7-open-items ]
+}
+
+record docwrite.work.m7-epub/1 : work {
+    title "EPUB export, if it proves useful"
+    state proposed
+    intent """
+        Markdown and PDF cover the semantic and print paths; an EPUB 3 package from the same blocks and styles is optional.
+        """
+    part_of [ @docwrite.milestone.m7-open-items ]
+}
+
+record docwrite.work.m7-idml-spreads/1 : work {
+    title "IDML with spreads and threaded text frames"
+    state proposed
+    intent """
+        export_idml writes a design map, styles, one master spread and the story, but no spreads or text frames, so InDesign has nowhere to flow the story; emit spreads per page pair with threaded frames on the master's text area. Not yet opened in InDesign.
+        """
+    part_of [ @docwrite.milestone.m7-open-items ]
+}
+
+record docwrite.work.m7-images/1 : work {
+    title "Place images in the page flow"
+    state proposed
+    intent """
+        Image blocks lay out as text today; read the asset's size, place it full-measure or inline with its caption kept with it, draw it on screen and embed it in the PDF (JPEG/PNG through lege-pdf-write).
+        """
+    part_of [ @docwrite.milestone.m7-open-items ]
+}
+
+record docwrite.work.m7-pdf-links/1 : work {
+    title "PDF link annotations and named destinations"
+    state proposed
+    intent """
+        Links and citations are plain text in the PDF; add link annotations (URIs, and internal destinations for contents, index and citations) to lege-pdf-write and use them.
+        """
+    part_of [ @docwrite.milestone.m7-open-items ]
 }

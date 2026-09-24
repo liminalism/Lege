@@ -37,6 +37,21 @@ record docwrite.evidence.book-map-drag/1 : evidence {
         """
 }
 
+record docwrite.evidence.chapter-rules-and-masters/1 : evidence {
+    title "NextPage chapters start a page; each chapter uses its template's master"
+    state verified
+    result pass
+    method command
+    observed_at git:987c32fee7cb49205649306dd7c7a89fb6976efe
+    command "cargo test -p docwrite-typeset --test book_layout"
+    summary """
+        A NextPage chapter opens the very next page; a chapter on an Appendix template
+        takes its master's margins (inset per facing side), measure and running-head
+        rule, while chapter one keeps its own. NextRecto still blanks a verso, with a
+        pending footnote carried across it.
+        """
+}
+
 record docwrite.evidence.editor-commands/1 : evidence {
     title "The window's commands work: clipboard, undo, line motion across pages, click, save, autosave, export, CLI export"
     state verified
@@ -66,6 +81,21 @@ record docwrite.evidence.editor-latency-release/1 : evidence {
         keystroke shaped exactly one paragraph and laid out at most three pages; wall
         clock p50 4.43 ms, max 4.95 ms against the 8 ms budget; opening the book 67 ms.
         Debug builds assert the work counts only.
+        """
+}
+
+record docwrite.evidence.editor-latency-release-2026-09-24/1 : evidence {
+    title "Typing through Editor into a 550-page book: p50 1.94 ms, max 2.21 ms (release)"
+    state verified
+    result pass
+    method command
+    observed_at git:987c32fee7cb49205649306dd7c7a89fb6976efe
+    command "cargo test --release -p docwrite-app --test latency_gate -- --nocapture"
+    summary """
+        With the font family, justification and styled paragraphs in place, typing at the
+        start, middle and end of a 550-page book shaped one paragraph and laid out at most
+        three pages per key; keypress-to-present p50 1.94 ms, max 2.21 ms against 8 ms;
+        opening 42 ms.
         """
 }
 
@@ -408,6 +438,21 @@ record docwrite.evidence.m5-preflight-current/1 : evidence {
         """
 }
 
+record docwrite.evidence.measured-footnotes/1 : evidence {
+    title "Footnotes are measured into the page and split by lines"
+    state verified
+    result pass
+    method command
+    observed_at git:987c32fee7cb49205649306dd7c7a89fb6976efe
+    command "cargo test -p docwrite-typeset --test footnotes"
+    summary """
+        A footnote takes its measured height from its reference page's text block (fewer
+        body lines than the same page without it), sits at the foot below a rule at
+        footnote size, and a long note continues on later pages line by line with every
+        word set once, in order; it stays on its reference page after an earlier edit.
+        """
+}
+
 record docwrite.evidence.pdf-renders-typeset-pages/1 : evidence {
     title "Exported PDF renders the typeset pages with ink, one PDF page per layout page"
     state verified
@@ -456,5 +501,24 @@ record docwrite.evidence.typing-trace/1 : evidence {
     command "cargo test -p docwrite-app --test latency_gate"
     summary """
         A 46-frame typing trace on a 500-page document stayed inside 8ms. Each keypress laid out only the edited page and the next, and the typed page text starts with k.
+        """
+}
+
+record docwrite.evidence.window-features-2026-09-24/1 : evidence {
+    title "Editor commands, toolbar, sidebar, full screen, spreads, research pane, find/replace and typography pass their tests"
+    state verified
+    result pass
+    method command
+    observed_at git:987c32fee7cb49205649306dd7c7a89fb6976efe
+    command "cargo test (lege-docwrite workspace: 92 tests) and cargo clippy --all-targets (no warnings)"
+    summary """
+        Covers: resizable Book Map folding to a tab; WordPerfect-style full screen with a
+        status line; spread view; toolbar marks, styles, sizes, chapter/rename/note
+        prompts; find, find-again, replace-all (one undo); smart quotes/dashes/ellipses;
+        research pane capture, quote, cite and citation follow-through; lossless format-2
+        bundles with format-1 migration and crash-safe swap; bold/italic families,
+        justification, indents, drop caps, synthesized small caps; contents, Notes,
+        Bibliography and Index sections. Views were also checked in offscreen PNG
+        snapshots. Not covered: an interactive session in the window by a person.
         """
 }

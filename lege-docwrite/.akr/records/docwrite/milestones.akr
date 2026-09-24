@@ -422,6 +422,7 @@ record docwrite.milestone.m6-writer-ready/1 : milestone {
                 """
             method command
             command "cargo test -p docwrite-typeset --test book_layout"
+            verified_by [ @docwrite.evidence.chapter-rules-and-masters/1 ]
         }
         check measured-footnotes {
             statement """
@@ -431,6 +432,7 @@ record docwrite.milestone.m6-writer-ready/1 : milestone {
                 """
             method command
             command "cargo test -p docwrite-typeset --test footnotes"
+            verified_by [ @docwrite.evidence.measured-footnotes/1 ]
         }
         check window-draft {
             statement """
@@ -443,4 +445,32 @@ record docwrite.milestone.m6-writer-ready/1 : milestone {
     }
     after [ @docwrite.milestone.m5-interchange ]
     depends_on [ @docwrite.observation.milestones-closed-on-synthetic-paths ]
+}
+
+record docwrite.milestone.m7-open-items/1 : milestone {
+    title "M7 — images, bidi, IDML spreads, CFF and PDF links"
+    state proposed
+    intent """
+        What the 2026-09-24 session left open: images in the page flow, right-to-left
+        text, an IDML package InDesign can open, CFF (OpenType-PostScript) fonts and links
+        in the PDF, and EPUB if it proves useful.
+        """
+    acceptance {
+        check idml-opens {
+            statement """
+                An exported IDML opens in InDesign with its styles, parent pages, spreads with
+                threaded text frames, story and footnotes.
+                """
+            method manual
+        }
+        check images-flow {
+            statement """
+                An image block is placed in the page flow at its asset's aspect ratio, full
+                measure or inline, keeps with its caption, and is embedded in the PDF.
+                """
+            method command
+            command "cargo test -p docwrite-typeset --test images"
+        }
+    }
+    after [ @docwrite.milestone.m6-writer-ready ]
 }

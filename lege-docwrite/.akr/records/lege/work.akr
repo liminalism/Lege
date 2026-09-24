@@ -21,7 +21,7 @@ record lege.work.links-labels-destinations/1 : work {
 
 record lege.work.multi-font-pages-and-tounicode/1 : work {
     title "lege-pdf-write: several fonts per page and per-cluster ToUnicode"
-    state proposed
+    state completed
     intent """
         Allow any number of font resources per page and generate ToUnicode maps from shaping clusters (ligatures, small caps, alternates) so output text is searchable and copyable.
         """
