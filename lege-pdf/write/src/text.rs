@@ -50,12 +50,18 @@ pub fn emit_glyph_layer(content: &mut ContentWriter, layer: &PreparedGlyphLayer)
     content.set_word_spacing(0.0);
     content.set_horizontal_scale(100.0);
     content.set_font(glyph_font_resource(layer.font), 1.0);
+    let mut current_font = layer.font;
 
     let mut current_rise: i32 = 0;
     let mut pending: Vec<(u16, i32)> = Vec::new();
     for line in layer.lines.iter() {
         if line.items.is_empty() {
             continue;
+        }
+        let font = line.font.unwrap_or(layer.font);
+        if font != current_font {
+            content.set_font(glyph_font_resource(font), 1.0);
+            current_font = font;
         }
         content.set_text_matrix(line.matrix);
         for item in line.items.iter() {
@@ -198,10 +204,12 @@ mod tests {
                             rise: 0,
                         },
                     ]),
+                    font: None,
                 },
                 GlyphLine {
                     matrix: Affine::scale_translate(100.0, 100.0, 72.0, 600.0),
                     items: Box::new([]),
+                    font: None,
                 },
             ]),
         };

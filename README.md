@@ -25,7 +25,7 @@ Lege/
 │       ├── Freya/             `lege-gui`: default desktop frontend
 │       ├── musicsheet/        `lege-music-gui`
 │       └── rfd/               vendored file dialog crate
-├── lege-viewer/               native `lege-viewer`: reader + processing workspace
+├── lege-viewer/               retained source copy during Liminaldoc migration
 ├── lege-document-ocr/         business-grade OCR product
 │   ├── crates/                document IR, pipeline, batch, and export libraries
 │   ├── cli/                   `lege-ocr` batch CLI
@@ -47,8 +47,11 @@ Lege/
 └── freya-main/                vendored upstream UI workspace
 ```
 
-`lege-pdf/render` and `lege-viewer` are direct workspace members and evolve
-together through retained semantic, text, compiled-IR, and tiled-raster APIs.
+The reader and writer now build from the sibling `../liminaldoc` repository.
+Their old source copies remain here during migration and are excluded from this
+workspace. Liminaldoc continues to use the Lege PDF crates through path
+dependencies while the repositories are being separated.
+`lege-pdf/render` retains semantic, text, compiled-IR, and tiled-raster APIs.
 The codec projects keep independent build graphs, while the root workspace
 uses the in-tree JBIG2 and JPEG2000 sources.
 

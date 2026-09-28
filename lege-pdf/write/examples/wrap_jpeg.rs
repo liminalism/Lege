@@ -40,6 +40,7 @@ fn main() {
                     color: ColorModel::Rgb,
                 },
             }]),
+            fills: Box::new([]),
             text_layer: None,
             glyph_layer: None,
             rotation: PageRotation::Upright,

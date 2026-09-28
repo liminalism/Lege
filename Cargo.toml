@@ -31,7 +31,6 @@ members = [
     "lege-pdf/render/crates/*", # native PDF document + rendering engine
     "lege-pdf/write",           # `lege-pdf-write`
     "lege-pdf/print",           # `lege-pdf-print`: imposition, sheets, spooling
-    "lege-viewer",              # `lege-viewer`: native viewer + processing workspace
     "lege-misc/bindings/lege-render-ffi", # C ABI over the renderer facade
     "lege-misc/xtask",          # packaging tasks (`cargo appimage`)
     "lege-android",             # JNI cdylib for the Android APK
@@ -40,6 +39,8 @@ members = [
 #   freya-main               — vendored upstream fork with its own workspace
 #   lege-codecs/*            — separate build graphs / licenses (patched in below)
 #   lege-pdf/pdf-integrity   — nested forensic-triage workspace (own lockfile)
+#   lege-viewer / lege-docwrite — retained migration copies; active reader and
+#                              writer live in the sibling ../liminaldoc workspace
 #   lege-misc/bindings/jbig2enc-py — pyo3 extension module; `extension-module`
 #                              leaves Python symbols unresolved until import,
 #                              which breaks any plain `cargo build` that links
@@ -51,10 +52,11 @@ exclude = [
     "lege-codecs",
     "lege-misc/bindings/jbig2enc-py",
     "lege-pdf/pdf-integrity",
+    "lege-viewer",
+    "lege-docwrite",
 ]
 # `cargo build` produces the `lege` CLI plus the default GUI frontend, the
-# Freya processor GUI (bin `lege-gui`). The native viewer is an opt-in
-# frontend: build it with `cargo viewer` (bin `lege-viewer`).
+# Freya processor GUI (bin `lege-gui`). `cargo viewer` targets Liminaldoc.
 default-members = [
     "lege-process",
     "lege-process/GUI/Freya",

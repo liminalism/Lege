@@ -77,12 +77,12 @@ cargo build \
 # Each frontend owns a uniquely named binary; the AppDir always installs it as
 # `lege-gui`, which is what lege.desktop and AppRun exec.
 if [[ "$APPIMAGE_GUI" == "viewer" ]]; then
-  GUI_BINARY="lege-viewer"
+  GUI_BINARY_PATH="$ROOT/../liminaldoc/target/release/liminaldoc-reader"
   cargo build --release \
-    --manifest-path "$ROOT/Cargo.toml" \
-    --package lege-viewer
+    --manifest-path "$ROOT/../liminaldoc/Cargo.toml" \
+    --package liminaldoc-reader
 else
-  GUI_BINARY="lege-gui"
+  GUI_BINARY_PATH="$ROOT/target/release/lege-gui"
   cargo build --release \
     --manifest-path "$ROOT/Cargo.toml" \
     --package lege-gui-freya \
@@ -101,7 +101,7 @@ mkdir -p \
   "$APPDIR/usr/share/metainfo"
 
 install -Dm755 "$ROOT/target/release/lege" "$APPDIR/usr/bin/lege"
-install -Dm755 "$ROOT/target/release/$GUI_BINARY" "$APPDIR/usr/bin/lege-gui"
+install -Dm755 "$GUI_BINARY_PATH" "$APPDIR/usr/bin/lege-gui"
 
 install -Dm644 "$ROOT/lege-process/lege.desktop" "$APPDIR/usr/share/applications/lege.desktop"
 install -Dm644 "$ROOT/lege-process/lege.desktop" "$APPDIR/lege.desktop"

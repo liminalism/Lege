@@ -39,6 +39,7 @@ fn main() {
         index: 0,
         media_box: PdfRect::from_size(W, H),
         elements: Box::new([]),
+        fills: Box::new([]),
         text_layer: Some(PreparedTextLayer {
             runs: runs.into_boxed_slice(),
             font: TextFont::HelveticaFallback,

@@ -297,15 +297,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3d036a3c4ab069c7b410a2ce876bd74808d2d0888a82667669f8e783a898bf1"
 
 [[package]]
-name = "arc-swap"
-version = "1.9.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c049c0be4daef0b145cb3555416b3b8ef5b7888a38aea1a3a155801fe7b0810b"
-dependencies = [
- "rustversion",
-]
-
-[[package]]
 name = "arg_enum_proc_macro"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2964,25 +2955,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d98f6fed1fde3f8c21bc40a1abb88dd75e67924f9cffc3ef95607bad8017f8e2"
 
 [[package]]
-name = "is-docker"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "928bae27f42bc99b60d9ac7334e3a21d10ad8f1835a4e12ec3ec0464765ed1b3"
-dependencies = [
- "once_cell",
-]
-
-[[package]]
-name = "is-wsl"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "173609498df190136aa7dea1a91db051746d339e18476eed5ca40521f02d7aa5"
-dependencies = [
- "is-docker",
- "once_cell",
-]
-
-[[package]]
 name = "is_terminal_polyfill"
 version = "1.70.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3517,37 +3489,6 @@ name = "lege-render-ffi"
 version = "0.1.0"
 dependencies = [
  "lege-pdf-read",
-]
-
-[[package]]
-name = "lege-viewer"
-version = "0.1.0"
-dependencies = [
- "arc-swap",
- "copypasta",
- "cosmic-text",
- "crossbeam-channel",
- "lege-gpu",
- "libc",
- "open",
- "pdf-content",
- "pdf-document",
- "pdf-font",
- "pdf-page-ir",
- "pdf-render-api",
- "pdf-render-cpu",
- "pdf-render-wgpu",
- "pdf-security",
- "pdf-source",
- "pdf-test-support",
- "pdf-text",
- "rfd 0.17.2",
- "serde",
- "serde_json",
- "softbuffer",
- "tempfile",
- "thiserror 2.0.19",
- "winit",
 ]
 
 [[package]]
@@ -4466,16 +4407,6 @@ name = "once_cell_polyfill"
 version = "1.70.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
-
-[[package]]
-name = "open"
-version = "5.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a0b3d059e795d52b8a72fef45658620edd4d9c359b338564aa14391ffa511ed5"
-dependencies = [
- "is-wsl",
- "libc",
-]
 
 [[package]]
 name = "opener"

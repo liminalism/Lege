@@ -51,6 +51,10 @@ pub struct DocumentWriter<W: Write> {
     /// that draws from that bank, written at finalization.
     glyph_font_ids: Vec<Option<ObjectId>>,
     bookmarks: Vec<OutlineItem>,
+    lang: Option<String>,
+    /// Structure element names (`H1`, `P`, `Note`, `Figure`) in reading order.
+    structure: Vec<String>,
+    page_labels: Option<Vec<u8>>,
 }
 
 impl<W: Write> std::fmt::Debug for DocumentWriter<W> {
@@ -106,6 +110,9 @@ impl<W: Write> DocumentWriter<W> {
             glyph_fonts: Vec::new(),
             glyph_font_ids: Vec::new(),
             bookmarks: Vec::new(),
+            lang: None,
+            structure: Vec::new(),
+            page_labels: None,
         };
         // Reserve the /Pages root so pages written on arrival can carry a valid
         // /Parent.
@@ -146,6 +153,21 @@ impl<W: Write> DocumentWriter<W> {
         self.bookmarks = bookmarks;
     }
 
+    /// `/Lang` on the catalog.
+    pub fn set_language(&mut self, lang: impl Into<String>) {
+        self.lang = Some(lang.into());
+    }
+
+    /// Structure element types written as a `/StructTreeRoot`.
+    pub fn set_structure(&mut self, elements: Vec<String>) {
+        self.structure = elements;
+    }
+
+    /// Raw `/PageLabels` number-tree dictionary, including the outer `<< >>`.
+    pub fn set_page_labels(&mut self, labels: Vec<u8>) {
+        self.page_labels = Some(labels);
+    }
+
     /// Register a shared resource's bytes (e.g. JBIG2 globals) before any
     /// artifact references it.
     pub fn register_shared(&mut self, id: SharedResourceId, bytes: Arc<[u8]>) {
@@ -168,6 +190,14 @@ impl<W: Write> DocumentWriter<W> {
             }
             content.concat_matrix(element.transform);
             content.draw_xobject(name);
+            content.restore();
+        }
+
+        for fill in artifact.fills.iter() {
+            let rect = fill.rect;
+            content.save();
+            content.set_gray_fill(fill.gray);
+            content.fill_rect(rect.x0, rect.y0, rect.x1 - rect.x0, rect.y1 - rect.y0);
             content.restore();
         }
 
@@ -200,20 +230,31 @@ impl<W: Write> DocumentWriter<W> {
             .as_ref()
             .is_some_and(|gl| gl.lines.iter().any(|l| !l.items.is_empty()));
         if has_glyphs {
-            let bank = artifact.glyph_layer.as_ref().unwrap().font;
-            if self.glyph_font_ids.len() <= usize::from(bank) {
-                self.glyph_font_ids.resize(usize::from(bank) + 1, None);
-            }
-            let gid = match self.glyph_font_ids[usize::from(bank)] {
-                Some(id) => id,
-                None => {
-                    let id = self.sink.alloc_id();
-                    self.glyph_font_ids[usize::from(bank)] = Some(id);
-                    id
+            let layer = artifact.glyph_layer.as_ref().unwrap();
+            // Every bank the page draws from: the layer's and any line's own.
+            let mut banks = vec![layer.font];
+            for line in layer.lines.iter() {
+                if let Some(bank) = line.font
+                    && !banks.contains(&bank)
+                {
+                    banks.push(bank);
                 }
-            };
-            fonts.push((crate::artifact::glyph_font_resource(bank), gid));
-            emit_glyph_layer(&mut content, artifact.glyph_layer.as_ref().unwrap());
+            }
+            for bank in banks {
+                if self.glyph_font_ids.len() <= usize::from(bank) {
+                    self.glyph_font_ids.resize(usize::from(bank) + 1, None);
+                }
+                let gid = match self.glyph_font_ids[usize::from(bank)] {
+                    Some(id) => id,
+                    None => {
+                        let id = self.sink.alloc_id();
+                        self.glyph_font_ids[usize::from(bank)] = Some(id);
+                        id
+                    }
+                };
+                fonts.push((crate::artifact::glyph_font_resource(bank), gid));
+            }
+            emit_glyph_layer(&mut content, layer);
         }
 
         // Content stream: compress when it carries text (parity with the
@@ -291,13 +332,25 @@ impl<W: Write> DocumentWriter<W> {
             None
         };
 
+        let struct_tree = if self.structure.is_empty() {
+            None
+        } else {
+            Some(write_structure_tree(
+                &mut self.sink,
+                &self.slots,
+                &self.structure,
+            )?)
+        };
         let catalog = write_catalog(
             &mut self.sink,
             self.pages_root,
             CatalogExtras {
                 outlines,
                 output_intent,
-                mark_info: self.profile.wants_pdfa_metadata(),
+                mark_info: self.profile.wants_pdfa_metadata() || struct_tree.is_some(),
+                lang: self.lang.clone(),
+                struct_tree,
+                page_labels: self.page_labels.clone(),
             },
         )?;
 
@@ -332,6 +385,44 @@ impl<W: Write> DocumentWriter<W> {
 }
 
 /// Deflate (zlib) a content stream.
+fn write_structure_tree<W: Write>(
+    sink: &mut PdfSink<W>,
+    slots: &crate::pages::WrittenPageSlots,
+    elements: &[String],
+) -> Result<ObjectId> {
+    let mut kids = Vec::new();
+    for (index, name) in elements.iter().enumerate() {
+        let id = sink.alloc_id();
+        let Some(page) = slots.page_id(index as u32).or_else(|| slots.page_id(0)) else {
+            continue;
+        };
+        let mut d = Vec::new();
+        d.extend_from_slice(b"<<");
+        d.extend_from_slice(b"/Type /StructElem");
+        d.extend_from_slice(b" /S /");
+        d.extend_from_slice(name.as_bytes());
+        d.extend_from_slice(b" /Pg ");
+        crate::serialize::write_ref(&mut d, page);
+        d.extend_from_slice(b" /K (");
+        d.extend_from_slice(name.as_bytes());
+        d.extend_from_slice(b")>>");
+        sink.write_indirect(id, &d)?;
+        kids.push(id);
+    }
+    let root = sink.alloc_id();
+    let mut d = Vec::new();
+    d.extend_from_slice(b"<< /Type /StructTreeRoot /K [");
+    for (index, id) in kids.iter().enumerate() {
+        if index > 0 {
+            d.push(b' ');
+        }
+        crate::serialize::write_ref(&mut d, *id);
+    }
+    d.extend_from_slice(b"]>>");
+    sink.write_indirect(root, &d)?;
+    Ok(root)
+}
+
 fn deflate(data: &[u8]) -> Result<Vec<u8>> {
     let mut enc = ZlibEncoder::new(Vec::new(), Compression::default());
     enc.write_all(data).map_err(WriteError::from)?;
@@ -361,6 +452,7 @@ mod tests {
                     color: ColorModel::Rgb,
                 },
             }]),
+            fills: Box::new([]),
             text_layer: None,
             glyph_layer: None,
             rotation: PageRotation::Upright,
@@ -384,6 +476,7 @@ mod tests {
             index,
             media_box: PdfRect::from_size(612.0, 792.0),
             elements: Box::new([]),
+            fills: Box::new([]),
             text_layer: None,
             glyph_layer: Some(PreparedGlyphLayer {
                 lines: Box::new([GlyphLine {
@@ -393,6 +486,7 @@ mod tests {
                         adjust: 0,
                         rise: 0,
                     }]),
+                    font: None,
                 }]),
                 font: 0,
             }),
@@ -421,6 +515,76 @@ mod tests {
         );
         assert!(t.contains("/F2"), "{t}");
         assert!(t.contains("/F3"), "{t}");
+    }
+
+    #[test]
+    fn one_page_can_draw_lines_from_several_banks() {
+        let mut w = DocumentWriter::new(Vec::new(), 1).unwrap();
+        let mut page = glyph_page(0);
+        let layer = page.glyph_layer.as_mut().unwrap();
+        let mut lines = std::mem::take(&mut layer.lines).into_vec();
+        lines.push(GlyphLine {
+            matrix: Affine::scale_translate(100.0, 100.0, 72.0, 600.0),
+            items: Box::new([GlyphItem {
+                gid: 1,
+                adjust: 0,
+                rise: 0,
+            }]),
+            font: Some(1),
+        });
+        layer.lines = lines.into_boxed_slice();
+        w.add_page(&page).unwrap();
+        let mut font = sample_font();
+        font.symbolic = true;
+        font.to_unicode = ToUnicode::None;
+        font.cid_widths = Some(Arc::from(&[0u16, 500][..]));
+        w.set_glyph_fonts(vec![font.clone(), font]);
+        let bytes = w.finalize().unwrap();
+        let t = String::from_utf8_lossy(&bytes).into_owned();
+        assert_eq!(t.matches("/Subtype /Type0").count(), 2, "{t}");
+        assert!(
+            t.contains("/F2") && t.contains("/F3"),
+            "both banks are page resources"
+        );
+    }
+
+    #[test]
+    fn fills_are_drawn_as_gray_rectangles() {
+        let mut w = DocumentWriter::new(Vec::new(), 1).unwrap();
+        let mut page = glyph_page(0);
+        page.fills = Box::new([crate::artifact::PdfFill {
+            rect: PdfRect::new(72.0, 100.0, 172.0, 100.5),
+            gray: 0.0,
+        }]);
+        w.add_page(&page).unwrap();
+        let mut font = sample_font();
+        font.symbolic = true;
+        font.to_unicode = ToUnicode::None;
+        font.cid_widths = Some(Arc::from(&[0u16, 500][..]));
+        w.set_glyph_fonts(vec![font]);
+        let bytes = w.finalize().unwrap();
+        // The content stream is compressed when it has text: inflate them all.
+        let mut content = Vec::new();
+        for (index, _) in bytes
+            .windows(6)
+            .enumerate()
+            .filter(|(_, window)| *window == b"stream")
+        {
+            let start = index
+                + 6
+                + if bytes.get(index + 6) == Some(&b'\r') {
+                    2
+                } else {
+                    1
+                };
+            let mut data = Vec::new();
+            let mut decoder = flate2::read::ZlibDecoder::new(&bytes[start..]);
+            if std::io::Read::read_to_end(&mut decoder, &mut data).is_ok() {
+                content.extend(data);
+            }
+        }
+        let text = String::from_utf8_lossy(&content);
+        assert!(text.contains("72 100 100 0.5 re f"), "{text}");
     }
 
     #[test]
@@ -539,6 +703,7 @@ mod tests {
             index: 0,
             media_box: PdfRect::from_size(612.0, 792.0),
             elements: Box::new([]),
+            fills: Box::new([]),
             text_layer: Some(PreparedTextLayer {
                 runs: Box::new([TextRun {
                     text: "hello".to_string(),

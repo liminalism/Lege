@@ -5,19 +5,18 @@ fmt-all-check = "fmt --all -- --check"
 
 # Main sub-programs.
 #
-# Each frontend is its own package and owns a uniquely named binary, so any
-# combination can be selected in one invocation without Cargo colliding the
-# outputs in target/<profile>/:
+# The processor frontends are workspace packages. Liminaldoc is a sibling
+# workspace with its own target directory:
 #
 #   lege          package `lege`            — the CLI
 #   lege-gui      package `lege-gui-freya`  — Freya processor GUI (default)
-#   lege-viewer   package `lege-viewer`     — native document viewer
+#   liminaldoc-reader / liminaldoc-writer  — native reader and writer
 #
 # The three supported build configurations:
 #
 #   cargo cli      CLI only
 #   cargo gui      CLI + Freya GUI  (same as a bare `cargo build`)
-#   cargo viewer   CLI + native viewer
+#   cargo viewer   Liminaldoc reader backend
 
 # CLI only.
 cli = "build --package lege --bin lege"
@@ -36,13 +35,15 @@ gui-freya = "build --package lege --package lege-gui-freya"
 gui-freya-check = "check --package lege --package lege-gui-freya"
 gui-freya-run = "run --package lege-gui-freya --bin lege-gui --"
 
-# CLI + native document viewer.
-viewer = "build --package lege --package lege-viewer"
-viewer-check = "check --package lege --package lege-viewer"
-viewer-run = "run --package lege-viewer --bin lege-viewer --"
-viewer-gui = "build --package lege --package lege-viewer"
-viewer-gui-check = "check --package lege --package lege-viewer"
-viewer-gui-run = "run --package lege-viewer --bin lege-viewer --"
+# Native document reader in the sibling Liminaldoc workspace.
+viewer = "build --manifest-path ../liminaldoc/Cargo.toml -p liminaldoc-reader"
+viewer-check = "check --manifest-path ../liminaldoc/Cargo.toml -p liminaldoc-reader"
+viewer-run = "run --manifest-path ../liminaldoc/Cargo.toml -p liminaldoc-reader --bin liminaldoc-reader --"
+viewer-gui = "build --manifest-path ../liminaldoc/Cargo.toml -p liminaldoc-reader"
+viewer-gui-check = "check --manifest-path ../liminaldoc/Cargo.toml -p liminaldoc-reader"
+viewer-gui-run = "run --manifest-path ../liminaldoc/Cargo.toml -p liminaldoc-reader --bin liminaldoc-reader --"
+liminaldoc = "build --manifest-path ../liminaldoc/Cargo.toml --workspace"
+liminaldoc-run = "run --manifest-path ../liminaldoc/Cargo.toml -p liminaldoc --bin liminaldoc --"
 
 music-gui = "build --package lege-music-gui"
 music-gui-check = "check --package lege-music-gui"
@@ -71,6 +72,11 @@ xtask-help = "run --package xtask -- help"
 jbig2 = "build --manifest-path lege-codecs/jbig2enc-rust/Cargo.toml"
 jp2 = "build --manifest-path lege-codecs/jp2lam/Cargo.toml"
 djvu = "build --manifest-path lege-codecs/djvulibrust/Cargo.toml --features cli --bin djvu-encoder"
+
+# Page-native writer in the sibling Liminaldoc workspace.
+docwrite = "build --manifest-path ../liminaldoc/Cargo.toml -p docwrite-app --bin liminaldoc-writer"
+docwrite-check = "check --manifest-path ../liminaldoc/Cargo.toml -p docwrite-app --all-targets"
+docwrite-run = "run --manifest-path ../liminaldoc/Cargo.toml -p docwrite-app --bin liminaldoc-writer --"
 
 # Android. `cargo check` for this target needs only
 # `rustup target add aarch64-linux-android` — no NDK, because checking does not

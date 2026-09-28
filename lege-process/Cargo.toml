@@ -109,7 +109,7 @@ windows-core = { workspace = true }
 [features]
 # This crate builds the `lege` CLI only. The desktop GUIs are their own
 # packages: `lege-gui-freya` (bin `lege-gui`, the default frontend) and
-# `lege-viewer` (bin `lege-viewer`).
+# the reader and writer in the sibling Liminaldoc workspace.
 default = ["jp2-lam", "paddle-ocr", "layout-detection"]
 # Android platform support. Gates everything under `android/`; nothing new
 # compiles with the feature off, so desktop builds are unaffected. Building for
