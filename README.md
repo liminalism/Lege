@@ -25,7 +25,6 @@ Lege/
 │       ├── Freya/             `lege-gui`: default desktop frontend
 │       ├── musicsheet/        `lege-music-gui`
 │       └── rfd/               vendored file dialog crate
-├── lege-viewer/               retained source copy during Liminaldoc migration
 ├── lege-document-ocr/         business-grade OCR product
 │   ├── crates/                document IR, pipeline, batch, and export libraries
 │   ├── cli/                   `lege-ocr` batch CLI
