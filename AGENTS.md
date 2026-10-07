@@ -5,6 +5,14 @@
 Durable project knowledge lives in `.akr/` as typed records, not in Markdown.
 `docs/generated/` is build output. Follow this protocol.
 
+`knowledge.*` below are MCP tool names; the CLI spells them without the prefix:
+`knowledge.context` → `akr context`, `knowledge.get` → `akr get`,
+`knowledge.search` → `akr search`, `knowledge.propose` → `akr propose`,
+`knowledge.revise` → `akr revise`, `knowledge.supersede` → `akr supersede`,
+`knowledge.evidence_add` → `akr evidence add`, `knowledge.complete` →
+`akr complete`, `knowledge.papercut` → `akr papercut -m <agent>`,
+`knowledge.validate` → `akr check`. There is no `akr knowledge ...` subcommand.
+
 **Before starting any task**
 1. `knowledge.context --goal <milestone|work|track>` for the thing you are working on.
    Add `--paths` for the files you expect to touch.

@@ -368,11 +368,7 @@ fn preprocessing_for(label: &str) -> &'static str {
     }
 }
 
-fn placeholder_region(
-    id: String,
-    box_: &LayoutBox,
-    language: &str,
-) -> Region {
+fn placeholder_region(id: String, box_: &LayoutBox, language: &str) -> Region {
     let [x0, y0, x1, y1] = box_.bbox;
     let polygon = rect_polygon(x0, y0, x1, y1);
     let provenance = Provenance {
@@ -474,9 +470,9 @@ pub fn group_ocr_lines(
         // page number is to keep).
         let role = match role {
             LayoutRole::Number
-                if box_.confidence.is_some_and(|confidence| {
-                    confidence >= NUMBER_DROP_CONFIDENCE
-                }) =>
+                if box_
+                    .confidence
+                    .is_some_and(|confidence| confidence >= NUMBER_DROP_CONFIDENCE) =>
             {
                 LayoutRole::Drop
             }
@@ -548,12 +544,7 @@ pub fn group_ocr_lines(
                         .collect();
                     text_lines.push(TextLine {
                         text: TextEvidence::raw(line.text.clone()),
-                        polygon: rect_polygon(
-                            left as f32,
-                            top as f32,
-                            right as f32,
-                            bottom as f32,
-                        ),
+                        polygon: rect_polygon(left as f32, top as f32, right as f32, bottom as f32),
                         confidence: RecognitionConfidence {
                             mean_token: line.confidence,
                             ..Default::default()
@@ -688,9 +679,9 @@ pub fn group_native_words(
         let member_words = &members[box_index];
         let role = match role {
             LayoutRole::Number
-                if box_.confidence.is_some_and(|confidence| {
-                    confidence >= NUMBER_DROP_CONFIDENCE
-                }) =>
+                if box_
+                    .confidence
+                    .is_some_and(|confidence| confidence >= NUMBER_DROP_CONFIDENCE) =>
             {
                 LayoutRole::Drop
             }
@@ -903,17 +894,11 @@ pub fn resolve_furniture(document: &mut lege_docir::Document) -> Option<String> 
                 continue;
             }
             match region.kind {
-                RegionKind::Header | RegionKind::Footer
-                    if is_layout_classified(region) =>
-                {
+                RegionKind::Header | RegionKind::Footer if is_layout_classified(region) => {
                     if let Some(text) = region.content.plain_text(lege_docir::TextView::Raw) {
-                        let normalized =
-                            text.split_whitespace().collect::<Vec<_>>().join(" ");
+                        let normalized = text.split_whitespace().collect::<Vec<_>>().join(" ");
                         if !normalized.is_empty() {
-                            text_pages
-                                .entry(normalized)
-                                .or_default()
-                                .insert(page.index);
+                            text_pages.entry(normalized).or_default().insert(page.index);
                         }
                     }
                 }
@@ -948,9 +933,7 @@ pub fn resolve_furniture(document: &mut lege_docir::Document) -> Option<String> 
                 continue;
             }
             match region.kind {
-                RegionKind::Header | RegionKind::Footer
-                    if is_layout_classified(&region) =>
-                {
+                RegionKind::Header | RegionKind::Footer if is_layout_classified(&region) => {
                     let normalized = region
                         .content
                         .plain_text(lege_docir::TextView::Raw)
@@ -968,13 +951,12 @@ pub fn resolve_furniture(document: &mut lege_docir::Document) -> Option<String> 
                     }
                 }
                 _ => {
-                    let repeated_figure = layout_placeholder_caption(&region).is_some_and(
-                        |caption| {
+                    let repeated_figure =
+                        layout_placeholder_caption(&region).is_some_and(|caption| {
                             figure_pages
                                 .get(&(caption.to_string(), quantized_bbox(&region)))
                                 .is_some_and(|pages| pages.len() >= FIGURE_REPEAT_PAGES)
-                        },
-                    );
+                        });
                     if repeated_figure {
                         removed_figures += 1;
                     } else {
@@ -1172,7 +1154,10 @@ mod tests {
             .find(|region| region.kind == RegionKind::Figure)
             .expect("image becomes a figure");
         assert_eq!(
-            figure.content.plain_text(lege_docir::TextView::Raw).as_deref(),
+            figure
+                .content
+                .plain_text(lege_docir::TextView::Raw)
+                .as_deref(),
             Some("[image]")
         );
         assert_eq!(regions.len(), 3);
@@ -1198,7 +1183,10 @@ mod tests {
             .find(|region| region.kind == RegionKind::Title)
             .expect("doc title region");
         assert_eq!(
-            title.content.plain_text(lege_docir::TextView::Raw).as_deref(),
+            title
+                .content
+                .plain_text(lege_docir::TextView::Raw)
+                .as_deref(),
             Some("Runs")
         );
         let body = regions
@@ -1206,7 +1194,9 @@ mod tests {
             .find(|region| region.kind == RegionKind::Paragraph)
             .expect("body region");
         assert_eq!(
-            body.content.plain_text(lege_docir::TextView::Raw).as_deref(),
+            body.content
+                .plain_text(lege_docir::TextView::Raw)
+                .as_deref(),
             Some("Body text")
         );
     }
@@ -1300,7 +1290,9 @@ mod tests {
             .regions
             .iter()
             .find(|region| {
-                region.content.plain_text(lege_docir::TextView::Raw)
+                region
+                    .content
+                    .plain_text(lege_docir::TextView::Raw)
                     .is_some_and(|text| text.contains("Unique Title"))
             })
             .expect("unique title survives");
@@ -1326,7 +1318,10 @@ mod tests {
                         ocr_line("Body", [100, 300, 300, 330]),
                         ocr_line("7", [1760, 2755, 1775, 2775]),
                     ],
-                    &[number_at(0.42), layout_box("text", [90.0, 280.0, 520.0, 360.0])],
+                    &[
+                        number_at(0.42),
+                        layout_box("text", [90.0, 280.0, 520.0, 360.0]),
+                    ],
                 )
             })
             .collect();
@@ -1336,7 +1331,11 @@ mod tests {
         for page in &document.pages {
             assert!(
                 !page.regions.iter().any(|region| {
-                    region.content.plain_text(lege_docir::TextView::Raw).as_deref() == Some("7")
+                    region
+                        .content
+                        .plain_text(lege_docir::TextView::Raw)
+                        .as_deref()
+                        == Some("7")
                 }),
                 "repeated margin number is gone from page {}",
                 page.index
@@ -1345,7 +1344,8 @@ mod tests {
     }
 
     #[test]
-    fn logos_repeating_on_three_pages_are_removed() {        let logo = || layout_box("image", [90.0, 40.0, 200.0, 120.0]);
+    fn logos_repeating_on_three_pages_are_removed() {
+        let logo = || layout_box("image", [90.0, 40.0, 200.0, 120.0]);
         let pages = (0..3)
             .map(|index| {
                 grouped_page(

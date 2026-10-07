@@ -56,20 +56,26 @@ pub(crate) struct UnquantizedTileDwt {
 
 #[cfg(test)]
 mod forward_dwt_calls {
-    use std::sync::atomic::{AtomicU32, Ordering};
+    use std::cell::Cell;
 
-    static CALLS: AtomicU32 = AtomicU32::new(0);
+    // Thread-local rather than a global so parallel tests do not read each
+    // other's encodes. The measured cache path runs the forward DWT on the
+    // calling thread; component-parallelism worker increments land on worker
+    // threads, where no test reads them.
+    thread_local! {
+        static CALLS: Cell<u32> = const { Cell::new(0) };
+    }
 
     pub(super) fn inc() {
-        CALLS.fetch_add(1, Ordering::SeqCst);
+        CALLS.with(|calls| calls.set(calls.get().wrapping_add(1)));
     }
 
     pub(crate) fn reset() {
-        CALLS.store(0, Ordering::SeqCst);
+        CALLS.with(|calls| calls.set(0));
     }
 
     pub(crate) fn get() -> u32 {
-        CALLS.load(Ordering::SeqCst)
+        CALLS.with(|calls| calls.get())
     }
 }
 
@@ -2453,7 +2459,8 @@ mod tests {
     use super::{
         IctTileInputs, NativeBackend, allow_component_parallelism,
         component_parallel_working_memory_floor, contrast_weight_for_stored_block,
-        irreversible_input_component_rect,
+        forward_dwt_call_count, forward_dwt_calls, irreversible_input_component_rect,
+        reset_forward_dwt_calls,
     };
     use crate::encode::block_store::EncodedBlockStore;
     use crate::encode::context::EncodeContext;
@@ -2529,6 +2536,24 @@ mod tests {
             },
         )
         .expect("build context")
+    }
+
+    #[test]
+    fn forward_dwt_call_count_is_thread_local() {
+        reset_forward_dwt_calls();
+        std::thread::scope(|scope| {
+            scope.spawn(|| {
+                for _ in 0..7 {
+                    forward_dwt_calls::inc();
+                }
+                assert_eq!(forward_dwt_call_count(), 7);
+            });
+        });
+        assert_eq!(
+            forward_dwt_call_count(),
+            0,
+            "another thread's encodes must not pollute this thread's count"
+        );
     }
 
     #[test]

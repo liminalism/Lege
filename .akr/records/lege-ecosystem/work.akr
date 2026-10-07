@@ -3657,7 +3657,7 @@ record lege-ecosystem.work.thorough-ppocrv6-performance-and-output-preflight/1 :
 
 record lege-ecosystem.work.thorough-ppocrv6-performance-and-output-preflight/2 : work {
     title "Audit thorough PP-OCRv6 throughput without sacrificing accuracy"
-    state completed
+    state superseded
     scope [
         path "lege-document-ocr/scripts/benchmarks/**",
         path "lege-gpu/src/vision/**",
@@ -3717,6 +3717,75 @@ record lege-ecosystem.work.thorough-ppocrv6-performance-and-output-preflight/2 :
         }
     }
     supersedes [ @lege-ecosystem.work.thorough-ppocrv6-performance-and-output-preflight/1 ]
+}
+
+record lege-ecosystem.work.thorough-ppocrv6-performance-and-output-preflight/3 : work {
+    title "Audit thorough PP-OCRv6 throughput without sacrificing accuracy"
+    state active
+    scope [
+        path "lege-document-ocr/scripts/benchmarks/**",
+        path "lege-gpu/src/vision/**",
+        path "lege-ocr/**",
+        path "lege-process/core/main.rs",
+        path "lege-process/pipeline/epub_pipeline.rs"
+    ]
+    intent """
+        Profile the current thorough EPUB OCR path after the embedded PP-OCRv6 upgrade, retain V6 detector quality policy and all thorough recognition/recovery behavior, land only optimizations whose structured OCR output is unchanged or whose accuracy is independently demonstrated, and prevent an unwritable destination from wasting a full OCR run.
+        """
+    note """
+        Scope corrected 2026-09-08: `lege-process/**/tests/**` matched no tracked file and never had —
+        lege-process keeps no `tests/` directory, only `lege-process/scripts/test-paddle-ocr-gpu.sh` —
+        so it was a scope that could not be verified against anything. Dropped rather than guessed at,
+        since the other five paths already name what this work touched. Surfaced by AKR 0.5.0's
+        extension of AKR-G023 to completed records; it had been invisible since the record was written.
+
+        Reopened 2026-10-05: the scope correction above postdated the 2026-08-22 completion
+        evidence, invalidating all five acceptance checks (AKR-R022) and with them the
+        completion claim. The August verification work is unchanged; only the claim is
+        withdrawn. Re-complete with fresh evidence if the claim is needed.
+        """
+    acceptance {
+        check focused-tests {
+            statement """
+                Focused lege-ocr, lege-gpu vision, and EPUB pipeline tests pass.
+                """
+            method command
+            verified_by [ @lege-ecosystem.evidence.thorough-ppocrv6-focused-tests-20260822/1 ]
+        }
+        check generation-resolution-policy {
+            statement """
+                Tests retain detector limit_side 960 for PP-OCRv5 and 1280 for PP-OCRv6.
+                """
+            method command
+            verified_by [ @lege-ecosystem.evidence.thorough-ppocrv6-focused-tests-20260822/1 ]
+        }
+        check output-preflight {
+            statement """
+                An unwritable EPUB destination is rejected or safely redirected before page processing begins, with a focused regression test.
+                """
+            method command
+            verified_by [ @lege-ecosystem.evidence.epub-output-preflight-cli-20260822/1 ]
+        }
+        check quality-preserved {
+            statement """
+                Optimized thorough OCR emits identical structured text and geometry on the fixed benchmark inputs, or any intentional difference has ground-truth evidence that it is not a regression.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.thorough-ppocrv6-throughput-quality-20260822/1
+            ]
+        }
+        check throughput-measured {
+            statement """
+                A representative release-mode benchmark attributes stage time and records the before/after throughput result; performance code is changed only when the result is faster without a quality loss.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.thorough-ppocrv6-throughput-quality-20260822/1
+            ]
+        }
+    }
+    supersedes [ @lege-ecosystem.work.thorough-ppocrv6-performance-and-output-preflight/2 ]
 }
 
 record lege-ecosystem.work.tier-1-code-block-parallelism/1 : work {

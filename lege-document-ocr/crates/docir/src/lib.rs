@@ -166,10 +166,7 @@ impl Page {
         let mut chunks = Vec::new();
         for id in &self.reading_order {
             if let Some(region) = self.regions.iter().find(|region| &region.id == id)
-                && !matches!(
-                    region.kind,
-                    RegionKind::Header | RegionKind::Footer
-                )
+                && !matches!(region.kind, RegionKind::Header | RegionKind::Footer)
                 && let Some(text) = region.content.plain_text(view)
             {
                 chunks.push(text);
@@ -177,10 +174,7 @@ impl Page {
         }
         for region in &self.regions {
             if !self.reading_order.iter().any(|id| id == &region.id)
-                && !matches!(
-                    region.kind,
-                    RegionKind::Header | RegionKind::Footer
-                )
+                && !matches!(region.kind, RegionKind::Header | RegionKind::Footer)
                 && let Some(text) = region.content.plain_text(view)
             {
                 chunks.push(text);

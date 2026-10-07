@@ -394,8 +394,7 @@ impl DocumentProcessor {
             let plane = session.render(&compiled, &RasterProduct::gray8(width, height))?;
             gray_image(plane)?
         };
-        match layout.group_native_words(&gray, page_index, &evidence.words, &self.config.language)
-        {
+        match layout.group_native_words(&gray, page_index, &evidence.words, &self.config.language) {
             Ok((regions, order, stats)) => {
                 if let Some(warning) = stats.warning() {
                     warnings.push(warning);
@@ -562,8 +561,8 @@ impl DocumentProcessor {
                 warnings,
             )
         };
-        let reading_order =
-            reading_order.unwrap_or_else(|| regions.iter().map(|region| region.id.clone()).collect());
+        let reading_order = reading_order
+            .unwrap_or_else(|| regions.iter().map(|region| region.id.clone()).collect());
         Ok(Page {
             index: page_index,
             source_size: Size { width, height },

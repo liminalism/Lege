@@ -1774,6 +1774,9 @@ fn run_main() -> Result<()> {
                     validate_page_range(&range)?;
                     page_range = Some(range);
                 } else if parse_target_argument(last).is_ok() {
+                    if let Some(warning) = lone_integer_target_warning(last) {
+                        eprintln!("{warning}");
+                    }
                     target_arg = positional.pop();
                 } else if looks_like_page_range(last) {
                     let candidate = positional.pop().unwrap();
@@ -1930,6 +1933,20 @@ fn lone_number_is_page_like(input: &str) -> bool {
         .trim()
         .parse::<u32>()
         .is_ok_and(|value| (1..LONE_NUMBER_MIN_TARGET_HEIGHT).contains(&value))
+}
+
+/// Warning for the ambiguous case above the page-like cutoff: a lone integer
+/// read as a target height could equally be a page number, so say which way
+/// it went and name the unambiguous single-page form. `None` for anything
+/// that is not a lone positive integer (ranges, dimensions, presets).
+fn lone_integer_target_warning(arg: &str) -> Option<String> {
+    let page: u32 = arg.trim().parse().ok()?;
+    if page == 0 {
+        return None;
+    }
+    Some(format!(
+        "warning: interpreting '{arg}' as a {page}px target height; use '{page}-{page}' for page {page}"
+    ))
 }
 
 /// Build a `BinarizationConfig` from the CLI `--binarization` / `--threshold` /
@@ -3715,6 +3732,19 @@ mod cli_parser_tests {
         );
         assert_eq!(canonicalize_page_range_token("5"), "5-5");
         assert_eq!(canonicalize_page_range_token("1-10"), "1-10");
+    }
+
+    #[test]
+    fn lone_integer_target_height_warns_with_page_form() {
+        let warning = lone_integer_target_warning("510").expect("warn on bare 510");
+        assert!(
+            warning.contains("510px target height") && warning.contains("510-510"),
+            "unexpected warning: {warning}"
+        );
+        assert!(lone_integer_target_warning("1-10").is_none());
+        assert!(lone_integer_target_warning("800x600").is_none());
+        assert!(lone_integer_target_warning("preset").is_none());
+        assert!(lone_integer_target_warning("0").is_none());
     }
 
     #[test]

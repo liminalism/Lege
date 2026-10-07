@@ -1241,7 +1241,10 @@ mod tests {
         assert!(!markdown.contains("Running Head"), "{markdown}");
         assert!(!markdown.contains("\n12\n"), "{markdown}");
 
-        exporter(ExportFormat::Text).unwrap().export(&request).unwrap();
+        exporter(ExportFormat::Text)
+            .unwrap()
+            .export(&request)
+            .unwrap();
         let text = std::fs::read_to_string(directory.path().join("book.txt")).unwrap();
         assert!(text.contains("Body text."), "{text}");
         assert!(text.contains("[image]"), "{text}");
@@ -1249,7 +1252,8 @@ mod tests {
     }
 
     #[test]
-    fn rasterized_searchable_pdf_contains_a_text_layer() {        let directory = tempfile::tempdir().unwrap();
+    fn rasterized_searchable_pdf_contains_a_text_layer() {
+        let directory = tempfile::tempdir().unwrap();
         let source_path = directory.path().join("source.pdf");
         let mut pdf = PdfBuilder::new();
         pdf.add_object(1, "<</Type/Catalog/Pages 2 0 R>>");

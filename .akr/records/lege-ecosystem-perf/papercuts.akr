@@ -261,12 +261,26 @@ record lege-ecosystem-perf.papercut.while-reproducing-the-structures-pdf-mrc/4 :
 
 record lege-ecosystem-perf.papercut.while-validating-the-jpx-output-ownership/1 : papercut {
     title "While validating the JPX output-ownership change, `cargo check -p…"
+    state superseded
+    statement """
+        While validating the JPX output-ownership change, `cargo check -p jp2lam` worked from the ecosystem root but `cargo test -p jp2lam` failed because jp2lam is path-patched yet not a workspace member. Tests must be invoked with `--manifest-path lege-codecs/jp2lam/Cargo.toml`, a non-obvious package-selection inconsistency.
+        """
+    observed_at git:174105ceac73d00a20e25fc7bf80d23444dd7d93
+    about "cargo"
+    author "codex"
+    created_at 2026-08-09
+}
+
+record lege-ecosystem-perf.papercut.while-validating-the-jpx-output-ownership/2 : papercut {
+    title "While validating the JPX output-ownership change, `cargo check -p…"
     state verified
     statement """
         While validating the JPX output-ownership change, `cargo check -p jp2lam` worked from the ecosystem root but `cargo test -p jp2lam` failed because jp2lam is path-patched yet not a workspace member. Tests must be invoked with `--manifest-path lege-codecs/jp2lam/Cargo.toml`, a non-obvious package-selection inconsistency.
         """
     observed_at git:174105ceac73d00a20e25fc7bf80d23444dd7d93
     about "cargo"
+    closed_at 2026-10-06
+    supersedes [ @lege-ecosystem-perf.papercut.while-validating-the-jpx-output-ownership/1 ]
     author "codex"
     created_at 2026-08-09
 }
