@@ -1,0 +1,182 @@
+akr 0.1
+project pdf-integrity
+
+record audit.evidence.m1-encrypted-modes/1 : evidence {
+    title "encrypted_modes: 4 passed incl. password-upgrade test (run in lege-pdf/pdf-integrity)"
+    state verified
+    result pass
+    method command
+    observed_at git:883393dc473bf5288501b4e619688a4bfb68bcf9
+    command "cargo test -p pdf-forensics --test encrypted_modes"
+    summary """
+        encrypted_modes: 4 passed incl. password-upgrade test (run in lege-pdf/pdf-integrity)
+        """
+}
+
+record audit.evidence.m1-fixture-suite/1 : evidence {
+    title "m1_fixtures: 10 passed, all M1 fixtures classify as expected (run in lege-pdf/pdf-integrity)"
+    state verified
+    result pass
+    method command
+    observed_at git:883393dc473bf5288501b4e619688a4bfb68bcf9
+    command "cargo test -p pdf-forensics --test m1_fixtures"
+    summary """
+        m1_fixtures: 10 passed, all M1 fixtures classify as expected (run in lege-pdf/pdf-integrity)
+        """
+}
+
+record audit.evidence.m1-pdfverse/1 : evidence {
+    title "pdfverse export: 3/3 raster_only, 0 visible text, 0 fonts, INCONCLUSIVE (run in lege-pdf/pdf-integrity)"
+    state verified
+    result pass
+    method command
+    observed_at git:883393dc473bf5288501b4e619688a4bfb68bcf9
+    command "cargo run -p lege-pdf-audit -- inspect fixtures/pdfverse-export.pdf --json -"
+    summary """
+        pdfverse export: 3/3 raster_only, 0 visible text, 0 fonts, INCONCLUSIVE (run in lege-pdf/pdf-integrity)
+        """
+}
+
+record audit.evidence.m1-schema/1 : evidence {
+    title "report_schema: 6 passed, versioned JSON contract holds (run in lege-pdf/pdf-integrity)"
+    state verified
+    result pass
+    method command
+    observed_at git:883393dc473bf5288501b4e619688a4bfb68bcf9
+    command "cargo test -p pdf-forensics --test report_schema"
+    summary """
+        report_schema: 6 passed, versioned JSON contract holds (run in lege-pdf/pdf-integrity)
+        """
+}
+
+record audit.evidence.m2-hybrid/1 : evidence {
+    title "m2_revisions hybrid filter: 2 passed, hybrid save counts once (run in lege-pdf/pdf-integrity)"
+    state verified
+    result pass
+    method command
+    observed_at git:883393dc473bf5288501b4e619688a4bfb68bcf9
+    command "cargo test -p pdf-forensics --test m2_revisions -- hybrid"
+    summary """
+        m2_revisions hybrid filter: 2 passed, hybrid save counts once (run in lege-pdf/pdf-integrity)
+        """
+}
+
+record audit.evidence.m2-qpdf-oracle/1 : evidence {
+    title "m2_qpdf_oracle: 8 passed vs rootless qpdf 12.3.2 (run in lege-pdf/pdf-integrity)"
+    state verified
+    result pass
+    method command
+    observed_at git:883393dc473bf5288501b4e619688a4bfb68bcf9
+    command "PATH=/tmp/qpdfroot/root/usr/bin:$PATH LD_LIBRARY_PATH=/tmp/qpdfroot/root/usr/lib/x86_64-linux-gnu cargo test -p pdf-forensics --test m2_qpdf_oracle -- --ignored"
+    summary """
+        m2_qpdf_oracle: 8 passed vs rootless qpdf 12.3.2 (run in lege-pdf/pdf-integrity)
+        """
+}
+
+record audit.evidence.m2-replay/1 : evidence {
+    title "m2_replay: 3 passed, rev0 opens via PrefixSource with pre-edit text (run in lege-pdf/pdf-integrity)"
+    state verified
+    result pass
+    method command
+    observed_at git:883393dc473bf5288501b4e619688a4bfb68bcf9
+    command "cargo test -p pdf-forensics --test m2_replay"
+    summary """
+        m2_replay: 3 passed, rev0 opens via PrefixSource with pre-edit text (run in lege-pdf/pdf-integrity)
+        """
+}
+
+record audit.evidence.m2-revision-fixtures/1 : evidence {
+    title "m2_revisions: 15 passed across xref variants (run in lege-pdf/pdf-integrity)"
+    state verified
+    result pass
+    method command
+    observed_at git:883393dc473bf5288501b4e619688a4bfb68bcf9
+    command "cargo test -p pdf-forensics --test m2_revisions"
+    summary """
+        m2_revisions: 15 passed across xref variants (run in lege-pdf/pdf-integrity)
+        """
+}
+
+record audit.evidence.m3-determinism/1 : evidence {
+    title "m3_determinism: 2 passed, byte-identical PNGs across runs (run in lege-pdf/pdf-integrity)"
+    state verified
+    result pass
+    method command
+    observed_at git:883393dc473bf5288501b4e619688a4bfb68bcf9
+    command "cargo test -p pdf-forensics --test m3_determinism"
+    summary """
+        m3_determinism: 2 passed, byte-identical PNGs across runs (run in lege-pdf/pdf-integrity)
+        """
+}
+
+record audit.evidence.m3-gpa/1 : evidence {
+    title "m3_revision_diff: 5 passed incl GPA 2.84/3.84 with PNGs (run in lege-pdf/pdf-integrity)"
+    state verified
+    result pass
+    method command
+    observed_at git:883393dc473bf5288501b4e619688a4bfb68bcf9
+    command "cargo test -p pdf-forensics --test m3_revision_diff"
+    summary """
+        m3_revision_diff: 5 passed incl GPA 2.84/3.84 with PNGs (run in lege-pdf/pdf-integrity)
+        """
+}
+
+record audit.evidence.m3-occlusion/1 : evidence {
+    title "m3_occlusion: 5 passed, rect and patch candidates at contextual strength (run in lege-pdf/pdf-integrity)"
+    state verified
+    result pass
+    method command
+    observed_at git:883393dc473bf5288501b4e619688a4bfb68bcf9
+    command "cargo test -p pdf-forensics --test m3_occlusion"
+    summary """
+        m3_occlusion: 5 passed, rect and patch candidates at contextual strength (run in lege-pdf/pdf-integrity)
+        """
+}
+
+record audit.evidence.m3-overlays/1 : evidence {
+    title "m3_overlays: 6 passed, covering appearances report, benign stay silent (run in lege-pdf/pdf-integrity)"
+    state verified
+    result pass
+    method command
+    observed_at git:883393dc473bf5288501b4e619688a4bfb68bcf9
+    command "cargo test -p pdf-forensics --test m3_overlays"
+    summary """
+        m3_overlays: 6 passed, covering appearances report, benign stay silent (run in lege-pdf/pdf-integrity)
+        """
+}
+
+record audit.evidence.m4-byterange/1 : evidence {
+    title "m4_byterange: 6 passed, valid/truncated/overlap/gap/malformed classified (run in lege-pdf/pdf-integrity)"
+    state verified
+    result pass
+    method command
+    observed_at git:883393dc473bf5288501b4e619688a4bfb68bcf9
+    command "cargo test -p pdf-forensics --test m4_byterange"
+    summary """
+        m4_byterange: 6 passed, valid/truncated/overlap/gap/malformed classified (run in lege-pdf/pdf-integrity)
+        """
+}
+
+record audit.evidence.m4-digest/1 : evidence {
+    title "m4_digest: 2 passed, real CMS verifies, flipped byte fails (run in lege-pdf/pdf-integrity)"
+    state verified
+    result pass
+    method command
+    observed_at git:883393dc473bf5288501b4e619688a4bfb68bcf9
+    command "cargo test -p pdf-forensics --test m4_digest"
+    summary """
+        m4_digest: 2 passed, real CMS verifies, flipped byte fails (run in lege-pdf/pdf-integrity)
+        """
+}
+
+record audit.evidence.m4-docmdp/1 : evidence {
+    title "m4_docmdp: 16 passed, violation matrix incl P=1/2/3 (run in lege-pdf/pdf-integrity)"
+    state verified
+    result pass
+    method command
+    observed_at git:883393dc473bf5288501b4e619688a4bfb68bcf9
+    command "cargo test -p pdf-forensics --test m4_docmdp"
+    summary """
+        m4_docmdp: 16 passed, violation matrix incl P=1/2/3 (run in lege-pdf/pdf-integrity)
+        """
+}

@@ -3,3 +3,4 @@
 .akr/cache/
 .agent/scratch/
 /target
+.agent/handoffs/

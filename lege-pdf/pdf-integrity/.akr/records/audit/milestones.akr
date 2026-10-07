@@ -3,7 +3,7 @@ project pdf-integrity
 
 record audit.milestone.m1-factual-audit/1 : milestone {
     title "M1 — factual audit utility"
-    state proposed
+    state completed
     intent """
         A `pdf-cli audit` run (later `lege-pdf-audit inspect`) over any PDF emits a
         versioned JSON and terminal report of neutral facts: SHA-256 and size, PDF
@@ -23,6 +23,7 @@ record audit.milestone.m1-factual-audit/1 : milestone {
                 """
             method command
             command "cargo test -p pdf-forensics --test encrypted_modes"
+            verified_by [ @audit.evidence.m1-encrypted-modes/1 ]
         }
         check fixture-suite-green {
             statement """
@@ -30,6 +31,7 @@ record audit.milestone.m1-factual-audit/1 : milestone {
                 """
             method command
             command "cargo test -p pdf-forensics --test m1_fixtures"
+            verified_by [ @audit.evidence.m1-fixture-suite/1 ]
         }
         check pdfverse-identified {
             statement """
@@ -37,6 +39,7 @@ record audit.milestone.m1-factual-audit/1 : milestone {
                 """
             method command
             command "cargo run -p lege-pdf-audit -- inspect fixtures/pdfverse-export.pdf --json -"
+            verified_by [ @audit.evidence.m1-pdfverse/1 ]
         }
         check schema-versioned {
             statement """
@@ -44,6 +47,7 @@ record audit.milestone.m1-factual-audit/1 : milestone {
                 """
             method command
             command "cargo test -p pdf-forensics --test report_schema"
+            verified_by [ @audit.evidence.m1-schema/1 ]
         }
     }
     depends_on [
@@ -56,7 +60,7 @@ record audit.milestone.m1-factual-audit/1 : milestone {
 
 record audit.milestone.m2-revision-history/1 : milestone {
     title "M2 — correct logical revision history"
-    state proposed
+    state completed
     intent """
         The structure layer preserves per-section xref entries and the checker
         reconstructs logical revisions correctly: classic and stream sections with
@@ -78,6 +82,7 @@ record audit.milestone.m2-revision-history/1 : milestone {
                 """
             method command
             command "cargo test -p pdf-forensics --test m2_replay"
+            verified_by [ @audit.evidence.m2-replay/1 ]
         }
         check hybrid-counts-once {
             statement """
@@ -86,6 +91,7 @@ record audit.milestone.m2-revision-history/1 : milestone {
                 """
             method command
             command "cargo test -p pdf-forensics --test m2_revisions -- hybrid"
+            verified_by [ @audit.evidence.m2-hybrid/1 ]
         }
         check qpdf-oracle-agrees {
             statement """
@@ -95,6 +101,7 @@ record audit.milestone.m2-revision-history/1 : milestone {
                 """
             method command
             command "cargo test -p pdf-forensics --test m2_qpdf_oracle -- --ignored"
+            verified_by [ @audit.evidence.m2-qpdf-oracle/1 ]
         }
         check revision-fixtures-green {
             statement """
@@ -104,6 +111,7 @@ record audit.milestone.m2-revision-history/1 : milestone {
                 """
             method command
             command "cargo test -p pdf-forensics --test m2_revisions"
+            verified_by [ @audit.evidence.m2-revision-fixtures/1 ]
         }
     }
     after [ @audit.milestone.m1-factual-audit ]
@@ -112,7 +120,7 @@ record audit.milestone.m2-revision-history/1 : milestone {
 
 record audit.milestone.m3-diff-and-overlay/1 : milestone {
     title "M3 — revision comparison and overlay evidence"
-    state proposed
+    state completed
     intent """
         The checker compares consecutive logical revisions at three levels — object
         diff, semantic diff (words, glyphs, fonts, images, page relationships) and
@@ -137,6 +145,7 @@ record audit.milestone.m3-diff-and-overlay/1 : milestone {
                 """
             method command
             command "cargo test -p pdf-forensics --test m3_overlays"
+            verified_by [ @audit.evidence.m3-overlays/1 ]
         }
         check deterministic-artifacts {
             statement """
@@ -144,6 +153,7 @@ record audit.milestone.m3-diff-and-overlay/1 : milestone {
                 """
             method command
             command "cargo test -p pdf-forensics --test m3_determinism"
+            verified_by [ @audit.evidence.m3-determinism/1 ]
         }
         check flattened-occlusion-candidates {
             statement """
@@ -154,6 +164,7 @@ record audit.milestone.m3-diff-and-overlay/1 : milestone {
                 """
             method command
             command "cargo test -p pdf-forensics --test m3_occlusion"
+            verified_by [ @audit.evidence.m3-occlusion/1 ]
         }
         check gpa-scenario-end-to-end {
             statement """
@@ -165,6 +176,7 @@ record audit.milestone.m3-diff-and-overlay/1 : milestone {
                 """
             method command
             command "cargo test -p pdf-forensics --test m3_revision_diff"
+            verified_by [ @audit.evidence.m3-gpa/1 ]
         }
     }
     after [ @audit.milestone.m2-revision-history ]
@@ -173,7 +185,7 @@ record audit.milestone.m3-diff-and-overlay/1 : milestone {
 
 record audit.milestone.m4-signatures/1 : milestone {
     title "M4 — signature verification"
-    state proposed
+    state completed
     intent """
         Signature reporting reaches both layers of the layering decision: strict
         ByteRange validation against original bytes, association of each signature
@@ -194,6 +206,7 @@ record audit.milestone.m4-signatures/1 : milestone {
                 """
             method command
             command "cargo test -p pdf-forensics --test m4_byterange"
+            verified_by [ @audit.evidence.m4-byterange/1 ]
         }
         check digest-verifies {
             statement """
@@ -203,6 +216,7 @@ record audit.milestone.m4-signatures/1 : milestone {
                 """
             method command
             command "cargo test -p pdf-forensics --test m4_digest"
+            verified_by [ @audit.evidence.m4-digest/1 ]
         }
         check post-signature-changes {
             statement """
@@ -212,6 +226,7 @@ record audit.milestone.m4-signatures/1 : milestone {
                 """
             method command
             command "cargo test -p pdf-forensics --test m4_docmdp"
+            verified_by [ @audit.evidence.m4-docmdp/1 ]
         }
     }
     after [ @audit.milestone.m3-diff-and-overlay ]

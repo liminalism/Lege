@@ -3,7 +3,7 @@ project pdf-integrity
 
 record lege.work.annotation-forensic-metadata/1 : work {
     title "pdf-document: forensic identity fields on PageAnnotation"
-    state proposed
+    state completed
     intent """
         PageAnnotation preserves rendering fields but not annotation object identity or provenance. Add the neutral facts the overlay analyzer needs: source ObjectId, /Contents, /NM unique name, /M modified date, /CreationDate, /T author, /Subj subject, /IT intent. These are facts, not findings — they belong in the document model, and the forensic interpretation stays in pdf-forensics per the crate-shape decision.
         """
@@ -13,7 +13,7 @@ record lege.work.annotation-forensic-metadata/1 : work {
 
 record lege.work.page-trace-sidecar/1 : work {
     title "pdf-content: optional PageTrace op-provenance sidecar"
-    state proposed
+    state completed
     intent """
         An audit-mode-only compile trace parallel to SemanticPage::ops: for each operator, the source stream object, nested object stack (form XObjects, patterns, Type 3), byte span within the stream, operator index, and PaintOrigin. The existing attribution map ignores alpha, blend modes and soft masks and records only broad origin categories, so it generates occlusion candidates but cannot serve as final evidence; PageTrace closes that gap without widening any normal render path — it is produced only when the audit flag asks for it.
         """
@@ -22,7 +22,7 @@ record lege.work.page-trace-sidecar/1 : work {
 
 record lege.work.prefix-source/1 : work {
     title "pdf-source: bounded PrefixSource for revision replay"
-    state proposed
+    state completed
     intent """
         Add PrefixSource to pdf-source: a PdfSource wrapper exposing only bytes [0, end) of an underlying source, so any reliable logical-revision boundary can be opened through the ordinary DocumentSnapshot::open path and compiled, extracted and rendered with the existing machinery. No special historical-document implementation anywhere else.
         """
@@ -31,7 +31,7 @@ record lege.work.prefix-source/1 : work {
 
 record lege.work.xref-section-preservation/1 : work {
     title "pdf-structure: preserve per-section xref entries"
-    state proposed
+    state completed
     intent """
         Replace pdf-structure's two-field Revision (xref_offset, trailer) with the XrefSection model: offset, kind (Classic/Stream), preserved entry list, trailer, /Prev link, auxiliary_of for /XRefStm pairing, and per-section recovery events. The loader currently merges entries first-write-wins and discards which objects each section introduced; it must instead retain them (Arc slices, materialized only on the audit path) while leaving the fast rendering path's behavior and performance unchanged. This is the single load-bearing lege-pdf refactor for the checker — everything in M2 and M3 rests on it.
         """

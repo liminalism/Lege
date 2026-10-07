@@ -7,7 +7,7 @@
 
 use std::collections::HashSet;
 
-use pdf_object::{Dictionary, ObjectError, ObjectId, PdfObject};
+use pdf_object::{Dictionary, ObjectError, ObjectId, PdfObject, decode_text_string_lossy};
 use pdf_structure::RecoveryEvent;
 
 use crate::resolve::{Resolver, kind_name};
@@ -550,6 +550,7 @@ fn parse_annots(
         }
         out.push(PageAnnotation {
             subtype,
+            source: item.as_reference(),
             rect: annot_rect(dict.get(names.intern(b"Rect")), resolver, ctx),
             flags: resolve_int(dict.get(names.intern(b"F")), resolver, ctx)
                 .map_or(0, |f| f.clamp(0, u32::MAX as i64) as u32),
@@ -562,6 +563,13 @@ fn parse_annots(
             opacity: resolve_number(dict.get(names.intern(b"CA")), resolver, ctx)
                 .unwrap_or(1.0)
                 .clamp(0.0, 1.0) as f32,
+            contents: annot_text(dict.get(names.intern(b"Contents")), resolver, ctx),
+            name: annot_text(dict.get(names.intern(b"NM")), resolver, ctx),
+            modified: annot_text(dict.get(names.intern(b"M")), resolver, ctx),
+            creation_date: annot_text(dict.get(names.intern(b"CreationDate")), resolver, ctx),
+            author: annot_text(dict.get(names.intern(b"T")), resolver, ctx),
+            subject: annot_text(dict.get(names.intern(b"Subj")), resolver, ctx),
+            intent: annot_name(dict.get(names.intern(b"IT")), resolver, ctx),
         });
     }
     out.into()
@@ -630,6 +638,37 @@ fn annot_color(
         1 => Some(crate::AnnotationColor::Gray(c(0))),
         3 => Some(crate::AnnotationColor::Rgb([c(0), c(1), c(2)])),
         4 => Some(crate::AnnotationColor::Cmyk([c(0), c(1), c(2), c(3)])),
+        _ => None,
+    }
+}
+
+/// An annotation's text-string field (`/Contents`, `/NM`, `/M`,
+/// `/CreationDate`, `/T`, `/Subj`): resolved when indirect, decoded lossy.
+/// Anything that is not a string — including a missing key — stays `None`.
+fn annot_text(
+    value: Option<&PdfObject>,
+    resolver: &Resolver<'_>,
+    ctx: &mut ParseContext,
+) -> Option<String> {
+    let resolved = resolver.resolve_value(value?, ctx).ok()?;
+    match &*resolved {
+        PdfObject::String(text) => Some(decode_text_string_lossy(text.as_bytes())),
+        _ => None,
+    }
+}
+
+/// An annotation's name field (`/IT` intent): resolved when indirect, read
+/// as the name's bytes. Anything that is not a name stays `None`.
+fn annot_name(
+    value: Option<&PdfObject>,
+    resolver: &Resolver<'_>,
+    ctx: &mut ParseContext,
+) -> Option<String> {
+    let resolved = resolver.resolve_value(value?, ctx).ok()?;
+    match &*resolved {
+        PdfObject::Name(id) => {
+            Some(String::from_utf8_lossy(&resolver.names.resolve(*id)).into_owned())
+        }
         _ => None,
     }
 }

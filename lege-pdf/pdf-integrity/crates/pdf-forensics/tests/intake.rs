@@ -308,6 +308,41 @@ fn every_pending_section_says_what_blocks_it() {
     }
 }
 
+#[test]
+fn linearization_is_a_determined_fact() {
+    // Positive: the first-object marker is detected, and the section has
+    // left the pending list.
+    let report = audit_bytes(&builder::linearized(), None);
+    report.validate().unwrap();
+    assert!(report.document.linearization.value().unwrap().linearized);
+    assert!(
+        !report
+            .document
+            .pending
+            .iter()
+            .any(|p| p.section == "linearization"),
+        "linearization must not stay pending: {:?}",
+        report.document.pending
+    );
+
+    // Negative: an ordinary document determines the fact as absent.
+    let report = audit_bytes(&builder::multipage_classic(1), None);
+    assert_eq!(
+        report.document.linearization.value().map(|l| l.linearized),
+        Some(false)
+    );
+
+    // No structure at all: the fact is a gap, not a guessed negative.
+    let report = audit_bytes(b"this is not a PDF at all", None);
+    assert!(matches!(
+        report.document.linearization,
+        Availability::Unavailable {
+            reason: UnavailableReason::Unparseable,
+            ..
+        }
+    ));
+}
+
 /// One 72×72 pt page painted with a 2×2 DeviceRGB image covering the crop.
 fn full_page_image_pdf(ocr_layer: bool) -> Vec<u8> {
     let mut b = pdf_test_support::builder::PdfBuilder::new();

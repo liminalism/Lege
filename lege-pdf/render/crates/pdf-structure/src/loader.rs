@@ -4,7 +4,7 @@
 //!
 //! Tolerances are ported from PDFium's `CPDF_Parser` (intent only). All
 //! offsets in this module — startxref values, xref entry offsets, `/Prev`,
-//! `/XRefStm`, `Revision::xref_offset`, `XrefMap` offsets — are relative to
+//! `/XRefStm`, `XrefSection::offset`, `XrefMap` offsets — are relative to
 //! the **header position**: files with leading garbage prepend a delta that
 //! writers did not account for, so the header becomes offset zero (PDFium's
 //! `header_offset_`). `DocumentStructure::header_offset` carries the delta;
@@ -22,8 +22,8 @@ use pdf_syntax::{Lexer, SyntaxLimits, Token};
 use crate::decode::{DecodeBudget, decode_stream};
 use crate::objstm::parse_object_stream_layout;
 use crate::{
-    DocumentStructure, ObjectLocation, PdfVersion, RecoveryEvent, Revision, StructureError,
-    Trailer, XrefMap,
+    DocumentStructure, ObjectLocation, PdfVersion, RecoveryEvent, RevisionXrefEntry,
+    StructureError, Trailer, XrefMap, XrefSection, XrefSectionKind,
 };
 
 /// Limits enforced while loading structure. A structural mirror of the
@@ -39,6 +39,11 @@ pub struct StructureLimits {
     pub max_objects: u32,
     /// Decompressed-byte budget for xref streams during open.
     pub max_decoded_bytes: usize,
+    /// Audit path only: retain every entry each xref section declared on
+    /// [`XrefSection::entries`]. Off by default so the fast render path keeps
+    /// its behavior and performance (no per-section entry retention); audit
+    /// tooling opts in to diff sections into per-object change histories.
+    pub preserve_section_entries: bool,
 }
 
 impl Default for StructureLimits {
@@ -48,6 +53,7 @@ impl Default for StructureLimits {
             max_revisions: 4096,
             max_objects: 8 * 1024 * 1024,
             max_decoded_bytes: 256 * 1024 * 1024,
+            preserve_section_entries: false,
         }
     }
 }
@@ -81,7 +87,7 @@ pub fn load_structure(
         limits,
         budget: DecodeBudget::new(limits.max_decoded_bytes),
         entries: HashMap::new(),
-        revisions: Vec::new(),
+        sections: Vec::new(),
         visited: HashSet::new(),
         recovery,
     };
@@ -152,7 +158,7 @@ pub fn load_structure(
         // or a synthetic xref-stream fixture) can be rolled back instead of
         // clobbering usable entries with a sparser scan.
         let saved_entries = loader.entries.clone();
-        let saved_revisions = loader.revisions.clone();
+        let saved_sections = loader.sections.clone();
         let saved_recovery_len = loader.recovery.len();
 
         // Full-file reconstruction (PDFium `RebuildCrossRef`).
@@ -171,7 +177,7 @@ pub fn load_structure(
             trailer = rebuilt;
         } else if trailer.is_some() {
             loader.entries = saved_entries;
-            loader.revisions = saved_revisions;
+            loader.sections = saved_sections;
             loader.recovery.truncate(saved_recovery_len);
         } else if rebuilt.is_some() {
             trailer = rebuilt;
@@ -185,7 +191,7 @@ pub fn load_structure(
         header_offset: header_offset as u64,
         xref,
         trailer,
-        revisions: loader.revisions.into_boxed_slice(),
+        sections: loader.sections.into_boxed_slice(),
         recovery: loader.recovery.into_boxed_slice(),
     })
 }
@@ -219,7 +225,7 @@ pub fn load_structure_rebuilt(
         limits,
         budget: DecodeBudget::new(limits.max_decoded_bytes),
         entries: HashMap::new(),
-        revisions: Vec::new(),
+        sections: Vec::new(),
         visited: HashSet::new(),
         recovery,
     };
@@ -236,7 +242,7 @@ pub fn load_structure_rebuilt(
         header_offset: header_offset as u64,
         xref,
         trailer,
-        revisions: loader.revisions.into_boxed_slice(),
+        sections: loader.sections.into_boxed_slice(),
         recovery: loader.recovery.into_boxed_slice(),
     })
 }
@@ -325,7 +331,7 @@ struct Loader<'a> {
     /// live one; older revisions (and older entries in hybrid files) are
     /// shadowed. Free entries occupy their number like any other write.
     entries: HashMap<u32, (u16, ObjectLocation)>,
-    revisions: Vec<Revision>,
+    sections: Vec<XrefSection>,
     visited: HashSet<u64>,
     recovery: Vec<RecoveryEvent>,
 }
@@ -333,8 +339,16 @@ struct Loader<'a> {
 impl<'a> Loader<'a> {
     fn reset_merge_state(&mut self) {
         self.entries.clear();
-        self.revisions.clear();
+        self.sections.clear();
         self.visited.clear();
+    }
+
+    /// Snapshot the recovery events recorded since `start` (a `recovery.len()`
+    /// taken when section parsing began) for one section's own log. The
+    /// global log keeps everything; the section carries its attributable
+    /// subset.
+    fn section_recovery(&self, start: usize) -> Arc<[RecoveryEvent]> {
+        self.recovery.get(start..).unwrap_or(&[]).to_vec().into()
     }
 
     /// Record an entry unless the number is already live (first-write-wins).
@@ -378,7 +392,7 @@ impl<'a> Loader<'a> {
                 )));
                 break;
             }
-            if self.revisions.len() >= self.limits.max_revisions {
+            if self.sections.len() >= self.limits.max_revisions {
                 return Err(StructureError::LimitExceeded("max_revisions"));
             }
             next = self.parse_section(offset)?;
@@ -394,18 +408,32 @@ impl<'a> Loader<'a> {
         let first = lexer.peek_token()?;
         match &first.value {
             Token::Keyword(kw) if kw == b"xref" => self.parse_classic_table(lexer, offset),
-            Token::Integer(_) => self.parse_xref_stream(offset),
+            Token::Integer(_) => self.parse_xref_stream(offset, None),
             _ => Err(StructureError::NoUsableXref),
         }
     }
 
     /// Classic `xref` table. Entries are read token-wise, which naturally
     /// tolerates the 19/21-byte CR/LF-sloppy variants PDFium accepts.
+    /// Collect per-section entries on the audit path; an empty slice on the
+    /// fast render path (no per-entry retention there).
+    fn preserved_entries(
+        &self,
+        entries: impl Iterator<Item = RevisionXrefEntry>,
+    ) -> Arc<[RevisionXrefEntry]> {
+        if self.limits.preserve_section_entries {
+            entries.collect::<Vec<_>>().into()
+        } else {
+            Vec::new().into()
+        }
+    }
+
     fn parse_classic_table(
         &mut self,
         mut lexer: Lexer<'a>,
         offset: u64,
     ) -> Result<Option<u64>, StructureError> {
+        let recovery_start = self.recovery.len();
         let _ = lexer.next_token()?; // consume `xref`
         let mut staged: Vec<(u32, u16, ObjectLocation)> = Vec::new();
         let trailer_dict: Option<Dictionary> = loop {
@@ -501,13 +529,36 @@ impl<'a> Loader<'a> {
 
         // Table entries first (they take precedence over the hybrid
         // /XRefStm entries of the same revision — PDFium's merge order).
-        for (n, g, loc) in staged {
-            self.record(n, g, loc);
+        for (n, g, loc) in &staged {
+            self.record(*n, *g, *loc);
         }
         let trailer_dict = Arc::new(trailer_dict);
-        self.revisions.push(Revision {
-            xref_offset: offset,
+        let prev = trailer_dict
+            .get(self.names.known.prev)
+            .and_then(PdfObject::as_int)
+            .and_then(|v| u64::try_from(v).ok());
+        let entries =
+            self.preserved_entries(staged.iter().map(|&(number, generation, location)| {
+                RevisionXrefEntry {
+                    id: ObjectId::new(number, generation),
+                    location,
+                }
+            }));
+        let classic_idx = self.sections.len();
+        let recovery = self.section_recovery(recovery_start);
+        let mut entry_counts = crate::XrefEntryCounts::default();
+        for &(_, _, location) in &staged {
+            entry_counts.tally(location);
+        }
+        self.sections.push(XrefSection {
+            offset,
+            kind: XrefSectionKind::Classic,
+            entry_counts,
+            entries,
             trailer: Arc::clone(&trailer_dict),
+            prev,
+            auxiliary_of: None,
+            recovery,
         });
 
         // Hybrid-reference hop: /XRefStm within this revision.
@@ -520,21 +571,32 @@ impl<'a> Loader<'a> {
         {
             // Failures in the hybrid stream are tolerated: the classic
             // table alone may still be a usable view.
-            if let Err(e) = self.parse_xref_stream(stm_off) {
+            let auxiliary_of = u32::try_from(classic_idx).ok();
+            if let Err(e) = self.parse_xref_stream(stm_off, auxiliary_of) {
                 self.recovery.push(RecoveryEvent::Other(format!(
                     "hybrid /XRefStm at {stm_off} unusable: {e}"
                 )));
+                // The failure note belongs to this revision too: re-attach
+                // the section's recovery log now that it exists.
+                let recovery = self.section_recovery(recovery_start);
+                if let Some(classic) = self.sections.get_mut(classic_idx) {
+                    classic.recovery = recovery;
+                }
             }
         }
 
-        Ok(trailer_dict
-            .get(self.names.known.prev)
-            .and_then(PdfObject::as_int)
-            .and_then(|v| u64::try_from(v).ok()))
+        Ok(prev)
     }
 
-    /// Cross-reference stream (ISO 32000-1 §7.5.8).
-    fn parse_xref_stream(&mut self, offset: u64) -> Result<Option<u64>, StructureError> {
+    /// Cross-reference stream (ISO 32000-1 §7.5.8). `auxiliary_of` carries
+    /// the hybrid-reference pairing: the classic table's section index when
+    /// this stream was reached via `/XRefStm`, `None` on the primary chain.
+    fn parse_xref_stream(
+        &mut self,
+        offset: u64,
+        auxiliary_of: Option<u32>,
+    ) -> Result<Option<u64>, StructureError> {
+        let recovery_start = self.recovery.len();
         let window = &self.file[offset as usize..];
         let mut parser = ObjectParser::new(window, offset, &self.limits.syntax, self.names);
         // /Length can in principle be indirect; unresolvable pre-xref, so
@@ -616,6 +678,16 @@ impl<'a> Loader<'a> {
 
         let stride = usize::try_from(total_width).unwrap_or(usize::MAX);
         let mut seg_start = 0usize;
+        // Audit path only: retain what this section declared. `None` on the
+        // fast path, where no per-section allocation happens at all. The
+        // counters below run on both paths: the facts layer reports counts,
+        // never entries.
+        let mut staged: Option<Vec<RevisionXrefEntry>> = if self.limits.preserve_section_entries {
+            Some(Vec::new())
+        } else {
+            None
+        };
+        let mut entry_counts = crate::XrefEntryCounts::default();
         for (start_num, count) in indices {
             let count_usize = count as usize;
             let Some(seg_len) = count_usize.checked_mul(stride) else {
@@ -631,26 +703,48 @@ impl<'a> Loader<'a> {
             for i in 0..count_usize {
                 let number = start_num.saturating_add(i as u32);
                 let entry = &seg[i * stride..(i + 1) * stride];
-                self.record_stream_entry(entry, &widths, number);
+                if let Some((generation, location)) = Self::decode_stream_entry(entry, &widths) {
+                    self.record(number, generation, location);
+                    entry_counts.tally(location);
+                    if let Some(staged) = staged.as_mut() {
+                        staged.push(RevisionXrefEntry {
+                            id: ObjectId::new(number, generation),
+                            location,
+                        });
+                    }
+                }
             }
             seg_start = seg_end;
         }
 
         let dict_arc = Arc::new(dict.clone());
-        self.revisions.push(Revision {
-            xref_offset: offset,
-            trailer: dict_arc,
-        });
-
-        Ok(dict
+        let prev = dict
             .get(self.names.known.prev)
             .and_then(PdfObject::as_int)
-            .and_then(|v| u64::try_from(v).ok()))
+            .and_then(|v| u64::try_from(v).ok());
+        let entries: Arc<[RevisionXrefEntry]> = match staged {
+            Some(staged) => staged.into(),
+            None => Vec::new().into(),
+        };
+        let recovery = self.section_recovery(recovery_start);
+        self.sections.push(XrefSection {
+            offset,
+            kind: XrefSectionKind::Stream,
+            entry_counts,
+            entries,
+            trailer: dict_arc,
+            prev,
+            auxiliary_of,
+            recovery,
+        });
+
+        Ok(prev)
     }
 
     /// Decode one xref-stream entry (ISO 32000-1 Table 18 / PDFium
-    /// `ProcessCrossRefStreamEntry`).
-    fn record_stream_entry(&mut self, entry: &[u8], widths: &[u64], number: u32) {
+    /// `ProcessCrossRefStreamEntry`). `None` for unknown entry types and
+    /// out-of-range field values: skip the entry, keep the section (PDFium).
+    fn decode_stream_entry(entry: &[u8], widths: &[u64]) -> Option<(u16, ObjectLocation)> {
         // Field offsets are a property of `W`, not of the entry, so walk the
         // prefix once here instead of re-summing it inside `field` for each of
         // the three fields of every entry in the table.
@@ -672,39 +766,33 @@ impl<'a> Loader<'a> {
         let f2 = field(2);
         match entry_type {
             0 => {
-                if let Ok(generation) = u16::try_from(f2) {
-                    self.record(number, generation, ObjectLocation::Free);
-                }
+                let generation = u16::try_from(f2).ok()?;
+                Some((generation, ObjectLocation::Free))
             }
             1 => {
-                if let Ok(generation) = u16::try_from(f2) {
-                    self.record(number, generation, ObjectLocation::Offset(f1));
-                }
+                let generation = u16::try_from(f2).ok()?;
+                Some((generation, ObjectLocation::Offset(f1)))
             }
             2 => {
-                if let (Ok(container), Ok(index)) = (u32::try_from(f1), u32::try_from(f2)) {
-                    // Generation of in-stream objects is 0 by definition.
-                    self.record(
-                        number,
-                        0,
-                        ObjectLocation::InObjectStream { container, index },
-                    );
-                }
+                let container = u32::try_from(f1).ok()?;
+                let index = u32::try_from(f2).ok()?;
+                // Generation of in-stream objects is 0 by definition.
+                Some((0, ObjectLocation::InObjectStream { container, index }))
             }
             // Unknown types: skip the entry, keep the section (PDFium).
-            _ => {}
+            _ => None,
         }
     }
 
-    /// Resolve the current trailer view from the merged revisions:
+    /// Resolve the current trailer view from the merged sections:
     /// newest-first, first hit wins per key.
     fn resolve_trailer(&self) -> Option<Trailer> {
         let mut root: Option<ObjectId> = None;
         let mut info: Option<ObjectId> = None;
         let mut encrypt: Option<ObjectId> = None;
         let mut file_id: Option<[PdfString; 2]> = None;
-        for rev in &self.revisions {
-            let d = &rev.trailer;
+        for section in &self.sections {
+            let d = &section.trailer;
             if root.is_none() {
                 root = d
                     .get(self.names.known.root)
@@ -729,9 +817,9 @@ impl<'a> Loader<'a> {
         }
         let root = root?;
         let dict = self
-            .revisions
+            .sections
             .first()
-            .map(|r| Arc::clone(&r.trailer))
+            .map(|s| Arc::clone(&s.trailer))
             .unwrap_or_else(|| Arc::new(Dictionary::new()));
         Some(Trailer {
             dict,
@@ -878,25 +966,39 @@ impl<'a> Loader<'a> {
         }
         // Later trailers are later revisions: iterate newest-last →
         // register newest first for the first-hit-wins trailer resolution.
+        // These sections are synthesized (offset 0, no entries): a scan has
+        // no section structure, only trailer dictionaries to resolve.
         for dict in trailer_dicts.into_iter().rev() {
-            self.revisions.push(Revision {
-                xref_offset: 0,
+            self.sections.push(XrefSection {
+                offset: 0,
+                kind: XrefSectionKind::Classic,
+                entry_counts: crate::XrefEntryCounts::default(),
+                entries: Vec::new().into(),
                 trailer: Arc::new(dict),
+                prev: None,
+                auxiliary_of: None,
+                recovery: Vec::new().into(),
             });
         }
 
         // No trailer with /Root anywhere: hunt for a /Type /Catalog object.
         let root_known = self
-            .revisions
+            .sections
             .iter()
-            .any(|r| r.trailer.get(self.names.known.root).is_some());
+            .any(|s| s.trailer.get(self.names.known.root).is_some());
         if !root_known && let Some((id, _)) = self.find_catalog() {
             let dict = Dictionary::from_pairs([(self.names.known.root, PdfObject::Reference(id))]);
-            self.revisions.insert(
+            self.sections.insert(
                 0,
-                Revision {
-                    xref_offset: 0,
+                XrefSection {
+                    offset: 0,
+                    kind: XrefSectionKind::Classic,
+                    entry_counts: crate::XrefEntryCounts::default(),
+                    entries: Vec::new().into(),
                     trailer: Arc::new(dict),
+                    prev: None,
+                    auxiliary_of: None,
+                    recovery: Vec::new().into(),
                 },
             );
         }

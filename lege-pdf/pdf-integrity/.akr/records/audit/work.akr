@@ -15,7 +15,7 @@ record audit.work.compare-command/1 : work {
 
 record audit.work.edit-provenance-facts/1 : work {
     title "Direct-edit provenance facts: touch-up markers and document lineage identifiers"
-    state proposed
+    state completed
     intent """
         Two neutral fact families the M1 inventory currently omits, both cheap to reach and both decisive in the derived-document case.
 
@@ -72,7 +72,7 @@ record audit.work.intra-run-font-fragmentation/1 : work {
 
 record audit.work.m1-plan/1 : work {
     title "M1 plan of record"
-    state proposed
+    state completed
     intent """
         Order of work: (1) define the AuditReport JSON schema and Finding/EvidenceStrength types in the new pdf-forensics crate; (2) extend pdf-read's existing doctor output with the missing inventories (annotation identity fields, signature dictionaries and ByteRange, per-page representation metrics from SemImage/SemFont counts, image coverage and effective DPI); (3) implement the PageRepresentation classifier over prepare_rgb_image_page and the semantic page; (4) wire a `pdf-cli audit` subcommand emitting JSON and terminal output; (5) build the ten M1 acceptance fixtures in pdf-test-support plus real captured producer outputs. No new parsing work is required for M1 — it is assembly and classification over facts pdf-read already reaches.
         """
@@ -83,7 +83,7 @@ record audit.work.m1-plan/1 : work {
 
 record audit.work.m2-plan/1 : work {
     title "M2 plan of record"
-    state proposed
+    state completed
     intent """
         Order of work: (1) land the XrefSection refactor in pdf-structure (lege repo) so section entries survive loading; (2) land PrefixSource in pdf-source; (3) build LogicalRevision grouping in pdf-forensics — hybrid /XRefStm pairing, boundary confidence, linearization-stub filtering, startxref-paired EOF boundary detection; (4) object-change classification (Added/Redefined/Freed/RepeatedIdentically) with raw and semantic hashes and object-role mapping; (5) historical snapshot replay through DocumentSnapshot::open over PrefixSource; (6) fixtures for every xref variant plus the qpdf differential oracle. Steps 1–2 are lege-pdf upgrades tracked as their own work records; the rest is pdf-forensics.
         """
@@ -94,7 +94,7 @@ record audit.work.m2-plan/1 : work {
 
 record audit.work.m3-plan/1 : work {
     title "M3 plan of record"
-    state proposed
+    state completed
     intent """
         Order of work: (1) revision text diff over SemanticPage word/glyph output; (2) deterministic CPU render diff with connected changed-region extraction; (3) annotation-on/annotation-off diff using AnnotationMode::None vs StaticAppearances, intersected with glyph boxes, plus appearance-stream text extraction; (4) PageAnnotation forensic-metadata fields in pdf-document (lege upgrade); (5) painter-order occlusion candidate detection over CompiledPage and the attribution map — cheap geometry first, then high-resolution rasterization of candidate regions only; (6) optional PageTrace op-provenance sidecar behind an audit-mode flag (lege upgrade); (7) evidence artifact writer (PNGs, region crops, object-history text). Ship (1)-(3) before starting (5); the annotation path alone is the quickest high-value feature.
         """
@@ -105,7 +105,7 @@ record audit.work.m3-plan/1 : work {
 
 record audit.work.m4-plan/1 : work {
     title "M4 plan of record"
-    state proposed
+    state completed
     intent """
         Order of work: (1) structural layer — /FT /Sig discovery, signature dictionary parsing, strict ByteRange shape/order/bounds validation against raw bytes, revision association, post-signature object-change lists; (2) DocMDP and FieldMDP policy parsing and compliance evaluation; (3) crypto layer behind the crate chosen by the open crypto-crate question — CMS/CAdES digest verification first, then certificate chain, trust and timestamp reporting. The structural layer must not depend on the crypto layer compiling: layer one ships even if the crate decision slips.
         """
@@ -121,7 +121,7 @@ record audit.work.m5-plan/1 : work {
         Order of work, gated on the M1-M4 utility already proving useful: (1) stand up the corpus-sweep harness and false-positive measurement over the legitimate corpus before writing any heuristic; (2) font-layer heuristics (font-program hashes, per-line font-identity outliers, subset glyph-coverage anomalies) — SemFont already preserves everything needed, no OCR; (3) text-layout heuristics (spacing, matrix, TJ-style outliers); (4) serialization heuristics (stream filters, object-number and resource-name clusters); (5) metadata timeline checks; (6) image-statistics outliers (DPI, codec, quantization, colorspace); (7) producer fingerprints, as corroboration only, never primary evidence. Each heuristic lands with its measured per-producer false-positive rate or it does not land.
         """
     note """
-        This is the most speculative milestone. If M3 evidence output is already serving real triage well, it is acceptable to stop before M5 entirely.
+        Operator timing decision (2026-10-07): the operator has no fraudulent/edited PDFs, and building a synthetic edited-PDF corpus with a sufficiently automatable editor is deferred until later. M5 heuristic work that needs seeded edits or the validation corpus waits; corpus-independent work may proceed.
         """
     implements [ @audit.decision.product-framing ]
     plan_of_record [ @audit.milestone.m5-consistency-heuristics ]

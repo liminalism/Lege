@@ -7,7 +7,7 @@ use std::io::Write as _;
 use pdf_object::{NameTable, ObjectId};
 use pdf_source::OwnedBytesSource;
 use pdf_structure::{
-    ObjectLocation, RecoveryEvent, StructureError, StructureLimits, load_structure,
+    ObjectLocation, RecoveryEvent, StructureError, StructureLimits, XrefSectionKind, load_structure,
 };
 
 /// Minimal fixture assembler: append objects, remember offsets, then emit a
@@ -72,6 +72,17 @@ fn load(bytes: Vec<u8>) -> pdf_structure::DocumentStructure {
     load_structure(&source, &names, &limits).expect("load_structure failed")
 }
 
+/// Audit-path load: per-section entries are materialized.
+fn load_audit(bytes: Vec<u8>) -> pdf_structure::DocumentStructure {
+    let names = NameTable::new();
+    let limits = StructureLimits {
+        preserve_section_entries: true,
+        ..Default::default()
+    };
+    let source = OwnedBytesSource::new(bytes);
+    load_structure(&source, &names, &limits).expect("load_structure failed")
+}
+
 fn basic_two_object_pdf() -> Vec<u8> {
     let mut pdf = MiniPdf::new();
     pdf.add_object(1, "<</Type/Catalog/Pages 2 0 R>>");
@@ -99,7 +110,7 @@ fn classic_table_loads() {
         structure.xref.locate(ObjectId::new(0, 0)),
         ObjectLocation::Free
     );
-    assert_eq!(structure.revisions.len(), 1);
+    assert_eq!(structure.sections.len(), 1);
 }
 
 #[test]
@@ -289,7 +300,7 @@ fn incremental_update_shadows_and_frees() {
     .unwrap();
 
     let structure = load(buf);
-    assert_eq!(structure.revisions.len(), 2);
+    assert_eq!(structure.sections.len(), 2);
     // Object 2: the update's offset wins over the base's.
     let loc2 = structure.xref.locate(ObjectId::new(2, 0));
     assert_eq!(loc2, ObjectLocation::Offset(new2_off));
@@ -942,4 +953,257 @@ fn a_subsection_declared_at_one_but_starting_with_the_free_head_is_corrected() {
         "object 1 is the catalog, not a free entry"
     );
     assert_eq!(at(2), Some(pages), "object 2 is the page tree");
+}
+
+#[test]
+fn audit_path_preserves_classic_section_entries() {
+    // Incremental update over a three-object base: the update redefines
+    // object 2 and frees object 3.
+    let mut pdf = MiniPdf::new();
+    pdf.add_object(1, "<</Type/Catalog/Pages 2 0 R>>");
+    let old2 = pdf.add_object(2, "<</Version 1>>");
+    pdf.add_object(3, "<</Keep 1>>");
+    let mut buf = pdf.finish_classic("/Root 1 0 R");
+    let base_xref = buf.windows(4).position(|w| w == b"xref").unwrap();
+    let new2_off = buf.len() as u64;
+    write!(buf, "2 0 obj\n<</Version 2>>\nendobj\n").unwrap();
+    let upd_xref = buf.len();
+    write!(
+        buf,
+        "xref\n2 2\n{new2_off:010} 00000 n\r\n0000000000 00001 f\r\n"
+    )
+    .unwrap();
+    write!(
+        buf,
+        "trailer\n<</Size 4/Root 1 0 R/Prev {base_xref}>>\nstartxref\n{upd_xref}\n%%EOF"
+    )
+    .unwrap();
+
+    let structure = load_audit(buf);
+    assert_eq!(structure.sections.len(), 2);
+    // Newest first; the update links back to the base via /Prev.
+    let (update, base) = (&structure.sections[0], &structure.sections[1]);
+    assert_eq!(update.offset, upd_xref as u64);
+    assert_eq!(update.kind, XrefSectionKind::Classic);
+    assert_eq!(update.prev, Some(base_xref as u64));
+    assert_eq!(base.offset, base_xref as u64);
+    assert_eq!(base.kind, XrefSectionKind::Classic);
+    assert_eq!(base.prev, None);
+    // The update introduced exactly object 2 (redefined) and object 3
+    // (freed) — the base's shadowed object 2 is not folded in.
+    let update_entries: Vec<(ObjectId, ObjectLocation)> =
+        update.entries.iter().map(|e| (e.id, e.location)).collect();
+    assert_eq!(
+        update_entries,
+        vec![
+            (ObjectId::new(2, 0), ObjectLocation::Offset(new2_off)),
+            (ObjectId::new(3, 1), ObjectLocation::Free),
+        ]
+    );
+    // The base kept its own object 2 at the old offset.
+    let base_two = base
+        .entries
+        .iter()
+        .find(|e| e.id == ObjectId::new(2, 0))
+        .expect("base object 2");
+    assert_eq!(base_two.location, ObjectLocation::Offset(old2));
+    // The merged view is unchanged: the update still wins.
+    assert_eq!(
+        structure.xref.locate(ObjectId::new(2, 0)),
+        ObjectLocation::Offset(new2_off)
+    );
+}
+
+#[test]
+fn section_entry_counts_recorded_on_both_paths() {
+    // Fast path: no per-section entries, but the counters still run — the
+    // facts layer reports counts, never entries.
+    let fast = load(basic_two_object_pdf());
+    assert!(fast.sections[0].entries.is_empty());
+    assert_eq!(fast.sections[0].entry_counts.total, 3);
+    assert_eq!(fast.sections[0].entry_counts.live, 2);
+    assert_eq!(fast.sections[0].entry_counts.free, 1);
+    assert_eq!(fast.sections[0].entry_counts.compressed, 0);
+    // Audit path: same counters, alongside the materialized entries.
+    let audit = load_audit(basic_two_object_pdf());
+    assert_eq!(audit.sections[0].entries.len(), 3);
+    assert_eq!(
+        audit.sections[0].entry_counts,
+        fast.sections[0].entry_counts
+    );
+}
+
+#[test]
+fn fast_path_leaves_section_entries_empty() {
+    let structure = load(basic_two_object_pdf());
+    assert_eq!(structure.sections.len(), 1);
+    let section = &structure.sections[0];
+    assert!(section.entries.is_empty());
+    // Section metadata is still recorded: source offset, kind, linkage.
+    assert!(section.offset > 0);
+    assert_eq!(section.kind, XrefSectionKind::Classic);
+    assert_eq!(section.prev, None);
+    assert!(section.auxiliary_of.is_none());
+    assert!(matches!(
+        structure.xref.locate(ObjectId::new(1, 0)),
+        ObjectLocation::Offset(_)
+    ));
+}
+
+#[test]
+fn hybrid_xrefstm_section_links_to_its_table() {
+    let mut pdf = MiniPdf::new();
+    let off1 = pdf.add_object(1, "<</Type/Catalog/Pages 2 0 R>>");
+    let off2_table = pdf.add_object(2, "<</Type/Pages/Kids[]/Count 0>>");
+    let off3 = pdf.add_object(3, "<</OnlyInStream 1>>");
+    let mut buf = pdf.buf;
+
+    let stm_off = buf.len() as u64;
+    let rows: Vec<[u8; 4]> = vec![
+        [0, 0, 0, 255],
+        [1, (off1 >> 8) as u8, off1 as u8, 0],
+        [1, 0x30, 0x39, 0], // object 2 → bogus offset 12345
+        [1, (off3 >> 8) as u8, off3 as u8, 0],
+    ];
+    let data: Vec<u8> = rows.iter().flatten().copied().collect();
+    write!(
+        buf,
+        "4 0 obj\n<</Type/XRef/Size 4/W[1 2 1]/Length {}>>\nstream\n",
+        data.len()
+    )
+    .unwrap();
+    buf.extend_from_slice(&data);
+    write!(buf, "\nendstream\nendobj\n").unwrap();
+
+    let xref_off = buf.len();
+    write!(
+        buf,
+        "xref\n0 3\n0000000000 65535 f\r\n{off1:010} 00000 n\r\n{off2_table:010} 00000 n\r\n"
+    )
+    .unwrap();
+    write!(
+        buf,
+        "trailer\n<</Size 4/Root 1 0 R/XRefStm {stm_off}>>\nstartxref\n{xref_off}\n%%EOF"
+    )
+    .unwrap();
+
+    let structure = load_audit(buf);
+    assert_eq!(structure.sections.len(), 2);
+    let (table, stream) = (&structure.sections[0], &structure.sections[1]);
+    assert_eq!(table.kind, XrefSectionKind::Classic);
+    assert_eq!(table.offset, xref_off as u64);
+    assert!(table.auxiliary_of.is_none());
+    assert_eq!(stream.kind, XrefSectionKind::Stream);
+    assert_eq!(stream.offset, stm_off);
+    assert_eq!(stream.auxiliary_of, Some(0));
+    // The stream section retains its own (shadowed) claim on object 2.
+    let claimed = stream
+        .entries
+        .iter()
+        .find(|e| e.id == ObjectId::new(2, 0))
+        .expect("stream object 2");
+    assert_eq!(claimed.location, ObjectLocation::Offset(12345));
+    // ...while the merged map still prefers the table.
+    assert_eq!(
+        structure.xref.locate(ObjectId::new(2, 0)),
+        ObjectLocation::Offset(off2_table)
+    );
+}
+
+#[test]
+fn audit_path_preserves_xref_stream_entries() {
+    let (buf, off1, off2) = xref_stream_pdf(false);
+    let structure = load_audit(buf);
+    assert_eq!(structure.sections.len(), 1);
+    let section = &structure.sections[0];
+    assert_eq!(section.kind, XrefSectionKind::Stream);
+    assert_eq!(section.prev, None);
+    assert!(section.auxiliary_of.is_none());
+    let entries: Vec<(ObjectId, ObjectLocation)> =
+        section.entries.iter().map(|e| (e.id, e.location)).collect();
+    assert_eq!(
+        entries,
+        vec![
+            (ObjectId::new(0, 255), ObjectLocation::Free),
+            (ObjectId::new(1, 0), ObjectLocation::Offset(off1)),
+            (ObjectId::new(2, 0), ObjectLocation::Offset(off2)),
+            (ObjectId::new(3, 0), ObjectLocation::Offset(section.offset)),
+        ]
+    );
+}
+
+#[test]
+fn section_recovery_events_are_attributed() {
+    // An xref stream whose /Length lies: repaired by endstream scan.
+    let mut pdf = MiniPdf::new();
+    let off1 = pdf.add_object(1, "<</Type/Catalog/Pages 2 0 R>>");
+    let off2 = pdf.add_object(2, "<</Type/Pages/Kids[]/Count 0>>");
+    let mut buf = pdf.buf;
+    let xref_off = buf.len() as u64;
+    let rows: Vec<[u8; 4]> = vec![
+        [0, 0, 0, 255],
+        [1, (off1 >> 8) as u8, off1 as u8, 0],
+        [1, (off2 >> 8) as u8, off2 as u8, 0],
+        [1, (xref_off >> 8) as u8, xref_off as u8, 0],
+    ];
+    let data: Vec<u8> = rows.iter().flatten().copied().collect();
+    write!(
+        buf,
+        "3 0 obj\n<</Type/XRef/Size 4/W[1 2 1]/Root 1 0 R/Length 3>>\nstream\n"
+    )
+    .unwrap();
+    buf.extend_from_slice(&data);
+    write!(buf, "\nendstream\nendobj\nstartxref\n{xref_off}\n%%EOF").unwrap();
+
+    let structure = load_audit(buf);
+    assert_eq!(structure.sections.len(), 1);
+    // The length repair is attributed to the section that needed it...
+    assert!(structure.sections[0].recovery.iter().any(|e| matches!(
+        e,
+        RecoveryEvent::StreamLengthRepaired {
+            declared: Some(3),
+            actual: 16,
+            ..
+        }
+    )));
+    // ...and still present in the snapshot-wide log.
+    assert!(
+        structure
+            .recovery
+            .iter()
+            .any(|e| matches!(e, RecoveryEvent::StreamLengthRepaired { .. }))
+    );
+}
+
+#[test]
+fn rebuilt_sections_are_synthetic_and_entryless() {
+    let mut pdf = MiniPdf::new();
+    pdf.add_object(1, "<</Type/Catalog/Pages 2 0 R>>");
+    pdf.add_object(2, "<</Type/Pages/Kids[]/Count 0>>");
+    let mut buf = pdf.buf;
+    write!(buf, "trailer\n<</Size 3/Root 1 0 R>>\n%%EOF").unwrap();
+
+    let structure = load_audit(buf);
+    assert!(
+        structure
+            .recovery
+            .iter()
+            .any(|e| matches!(e, RecoveryEvent::XrefRebuilt))
+    );
+    assert!(!structure.sections.is_empty());
+    // Synthesized by the scan, even on the audit path: no source offset,
+    // no section entries — the merged map alone carries what the scan found.
+    assert!(
+        structure
+            .sections
+            .iter()
+            .all(|s| s.offset == 0 && s.entries.is_empty() && s.auxiliary_of.is_none())
+    );
+    // ...and nothing to count: a scan has no section structure.
+    assert!(
+        structure
+            .sections
+            .iter()
+            .all(|s| s.entry_counts == pdf_structure::XrefEntryCounts::default())
+    );
 }

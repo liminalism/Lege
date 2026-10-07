@@ -29,10 +29,14 @@ fn facts() -> DocumentFacts {
             xref_rebuilt: false,
             xref_section_count: 1,
         },
+        revisions: Availability::unavailable(UnavailableReason::NotImplemented, "test fixture"),
         header: Availability::available(pdf_forensics::HeaderFacts {
             major: 1,
             minor: 7,
             header_offset: 0,
+        }),
+        linearization: Availability::available(pdf_forensics::LinearizationFacts {
+            linearized: false,
         }),
         lineage: pdf_forensics::LineageFacts::default(),
         signatures: Availability::available(pdf_forensics::SignatureInventoryFacts::default()),
@@ -42,6 +46,7 @@ fn facts() -> DocumentFacts {
         pages: Availability::unavailable(UnavailableReason::NotImplemented, "test fixture"),
         fonts: Availability::unavailable(UnavailableReason::NotImplemented, "test fixture"),
         images: Availability::unavailable(UnavailableReason::NotImplemented, "test fixture"),
+        edit_markers: Availability::unavailable(UnavailableReason::NotImplemented, "test fixture"),
         pending: Vec::new(),
     }
 }

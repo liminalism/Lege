@@ -3,11 +3,24 @@ project pdf-integrity
 
 record audit.question.crypto-crate/1 : question {
     title "Which cryptographic implementation backs M4 layer two?"
-    state open
+    state superseded
     question """
         Which mature Rust implementation handles CMS/CAdES parsing, digest verification, certificate chains and trust for signature layer two — the RustCrypto cms/x509-cert stack, rasn-based CMS, something over ring/aws-lc-rs, or shelling out to an external verifier for trust decisions only? Criteria: CAdES coverage, timestamp (RFC 3161) support, maintenance health, and how a trust store gets configured on an offline machine.
         """
     blocks [ @audit.milestone.m4-signatures ]
+}
+
+record audit.question.crypto-crate/2 : question {
+    title "Which cryptographic implementation backs M4 layer two?"
+    state resolved
+    question """
+        Which mature Rust implementation handles CMS/CAdES parsing, digest verification, certificate chains and trust for signature layer two — the RustCrypto cms/x509-cert stack, rasn-based CMS, something over ring/aws-lc-rs, or shelling out to an external verifier for trust decisions only? Criteria: CAdES coverage, timestamp (RFC 3161) support, maintenance health, and how a trust store gets configured on an offline machine.
+        """
+    resolution """
+        RustCrypto stack: `cms` + `x509-cert` + `rsa`/`ecdsa` + `sha2`. Timestamp verification and trust-anchor validation deferred out of M4 as explicit non-claims. See @audit.decision.crypto-crate-choice.
+        """
+    blocks [ @audit.milestone.m4-signatures ]
+    supersedes [ @audit.question.crypto-crate/1 ]
 }
 
 record audit.question.encrypted-input-policy/1 : question {
@@ -56,11 +69,24 @@ record audit.question.forensics-crate-home/2 : question {
 
 record audit.question.heuristic-validation-corpus/1 : question {
     title "How big must the legitimate corpus be before M5 heuristics can ship?"
-    state open
+    state superseded
     question """
         The M5 acceptance budget is a per-producer false-positive rate under 1 percent, but a rate needs a denominator: how many documents per producer, across how many producer versions, before that number means anything? And can the existing 11k-PDF oracle-sweep corpus be reused as the legitimate baseline, given it was collected for rendering coverage rather than provenance labeling?
         """
     blocks [ @audit.milestone.m5-consistency-heuristics ]
+}
+
+record audit.question.heuristic-validation-corpus/2 : question {
+    title "How big must the legitimate corpus be before M5 heuristics can ship?"
+    state resolved
+    question """
+        The M5 acceptance budget is a per-producer false-positive rate under 1 percent, but a rate needs a denominator: how many documents per producer, across how many producer versions, before that number means anything? And can the existing 11k-PDF oracle-sweep corpus be reused as the legitimate baseline, given it was collected for rendering coverage rather than provenance labeling?
+        """
+    resolution """
+        Minimum 200 labeled documents per producer family, 8+ families, at most 1 miss per sample; the absent 11k sweep corpus is not the baseline. See @audit.decision.heuristic-corpus-size.
+        """
+    blocks [ @audit.milestone.m5-consistency-heuristics ]
+    supersedes [ @audit.question.heuristic-validation-corpus/1 ]
 }
 
 record audit.question.ocr-accuracy-sufficient/1 : question {

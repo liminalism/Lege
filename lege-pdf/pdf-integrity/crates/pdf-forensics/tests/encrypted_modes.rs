@@ -4,14 +4,11 @@
 //! and an audit that could not read the document must not resemble one that
 //! read it and found nothing.
 //!
-//! **This check is not yet fully satisfied.** The structure-only half is
-//! covered here. The other half — supplying a correct password and getting a
-//! full audit of the same file — needs a fixture encrypted under a *non-empty*
-//! user password on a scheme the standard handler supports; the available
-//! fixtures are an RC4 document whose empty user password validates (so it
-//! opens with no password) and an AES-256 document the handler declines
-//! outright (so no password opens it). That fixture is corpus work under
-//! `@audit.track.fixture-corpus`.
+//! Both halves are covered here: the structure-only audit of a document that
+//! does not open (a declined scheme, or a supported scheme without its
+//! password), and the password upgrade — the same RC4 V2/R3 file audited
+//! without a password (structure-only, decryption-gated sections unavailable)
+//! and again with the correct non-empty user password (full, pages available).
 #![allow(clippy::unwrap_used, reason = "a failed unwrap is a failed test")]
 
 use pdf_forensics::{
@@ -127,4 +124,48 @@ fn a_structure_only_run_emits_no_finding_it_could_not_support() {
         );
     }
     report.validate().unwrap();
+}
+
+#[test]
+fn supplying_the_user_password_upgrades_the_same_file_to_full() {
+    // RC4 V2/R3 whose /U validates for a non-empty user password: without it
+    // the file does not open; with it the same bytes audit in full.
+    let password = "correct-horse-battery";
+    let bytes = builder::encrypted_with_user_password(password);
+
+    let without = audit_bytes(&bytes, None);
+    without.validate().unwrap();
+    assert_eq!(without.analysis_mode, AnalysisMode::StructureOnly);
+    assert!(matches!(
+        without.document.parse.state,
+        OpenState::Failed { .. }
+    ));
+    let encryption = without
+        .document
+        .encryption
+        .value()
+        .unwrap()
+        .as_ref()
+        .unwrap();
+    assert_eq!(encryption.version, 2);
+    assert_eq!(encryption.revision, 3);
+    assert!(
+        !encryption.user_password_empty,
+        "a non-empty user password is required, which is why this is structure-only"
+    );
+    assert!(matches!(
+        without.document.pages,
+        Availability::Unavailable {
+            reason: UnavailableReason::Encrypted,
+            ..
+        }
+    ));
+    assert_eq!(without.disposition, Disposition::Inconclusive);
+
+    let with = audit_bytes(&bytes, Some(password));
+    with.validate().unwrap();
+    assert_eq!(with.analysis_mode, AnalysisMode::Full);
+    assert_eq!(with.document.parse.state, OpenState::Clean);
+    assert!(with.document.pages.is_available());
+    assert_eq!(with.document.pages.value().unwrap().len(), 1);
 }

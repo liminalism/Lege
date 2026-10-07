@@ -577,3 +577,50 @@ fn blank_page_fixture() -> Vec<u8> {
     b.finish_classic_xref("/Root 1 0 R");
     b.into_bytes()
 }
+
+#[test]
+fn linearized_document_is_detected() {
+    let report = examine_bytes(builder::linearized());
+    assert!(
+        matches!(report.open, OpenOutcome::Ok),
+        "open: {:?}",
+        report.open
+    );
+    assert!(report.linearized, "first-object /Linearized marker");
+    assert!(report.summary().contains("linearized: true"));
+}
+
+/// A valid `/Linearized` dict that is *not* the first object: only the
+/// first object can be the linearization parameter dictionary.
+fn linearized_decoy_fixture() -> Vec<u8> {
+    let mut b = PdfBuilder::new();
+    b.add_object(1, "<</Type/Catalog/Pages 2 0 R>>");
+    b.add_object(
+        2,
+        "<</Type/Pages/Kids[3 0 R]/Count 1/MediaBox[0 0 100 100]>>",
+    );
+    b.add_object(3, "<</Type/Page/Parent 2 0 R>>");
+    b.add_object(4, "<</Linearized 1>>");
+    b.finish_classic_xref("/Root 1 0 R");
+    b.into_bytes()
+}
+
+#[test]
+fn ordinary_and_unopenable_documents_are_not_linearized() {
+    let report = examine_bytes(builder::multipage_classic(1));
+    assert!(!report.linearized);
+    assert!(report.summary().contains("linearized: false"));
+
+    // The marker in a later object is not linearization.
+    let report = examine_bytes(linearized_decoy_fixture());
+    assert!(
+        matches!(report.open, OpenOutcome::Ok),
+        "open: {:?}",
+        report.open
+    );
+    assert!(!report.linearized);
+
+    // Nor is there one in a file with no structure at all.
+    let report = examine_bytes(b"this is not a pdf at all".to_vec());
+    assert!(!report.linearized);
+}

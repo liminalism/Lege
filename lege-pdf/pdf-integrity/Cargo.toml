@@ -7,11 +7,10 @@
 # @audit.decision.forensics-repo-home.
 #
 #   * crates/pdf-forensics — report schema, findings policy, interpretation
-#
-# The lege-pdf-audit binary joins once it has facts to print.
+#   * crates/lege-pdf-audit — read-only `inspect` CLI over pdf-forensics
 [workspace]
 resolver = "3"
-members = ["crates/pdf-forensics"]
+members = ["crates/pdf-forensics", "crates/lege-pdf-audit"]
 
 [workspace.package]
 version = "0.1.0"
@@ -23,6 +22,21 @@ license = "Apache-2.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
 sha2 = "0.11.0"
+# M4 signature crypto layer (see @audit.decision.crypto-crate-choice): RustCrypto
+# CMS parsing plus X.509. Pure Rust, no system libraries. `sha2` above (0.11)
+# is the digest used by the verifier; `sha2_10` (0.10) exists only for the
+# test signer, whose RSA signing key must match the `digest` 0.10 API that
+# `rsa` 0.9 and `cms` 0.2 build against. Both compute identical SHA-256 bytes.
+cms = { version = "0.2", default-features = false, features = ["std"] }
+x509-cert = { version = "0.2", default-features = false, features = ["std"] }
+der = { version = "0.7" }
+const-oid = { version = "0.9", features = ["db"] }
+rsa = { version = "0.9", features = ["sha2"] }
+rand = { version = "0.8" }
+sha2_10 = { package = "sha2", version = "0.10" }
+# Pure-Rust PNG encoder for deterministic evidence artifacts. Version matches
+# the ecosystem root's single-PNG-version pin.
+png = "0.18"
 
 # Renderer crates, consumed by path from the sibling render tree. They keep
 # inheriting from the ecosystem workspace root; only the dependency edge is
@@ -35,7 +49,17 @@ sha2 = "0.11.0"
 pdf-read = { path = "../render/crates/pdf-read" }
 pdf-source = { path = "../render/crates/pdf-source" }
 pdf-document = { path = "../render/crates/pdf-document" }
+pdf-object = { path = "../render/crates/pdf-object" }
+pdf-structure = { path = "../render/crates/pdf-structure" }
+pdf-syntax = { path = "../render/crates/pdf-syntax" }
 pdf-test-support = { path = "../render/crates/pdf-test-support" }
+# Evidence rendering (CPU-only): page compilation plus the normative CPU
+# rasterizer. No GPU crates, no OCR.
+pdf-content = { path = "../render/crates/pdf-content" }
+pdf-text = { path = "../render/crates/pdf-text" }
+pdf-page-ir = { path = "../render/crates/pdf-page-ir" }
+pdf-render-api = { path = "../render/crates/pdf-render-api" }
+pdf-render-cpu = { path = "../render/crates/pdf-render-cpu" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

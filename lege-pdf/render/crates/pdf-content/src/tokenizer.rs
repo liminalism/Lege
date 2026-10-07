@@ -100,6 +100,8 @@ pub enum Lexeme {
 pub struct ContentLexer<'a> {
     lexer: Lexer<'a>,
     limits: &'a SyntaxLimits,
+    /// Start offset of the most recently returned operator keyword.
+    last_operator_offset: usize,
 }
 
 impl<'a> ContentLexer<'a> {
@@ -107,12 +109,23 @@ impl<'a> ContentLexer<'a> {
         Self {
             lexer: Lexer::new(input, 0, limits),
             limits,
+            last_operator_offset: 0,
         }
     }
 
     /// Current position in the content byte slice.
     pub fn pos(&self) -> usize {
         self.lexer.pos()
+    }
+
+    /// Byte offset of the most recently returned operator keyword within the
+    /// content slice.
+    ///
+    /// Updated only when [`Self::next_lexeme`] yields [`Lexeme::Operator`];
+    /// operands, inline images, and end-of-stream leave it untouched, so the
+    /// interpreter reads it immediately upon receiving an operator lexeme.
+    pub fn last_operator_offset(&self) -> usize {
+        self.last_operator_offset
     }
 
     /// Step the cursor over a single byte, returning `false` at end of input.
@@ -137,6 +150,9 @@ impl<'a> ContentLexer<'a> {
                 if kw == b"BI" {
                     self.read_inline_image().map(Some)
                 } else {
+                    // The base offset is 0 for content streams, so the token
+                    // start is the keyword's index into the content slice.
+                    self.last_operator_offset = usize::try_from(tok.start).unwrap_or(usize::MAX);
                     Ok(Some(Lexeme::Operator(kw)))
                 }
             }

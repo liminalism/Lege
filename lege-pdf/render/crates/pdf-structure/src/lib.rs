@@ -95,14 +95,108 @@ impl XrefMap {
     }
 }
 
-/// A single revision (original document or one incremental update),
-/// retained for diagnostics and future signature verification.
+/// How one xref section was encoded in the file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum XrefSectionKind {
+    /// A classic `xref` table followed by a `trailer` dictionary.
+    Classic,
+    /// A `/Type /XRef` cross-reference stream (its own dictionary is the
+    /// trailer).
+    Stream,
+}
+
+/// One cross-reference entry exactly as one xref section declared it: the
+/// object identity and where that section claims the object lives.
+///
+/// Unlike [`XrefEntry`] — one entry of the merged, all-updates-applied map —
+/// these are never shadowed: a section keeps every entry it declared, even
+/// when a newer section redefines the same object. That is what lets audit
+/// tooling diff sections into per-object change histories.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RevisionXrefEntry {
+    /// Object identity (number and generation) as declared by the section.
+    pub id: ObjectId,
+    /// Where this section claims the object lives.
+    pub location: ObjectLocation,
+}
+
+/// How many entries of each location kind one xref section declared.
+///
+/// Unlike [`XrefSection::entries`] — the entries themselves, materialized only
+/// on the audit path — these counters are recorded on every load: four integer
+/// increments cost nothing, and the facts layer reports counts, never entries.
+/// Rebuild-synthesized sections carry all zeros: a full-file scan has no
+/// section structure to count.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct XrefEntryCounts {
+    /// Every entry the section declared.
+    pub total: u32,
+    /// Entries claiming an uncompressed object at a file offset.
+    pub live: u32,
+    /// Entries claiming an object-stream member.
+    pub compressed: u32,
+    /// Free entries.
+    pub free: u32,
+}
+
+impl XrefEntryCounts {
+    /// Tally one declared entry by where the section claims the object lives.
+    pub(crate) fn tally(&mut self, location: ObjectLocation) {
+        self.total = self.total.saturating_add(1);
+        match location {
+            ObjectLocation::Offset(_) => self.live = self.live.saturating_add(1),
+            ObjectLocation::InObjectStream { .. } => {
+                self.compressed = self.compressed.saturating_add(1);
+            }
+            ObjectLocation::Free => self.free = self.free.saturating_add(1),
+        }
+    }
+}
+
+/// One xref section walked while opening the document: a classic table, an
+/// xref stream, or — with [`XrefSection::offset`] zero — a trailer
+/// synthesized by a full-file rebuild.
+///
+/// Sections are stored newest first (chain order). They are *not* logical
+/// revisions: one user-visible save can hold two sections (a hybrid-reference
+/// classic table plus its auxiliary `/XRefStm` stream), and linearized files
+/// carry stub sections that are not evidence of a later edit. Grouping
+/// sections into logical revisions is the audit layer's job, never a raw
+/// section count.
 #[derive(Debug, Clone)]
-pub struct Revision {
-    /// Offset of this revision's xref section (table or stream).
-    pub xref_offset: u64,
-    /// The trailer dictionary of this revision.
+pub struct XrefSection {
+    /// Header-relative file offset of this section (the `startxref`/`/Prev`
+    /// value that led here). Zero marks a section synthesized by a full-file
+    /// rebuild, which has no source offset — a real section can never sit at
+    /// zero because the `%PDF` header lives there.
+    pub offset: u64,
+    /// How the section was encoded.
+    pub kind: XrefSectionKind,
+    /// How many entries this section declared, by location kind. Recorded on
+    /// both the fast and the audit path; rebuild-synthesized sections carry
+    /// zeros.
+    pub entry_counts: XrefEntryCounts,
+    /// Every entry this section declared, in section order — including
+    /// entries a newer section shadows. Materialized only on the audit path
+    /// (see [`StructureLimits::preserve_section_entries`]); empty on
+    /// the fast render path. Rebuild-synthesized sections (`offset == 0`)
+    /// never carry entries: a full-file scan merges objects directly,
+    /// without section structure.
+    pub entries: Arc<[RevisionXrefEntry]>,
+    /// The trailer dictionary of this section: a classic `trailer`, or the
+    /// xref stream's own dictionary.
     pub trailer: Arc<Dictionary>,
+    /// The `/Prev` link this section declares, when any.
+    pub prev: Option<u64>,
+    /// For a hybrid-reference `/XRefStm` stream: the index into
+    /// [`DocumentStructure::sections`] of the classic table it extends.
+    /// `None` for primary sections.
+    pub auxiliary_of: Option<u32>,
+    /// Recovery events attributable to parsing this section. A subset of the
+    /// snapshot-wide [`DocumentStructure::recovery`] log, which additionally
+    /// carries chain-level events (cycles, truncated chains, rebuilds) that
+    /// belong to no single section.
+    pub recovery: Arc<[RecoveryEvent]>,
 }
 
 /// The resolved trailer view of the current document.
@@ -182,13 +276,15 @@ pub enum StructureError {
 pub struct DocumentStructure {
     pub version: PdfVersion,
     /// Bytes of leading garbage before `%PDF`. Every structural offset
-    /// (xref entries, `Revision::xref_offset`) is relative to the header,
+    /// (xref entries, `XrefSection::offset`) is relative to the header,
     /// i.e. the *source* position is `header_offset + structural offset`
     /// (PDFium's `header_offset_` convention).
     pub header_offset: u64,
     pub xref: XrefMap,
     pub trailer: Trailer,
-    pub revisions: Box<[Revision]>,
+    /// Xref sections walked while opening, newest first (see [`XrefSection`]
+    /// for ordering and what counts as a section).
+    pub sections: Box<[XrefSection]>,
     pub recovery: Box<[RecoveryEvent]>,
 }
 

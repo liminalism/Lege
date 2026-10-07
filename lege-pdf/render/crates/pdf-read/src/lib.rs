@@ -2,8 +2,9 @@
 //! existing machinery.
 //!
 //! [`examine`] opens a document (tolerating failure), probes structure,
-//! encryption, per-page compilability, annotations, and feature flags, and
-//! returns a [`DocumentReport`]. Nothing here parses PDF syntax itself:
+//! linearization, encryption, per-page compilability, annotations, and
+//! feature flags, and returns a [`DocumentReport`]. Nothing here parses PDF
+//! syntax itself:
 //! every byte is read through `pdf-structure`/`pdf-document` resolvers, and
 //! page content through `pdf-content`'s compiler. No new parsers.
 //!
@@ -17,12 +18,16 @@ use std::sync::Arc;
 
 use pdf_content::PageCompiler;
 use pdf_document::{DocumentLimits, DocumentSnapshot, PageIndex, ParseContext};
-use pdf_object::{Dictionary, NameId, NameTable, ObjectId, PdfObject};
+use pdf_object::{Dictionary, NameId, NameTable, ObjectId, PdfObject, decode_text_string_lossy};
 use pdf_source::PdfSource;
 use pdf_structure::{ObjectLocation, RecoveryEvent};
 
+mod byterange;
 mod metrics;
 mod xmp;
+pub use byterange::{
+    ByteRangeAssessment, ByteRangeSpan, ByteRangeValidity, assess as assess_byte_range,
+};
 pub use metrics::{FontRecord, ImageRecord, PageMetrics};
 pub use xmp::{XmpHistoryEvent, XmpLineage};
 
@@ -104,14 +109,22 @@ pub struct DocumentIdentity {
 pub struct SignatureInfo {
     /// The field's `/T` name, if it has one.
     pub field_name: Option<String>,
+    /// Backing field dictionary, when the field is (as usual) an indirect
+    /// reference; `None` for a direct inline field dictionary.
+    pub field_object: Option<ObjectId>,
+    /// The `/V` signature value dictionary, when indirect; `None` for a
+    /// direct inline value.
+    pub value_object: Option<ObjectId>,
     /// `/Filter` — the handler that produced the signature, e.g. `Adobe.PPKLite`.
     pub filter: Option<String>,
     /// `/SubFilter` — the signature encoding, e.g. `ETSI.CAdES.detached`.
     pub sub_filter: Option<String>,
     /// `/M` — the claimed signing time, verbatim and unparsed.
     pub signed_at: Option<String>,
-    /// `/ByteRange`, verbatim. Conventionally four numbers: two
-    /// offset/length pairs straddling the signature itself.
+    /// `/ByteRange` integer entries, verbatim and in order. Conventionally
+    /// four numbers: two offset/length pairs straddling the signature
+    /// itself. Non-integer entries are not representable here; their
+    /// presence makes [`Self::byte_range_validity`] malformed instead.
     pub byte_range: Vec<i64>,
     /// Whether `/ByteRange` spans the entire file — that is, starts at zero
     /// and its last pair ends at the final byte.
@@ -122,6 +135,48 @@ pub struct SignatureInfo {
     /// range turns out to be. This says nothing about whether the signature
     /// verifies; that is a separate, later question.
     pub covers_whole_file: bool,
+    /// Strict classification of `/ByteRange` against the original file
+    /// bytes: shape, ordering, and bounds. See [`assess_byte_range`].
+    pub byte_range_validity: ByteRangeValidity,
+    /// The claimed covered runs, in `/ByteRange` order. Empty when the
+    /// shape does not parse as offset/length pairs.
+    pub covered_ranges: Vec<ByteRangeSpan>,
+    /// Why the range is not valid. Always `None` for valid ranges.
+    pub byte_range_detail: Option<String>,
+    /// The DocMDP certification policy from the signature's `/Reference`
+    /// array, when one of its entries declares
+    /// `/TransformMethod /DocMDP`. `None` for an approval signature, which
+    /// carries no document lock.
+    pub docmdp: Option<DocMdpInfo>,
+    /// The FieldMDP lock policy from the signature's `/Reference` array,
+    /// when one of its entries declares `/TransformMethod /FieldMDP`.
+    pub fieldmdp: Option<FieldMdpInfo>,
+}
+
+/// A DocMDP certification policy, exactly as the signature reference states
+/// it: what later changes the signer permits.
+#[derive(Debug, Clone)]
+pub struct DocMdpInfo {
+    /// Verbatim `/P` from the DocMDP transform parameters: 1 (no changes),
+    /// 2 (form filling and signing), or 3 (additionally annotations).
+    /// `None` when `/P` is absent or not an integer.
+    pub p: Option<i64>,
+}
+
+/// A FieldMDP lock policy, exactly as the signature reference states it:
+/// which form fields the signer locked.
+#[derive(Debug, Clone)]
+pub struct FieldMdpInfo {
+    /// Verbatim `/P` from the FieldMDP transform parameters, when present.
+    pub p: Option<i64>,
+    /// Verbatim `/Action`: `All`, `Include`, or `Exclude`. `None` when
+    /// absent or not a name.
+    pub action: Option<String>,
+    /// Verbatim `/Fields`: the qualified field names the action applies to.
+    /// `None` when `/Fields` is absent or not an array; an empty array
+    /// reads as `Some` with no names, which is a degenerate but parseable
+    /// policy rather than a missing one.
+    pub fields: Option<Vec<String>>,
 }
 
 /// Signature fields found in the `/AcroForm`.
@@ -134,6 +189,88 @@ pub struct SignatureInventory {
     pub unsigned_fields: u32,
 }
 
+/// How one xref section was encoded in the file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum XrefSectionKind {
+    /// A classic `xref` table followed by a `trailer` dictionary.
+    Classic,
+    /// A `/Type /XRef` cross-reference stream (its own dictionary is the
+    /// trailer).
+    Stream,
+}
+
+/// How many entries of each location kind one xref section declared.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct XrefEntryCounts {
+    /// Every entry the section declared.
+    pub total: u32,
+    /// Entries claiming an uncompressed object at a file offset.
+    pub live: u32,
+    /// Entries claiming an object-stream member.
+    pub compressed: u32,
+    /// Free entries.
+    pub free: u32,
+}
+
+/// Where one xref section entry claims its object lives, as neutral facts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum XrefEntryLocation {
+    /// An uncompressed object at this header-relative file offset.
+    Offset(u64),
+    /// A compressed member of an object stream.
+    InObjectStream {
+        /// Object number of the containing `/Type /ObjStm` stream.
+        container: u32,
+        /// Zero-based index within the container.
+        index: u32,
+    },
+    /// A free entry.
+    Free,
+}
+
+/// One cross-reference entry exactly as one xref section declared it: the
+/// object identity and where that section claims the object lives.
+///
+/// Unlike the merged xref map — where later revisions shadow earlier ones —
+/// these are never shadowed: a section keeps every entry it declared, even
+/// when a newer section redefines the same object. That is what lets audit
+/// tooling diff sections into per-object change histories.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct XrefEntryFacts {
+    /// Object identity (number and generation) as declared by the section.
+    pub id: ObjectId,
+    /// Where this section claims the object lives.
+    pub location: XrefEntryLocation,
+}
+
+/// One xref section walked while opening the document, as neutral facts.
+#[derive(Debug, Clone)]
+pub struct XrefSectionFacts {
+    /// Header-relative file offset of this section (the `startxref`/`/Prev`
+    /// value that led here). Zero marks a section synthesized by a full-file
+    /// rebuild, which has no source offset.
+    pub offset: u64,
+    /// How the section was encoded.
+    pub kind: XrefSectionKind,
+    /// How many entries the section declared, by location kind.
+    /// Rebuild-synthesized sections carry zeros.
+    pub entry_counts: XrefEntryCounts,
+    /// Every entry this section declared, in section order — including
+    /// entries a newer section shadows. Empty only for rebuild-synthesized
+    /// sections, which have no section structure to preserve.
+    pub entries: Vec<XrefEntryFacts>,
+    /// The `/Prev` link this section declares, when any.
+    pub prev: Option<u64>,
+    /// For a hybrid-reference `/XRefStm` stream: the index into the
+    /// [`XrefHealth::sections`] vector (same newest-first order) of the
+    /// classic table it extends. `None` for primary sections.
+    pub auxiliary_of: Option<u32>,
+    /// Recovery events attributable to parsing this section, rendered. A
+    /// subset of the snapshot-wide recovery log, which additionally carries
+    /// chain-level events that belong to no single section.
+    pub recovery: Vec<String>,
+}
+
 /// Cross-reference health.
 #[derive(Debug, Clone, Default)]
 pub struct XrefHealth {
@@ -141,8 +278,14 @@ pub struct XrefHealth {
     pub recovery_used: bool,
     /// The xref was rebuilt by a full object scan (the heaviest repair).
     pub rebuilt: bool,
-    /// Number of revisions (original + incremental updates).
+    /// Number of xref sections walked (classic tables plus xref streams,
+    /// including auxiliary `/XRefStm` sections and synthetic rebuild
+    /// sections). A structural count, not a count of user edits: one save
+    /// can hold two sections, and stub sections are not edits.
     pub revision_count: usize,
+    /// The walked sections themselves, newest first (chain order). Grouping
+    /// them into logical revisions is the consumer's job, never a raw count.
+    pub sections: Vec<XrefSectionFacts>,
 }
 
 /// Per-page compile outcome.
@@ -161,6 +304,31 @@ pub enum CompileStatus {
     },
 }
 
+/// One marked-content span from a page content stream: the tag as written,
+/// where the span sits in the decoded content bytes, and the user-space
+/// bounds of the text shown inside it.
+///
+/// Neutral facts only — every tag is reported, structural (`/Span`, `/OC`)
+/// or otherwise; deciding which tags count as edit markers is the
+/// consumer's job.
+#[derive(Debug, Clone)]
+pub struct MarkedContentRecord {
+    /// Tag name as written, without the leading slash (e.g.
+    /// `"TouchUp_TextEdit"`).
+    pub tag: String,
+    /// Byte offset of the opening `BMC`/`BDC` keyword in the page's
+    /// concatenated decoded content stream.
+    pub open_offset: usize,
+    /// Byte offset of the closing `EMC` keyword in that same stream, or
+    /// `None` when the stream ended with the span still open.
+    pub close_offset: Option<usize>,
+    /// Union of the enclosed text runs' boxes in user-space points,
+    /// `[x0, y0, x1, y1]`, or `None` when the span enclosed no text runs.
+    /// Advance-derived and approximate; see
+    /// [`pdf_content::MarkedContentSpan`].
+    pub bbox: Option<[f64; 4]>,
+}
+
 /// One page's health.
 #[derive(Debug, Clone)]
 pub struct PageStatus {
@@ -172,12 +340,53 @@ pub struct PageStatus {
     /// Representation metrics from the compiled semantic page. `None` when
     /// compilation failed, so a failed page cannot be mistaken for a blank one.
     pub metrics: Option<PageMetrics>,
+    /// Marked-content spans from a second interpretation pass over the same
+    /// content. Empty when the page carries no marked content, or when the
+    /// marker pass itself failed — the compile status above carries any
+    /// failure, so an empty list beside [`CompileStatus::Failed`] is a gap,
+    /// not a clean bill.
+    pub marked_content: Vec<MarkedContentRecord>,
 }
 
-/// Count of annotations per `/Subtype`.
+/// One annotation and the identity it declares about itself.
+///
+/// Neutral facts only: these are what the annotation dictionary *says*, with
+/// no judgement about whether it is telling the truth.
+#[derive(Debug, Clone)]
+pub struct AnnotationRecord {
+    /// Zero-based page index carrying this annotation.
+    pub page: u32,
+    /// Backing annotation dictionary, when the `/Annots` entry is (as the
+    /// spec requires) an indirect reference; `None` for a direct inline
+    /// annotation dictionary.
+    pub object: Option<ObjectId>,
+    /// `/Subtype`, e.g. `Text`. `None` when absent or unreadable.
+    pub subtype: Option<String>,
+    /// `/Contents` text, decoded lossy.
+    pub contents: Option<String>,
+    /// `/NM` annotation name: the writer-assigned identifier meant to be
+    /// unique within the document.
+    pub name: Option<String>,
+    /// `/M` last-modification date, verbatim and unparsed. A writer's claim,
+    /// not an observation.
+    pub modified: Option<String>,
+    /// `/CreationDate`, verbatim and unparsed. Like [`Self::modified`], a
+    /// claim by whatever wrote the annotation.
+    pub creation_date: Option<String>,
+    /// `/T` text label — for markup annotations, the author. Verbatim.
+    pub author: Option<String>,
+    /// `/Subj` subject: a short description of the annotation. Verbatim.
+    pub subject: Option<String>,
+    /// `/IT` intent name (e.g. `FreeTextTypewriter`), as authored.
+    pub intent: Option<String>,
+}
+
+/// Count of annotations per `/Subtype`, plus the identity each declares.
 #[derive(Debug, Clone, Default)]
 pub struct AnnotationInventory {
     pub count_per_subtype: BTreeMap<String, u32>,
+    /// Every annotation in page order, with the identity it declares.
+    pub annotations: Vec<AnnotationRecord>,
 }
 
 impl AnnotationInventory {
@@ -208,6 +417,10 @@ pub struct DocumentReport {
     /// The `%PDF` header. `None` only when no header could be found at all,
     /// which is also the reason the document failed to open.
     pub header: Option<HeaderInfo>,
+    /// Whether the file is linearized (fast-web-view): its first object is
+    /// a valid `/Linearized` parameter dictionary. `false` for every
+    /// ordinary file, and for files with no readable structure at all.
+    pub linearized: bool,
     pub encryption: Option<EncryptionInfo>,
     pub xref: XrefHealth,
     /// What the document declares about its own identity and provenance.
@@ -240,7 +453,12 @@ pub fn examine_with_password(
     limits: DocumentLimits,
     password: Option<&str>,
 ) -> DocumentReport {
-    match DocumentSnapshot::open_with_password(Arc::clone(&source), limits.clone(), password) {
+    // The doctor is audit tooling: per-section entries are retained so
+    // consumers can diff sections into per-object change histories. The
+    // render path keeps the default off.
+    let mut audit_limits = limits.clone();
+    audit_limits.preserve_section_entries = true;
+    match DocumentSnapshot::open_with_password(Arc::clone(&source), audit_limits, password) {
         Ok(snapshot) => examine_open(&snapshot),
         Err(err) => examine_failed(source, limits, err.to_string()),
     }
@@ -261,11 +479,13 @@ fn examine_open(snapshot: &DocumentSnapshot) -> DocumentReport {
         rebuilt: recovery
             .iter()
             .any(|e| matches!(e, RecoveryEvent::XrefRebuilt)),
-        revision_count: snapshot.structure().revisions.len(),
+        revision_count: snapshot.structure().sections.len(),
+        sections: translate_sections(&snapshot.structure().sections),
     };
 
     let mut ctx = ParseContext::new();
     let encryption = read_encryption(snapshot, &mut ctx);
+    let linearized = detect_linearized(snapshot, &mut ctx);
     let (pages, fonts, images) = examine_pages(snapshot);
     let annotations = inventory_annotations(snapshot, &mut ctx);
     let features = read_features(snapshot, &mut ctx);
@@ -275,6 +495,7 @@ fn examine_open(snapshot: &DocumentSnapshot) -> DocumentReport {
     DocumentReport {
         open,
         header: Some(read_header(snapshot.structure())),
+        linearized,
         encryption,
         xref,
         identity,
@@ -298,6 +519,7 @@ fn examine_failed(
     let mut report = DocumentReport {
         open: OpenOutcome::Failed { error },
         header: None,
+        linearized: false,
         encryption: None,
         xref: XrefHealth::default(),
         identity: DocumentIdentity::default(),
@@ -315,6 +537,9 @@ fn examine_failed(
         max_revisions: limits.max_revisions,
         max_objects: limits.max_objects,
         max_decoded_bytes: limits.max_decoded_bytes_per_context,
+        // The failed-open path still reports per-section entries: revision
+        // membership is structural, and a structure-only audit needs it.
+        preserve_section_entries: true,
     };
     let Ok(structure) = pdf_structure::load_structure(source.as_ref(), &names, &structure_limits)
     else {
@@ -326,7 +551,8 @@ fn examine_failed(
             .recovery
             .iter()
             .any(|e| matches!(e, RecoveryEvent::XrefRebuilt)),
-        revision_count: structure.revisions.len(),
+        revision_count: structure.sections.len(),
+        sections: translate_sections(&structure.sections),
     };
     report.features.uses_object_streams = xref_uses_object_streams(&structure.xref);
     report.header = Some(read_header(&structure));
@@ -347,6 +573,10 @@ fn examine_failed(
     );
     let mut ctx = ParseContext::new();
     report.encryption = read_encryption(&snapshot, &mut ctx);
+    // The first object needs no decryption to identify (and a linearization
+    // parameter dictionary is itself never encrypted), so this is determined
+    // even for a document that would not open.
+    report.linearized = detect_linearized(&snapshot, &mut ctx);
     report
 }
 
@@ -385,6 +615,44 @@ fn describe_recovery(event: &RecoveryEvent) -> String {
         }
         RecoveryEvent::Other(s) => s.clone(),
     }
+}
+
+/// The walked xref sections as neutral facts, in the structure layer's
+/// newest-first order.
+fn translate_sections(sections: &[pdf_structure::XrefSection]) -> Vec<XrefSectionFacts> {
+    sections
+        .iter()
+        .map(|section| XrefSectionFacts {
+            offset: section.offset,
+            kind: match section.kind {
+                pdf_structure::XrefSectionKind::Classic => XrefSectionKind::Classic,
+                pdf_structure::XrefSectionKind::Stream => XrefSectionKind::Stream,
+            },
+            entry_counts: XrefEntryCounts {
+                total: section.entry_counts.total,
+                live: section.entry_counts.live,
+                compressed: section.entry_counts.compressed,
+                free: section.entry_counts.free,
+            },
+            entries: section
+                .entries
+                .iter()
+                .map(|entry| XrefEntryFacts {
+                    id: entry.id,
+                    location: match entry.location {
+                        ObjectLocation::Offset(offset) => XrefEntryLocation::Offset(offset),
+                        ObjectLocation::InObjectStream { container, index } => {
+                            XrefEntryLocation::InObjectStream { container, index }
+                        }
+                        ObjectLocation::Free => XrefEntryLocation::Free,
+                    },
+                })
+                .collect(),
+            prev: section.prev,
+            auxiliary_of: section.auxiliary_of,
+            recovery: section.recovery.iter().map(describe_recovery).collect(),
+        })
+        .collect()
 }
 
 // ── helpers over the resolver ───────────────────────────────────────────────
@@ -428,6 +696,41 @@ fn read_header(structure: &pdf_structure::DocumentStructure) -> HeaderInfo {
         minor: structure.version.minor,
         header_offset: structure.header_offset,
     }
+}
+
+// ── linearization ──────────────────────────────────────────────────────────
+
+/// Whether the file is linearized: its first object is a valid `/Linearized`
+/// parameter dictionary.
+///
+/// The linearization parameter dictionary is required to be the first object
+/// in the file, so the xref's lowest-offset direct object is the only
+/// candidate. It must resolve — through the existing resolver, like every
+/// other read here — to a dictionary carrying `/Linearized`. Anything else
+/// (no direct objects, an unresolvable first object, no marker) is an
+/// ordinary file. A `/Linearized` entry anywhere but the first object does
+/// not count.
+fn detect_linearized(snapshot: &DocumentSnapshot, ctx: &mut ParseContext) -> bool {
+    let first = snapshot
+        .structure()
+        .xref
+        .live_entries()
+        .filter_map(|entry| match entry.location {
+            ObjectLocation::Offset(offset) => Some((offset, entry.id)),
+            ObjectLocation::InObjectStream { .. } | ObjectLocation::Free => None,
+        })
+        .min_by_key(|(offset, _)| *offset);
+    let Some((_, id)) = first else {
+        return false;
+    };
+    let Some(object) = resolve(snapshot, id, ctx) else {
+        return false;
+    };
+    let Some(dict) = object.as_dict() else {
+        return false;
+    };
+    let key = snapshot.names().intern(b"Linearized");
+    dict.contains_key(key)
 }
 
 fn hex(bytes: &[u8]) -> String {
@@ -539,6 +842,7 @@ fn inventory_signatures(snapshot: &DocumentSnapshot, ctx: &mut ParseContext) -> 
     collect_signature_fields(
         snapshot,
         &fields,
+        None,
         source_len,
         &mut inventory,
         &mut seen,
@@ -554,6 +858,7 @@ const MAX_FORM_FIELDS: usize = 65_536;
 fn collect_signature_fields(
     snapshot: &DocumentSnapshot,
     node: &PdfObject,
+    field_id: Option<ObjectId>,
     source_len: u64,
     inventory: &mut SignatureInventory,
     seen: &mut usize,
@@ -569,7 +874,15 @@ fn collect_signature_fields(
             let Some(field) = resolve_value(snapshot, entry, ctx) else {
                 continue;
             };
-            collect_signature_fields(snapshot, &field, source_len, inventory, seen, ctx);
+            collect_signature_fields(
+                snapshot,
+                &field,
+                entry.as_reference(),
+                source_len,
+                inventory,
+                seen,
+                ctx,
+            );
         }
         return;
     }
@@ -588,6 +901,10 @@ fn collect_signature_fields(
         .is_some_and(|n| names.resolve(n).as_ref() == b"Sig");
 
     if is_signature {
+        let value_id = names
+            .lookup(b"V")
+            .and_then(|k| field.get(k))
+            .and_then(PdfObject::as_reference);
         match names
             .lookup(b"V")
             .and_then(|k| dict_get_resolved(snapshot, field, k, ctx))
@@ -595,9 +912,9 @@ fn collect_signature_fields(
         {
             Some(value) => {
                 if let Some(sig) = value.as_dict() {
-                    inventory
-                        .signatures
-                        .push(read_signature(snapshot, field, sig, source_len, ctx));
+                    inventory.signatures.push(read_signature(
+                        snapshot, field, field_id, sig, value_id, source_len, ctx,
+                    ));
                 }
             }
             None => inventory.unsigned_fields += 1,
@@ -609,14 +926,16 @@ fn collect_signature_fields(
         .lookup(b"Kids")
         .and_then(|k| dict_get_resolved(snapshot, field, k, ctx))
     {
-        collect_signature_fields(snapshot, &kids, source_len, inventory, seen, ctx);
+        collect_signature_fields(snapshot, &kids, None, source_len, inventory, seen, ctx);
     }
 }
 
 fn read_signature(
     snapshot: &DocumentSnapshot,
     field: &Dictionary,
+    field_id: Option<ObjectId>,
     sig: &Dictionary,
+    value_id: Option<ObjectId>,
     source_len: u64,
     ctx: &mut ParseContext,
 ) -> SignatureInfo {
@@ -632,57 +951,175 @@ fn read_signature(
         }
     };
 
-    let byte_range: Vec<i64> = names
+    // Every entry in order, `None` for one that is not an integer: the
+    // strict assessment needs to see non-integers, not have them filtered.
+    let entries: Vec<Option<i64>> = names
         .lookup(b"ByteRange")
         .and_then(|k| dict_get_resolved(snapshot, sig, k, ctx))
         .and_then(|v| match v.as_ref() {
             PdfObject::Array(entries) => Some(
                 entries
                     .iter()
-                    .filter_map(|e| resolve_value(snapshot, e, ctx))
-                    .filter_map(|e| e.as_int())
+                    .map(|e| resolve_value(snapshot, e, ctx).and_then(|resolved| resolved.as_int()))
                     .collect(),
             ),
             _ => None,
         })
         .unwrap_or_default();
+    let byte_range: Vec<i64> = entries.iter().filter_map(|entry| *entry).collect();
+    // Offsets in `/ByteRange` are absolute source positions, so the
+    // assessment compares against the source length rather than the
+    // post-header length.
+    let assessment = byterange::assess(&entries, source_len);
+
+    let (docmdp, fieldmdp) = read_transform_policies(snapshot, sig, ctx);
 
     SignatureInfo {
         field_name: text(field, b"T", ctx),
+        field_object: field_id,
+        value_object: value_id,
         filter: text(sig, b"Filter", ctx),
         sub_filter: text(sig, b"SubFilter", ctx),
         signed_at: text(sig, b"M", ctx),
-        covers_whole_file: byte_range_covers_all(&byte_range, source_len),
         byte_range,
+        covers_whole_file: assessment.validity == ByteRangeValidity::Valid,
+        byte_range_validity: assessment.validity,
+        covered_ranges: assessment.covered,
+        byte_range_detail: assessment.detail,
+        docmdp,
+        fieldmdp,
     }
 }
 
-/// Whether `/ByteRange` starts at zero and its final pair reaches the last
-/// byte of the file.
-///
-/// Offsets in `/ByteRange` are absolute source positions, so this comparison is
-/// against the source length rather than the post-header length.
-fn byte_range_covers_all(byte_range: &[i64], source_len: u64) -> bool {
-    if byte_range.len() < 2 || !byte_range.len().is_multiple_of(2) {
-        return false;
-    }
-    if byte_range[0] != 0 {
-        return false;
-    }
-    // Pairs must be ascending and non-overlapping for the span to mean
-    // anything; a scrambled range is not "whole-file" whatever it sums to.
-    let mut reach = 0i64;
-    for pair in byte_range.chunks_exact(2) {
-        let (offset, length) = (pair[0], pair[1]);
-        if offset < reach || length < 0 {
-            return false;
-        }
-        let Some(end) = offset.checked_add(length) else {
-            return false;
+/// The DocMDP and FieldMDP policies from a signature value dictionary's
+/// `/Reference` array: the first `/DocMDP` entry's and the first
+/// `/FieldMDP` entry's transform parameters, each resolved whether direct
+/// or indirect. Anything else in the array — timestamps, `/UR` entries,
+/// unresolvable elements — is not a document lock and is skipped.
+fn read_transform_policies(
+    snapshot: &DocumentSnapshot,
+    sig: &Dictionary,
+    ctx: &mut ParseContext,
+) -> (Option<DocMdpInfo>, Option<FieldMdpInfo>) {
+    let names = snapshot.names();
+    let mut docmdp = None;
+    let mut fieldmdp = None;
+    let Some(reference_key) = names.lookup(b"Reference") else {
+        return (None, None);
+    };
+    let Some(reference) = dict_get_resolved(snapshot, sig, reference_key, ctx) else {
+        return (None, None);
+    };
+    let PdfObject::Array(entries) = reference.as_ref() else {
+        return (None, None);
+    };
+    for entry in entries.iter() {
+        let Some(sig_ref) = resolve_value(snapshot, entry, ctx) else {
+            continue;
         };
-        reach = end;
+        let Some(sig_ref) = sig_ref.as_dict() else {
+            continue;
+        };
+        let method = names
+            .lookup(b"TransformMethod")
+            .and_then(|key| sig_ref.get(key))
+            .and_then(PdfObject::as_name)
+            .map(|name| names.resolve(name));
+        let Some(method) = method else {
+            continue;
+        };
+        if method.as_ref() == b"DocMDP" && docmdp.is_none() {
+            docmdp = Some(DocMdpInfo {
+                p: read_docmdp_p(snapshot, sig_ref, ctx),
+            });
+        } else if method.as_ref() == b"FieldMDP" && fieldmdp.is_none() {
+            fieldmdp = Some(read_fieldmdp_params(snapshot, sig_ref, ctx));
+        }
     }
-    u64::try_from(reach).is_ok_and(|reach| reach == source_len)
+    (docmdp, fieldmdp)
+}
+
+/// The `/TransformParams` dictionary of one signature reference entry,
+/// resolved whether direct or indirect.
+fn transform_params(
+    snapshot: &DocumentSnapshot,
+    sig_ref: &Dictionary,
+    ctx: &mut ParseContext,
+) -> Option<Arc<PdfObject>> {
+    let key = snapshot.names().lookup(b"TransformParams")?;
+    let params = dict_get_resolved(snapshot, sig_ref, key, ctx)?;
+    if params.as_dict().is_some() {
+        Some(params)
+    } else {
+        None
+    }
+}
+
+/// Verbatim `/P` from a DocMDP signature reference's transform parameters.
+/// `None` when anything on the path is missing or unreadable — the entry's
+/// presence is still reported by the caller, so a present-but-unparseable
+/// policy never reads as no policy at all.
+fn read_docmdp_p(
+    snapshot: &DocumentSnapshot,
+    sig_ref: &Dictionary,
+    ctx: &mut ParseContext,
+) -> Option<i64> {
+    let params = transform_params(snapshot, sig_ref, ctx)?;
+    let params = params.as_dict()?;
+    snapshot
+        .names()
+        .lookup(b"P")
+        .and_then(|key| dict_get_resolved(snapshot, params, key, ctx))
+        .and_then(|value| value.as_int())
+}
+
+/// The `/Action`, `/Fields`, and `/P` of a FieldMDP signature reference's
+/// transform parameters. Every field degrades to `None` independently when
+/// its path is missing or unreadable; the entry's presence is reported by
+/// the caller either way.
+fn read_fieldmdp_params(
+    snapshot: &DocumentSnapshot,
+    sig_ref: &Dictionary,
+    ctx: &mut ParseContext,
+) -> FieldMdpInfo {
+    let mut info = FieldMdpInfo {
+        p: None,
+        action: None,
+        fields: None,
+    };
+    let Some(params) = transform_params(snapshot, sig_ref, ctx) else {
+        return info;
+    };
+    let Some(params) = params.as_dict() else {
+        return info;
+    };
+    let names = snapshot.names();
+    info.action = names
+        .lookup(b"Action")
+        .and_then(|key| params.get(key))
+        .and_then(PdfObject::as_name)
+        .map(|name| String::from_utf8_lossy(&names.resolve(name)).into_owned());
+    info.fields = names.lookup(b"Fields").and_then(|key| {
+        let value = dict_get_resolved(snapshot, params, key, ctx)?;
+        let PdfObject::Array(entries) = value.as_ref() else {
+            return None;
+        };
+        let mut names_out = Vec::new();
+        for entry in entries.iter() {
+            let Some(field) = resolve_value(snapshot, entry, ctx) else {
+                continue;
+            };
+            if let PdfObject::String(text) = field.as_ref() {
+                names_out.push(decode_text_string_lossy(text.as_bytes()));
+            }
+        }
+        Some(names_out)
+    });
+    info.p = names
+        .lookup(b"P")
+        .and_then(|key| dict_get_resolved(snapshot, params, key, ctx))
+        .and_then(|value| value.as_int());
+    info
 }
 
 // ── encryption ──────────────────────────────────────────────────────────────
@@ -830,11 +1267,29 @@ fn examine_pages(
                     None,
                 ),
             };
+        // The marker inventory is a second pass over the same content (the
+        // accessor does not touch the semantic product). A fresh context:
+        // the semantic pass above already attributed this page's repairs.
+        let mut marker_ctx = ParseContext::new();
+        let marked_content =
+            match compiler.marked_content_spans(snapshot, PageIndex(index), &mut marker_ctx) {
+                Ok(spans) => spans
+                    .into_iter()
+                    .map(|span| MarkedContentRecord {
+                        tag: span.tag,
+                        open_offset: span.open_offset,
+                        close_offset: span.close_offset,
+                        bbox: span.bbox.map(|b| [b.x0, b.y0, b.x1, b.y1]),
+                    })
+                    .collect(),
+                Err(_) => Vec::new(),
+            };
         out.push(PageStatus {
             index,
             media_box_present,
             compile,
             metrics,
+            marked_content,
         });
     }
     let (fonts, images) = inventory.into_parts();
@@ -877,7 +1332,7 @@ fn page_has_media_box(snapshot: &DocumentSnapshot, index: u32, ctx: &mut ParseCo
 
 /// Count annotations per `/Subtype` by reading each page's `/Annots` array
 /// directly (read-only; deliberately independent of any higher-level
-/// annotation API).
+/// annotation API), and record the identity each annotation declares.
 fn inventory_annotations(
     snapshot: &DocumentSnapshot,
     ctx: &mut ParseContext,
@@ -908,6 +1363,7 @@ fn inventory_annotations(
             continue;
         };
         for entry in entries.iter() {
+            let object = entry.as_reference();
             let Some(annot) = resolve_value(snapshot, entry, ctx) else {
                 continue;
             };
@@ -917,12 +1373,59 @@ fn inventory_annotations(
             let subtype = annot
                 .get(names.known.subtype)
                 .and_then(PdfObject::as_name)
-                .map(|n| String::from_utf8_lossy(&names.resolve(n)).into_owned())
-                .unwrap_or_else(|| "(none)".to_owned());
-            *inventory.count_per_subtype.entry(subtype).or_insert(0) += 1;
+                .map(|n| String::from_utf8_lossy(&names.resolve(n)).into_owned());
+            *inventory
+                .count_per_subtype
+                .entry(subtype.clone().unwrap_or_else(|| "(none)".to_owned()))
+                .or_insert(0) += 1;
+            inventory.annotations.push(AnnotationRecord {
+                page: index,
+                object,
+                subtype,
+                contents: annot_text(snapshot, annot, b"Contents", ctx),
+                name: annot_text(snapshot, annot, b"NM", ctx),
+                modified: annot_text(snapshot, annot, b"M", ctx),
+                creation_date: annot_text(snapshot, annot, b"CreationDate", ctx),
+                author: annot_text(snapshot, annot, b"T", ctx),
+                subject: annot_text(snapshot, annot, b"Subj", ctx),
+                intent: annot_intent(snapshot, annot, ctx),
+            });
         }
     }
     inventory
+}
+
+/// An annotation's text-string field: resolved when indirect, decoded lossy.
+/// Anything that is not a string — including a missing key — stays `None`.
+fn annot_text(
+    snapshot: &DocumentSnapshot,
+    dict: &Dictionary,
+    key: &[u8],
+    ctx: &mut ParseContext,
+) -> Option<String> {
+    let names = snapshot.names();
+    let key = names.lookup(key)?;
+    let value = dict_get_resolved(snapshot, dict, key, ctx)?;
+    match value.as_ref() {
+        PdfObject::String(text) => Some(decode_text_string_lossy(text.as_bytes())),
+        _ => None,
+    }
+}
+
+/// An annotation's `/IT` intent name: resolved when indirect, read as the
+/// name's bytes. Anything that is not a name stays `None`.
+fn annot_intent(
+    snapshot: &DocumentSnapshot,
+    dict: &Dictionary,
+    ctx: &mut ParseContext,
+) -> Option<String> {
+    let names = snapshot.names();
+    let key = names.lookup(b"IT")?;
+    let value = dict_get_resolved(snapshot, dict, key, ctx)?;
+    match value.as_ref() {
+        PdfObject::Name(id) => Some(String::from_utf8_lossy(&names.resolve(*id)).into_owned()),
+        _ => None,
+    }
 }
 
 // ── features ────────────────────────────────────────────────────────────────
@@ -1015,6 +1518,7 @@ impl DocumentReport {
                 writeln_ok(&mut s, &line);
             }
         }
+        writeln_ok(&mut s, &format!("linearized: {}", self.linearized));
         writeln_ok(
             &mut s,
             &format!(

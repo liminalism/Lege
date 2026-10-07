@@ -268,6 +268,57 @@ impl PdfSource for FileReadAtSource {
     }
 }
 
+/// A prefix view over another source: exposes only bytes `[0, end)` of the
+/// inner source.
+///
+/// Historical revisions of a document are byte prefixes of the file, so a
+/// revision opens through the ordinary `DocumentSnapshot::open` path by
+/// wrapping the full-file source in a `PrefixSource` truncated at the
+/// revision's end offset. All bounds in errors and [`PdfSource::len`] refer
+/// to the prefix, never to the inner source.
+#[derive(Debug, Clone)]
+pub struct PrefixSource {
+    inner: Arc<dyn PdfSource>,
+    /// Clamped at construction to `inner.len()`.
+    end: u64,
+}
+
+impl PrefixSource {
+    /// View the first `end` bytes of `inner`. An `end` past the inner
+    /// length is clamped to the inner length rather than rejected, so
+    /// callers holding a stale or estimated length still get a usable view.
+    pub fn new(inner: Arc<dyn PdfSource>, end: u64) -> Self {
+        let end = end.min(inner.len());
+        Self { inner, end }
+    }
+}
+
+impl PdfSource for PrefixSource {
+    fn len(&self) -> u64 {
+        self.end
+    }
+
+    fn read_exact_at(&self, offset: u64, dst: &mut [u8]) -> Result<(), SourceError> {
+        // Bounds-check against the prefix first so reads past `end` fail
+        // uniformly with the prefix length, exactly like the other sources.
+        let end = offset.checked_add(dst.len() as u64);
+        match end {
+            Some(e) if e <= self.end => self.inner.read_exact_at(offset, dst),
+            _ => Err(SourceError::OutOfBounds {
+                offset,
+                len: dst.len() as u64,
+                source_len: self.end,
+            }),
+        }
+    }
+
+    fn as_contiguous(&self) -> Option<&[u8]> {
+        let all = self.inner.as_contiguous()?;
+        let end = usize::try_from(self.end).ok()?;
+        all.get(..end)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -278,6 +329,7 @@ mod tests {
 
     const _: () = assert_send_sync::<MmapSource>();
     const _: () = assert_send_sync::<FileReadAtSource>();
+    const _: () = assert_send_sync::<PrefixSource>();
 
     fn temp_file_with(bytes: &[u8]) -> std::path::PathBuf {
         let mut path = std::env::temp_dir();
@@ -353,6 +405,68 @@ mod tests {
         });
         drop(src);
         let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn prefix_source_bounds_reads_to_prefix() {
+        let inner: Arc<dyn PdfSource> = Arc::new(OwnedBytesSource::new(&b"%PDF-1.7 hello"[..]));
+        let src = PrefixSource::new(Arc::clone(&inner), 8);
+        assert_eq!(src.len(), 8);
+        assert!(!src.is_empty());
+        // In-prefix reads see the inner bytes.
+        let mut buf = [0u8; 5];
+        src.read_exact_at(3, &mut buf).unwrap();
+        assert_eq!(&buf, b"F-1.7");
+        // A read crossing `end` fails with the *prefix* length, even though
+        // the inner source holds those bytes.
+        let err = src.read_exact_at(6, &mut buf).unwrap_err();
+        assert!(matches!(
+            err,
+            SourceError::OutOfBounds {
+                offset: 6,
+                len: 5,
+                source_len: 8
+            }
+        ));
+        // Zero-length read exactly at `end` is in bounds.
+        src.read_exact_at(8, &mut []).unwrap();
+        // `end` past the inner length clamps instead of over-reporting.
+        let clamped = PrefixSource::new(inner, u64::MAX);
+        assert_eq!(clamped.len(), 14);
+    }
+
+    #[test]
+    fn prefix_source_truncates_contiguous_view() {
+        let inner: Arc<dyn PdfSource> = Arc::new(OwnedBytesSource::new(&b"%PDF-1.7 hello"[..]));
+        let src = PrefixSource::new(inner, 8);
+        assert_eq!(src.as_contiguous().unwrap(), b"%PDF-1.7");
+        // The default `read_range` borrows from the truncated view.
+        assert!(matches!(src.read_range(0..8).unwrap(), Cow::Borrowed(_)));
+        assert!(matches!(
+            src.read_range(0..9).unwrap_err(),
+            SourceError::OutOfBounds { .. }
+        ));
+        // A non-contiguous inner stays non-contiguous.
+        let streaming: Arc<dyn PdfSource> =
+            Arc::new(NonContiguous(OwnedBytesSource::new(&b"%PDF-1.7 hello"[..])));
+        let src = PrefixSource::new(streaming, 8);
+        assert!(src.as_contiguous().is_none());
+        assert_eq!(src.read_range(0..8).unwrap().as_ref(), b"%PDF-1.7");
+    }
+
+    /// Test-only wrapper that hides contiguity, standing in for streaming
+    /// sources (e.g. `FileReadAtSource`) without needing a temp file.
+    #[derive(Debug)]
+    struct NonContiguous(OwnedBytesSource);
+
+    impl PdfSource for NonContiguous {
+        fn len(&self) -> u64 {
+            self.0.len()
+        }
+
+        fn read_exact_at(&self, offset: u64, dst: &mut [u8]) -> Result<(), SourceError> {
+            self.0.read_exact_at(offset, dst)
+        }
     }
 
     #[test]

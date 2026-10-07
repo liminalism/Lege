@@ -109,7 +109,7 @@ record audit.observation.fact-layer-surface-gap/5 : observation {
 
 record audit.observation.fact-layer-surface-gap/6 : observation {
     title "pdf-read surfaces the visual M1 inventory; edit markers remain"
-    state verified
+    state superseded
     statement """
         Updated after the visual-fact work: pdf-read now compiles each page's SemanticPage into PageMetrics (text-run counts, visible vs invisible, path/shading paints, image coverage in crop-box basis points, effective DPI of the largest placement) plus document-level FontRecord and ImageRecord inventories. `embedded` on a font means the PDF carries a /FontFile* stream, not that the engine substituted a bundled Standard-14 face. pdf-forensics classifies each compiled page as Vector, RasterOnly, RasterWithTextLayer, Mixed, Blank, or Unknown, and those three former pending sections (page_representation, fonts, images) are gone from the report.
 
@@ -130,4 +130,104 @@ record audit.observation.fact-layer-surface-gap/6 : observation {
     watches [ "crates/pdf-forensics/src/intake.rs", "crates/pdf-forensics/src/document.rs" ]
     blocks [ @audit.work.m1-plan ]
     supersedes [ @audit.observation.fact-layer-surface-gap/5 ]
+}
+
+record audit.observation.fact-layer-surface-gap/7 : observation {
+    title "M1 inventory complete; xref sections and signature crypto remain"
+    state superseded
+    statement """
+        Updated after the M1 completion pass. Three former pending sections landed end to end and are gone from the report: linearization (pdf-read detects a valid /Linearized first object; pdf-forensics carries LinearizationFacts); per-annotation identity (PageAnnotation now keeps source ObjectId, /Contents, /NM, /M, /CreationDate, /T, /Subj and /IT, surfaced as AnnotationIdentityFacts in page order alongside the existing per-subtype counts); and marked-content edit markers (pdf-content exposes MarkedContentSpan with tag name and bbox; pdf-forensics reports per-page /TouchUp_* spans with tag, content-stream open/close offsets and text bbox). The fixture gap is closed too: pdf-test-support builds an RC4 document under a non-empty user password the standard handler accepts, and encrypted_modes covers the StructureOnly-to-Full upgrade on the same file.
+
+        Two sections remain pending, both outside M1 by the ledger's own account: per-xref-section offsets, types and entry counts (needs the XrefSection type from @audit.decision.revision-model; M2 work) and signature cryptography (structural ByteRange coverage is reported; verification itself is M4).
+
+        The lege-pdf-audit binary now ships `inspect` with terminal and JSON output, the ten-fixture M1 suite is green, and a PDF-Verse-style export reports all pages raster-only with zero visible text, zero embedded fonts, and disposition INCONCLUSIVE. M1's four acceptance checks are satisfied with evidence; @audit.work.edit-provenance-facts and the M1 plan of record are complete.
+
+        Still true from /6: the XMP parser is a targeted local-name scanner, not a general XML parser, and accepts a theoretical cross-namespace local-name collision in exchange for working with non-standard prefixes.
+        """
+    observed_at git:883393dc473bf5288501b4e619688a4bfb68bcf9
+    method manual
+    watches [ "crates/pdf-forensics/src/intake.rs", "crates/pdf-forensics/src/document.rs" ]
+    supersedes [ @audit.observation.fact-layer-surface-gap/6 ]
+}
+
+record audit.observation.fact-layer-surface-gap/8 : observation {
+    title "M1 inventory complete; xref sections and signature crypto remain"
+    state superseded
+    statement """
+        Updated after the M1 completion pass. Three former pending sections landed end to end and are gone from the report: linearization (pdf-read detects a valid /Linearized first object; pdf-forensics carries LinearizationFacts); per-annotation identity (PageAnnotation now keeps source ObjectId, /Contents, /NM, /M, /CreationDate, /T, /Subj and /IT, surfaced as AnnotationIdentityFacts in page order alongside the existing per-subtype counts); and marked-content edit markers (pdf-content exposes MarkedContentSpan with tag name and bbox; pdf-forensics reports per-page /TouchUp_* spans with tag, content-stream open/close offsets and text bbox). The fixture gap is closed too: pdf-test-support builds an RC4 document under a non-empty user password the standard handler accepts, and encrypted_modes covers the StructureOnly-to-Full upgrade on the same file.
+
+        Two sections remain pending, both outside M1 by the ledger's own account: per-xref-section offsets, types and entry counts (needs the XrefSection type from @audit.decision.revision-model; M2 work) and signature cryptography (structural ByteRange coverage is reported; verification itself is M4).
+
+        The lege-pdf-audit binary now ships `inspect` with terminal and JSON output, the ten-fixture M1 suite is green, and a PDF-Verse-style export reports all pages raster-only with zero visible text, zero embedded fonts, and disposition INCONCLUSIVE. M1's four acceptance checks are satisfied with evidence; @audit.work.edit-provenance-facts and the M1 plan of record are complete.
+
+        Still true from /6: the XMP parser is a targeted local-name scanner, not a general XML parser, and accepts a theoretical cross-namespace local-name collision in exchange for working with non-standard prefixes.
+        """
+    observed_at git:883393dc473bf5288501b4e619688a4bfb68bcf9
+    method manual
+    watches [
+        "lege-pdf/pdf-integrity/crates/pdf-forensics/src/intake.rs",
+        "lege-pdf/pdf-integrity/crates/pdf-forensics/src/document.rs"
+    ]
+    supersedes [ @audit.observation.fact-layer-surface-gap/7 ]
+}
+
+record audit.observation.fact-layer-surface-gap/9 : observation {
+    title "M1+M2 inventory complete; only signature crypto remains"
+    state superseded
+    statement """
+        Updated after the M2 completion pass. The structure layer now preserves per-section xref entries (XrefSection: offset, kind, entries, trailer, /Prev, auxiliary_of, recovery), pdf-source ships PrefixSource, and pdf-forensics groups sections into oldest-to-newest logical revisions (hybrid classic+/XRefStm counts once, linearization stubs excluded, startxref-paired EOF boundaries with confidence), classifies per-revision object changes (Added/Redefined/Freed/RepeatedIdentically with raw and semantic hashes, roles, object-to-page map), and replays historical prefixes through the ordinary DocumentSnapshot path. Per-revision inventory agrees with qpdf --json on all 8 differential oracle cases.
+
+        One section remains pending: signature_cryptography (structural ByteRange coverage is reported; verification itself is M4). The xref_sections pending entry is gone, and M2's four acceptance checks are satisfied with evidence; the M2 plan of record and both lege upgrades (@lege.work.prefix-source, @lege.work.xref-section-preservation) are complete.
+
+        Still true from /7: the XMP parser is a targeted local-name scanner, not a general XML parser, and accepts a theoretical cross-namespace local-name collision in exchange for working with non-standard prefixes.
+
+        Environment note: qpdf is not installed system-wide here, so the oracle evidence was observed with a rootless qpdf 12.3.2 extract on PATH; on a machine with qpdf installed the plain acceptance command applies.
+        """
+    observed_at git:883393dc473bf5288501b4e619688a4bfb68bcf9
+    method manual
+    watches [
+        "lege-pdf/pdf-integrity/crates/pdf-forensics/src/intake.rs",
+        "lege-pdf/pdf-integrity/crates/pdf-forensics/src/document.rs"
+    ]
+    supersedes [ @audit.observation.fact-layer-surface-gap/8 ]
+}
+
+record audit.observation.fact-layer-surface-gap/10 : observation {
+    title "M1-M3 complete; findings engine live, only signature crypto remains"
+    state superseded
+    statement """
+        Updated after the M3 completion pass. pdf-content ships the audit-mode PageTrace sidecar (per-op stream object, nested stack, byte span, operator index, PaintOrigin; synthesized ops carry no stream by contract). pdf-forensics compares consecutive logical revisions semantically (TEXT_CHANGED_BETWEEN_REVISIONS with exact previous/current strings, rect, object ids, revision index), diffs annotation-off/on renders against glyph boxes (EXPLICIT_ANNOTATION_OVER_TEXT with subtype, affected and appearance text, coverage), and emits painter-order occlusion candidates (PAGE_CONTENT_COVERS_TEXT, RASTER_PATCH_ON_VECTOR_PAGE at contextual strength). Evidence PNGs are byte-identical across runs (CPU renderer, no system-font substitution); the audit CLI writes them via --evidence-dir. Disposition is now a live policy (ReviewRecommended on indicators); the flattened-export verdict stays INCONCLUSIVE with zero findings.
+
+        One section remains pending: signature_cryptography (M4). M3's four acceptance checks are satisfied with evidence; the M3 plan of record and @lege.work.page-trace-sidecar are complete (@lege.work.annotation-forensic-metadata completed during M1).
+
+        The M4/M5 blockers are resolved by best-judgement decisions, not deferred: M4 layer two uses the RustCrypto cms/x509-cert stack (@audit.decision.crypto-crate-choice; timestamp verification and trust-anchor validation explicitly out of M4), and M5 heuristics require 200 labeled documents per producer family over 8+ families (@audit.decision.heuristic-corpus-size; the 11k sweep corpus is absent from this checkout and is not the baseline).
+
+        Renderer limitation noted during verification: text inside annotation appearance streams extracts correctly but does not rasterize in the evidence renderer, so pixel evidence for appearance text comes from the rect fill/erasure rather than the replacement glyphs.
+        """
+    observed_at git:883393dc473bf5288501b4e619688a4bfb68bcf9
+    method manual
+    watches [
+        "lege-pdf/pdf-integrity/crates/pdf-forensics/src/intake.rs",
+        "lege-pdf/pdf-integrity/crates/pdf-forensics/src/document.rs"
+    ]
+    supersedes [ @audit.observation.fact-layer-surface-gap/9 ]
+}
+
+record audit.observation.fact-layer-surface-gap/11 : observation {
+    title "M1-M4 complete; trust, timestamps, and M5 heuristics remain"
+    state verified
+    statement """
+        Updated after the M4 completion pass. Signatures now have both layers: strict ByteRange validation over the original bytes (valid/truncated/overlapping/gap-containing/malformed, with covered spans), association of each signature with its introducing logical revision and %%EOF-end verification, DocMDP/FieldMDP policy parsing with POST_SIGNATURE_REVISION and DOCMDP_POLICY_VIOLATION findings carrying exact changed objects, and CMS SignedData digest verification via the RustCrypto stack with a real self-signed test signer. The five statuses stay separate; certificate trust and timestamp-token verification are explicit Unevaluated states per @audit.decision.crypto-crate-choice, as is the remaining signature_cryptography pending entry. A proven digest mismatch drives IntegrityFailure.
+
+        M4's three acceptance checks are satisfied with evidence; the M4 plan of record is complete. M1-M4 acceptance stands at 15 of 17.
+
+        M5 is entered with a timing constraint, not a technical one: the operator has no edited/fraudulent PDFs, and synthetic edited-corpus generation is deferred until later (note on @audit.work.m5-plan). The corpus-size decision (@audit.decision.heuristic-corpus-size) and the absent-11k-corpus finding still govern whenever collection starts.
+        """
+    observed_at git:883393dc473bf5288501b4e619688a4bfb68bcf9
+    method manual
+    watches [
+        "lege-pdf/pdf-integrity/crates/pdf-forensics/src/intake.rs",
+        "lege-pdf/pdf-integrity/crates/pdf-forensics/src/document.rs"
+    ]
+    supersedes [ @audit.observation.fact-layer-surface-gap/10 ]
 }

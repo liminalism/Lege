@@ -16,6 +16,7 @@ use pdf_page_ir::{
     PageBounds, PaintOrigin, PathData, PathVerb, Point, Rect,
 };
 
+use crate::marked::MarkedContentSpan;
 use crate::semantic::{
     ActualTextSpan, ActualTextSpanId, FontId, ImageId, PathId, SemColor, SemFont, SemImage,
     SemShading, SemShadingKind, SemTiling, SemanticOp, SemanticPage, ShadingId, TextElement,
@@ -23,6 +24,7 @@ use crate::semantic::{
 };
 use crate::state::{ColorSpace, GraphicsState, PathBuilder};
 use crate::tokenizer::{ContentLexer, Lexeme, Operand};
+use crate::trace::{ContentSegment, OpTrace, PageTrace, TraceCurrent, TraceFrame, TraceFrameKind};
 use crate::{ContentError, ContentLimits};
 
 /// A hard cap on the operand stack to bound a malformed stream that never
@@ -182,6 +184,18 @@ struct MarkedContentFrame {
     actual_text: Option<ActualTextSpan>,
 }
 
+/// A `BMC`/`BDC` span opened while [`Interpreter::record_marked`] is set,
+/// still awaiting its `EMC`.
+#[derive(Debug, Clone)]
+struct OpenMarkedSpan {
+    /// Tag name, or `None` when the opening operator carried no name
+    /// operand (malformed; the span still nests for pairing purposes but is
+    /// dropped rather than reported).
+    tag: Option<String>,
+    open_offset: usize,
+    bbox: Option<Rect>,
+}
+
 /// One page-compilation job's mutable state. Owned, never shared.
 pub(crate) struct Interpreter<'a> {
     snapshot: &'a DocumentSnapshot,
@@ -232,10 +246,49 @@ pub(crate) struct Interpreter<'a> {
     /// painting is suppressed (state, clipping, and text advances still
     /// apply — hiding content must not shift what follows it).
     oc_hidden_count: u32,
+    /// Record every page-level `BMC`/`BDC`…`EMC` span into
+    /// [`Self::marked_spans`]. Off unless the marked-content accessor asked
+    /// for it, so default compilation neither pays for nor observes the
+    /// inventory.
+    record_marked: bool,
+    /// Spans opened at the page level and not yet closed.
+    marked_open: Vec<OpenMarkedSpan>,
+    /// Closed spans, in close order (re-sorted to document order on take).
+    marked_spans: Vec<MarkedContentSpan>,
     /// Set by [`Self::build_tint_image_lut`] when it had to repair a
     /// degenerate baked tint ramp (PLAN-POST-SWEEP3 §R1); cleared and read by
     /// the image builders so the flag lands on the right [`SemImage`].
     image_cs_degraded: bool,
+    /// Record a [`PageTrace`] alongside `ops`. Off unless the audit entry
+    /// point asked for it, so default compilation neither pays for nor
+    /// observes the trace (mirrors `record_marked`).
+    record_trace: bool,
+    /// Trace entries, index-aligned with `ops`. Empty unless `record_trace`.
+    trace: Vec<OpTrace>,
+    /// Page-level `/Contents` segment map (see [`gather_content_mapped`]).
+    /// Meaningful only for the page content run; nested streams are single
+    /// streams whose offsets are already stream-relative.
+    trace_segments: Vec<ContentSegment>,
+    /// Source stream object of the nested content stream currently being
+    /// interpreted. `None` at the page level (where [`Self::trace_segments`]
+    /// resolves the stream per operator) and for direct streams.
+    trace_stream: Option<ObjectId>,
+    /// Nested-object stack of the currently executing content stream,
+    /// outermost first. Empty at the page level.
+    trace_stack: Vec<TraceFrame>,
+    /// A pattern/shading resource resolved while producing the *next*
+    /// emitted op, appended to that op's stack by [`Self::emit`]. Set
+    /// immediately before the emission it belongs to; never survives it.
+    trace_extra: Option<TraceFrame>,
+    /// Content-operator execution sequence (trace only): incremented for
+    /// every operator keyword and inline image, in execution order, across
+    /// the page and all nested streams. Separate from `ops_executed` so the
+    /// operator budget's semantics stay untouched.
+    trace_seq: u64,
+    /// Provenance of the content operator currently being dispatched, or
+    /// `None` when the next emission is synthesized (outside any operator).
+    /// Saved across nested runs and cleared when each `run` returns.
+    trace_current: Option<TraceCurrent>,
 
     // --- interpreter state ---
     gs: GraphicsState,
@@ -356,7 +409,18 @@ impl<'a> Interpreter<'a> {
             mc_stack: Vec::new(),
             next_actual_text_span: 0,
             oc_hidden_count: 0,
+            record_marked: false,
+            marked_open: Vec::new(),
+            marked_spans: Vec::new(),
             image_cs_degraded: false,
+            record_trace: false,
+            trace: Vec::new(),
+            trace_segments: Vec::new(),
+            trace_stream: None,
+            trace_stack: Vec::new(),
+            trace_extra: None,
+            trace_seq: 0,
+            trace_current: None,
             gs: GraphicsState::default(),
             gs_stack: Vec::new(),
             gs_stack_floor: 0,
@@ -419,7 +483,19 @@ impl<'a> Interpreter<'a> {
                             if self.ops_executed > self.limits.max_ops {
                                 return Err(ContentError::OperatorBudget(self.ops_executed));
                             }
-                            if let Err(e) = self.dispatch(&op) {
+                            let offset = lexer.last_operator_offset();
+                            if self.record_trace {
+                                // `pos` sits just past the keyword: the span
+                                // is exactly the operator token.
+                                self.trace_seq += 1;
+                                self.trace_current = Some(TraceCurrent {
+                                    operator: op.clone(),
+                                    span_start: offset,
+                                    span_end: lexer.pos(),
+                                    seq: self.trace_seq,
+                                });
+                            }
+                            if let Err(e) = self.dispatch(&op, offset) {
                                 if e.is_fatal() {
                                     return Err(e);
                                 }
@@ -433,6 +509,17 @@ impl<'a> Interpreter<'a> {
                             self.operands.clear();
                         }
                         Lexeme::InlineImage { dict, data } => {
+                            if self.record_trace {
+                                // `pos_before` is the `BI` start; `pos` sits
+                                // just past `EI`: the span is the whole image.
+                                self.trace_seq += 1;
+                                self.trace_current = Some(TraceCurrent {
+                                    operator: b"BI".to_vec(),
+                                    span_start: pos_before,
+                                    span_end: lexer.pos(),
+                                    seq: self.trace_seq,
+                                });
+                            }
                             // Suppressed inside an OC-hidden span.
                             if !self.oc_hidden() {
                                 self.inline_image(&dict, data);
@@ -460,6 +547,13 @@ impl<'a> Interpreter<'a> {
                     }
                 }
             }
+        }
+        // A stream's last operator must not leak into whatever emits next:
+        // the caller's `trace_exit` restores the outer provenance (or none,
+        // for the page-level run, so post-content annotation wrappers read
+        // as synthesized).
+        if self.record_trace {
+            self.trace_current = None;
         }
         Ok(())
     }
@@ -507,19 +601,22 @@ impl<'a> Interpreter<'a> {
 
     // --- dispatch ----------------------------------------------------------
 
-    fn dispatch(&mut self, op: &[u8]) -> Result<(), ContentError> {
+    /// Execute one operator. `offset` is the operator keyword's byte offset
+    /// in the content slice being interpreted — only the marked-content
+    /// inventory reads it.
+    fn dispatch(&mut self, op: &[u8], offset: usize) -> Result<(), ContentError> {
         match op {
             // --- graphics state ---
             b"q" => {
                 self.gs_stack.push(self.gs.clone());
-                self.ops.push(SemanticOp::Save);
+                self.emit(SemanticOp::Save);
             }
             b"Q" => {
                 if self.gs_stack.len() > self.gs_stack_floor
                     && let Some(prev) = self.gs_stack.pop()
                 {
                     self.gs = prev;
-                    self.ops.push(SemanticOp::Restore);
+                    self.emit(SemanticOp::Restore);
                 }
                 // Unbalanced Q with an empty stack is tolerated (ignored).
             }
@@ -527,33 +624,33 @@ impl<'a> Interpreter<'a> {
                 if let Some([a, b, c, d, e, f]) = self.nums() {
                     let m = Matrix { a, b, c, d, e, f };
                     self.gs.ctm = m.then(self.gs.ctm);
-                    self.ops.push(SemanticOp::Concat(m));
+                    self.emit(SemanticOp::Concat(m));
                 }
             }
             b"w" => {
                 if let Some(v) = self.last_num() {
                     self.gs.line_width = v;
-                    self.ops.push(SemanticOp::SetLineWidth(v));
+                    self.emit(SemanticOp::SetLineWidth(v));
                 }
             }
             b"J" => {
                 if let Some(v) = self.last_num() {
                     let cap = map_line_cap(v);
                     self.gs.line_cap = cap;
-                    self.ops.push(SemanticOp::SetLineCap(cap));
+                    self.emit(SemanticOp::SetLineCap(cap));
                 }
             }
             b"j" => {
                 if let Some(v) = self.last_num() {
                     let join = map_line_join(v);
                     self.gs.line_join = join;
-                    self.ops.push(SemanticOp::SetLineJoin(join));
+                    self.emit(SemanticOp::SetLineJoin(join));
                 }
             }
             b"M" => {
                 if let Some(v) = self.last_num() {
                     self.gs.miter_limit = v;
-                    self.ops.push(SemanticOp::SetMiterLimit(v));
+                    self.emit(SemanticOp::SetMiterLimit(v));
                 }
             }
             b"d" => self.op_dash(),
@@ -638,7 +735,7 @@ impl<'a> Interpreter<'a> {
                 // out), matching PDFium (cpdf_renderstatus.cpp ProcessClipPath).
                 if !self.text_clip_runs.is_empty() {
                     let runs = std::mem::take(&mut self.text_clip_runs);
-                    self.ops.push(SemanticOp::ClipText { runs });
+                    self.emit(SemanticOp::ClipText { runs });
                     self.gs.clip_depth += 1;
                 }
             }
@@ -753,10 +850,13 @@ impl<'a> Interpreter<'a> {
             // Only `/OC` spans affect rendering: content inside a span whose
             // optional-content group is OFF is suppressed (§8.11.3.2). Other
             // tags carry no geometry we model.
-            b"BMC" => self.mc_stack.push(MarkedContentFrame {
-                hidden: false,
-                actual_text: None,
-            }),
+            b"BMC" => {
+                self.mc_stack.push(MarkedContentFrame {
+                    hidden: false,
+                    actual_text: None,
+                });
+                self.marked_open_bmc(offset);
+            }
             b"BDC" => {
                 let hidden = self.bdc_hides();
                 let actual_text = self.bdc_actual_text();
@@ -767,6 +867,7 @@ impl<'a> Interpreter<'a> {
                 if hidden {
                     self.oc_hidden_count += 1;
                 }
+                self.marked_open_bdc(offset);
             }
             b"EMC" => {
                 // Unbalanced EMC is tolerated (ignored), like unbalanced Q.
@@ -775,6 +876,7 @@ impl<'a> Interpreter<'a> {
                 {
                     self.oc_hidden_count -= 1;
                 }
+                self.marked_close(offset);
             }
 
             // Any unknown operator: ignore, having consumed the pending
@@ -832,7 +934,7 @@ impl<'a> Interpreter<'a> {
     /// stays balanced; only the emitted mark is dropped.
     fn push_color_op(&mut self, op: SemanticOp) {
         if !self.type3_shape_only {
-            self.ops.push(op);
+            self.emit(op);
         }
     }
 
@@ -1287,6 +1389,9 @@ impl<'a> Interpreter<'a> {
             let color = self
                 .resolve_pattern(name, &nums)
                 .unwrap_or(SemColor::Pattern { name, under: None });
+            if self.record_trace {
+                self.trace_extra = self.trace_pattern_frame(&color);
+            }
             if stroke {
                 self.gs.stroke_color = color.clone();
                 self.push_color_op(SemanticOp::SetStrokeColor(color));
@@ -1363,9 +1468,15 @@ impl<'a> Interpreter<'a> {
                 // The numeric operands preceding the pattern name are the
                 // underlying color for an uncolored (PaintType 2) pattern.
                 match name {
-                    Some(name) => self
-                        .resolve_pattern(name, &nums)
-                        .unwrap_or(SemColor::Pattern { name, under: None }),
+                    Some(name) => {
+                        let color = self
+                            .resolve_pattern(name, &nums)
+                            .unwrap_or(SemColor::Pattern { name, under: None });
+                        if self.record_trace {
+                            self.trace_extra = self.trace_pattern_frame(&color);
+                        }
+                        color
+                    }
                     None => SemColor::DeviceGray(0.0),
                 }
             }
@@ -1390,7 +1501,7 @@ impl<'a> Interpreter<'a> {
             .unwrap_or_default();
         self.gs.dash_pattern = pattern.clone();
         self.gs.dash_phase = phase;
-        self.ops.push(SemanticOp::SetDash { pattern, phase });
+        self.emit(SemanticOp::SetDash { pattern, phase });
     }
 
     // --- path painting -----------------------------------------------------
@@ -1410,14 +1521,14 @@ impl<'a> Interpreter<'a> {
         // apply — clipping is state, not marks (§8.11.3.2).
         if !self.oc_hidden() {
             match (fill, stroke) {
-                (Some(rule), false) => self.ops.push(SemanticOp::Fill { path: pid, rule }),
-                (None, true) => self.ops.push(SemanticOp::Stroke { path: pid }),
-                (Some(rule), true) => self.ops.push(SemanticOp::FillStroke { path: pid, rule }),
+                (Some(rule), false) => self.emit(SemanticOp::Fill { path: pid, rule }),
+                (None, true) => self.emit(SemanticOp::Stroke { path: pid }),
+                (Some(rule), true) => self.emit(SemanticOp::FillStroke { path: pid, rule }),
                 (None, false) => {}
             }
         }
         if let Some(rule) = clip {
-            self.ops.push(SemanticOp::Clip { path: pid, rule });
+            self.emit(SemanticOp::Clip { path: pid, rule });
             self.gs.clip_depth += 1;
         }
     }
@@ -1505,6 +1616,275 @@ impl<'a> Interpreter<'a> {
             .iter()
             .rev()
             .find_map(|frame| frame.actual_text.clone())
+    }
+
+    // --- marked-content inventory ------------------------------------------
+    //
+    // Recording is gated on `record_marked` (set only by the marked-content
+    // accessor) *and* on running the page content stream itself
+    // (`invoke_depth == 0`). Nested streams — form XObjects, Type 3
+    // CharProcs, soft masks, tiling cells, annotation appearances — are
+    // separate byte streams whose offsets belong to no page-level span, so
+    // their `BMC`/`BDC`/`EMC` and text runs never touch the inventory.
+
+    /// Enable span recording for this interpretation. The only caller is the
+    /// marked-content accessor; default compilation leaves it off.
+    pub(crate) fn set_record_marked(&mut self) {
+        self.record_marked = true;
+    }
+
+    /// The recorded spans, in document order. Spans still open (the stream
+    /// ended without their `EMC`) are reported with no close offset.
+    pub(crate) fn take_marked_spans(&mut self) -> Vec<MarkedContentSpan> {
+        for open in self.marked_open.drain(..) {
+            let Some(tag) = open.tag else {
+                continue;
+            };
+            self.marked_spans.push(MarkedContentSpan {
+                tag,
+                open_offset: open.open_offset,
+                close_offset: None,
+                bbox: open.bbox,
+            });
+        }
+        self.marked_spans.sort_by_key(|span| span.open_offset);
+        std::mem::take(&mut self.marked_spans)
+    }
+
+    /// Record a [`PageTrace`] for this run. `segments` is the page-level
+    /// `/Contents` map from [`gather_content_mapped`]; only the audit entry
+    /// point calls this.
+    pub(crate) fn set_record_trace(&mut self, segments: Vec<ContentSegment>) {
+        self.record_trace = true;
+        self.trace_segments = segments;
+    }
+
+    /// The recorded trace, index-aligned with the emitted `ops`.
+    pub(crate) fn take_trace(&mut self) -> PageTrace {
+        PageTrace {
+            entries: std::mem::take(&mut self.trace),
+        }
+    }
+
+    /// Push a semantic op, recording its [`OpTrace`] when
+    /// [`Self::record_trace`] is set. Every `ops` push goes through here so
+    /// the trace stays index-aligned with `ops` by construction; with
+    /// recording off this is exactly a `Vec::push` plus one predictable
+    /// branch.
+    fn emit(&mut self, op: SemanticOp) {
+        let op_index = self.ops.len();
+        // The one direct push left: this *is* the push path everything else
+        // funnels through.
+        self.ops.push(op);
+        if !self.record_trace {
+            return;
+        }
+        let mut stack = self.trace_stack.clone();
+        if let Some(extra) = self.trace_extra.take() {
+            stack.push(extra);
+        }
+        let origin = stack
+            .iter()
+            .rev()
+            .find_map(|frame| frame.kind.paint_origin())
+            .unwrap_or_default();
+        let Some(current) = self.trace_current.as_ref() else {
+            // Synthesized: emitted outside any content operator, so there is
+            // no source stream or byte span to name — only the stack.
+            self.trace.push(OpTrace {
+                op_index,
+                content_op_index: self.trace_seq,
+                operator: Vec::new(),
+                synthesized: true,
+                stream: None,
+                stack,
+                span: (0, 0),
+                origin,
+            });
+            return;
+        };
+        // At the page level the stream and stream-relative span come from
+        // the `/Contents` segment map; inside a nested stream the offsets
+        // are already stream-relative.
+        let (stream, span) = if self.trace_stack.is_empty() {
+            segment_span(&self.trace_segments, current.span_start, current.span_end)
+        } else {
+            (self.trace_stream, (current.span_start, current.span_end))
+        };
+        self.trace.push(OpTrace {
+            op_index,
+            content_op_index: current.seq,
+            operator: current.operator.clone(),
+            synthesized: false,
+            stream,
+            stack,
+            span,
+            origin,
+        });
+    }
+
+    /// Enter a nested content stream for tracing: the frame is pushed, the
+    /// source stream object becomes current, and the outer operator's
+    /// provenance is parked for [`Self::trace_exit`]. No-op unless
+    /// [`Self::record_trace`] is set.
+    fn trace_enter(
+        &mut self,
+        kind: TraceFrameKind,
+        object: Option<ObjectId>,
+    ) -> (Option<ObjectId>, Option<TraceCurrent>) {
+        if !self.record_trace {
+            return (None, None);
+        }
+        let saved_stream = std::mem::replace(&mut self.trace_stream, object);
+        let saved_current = self.trace_current.take();
+        self.trace_stack.push(TraceFrame { kind, object });
+        (saved_stream, saved_current)
+    }
+
+    /// Leave a nested content stream entered with [`Self::trace_enter`].
+    fn trace_exit(&mut self, saved: (Option<ObjectId>, Option<TraceCurrent>)) {
+        if !self.record_trace {
+            return;
+        }
+        self.trace_stack.pop();
+        self.trace_stream = saved.0;
+        self.trace_current = saved.1;
+    }
+
+    /// The stack frame for a pattern `color` just resolved, naming its
+    /// backing object when known. `None` for non-pattern colors and for the
+    /// symbolic fallback (whose object was never resolved).
+    fn trace_pattern_frame(&self, color: &SemColor) -> Option<TraceFrame> {
+        let (kind, object) = match color {
+            SemColor::ShadingPattern { shading, .. } => (
+                TraceFrameKind::ShadingPattern,
+                self.shadings.get(shading.index())?.object,
+            ),
+            SemColor::TilingPattern { tiling, .. } => (
+                TraceFrameKind::TilingPattern,
+                self.tilings.get(tiling.index())?.object,
+            ),
+            _ => return None,
+        };
+        object.map(|object| TraceFrame {
+            kind,
+            object: Some(object),
+        })
+    }
+
+    /// Whether a marked-content event belongs in the inventory.
+    fn marked_active(&self) -> bool {
+        self.record_marked && self.invoke_depth == 0
+    }
+
+    fn marked_open_bmc(&mut self, offset: usize) {
+        if !self.marked_active() {
+            return;
+        }
+        let tag = self
+            .operands
+            .last()
+            .and_then(Operand::as_name)
+            .map(|name| String::from_utf8_lossy(name).into_owned());
+        self.marked_open.push(OpenMarkedSpan {
+            tag,
+            open_offset: offset,
+            bbox: None,
+        });
+    }
+
+    fn marked_open_bdc(&mut self, offset: usize) {
+        if !self.marked_active() {
+            return;
+        }
+        // Operands: … tag properties. The tag is the second-to-last name,
+        // mirroring `bdc_hides`.
+        let tag = self
+            .operands
+            .len()
+            .checked_sub(2)
+            .and_then(|i| self.operands[i].as_name())
+            .map(|name| String::from_utf8_lossy(name).into_owned());
+        self.marked_open.push(OpenMarkedSpan {
+            tag,
+            open_offset: offset,
+            bbox: None,
+        });
+    }
+
+    fn marked_close(&mut self, offset: usize) {
+        if !self.marked_active() {
+            return;
+        }
+        // Unbalanced EMC is tolerated (ignored), like `mc_stack` above.
+        let Some(open) = self.marked_open.pop() else {
+            return;
+        };
+        let Some(tag) = open.tag else {
+            return;
+        };
+        self.marked_spans.push(MarkedContentSpan {
+            tag,
+            open_offset: open.open_offset,
+            close_offset: Some(offset),
+            bbox: open.bbox,
+        });
+    }
+
+    /// Fold a just-emitted text run's bounds into every open span. Called
+    /// with the run-start text matrix still in place (the advance below
+    /// has not run yet), so the box covers what this run paints.
+    fn marked_note_text_run(&mut self, font: FontId, elements: &[TextElement]) {
+        if !self.marked_active() || self.marked_open.is_empty() {
+            return;
+        }
+        let Some(run_box) = self.marked_run_box(font, elements) else {
+            return;
+        };
+        for open in &mut self.marked_open {
+            open.bbox = Some(open.bbox.map_or(run_box, |bbox| bbox.union(run_box)));
+        }
+    }
+
+    /// Advance-derived user-space box for a text run: the rectangle from
+    /// the run origin to its total displacement, `font_size` tall, mapped
+    /// through the run's text matrix and the CTM. `None` when any input is
+    /// non-finite (content numbers are untrusted).
+    fn marked_run_box(&self, font: FontId, elements: &[TextElement]) -> Option<Rect> {
+        let (tx, ty) = self.text_displacement(font, elements);
+        let size = self.gs.font_size.abs();
+        let rise = self.gs.rise;
+        if !(tx.is_finite() && ty.is_finite() && size.is_finite() && rise.is_finite()) {
+            return None;
+        }
+        if !self.text_matrix.is_finite() || !self.gs.ctm.is_finite() {
+            return None;
+        }
+        let x0 = 0.0f64.min(tx);
+        let mut x1 = 0.0f64.max(tx);
+        let y0 = rise + 0.0f64.min(ty);
+        let y1 = rise + 0.0f64.max(ty) + size;
+        if x1 <= x0 {
+            // Vertical and empty runs have no horizontal displacement but
+            // still occupy roughly an em in width.
+            x1 = x0 + size;
+        }
+        let matrix = self.text_matrix.then(self.gs.ctm);
+        let mut bounds: Option<Rect> = None;
+        for (x, y) in [(x0, y0), (x1, y0), (x0, y1), (x1, y1)] {
+            let corner = matrix.apply(Point { x, y });
+            if !corner.x.is_finite() || !corner.y.is_finite() {
+                return None;
+            }
+            let point = Rect {
+                x0: corner.x,
+                y0: corner.y,
+                x1: corner.x,
+                y1: corner.y,
+            };
+            bounds = Some(bounds.map_or(point, |bbox| bbox.union(point)));
+        }
+        bounds.map(Rect::normalized)
     }
 
     /// Visibility of a `/OC` value (an OCG or OCMD, usually by reference)
@@ -1630,7 +2010,10 @@ impl<'a> Interpreter<'a> {
         };
         let id = TextRunId(self.text_runs.len() as u32);
         self.text_runs.push(run);
-        self.ops.push(SemanticOp::ShowText(id));
+        self.emit(SemanticOp::ShowText(id));
+        // The run-start text matrix is still in place (the advance below has
+        // not run yet), which is what the marked-content box needs.
+        self.marked_note_text_run(font, &elements);
 
         // Type 3 glyphs paint through CharProc geometry. Keep the ShowText
         // operation above for extraction, then use the established renderer
@@ -1652,13 +2035,21 @@ impl<'a> Interpreter<'a> {
 
         // Advance the text line position by the run's total displacement, so a
         // following show operator starts where this one ended (ISO 32000-1
-        // §9.4.4). The displacement is the running sum of glyph advances —
-        // width·Tfs/1000 + Tc (+ Tw for a word-spacing code) — plus the explicit
-        // `TJ` adjustments (−n/1000·Tfs), all scaled by Th. This mirrors
-        // `lower::placed_glyphs`, which lays out glyphs *within* a run from the
-        // same quantities; without it, consecutive `Tj`/`TJ` operators that rely
-        // on the viewer to advance (rather than repositioning with `Td`/`Tm`)
+        // §9.4.4). Without it, consecutive `Tj`/`TJ` operators that rely on
+        // the viewer to advance (rather than repositioning with `Td`/`Tm`)
         // pile every run onto the same origin.
+        let (tx, ty) = self.text_displacement(font, &elements);
+        if tx != 0.0 || ty != 0.0 {
+            self.text_matrix = Matrix::translate(tx, ty).then(self.text_matrix);
+        }
+    }
+
+    /// A run's total displacement in text space: the running sum of glyph
+    /// advances — width·Tfs/1000 + Tc (+ Tw for a word-spacing code) — plus
+    /// the explicit `TJ` adjustments (−n/1000·Tfs), all scaled by Th. This
+    /// mirrors `lower::placed_glyphs`, which lays out glyphs *within* a run
+    /// from the same quantities.
+    fn text_displacement(&self, font: FontId, elements: &[TextElement]) -> (f64, f64) {
         let th = self.gs.horizontal_scale / 100.0;
         let fs = self.gs.font_size;
         let metrics = self.fonts[font.index()].metrics.clone();
@@ -1695,9 +2086,7 @@ impl<'a> Interpreter<'a> {
                 }
             }
         }
-        if tx != 0.0 || ty != 0.0 {
-            self.text_matrix = Matrix::translate(tx, ty).then(self.text_matrix);
-        }
+        (tx, ty)
     }
 
     /// Show a run of Type 3 text: execute each code's CharProc content stream
@@ -1749,9 +2138,13 @@ impl<'a> Interpreter<'a> {
                         let concat = fm.then(param).then(self.text_matrix);
                         let mut d_width = None;
                         if !invisible {
-                            if let Some(stream) = t3.char_procs[code as usize].clone() {
-                                d_width =
-                                    self.exec_char_proc(&stream, concat, t3.resources.clone());
+                            if let Some(char_proc) = t3.char_procs[code as usize].clone() {
+                                d_width = self.exec_char_proc(
+                                    char_proc.object,
+                                    &char_proc.stream,
+                                    concat,
+                                    t3.resources.clone(),
+                                );
                             } else {
                                 self.ctx.note_recovery(format!(
                                     "Type 3 glyph for code {code} has no CharProc; advancing only"
@@ -1787,6 +2180,7 @@ impl<'a> Interpreter<'a> {
     /// glyph that shows its own font terminates.
     fn exec_char_proc(
         &mut self,
+        object: Option<ObjectId>,
         stream: &PdfStream,
         concat: Matrix,
         resources: Option<Arc<PdfObject>>,
@@ -1810,11 +2204,11 @@ impl<'a> Interpreter<'a> {
         // consume it, and any trailing unmatched `q` is unwound below.
         let saved_floor = self.gs_stack_floor;
         self.gs_stack.push(self.gs.clone());
-        self.ops.push(SemanticOp::Save);
+        self.emit(SemanticOp::Save);
         self.gs_stack_floor = self.gs_stack.len();
         if concat != Matrix::IDENTITY {
             self.gs.ctm = concat.then(self.gs.ctm);
-            self.ops.push(SemanticOp::Concat(concat));
+            self.emit(SemanticOp::Concat(concat));
         }
 
         // 2. Scope the Type 3 flags to this CharProc: each glyph decides its
@@ -1839,13 +2233,14 @@ impl<'a> Interpreter<'a> {
         self.type3_nesting += 1;
 
         // 3. Execute (a malformed CharProc is a skipped glyph, never fatal).
-        self.ops
-            .push(SemanticOp::BeginPaintOrigin(PaintOrigin::Type3Glyph));
+        let trace_saved = self.trace_enter(TraceFrameKind::Type3Glyph, object);
+        self.emit(SemanticOp::BeginPaintOrigin(PaintOrigin::Type3Glyph));
         if let Err(e) = self.run(&content) {
             self.ctx
                 .note_recovery(format!("Type 3 CharProc aborted: {e}"));
         }
-        self.ops.push(SemanticOp::EndPaintOrigin);
+        self.emit(SemanticOp::EndPaintOrigin);
+        self.trace_exit(trace_saved);
 
         self.type3_nesting -= 1;
         self.invoke_depth -= 1;
@@ -1866,13 +2261,13 @@ impl<'a> Interpreter<'a> {
         while self.gs_stack.len() > self.gs_stack_floor {
             if let Some(prev) = self.gs_stack.pop() {
                 self.gs = prev;
-                self.ops.push(SemanticOp::Restore);
+                self.emit(SemanticOp::Restore);
             }
         }
         self.gs_stack_floor = saved_floor;
         if let Some(prev) = self.gs_stack.pop() {
             self.gs = prev;
-            self.ops.push(SemanticOp::Restore);
+            self.emit(SemanticOp::Restore);
         }
         captured
     }
@@ -1924,7 +2319,7 @@ impl<'a> Interpreter<'a> {
             .cloned()
             .and_then(|c| self.resolve_obj(&c))
             .and_then(|o| o.as_dict().cloned());
-        let mut char_procs: [Option<Arc<PdfStream>>; 256] = std::array::from_fn(|_| None);
+        let mut char_procs: [Option<CharProc>; 256] = std::array::from_fn(|_| None);
         if let Some(cp) = char_procs_dict {
             for code in 0u32..256 {
                 let name = diffs
@@ -1939,7 +2334,10 @@ impl<'a> Interpreter<'a> {
                 if let Some(obj) = self.resolve_obj(&entry)
                     && let PdfObject::Stream(s) = &*obj
                 {
-                    char_procs[code as usize] = Some(s.clone());
+                    char_procs[code as usize] = Some(CharProc {
+                        object: entry.as_reference(),
+                        stream: s.clone(),
+                    });
                 }
             }
         }
@@ -2924,7 +3322,7 @@ impl<'a> Interpreter<'a> {
         };
         let id = ImageId(self.images.len() as u32);
         self.images.push(img);
-        self.ops.push(SemanticOp::DrawImage(id));
+        self.emit(SemanticOp::DrawImage(id));
     }
 
     /// Convert 8-bit image samples in a space the sampler cannot express to
@@ -3808,17 +4206,17 @@ impl<'a> Interpreter<'a> {
 
         // 1. Save.
         self.gs_stack.push(self.gs.clone());
-        self.ops.push(SemanticOp::Save);
+        self.emit(SemanticOp::Save);
         // 2. Concat /Matrix.
         if matrix != Matrix::IDENTITY {
             self.gs.ctm = matrix.then(self.gs.ctm);
-            self.ops.push(SemanticOp::Concat(matrix));
+            self.emit(SemanticOp::Concat(matrix));
         }
         // 3. Clip to /BBox (in form space, i.e. after the Matrix concat).
         if let Some([x0, y0, x1, y1]) = bbox {
             let path = rect_path(x0, y0, x1 - x0, y1 - y0);
             let pid = self.intern_path(path);
-            self.ops.push(SemanticOp::Clip {
+            self.emit(SemanticOp::Clip {
                 path: pid,
                 rule: FillRule::NonZero,
             });
@@ -3830,7 +4228,7 @@ impl<'a> Interpreter<'a> {
         // with them, while its content paints with alpha/blend reset to
         // 1/Normal (ISO 32000-1 §11.6.6), avoiding a double alpha.
         if let Some((isolated, knockout, bounds)) = group {
-            self.ops.push(SemanticOp::BeginGroup {
+            self.emit(SemanticOp::BeginGroup {
                 isolated,
                 knockout,
                 bounds,
@@ -3868,9 +4266,17 @@ impl<'a> Interpreter<'a> {
         if let Some(id) = obj_id {
             self.form_stack.push(id);
         }
-        self.ops.push(SemanticOp::BeginPaintOrigin(origin));
+        // Only form and annotation-appearance invocations reach here; anything
+        // else would still be a form-shaped nested stream.
+        let trace_kind = match origin {
+            PaintOrigin::AnnotationAppearance => TraceFrameKind::AnnotationAppearance,
+            _ => TraceFrameKind::FormXObject,
+        };
+        let trace_saved = self.trace_enter(trace_kind, obj_id);
+        self.emit(SemanticOp::BeginPaintOrigin(origin));
         let result = self.run(&content);
-        self.ops.push(SemanticOp::EndPaintOrigin);
+        self.emit(SemanticOp::EndPaintOrigin);
+        self.trace_exit(trace_saved);
         if obj_id.is_some() {
             self.form_stack.pop();
         }
@@ -3884,13 +4290,13 @@ impl<'a> Interpreter<'a> {
         self.oc_hidden_count = saved_oc_hidden;
 
         if group.is_some() {
-            self.ops.push(SemanticOp::EndGroup);
+            self.emit(SemanticOp::EndGroup);
         }
 
         // 5. Restore.
         if let Some(prev) = self.gs_stack.pop() {
             self.gs = prev;
-            self.ops.push(SemanticOp::Restore);
+            self.emit(SemanticOp::Restore);
         }
         result
     }
@@ -3914,7 +4320,7 @@ impl<'a> Interpreter<'a> {
         // annotations (and lowering's state stack) start clean; likewise any
         // dangling marked-content (OC) suppression.
         while self.gs_stack.pop().is_some() {
-            self.ops.push(SemanticOp::Restore);
+            self.emit(SemanticOp::Restore);
         }
         self.mc_stack.clear();
         self.oc_hidden_count = 0;
@@ -3973,16 +4379,16 @@ impl<'a> Interpreter<'a> {
         self.operands.clear();
 
         self.gs_stack.push(self.gs.clone());
-        self.ops.push(SemanticOp::Save);
+        self.emit(SemanticOp::Save);
         if fit != Matrix::IDENTITY {
             self.gs.ctm = fit.then(self.gs.ctm);
-            self.ops.push(SemanticOp::Concat(fit));
+            self.emit(SemanticOp::Concat(fit));
         }
         let result =
             self.invoke_form_with_origin(stream_id, &stream, PaintOrigin::AnnotationAppearance);
         if let Some(prev) = self.gs_stack.pop() {
             self.gs = prev;
-            self.ops.push(SemanticOp::Restore);
+            self.emit(SemanticOp::Restore);
         }
         result
     }
@@ -4062,20 +4468,21 @@ impl<'a> Interpreter<'a> {
         // Each synthesized appearance is an isolated semantic state just like
         // an appearance Form. Attribution remains AnnotationAppearance so
         // sweep diagnostics do not misclassify these pixels as page content.
-        self.ops.push(SemanticOp::Save);
-        self.ops.push(SemanticOp::BeginPaintOrigin(
+        let trace_saved = self.trace_enter(TraceFrameKind::AnnotationAppearance, annot.source);
+        self.emit(SemanticOp::Save);
+        self.emit(SemanticOp::BeginPaintOrigin(
             PaintOrigin::AnnotationAppearance,
         ));
-        self.ops.push(SemanticOp::SetFillColor(color));
-        self.ops
-            .push(SemanticOp::SetFillAlpha(annot.opacity.clamp(0.0, 1.0)));
-        self.ops.push(SemanticOp::SetBlendMode(blend));
-        self.ops.push(SemanticOp::Fill {
+        self.emit(SemanticOp::SetFillColor(color));
+        self.emit(SemanticOp::SetFillAlpha(annot.opacity.clamp(0.0, 1.0)));
+        self.emit(SemanticOp::SetBlendMode(blend));
+        self.emit(SemanticOp::Fill {
             path,
             rule: FillRule::NonZero,
         });
-        self.ops.push(SemanticOp::EndPaintOrigin);
-        self.ops.push(SemanticOp::Restore);
+        self.emit(SemanticOp::EndPaintOrigin);
+        self.emit(SemanticOp::Restore);
+        self.trace_exit(trace_saved);
         Ok(())
     }
 
@@ -4232,7 +4639,7 @@ impl<'a> Interpreter<'a> {
         };
         let id = ImageId(self.images.len() as u32);
         self.images.push(img);
-        self.ops.push(SemanticOp::DrawImage(id));
+        self.emit(SemanticOp::DrawImage(id));
     }
 
     /// Map an inline image's `/CS` (abbreviation or named resource) to a color
@@ -4361,15 +4768,15 @@ impl<'a> Interpreter<'a> {
 
         if let Some(ca) = dict_num(dict, self.intern(b"ca")) {
             self.gs.fill_alpha = ca as f32;
-            self.ops.push(SemanticOp::SetFillAlpha(ca as f32));
+            self.emit(SemanticOp::SetFillAlpha(ca as f32));
         }
         if let Some(ca) = dict_num(dict, self.intern(b"CA")) {
             self.gs.stroke_alpha = ca as f32;
-            self.ops.push(SemanticOp::SetStrokeAlpha(ca as f32));
+            self.emit(SemanticOp::SetStrokeAlpha(ca as f32));
         }
         if let Some(lw) = dict_num(dict, self.intern(b"LW")) {
             self.gs.line_width = lw;
-            self.ops.push(SemanticOp::SetLineWidth(lw));
+            self.emit(SemanticOp::SetLineWidth(lw));
         }
         // /OP (stroke) and /op (fill) overprint: recorded as a page feature
         // flag (§8.6.7); compositing itself is unchanged.
@@ -4388,14 +4795,14 @@ impl<'a> Interpreter<'a> {
             if let Some(n) = name {
                 let mode = map_blend_mode(&self.names.resolve(n));
                 self.gs.blend = mode;
-                self.ops.push(SemanticOp::SetBlendMode(mode));
+                self.emit(SemanticOp::SetBlendMode(mode));
             }
         }
 
         // /SMask: a soft-mask dictionary, or /None to disable.
         if let Some(smask) = dict.get(self.intern(b"SMask")).cloned() {
             if matches!(&smask, PdfObject::Name(n) if self.names.resolve(*n).as_ref() == b"None") {
-                self.ops.push(SemanticOp::ClearSoftMask);
+                self.emit(SemanticOp::ClearSoftMask);
             } else if let Some(sm) = self.resolve_obj(&smask)
                 && let Some(sm) = sm.as_dict()
             {
@@ -4486,8 +4893,8 @@ impl<'a> Interpreter<'a> {
         // depth limit. resvg_masking_mask_recursive_on_self is exactly this.
         let recursive = group_id.is_some_and(|id| self.soft_mask_stack.contains(&id));
         if recursive {
-            self.ops.push(SemanticOp::BeginSoftMask { kind, transfer });
-            self.ops.push(SemanticOp::EndSoftMask);
+            self.emit(SemanticOp::BeginSoftMask { kind, transfer });
+            self.emit(SemanticOp::EndSoftMask);
             return Ok(());
         }
         let content = self.snapshot.decode_stream_data(stream, self.ctx)?;
@@ -4498,19 +4905,19 @@ impl<'a> Interpreter<'a> {
             None => self.resources.clone(),
         };
 
-        self.ops.push(SemanticOp::BeginSoftMask { kind, transfer });
+        self.emit(SemanticOp::BeginSoftMask { kind, transfer });
         // Isolate the mask content's graphics state (Save/Restore) so its
         // transform and paint changes do not leak into the masked painting.
         self.gs_stack.push(self.gs.clone());
-        self.ops.push(SemanticOp::Save);
+        self.emit(SemanticOp::Save);
         if matrix != Matrix::IDENTITY {
             self.gs.ctm = matrix.then(self.gs.ctm);
-            self.ops.push(SemanticOp::Concat(matrix));
+            self.emit(SemanticOp::Concat(matrix));
         }
         if let Some([x0, y0, x1, y1]) = bbox {
             let path = rect_path(x0, y0, x1 - x0, y1 - y0);
             let pid = self.intern_path(path);
-            self.ops.push(SemanticOp::Clip {
+            self.emit(SemanticOp::Clip {
                 path: pid,
                 rule: FillRule::NonZero,
             });
@@ -4533,10 +4940,11 @@ impl<'a> Interpreter<'a> {
             self.soft_mask_stack.push(id);
         }
         let operands = std::mem::take(&mut self.operands);
-        self.ops
-            .push(SemanticOp::BeginPaintOrigin(PaintOrigin::SoftMaskContent));
+        let trace_saved = self.trace_enter(TraceFrameKind::SoftMask, group_id);
+        self.emit(SemanticOp::BeginPaintOrigin(PaintOrigin::SoftMaskContent));
         let result = self.run(&content);
-        self.ops.push(SemanticOp::EndPaintOrigin);
+        self.emit(SemanticOp::EndPaintOrigin);
+        self.trace_exit(trace_saved);
         self.operands = operands;
         if group_id.is_some() {
             self.soft_mask_stack.pop();
@@ -4548,9 +4956,9 @@ impl<'a> Interpreter<'a> {
 
         if let Some(prev) = self.gs_stack.pop() {
             self.gs = prev;
-            self.ops.push(SemanticOp::Restore);
+            self.emit(SemanticOp::Restore);
         }
-        self.ops.push(SemanticOp::EndSoftMask);
+        self.emit(SemanticOp::EndSoftMask);
         result
     }
 
@@ -4588,7 +4996,13 @@ impl<'a> Interpreter<'a> {
         let bbox = self.shading_bbox(&obj);
         let id = ShadingId(self.shadings.len() as u32);
         self.shadings.push(SemShading { object, kind, bbox });
-        self.ops.push(SemanticOp::PaintShading(id));
+        if self.record_trace {
+            self.trace_extra = object.map(|object| TraceFrame {
+                kind: TraceFrameKind::Shading,
+                object: Some(object),
+            });
+        }
+        self.emit(SemanticOp::PaintShading(id));
         Ok(())
     }
 
@@ -5350,6 +5764,31 @@ impl<'a> Interpreter<'a> {
 
 // --- free helpers ----------------------------------------------------------
 
+/// Resolve a page-level concatenated offset to its source stream object and
+/// stream-relative span. Segments are disjoint and ascending; an offset that
+/// lands in no segment (only the `'\n'` separators between them, which never
+/// start an operator) yields no stream and the span unadjusted.
+fn segment_span(
+    segments: &[ContentSegment],
+    start: usize,
+    end: usize,
+) -> (Option<ObjectId>, (usize, usize)) {
+    let count = segments.partition_point(|seg| seg.start <= start);
+    let Some(seg) = count.checked_sub(1).and_then(|i| segments.get(i)) else {
+        return (None, (start, end));
+    };
+    if start.saturating_sub(seg.start) >= seg.len {
+        return (None, (start, end));
+    }
+    (
+        seg.object,
+        (
+            start.saturating_sub(seg.start),
+            end.saturating_sub(seg.start),
+        ),
+    )
+}
+
 fn get(nums: &[f64], i: usize) -> f64 {
     nums.get(i).copied().unwrap_or(0.0)
 }
@@ -5975,15 +6414,49 @@ pub(crate) fn gather_content(
         return Ok(Vec::new());
     };
     let mut out = Vec::new();
-    append_content(snapshot, contents, ctx, &mut out, 0, limits)?;
+    let mut sink = ContentSink {
+        out: &mut out,
+        segments: &mut None,
+    };
+    append_content(snapshot, contents, ctx, &mut sink, None, 0, limits)?;
     Ok(out)
+}
+
+/// Like [`gather_content`], plus the per-stream segment map the audit trace
+/// resolves page-level offsets through. The bytes are identical to what
+/// [`gather_content`] produces for the same input.
+pub(crate) fn gather_content_mapped(
+    snapshot: &DocumentSnapshot,
+    contents: Option<&PdfObject>,
+    ctx: &mut ParseContext,
+    limits: &ContentLimits,
+) -> Result<(Vec<u8>, Vec<ContentSegment>), ContentError> {
+    let Some(contents) = contents else {
+        return Ok((Vec::new(), Vec::new()));
+    };
+    let mut out = Vec::new();
+    let mut segments = Some(Vec::new());
+    let mut sink = ContentSink {
+        out: &mut out,
+        segments: &mut segments,
+    };
+    append_content(snapshot, contents, ctx, &mut sink, None, 0, limits)?;
+    Ok((out, segments.unwrap_or_default()))
+}
+
+/// Where [`append_content`] accumulates: the concatenated bytes plus, for the
+/// audit path only, the per-stream segment map.
+struct ContentSink<'a> {
+    out: &'a mut Vec<u8>,
+    segments: &'a mut Option<Vec<ContentSegment>>,
 }
 
 fn append_content(
     snapshot: &DocumentSnapshot,
     obj: &PdfObject,
     ctx: &mut ParseContext,
-    out: &mut Vec<u8>,
+    sink: &mut ContentSink<'_>,
+    current: Option<ObjectId>,
     depth: usize,
     limits: &ContentLimits,
 ) -> Result<(), ContentError> {
@@ -5995,13 +6468,18 @@ fn append_content(
             // A content object that fails to resolve is skipped, not fatal:
             // the page renders whatever other content streams it has.
             match snapshot.objects().resolve(snapshot, *id, ctx) {
-                Ok(resolved) => append_content(snapshot, &resolved, ctx, out, depth + 1, limits)?,
+                Ok(resolved) => {
+                    append_content(snapshot, &resolved, ctx, sink, Some(*id), depth + 1, limits)?
+                }
                 Err(e) => ctx.note_recovery(format!("page content object {id} unresolved: {e}")),
             }
         }
         PdfObject::Array(items) => {
+            // Each item establishes its own stream identity; an array reached
+            // through a reference must not lend that id to a direct stream
+            // item, which has no object of its own.
             for item in items.iter() {
-                append_content(snapshot, item, ctx, out, depth + 1, limits)?;
+                append_content(snapshot, item, ctx, sink, None, depth + 1, limits)?;
             }
         }
         PdfObject::Stream(stream) => {
@@ -6011,10 +6489,18 @@ fn append_content(
             // same; a real book can carry deliberately-empty/malformed pages.
             match snapshot.decode_stream_data(stream, ctx) {
                 Ok(bytes) => {
-                    if !out.is_empty() {
-                        out.push(b'\n');
+                    if !sink.out.is_empty() {
+                        sink.out.push(b'\n');
                     }
-                    out.extend_from_slice(&bytes);
+                    let start = sink.out.len();
+                    sink.out.extend_from_slice(&bytes);
+                    if let Some(segs) = sink.segments.as_mut() {
+                        segs.push(ContentSegment {
+                            object: current,
+                            start,
+                            len: bytes.len(),
+                        });
+                    }
                 }
                 Err(e) => ctx.note_recovery(format!("content stream decode failed, skipped: {e}")),
             }
@@ -6113,6 +6599,15 @@ fn eval_cie(space: CieSpace, values: &[f64]) -> SemColor {
     }
 }
 
+/// One resolved Type 3 CharProc: its content stream plus the indirect
+/// object it was reached through (`None` for a direct stream), retained so
+/// the audit trace can name the glyph's source stream object.
+#[derive(Debug, Clone)]
+struct CharProc {
+    object: Option<ObjectId>,
+    stream: Arc<PdfStream>,
+}
+
 /// A parsed `/Type3` font: everything needed to draw its glyphs, which are
 /// content streams rather than outlines (ISO 32000-1 §9.6.5).
 #[derive(Debug)]
@@ -6124,7 +6619,7 @@ struct Type3Font {
     resources: Option<Arc<PdfObject>>,
     /// Per character-code CharProc content stream, resolved through
     /// `/Encoding` + `/Differences`; `None` where the code names no glyph.
-    char_procs: [Option<Arc<PdfStream>>; 256],
+    char_procs: [Option<CharProc>; 256],
     /// Per character-code advance width in **glyph space** (`/Widths`); 0 where
     /// absent. Transform through `font_matrix` for the text-space advance.
     widths: [f64; 256],

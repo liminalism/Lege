@@ -17,17 +17,21 @@ use pdf_page_ir::{CompiledPage, FillRule, PageBounds, Rect};
 pub mod dump;
 mod interpret;
 mod lower;
+pub mod marked;
 mod mesh;
 pub mod semantic;
 pub mod state;
 pub mod tokenizer;
+pub mod trace;
 
+pub use marked::MarkedContentSpan;
 pub use semantic::{
     ActualTextSpan, ActualTextSpanId, SemColor, SemFont, SemImage, SemanticOp, SemanticPage,
     TextElement, TextRun,
 };
 pub use state::GraphicsState;
 pub use tokenizer::{ContentLexer, Lexeme, Operand};
+pub use trace::{OpTrace, PageTrace, TraceFrame, TraceFrameKind};
 
 /// Budgets applied while interpreting a content stream. Owned by the caller,
 /// threaded by reference — never global (blueprint §4.4).
@@ -228,6 +232,104 @@ impl PageCompiler {
             interp.run_annotations(&page_ref.annotations)?;
         }
         Ok(interp.finish(bounds))
+    }
+
+    /// Inventory the page content stream's marked-content spans
+    /// (`BMC`/`BDC`…`EMC`): tag names, content-stream offsets, and the
+    /// user-space bounds of the text each span encloses.
+    ///
+    /// Neutral facts only — every tag is reported, structural (`/Span`,
+    /// `/OC`) or otherwise; deciding which tags count as edit markers is
+    /// the caller's job. Offsets are byte positions in the page's
+    /// concatenated decoded content stream (one logical stream per
+    /// ISO 32000-1 §7.8.2, so a `/Contents` array reads as one span of
+    /// bytes). Spans inside nested content streams (form XObjects,
+    /// annotation appearances, and the like) are separate byte streams and
+    /// are not inventoried, and annotation appearance streams are not run
+    /// at all.
+    ///
+    /// A separate interpretation pass: default compilation
+    /// ([`Self::compile_semantic`], [`Self::compile`]) neither records
+    /// spans nor changes its output when this exists.
+    pub fn marked_content_spans(
+        &self,
+        snapshot: &DocumentSnapshot,
+        page: PageIndex,
+        ctx: &mut ParseContext,
+    ) -> Result<Vec<MarkedContentSpan>, ContentError> {
+        if ctx.is_cancelled() {
+            return Err(ContentError::Cancelled);
+        }
+        let page_ref = snapshot.page(page)?.clone();
+        let content =
+            interpret::gather_content(snapshot, page_ref.contents.as_ref(), ctx, &self.limits)?;
+        if ctx.is_cancelled() {
+            return Err(ContentError::Cancelled);
+        }
+        let resources = interpret::resolve_resources(snapshot, page_ref.resources.as_ref(), ctx);
+
+        let mut interp = interpret::Interpreter::new(
+            snapshot,
+            ctx,
+            &self.limits,
+            resources,
+            self.system_fonts.clone(),
+        );
+        interp.set_record_marked();
+        interp.run(&content)?;
+        Ok(interp.take_marked_spans())
+    }
+
+    /// Compile `page` into a [`SemanticPage`] plus its audit sidecar, the
+    /// [`PageTrace`]: per-op provenance (triggering operator, source stream
+    /// object, nested-object stack, byte span, operator index, paint origin)
+    /// recorded parallel to `SemanticPage::ops`.
+    ///
+    /// Audit-mode only: the semantic page is identical to what
+    /// [`Self::compile_semantic`] produces, and default compilation neither
+    /// allocates nor observes the trace. A separate interpretation pass, like
+    /// [`Self::marked_content_spans`].
+    pub fn compile_semantic_traced(
+        &self,
+        snapshot: &DocumentSnapshot,
+        page: PageIndex,
+        ctx: &mut ParseContext,
+    ) -> Result<(SemanticPage, PageTrace), ContentError> {
+        if ctx.is_cancelled() {
+            return Err(ContentError::Cancelled);
+        }
+        let page_ref = snapshot.page(page)?.clone();
+        let [x0, y0, x1, y1] = page_ref.crop_box;
+        let bounds = PageBounds {
+            crop: Rect { x0, y0, x1, y1 }.normalized(),
+            rotate: page_ref.rotate,
+        };
+
+        let (content, segments) = interpret::gather_content_mapped(
+            snapshot,
+            page_ref.contents.as_ref(),
+            ctx,
+            &self.limits,
+        )?;
+        if ctx.is_cancelled() {
+            return Err(ContentError::Cancelled);
+        }
+        let resources = interpret::resolve_resources(snapshot, page_ref.resources.as_ref(), ctx);
+
+        let mut interp = interpret::Interpreter::new(
+            snapshot,
+            ctx,
+            &self.limits,
+            resources,
+            self.system_fonts.clone(),
+        );
+        interp.set_record_trace(segments);
+        interp.run(&content)?;
+        if self.annotations && !page_ref.annotations.is_empty() {
+            interp.run_annotations(&page_ref.annotations)?;
+        }
+        let trace = interp.take_trace();
+        Ok((interp.finish(bounds), trace))
     }
 
     /// Compile once and retain both the semantic and lowered artifacts.

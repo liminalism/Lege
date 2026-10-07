@@ -2,10 +2,10 @@ akr-lock 0.1
 project pdf-integrity
 
 build {
-    tool "akr 0.3.1"
+    tool "akr 0.5.1"
     grammar "0.1"
     vocabulary "0.2"
-    source_graph "sha256:0177562aeb0587a498252cfddc560470780accce88e779d6a65ca05ecca250f7"
+    source_graph "sha256:5c3fb04c92cf274ce7cbfef53f7c0ce3b5988544b57d1e8ca738233ac0835fde"
 }
 
 source ".akr/project.akr" {
@@ -14,18 +14,23 @@ source ".akr/project.akr" {
 }
 
 source ".akr/records/audit/decisions.akr" {
-    hash "sha256:2ee390e48b6b6453db401833864ff003d5aea00a8ae1b95ca7d4411251e15186"
-    records 7
+    hash "sha256:e8fb204351cb609581cea581cd6f0907d5895b925c489b13754044acbac6e54a"
+    records 9
+}
+
+source ".akr/records/audit/evidence.akr" {
+    hash "sha256:fc2268f4e301fa5841d814147891b2b061feb76df30e06b5d0a8e62944bb6ef8"
+    records 15
 }
 
 source ".akr/records/audit/milestones.akr" {
-    hash "sha256:1009438ada5cf5f46fd85be62371e9094c3f7d2a145755143ccb973cedd738fc"
+    hash "sha256:e5a9edd251d7737e741cc861007281b0f457a9781faf0e48261c63749546edb9"
     records 5
 }
 
 source ".akr/records/audit/observations.akr" {
-    hash "sha256:cf29bc3c9d811fd1460c815f2a35d4873b55bd8a6111d40594e047f3b993fc9d"
-    records 6
+    hash "sha256:eba9e0534b2584cc1631db2ad29883954f34024edb3c4dce762278c768bb4bb2"
+    records 11
 }
 
 source ".akr/records/audit/papercuts.akr" {
@@ -34,8 +39,8 @@ source ".akr/records/audit/papercuts.akr" {
 }
 
 source ".akr/records/audit/questions.akr" {
-    hash "sha256:8ca60fc769d3923403511d625695ecac910762dc4927fa5494398524eaf80d29"
-    records 7
+    hash "sha256:f5b65eac2eac3bd90810bd00fa640486b8c39353c8b9cafb6586f7ec0172e736"
+    records 9
 }
 
 source ".akr/records/audit/requirements.akr" {
@@ -54,13 +59,25 @@ source ".akr/records/audit/tracks.akr" {
 }
 
 source ".akr/records/audit/work.akr" {
-    hash "sha256:4c6b709dc282c4cddb292b63eb1237c20a30e70a90da411ad90c6cf26dd15007"
+    hash "sha256:783556f0c6a33af43ffab89f123dba6aca2d9fa9621600b6c9b202cdffbd4faf"
     records 9
 }
 
 source ".akr/records/lege/work.akr" {
-    hash "sha256:82e091440c1cb000d97252e62b64257fe16e2003fbedd1717d03d2a4ba53d442"
+    hash "sha256:b15b070512e0c8715ce56571644603dd7e81321d621632b8d1d898f0d3e5ff86"
     records 4
+}
+
+resolution @audit.decision.crypto-crate-choice/1 {
+    slot implements
+    to @audit.decision.signature-layering/1
+    hash "sha256:2d50ca86639550fe78a3b1acd7eff53e9fb4e3428ae8f8cfdf0a08cf6e963795"
+}
+
+resolution @audit.decision.crypto-crate-choice/1 {
+    slot resolves
+    to @audit.question.crypto-crate/2
+    hash "sha256:39b92b4ca1a02eafc83f540cb7df189399650877901d954654f79884de8858aa"
 }
 
 resolution @audit.decision.encrypted-input-handling/1 {
@@ -85,6 +102,12 @@ resolution @audit.decision.forensics-repo-home/1 {
     slot resolves
     to @audit.question.forensics-crate-home/2
     hash "sha256:df1659afa8ce8adbcdfe38d61d858cb7672268e8831bb08f4631d67da40a5073"
+}
+
+resolution @audit.decision.heuristic-corpus-size/1 {
+    slot resolves
+    to @audit.question.heuristic-validation-corpus/2
+    hash "sha256:78ca0398cbe755c4f00c730513e8ebb60533dad91c87ea95e23b3af164e426aa"
 }
 
 resolution @audit.decision.product-framing/1 {
@@ -132,7 +155,7 @@ resolution @audit.milestone.m1-factual-audit/1 {
 resolution @audit.milestone.m2-revision-history/1 {
     slot after
     to @audit.milestone.m1-factual-audit/1
-    hash "sha256:ab0f33a10f4509c28b311fc7cad105bb265ca2dd8323da3f722f6230eae9f0fb"
+    hash "sha256:22c2cf29b286c53a371b08856f38f79871c2108c16ab9ccfc6f557b411260624"
 }
 
 resolution @audit.milestone.m2-revision-history/1 {
@@ -150,7 +173,7 @@ resolution @audit.milestone.m2-revision-history/1 {
 resolution @audit.milestone.m3-diff-and-overlay/1 {
     slot after
     to @audit.milestone.m2-revision-history/1
-    hash "sha256:67029605073aa10e7966f7e2592cbf8139d97093a5adb4ab51c21fa5217a2f7b"
+    hash "sha256:3c7f800eb3341c60020472b7f75759c89f269d74c2f612123e2ddb374c3476de"
 }
 
 resolution @audit.milestone.m3-diff-and-overlay/1 {
@@ -162,7 +185,7 @@ resolution @audit.milestone.m3-diff-and-overlay/1 {
 resolution @audit.milestone.m4-signatures/1 {
     slot after
     to @audit.milestone.m3-diff-and-overlay/1
-    hash "sha256:8cc5329b9df392845deec62f5fce5bceb15a2767015bb80b4d1ead2a6f5e73e4"
+    hash "sha256:63bfb122ad0c7e52ff036fffea9e8ea51ab69f800844488d709e3639bec96b22"
 }
 
 resolution @audit.milestone.m4-signatures/1 {
@@ -180,7 +203,7 @@ resolution @audit.milestone.m4-signatures/1 {
 resolution @audit.milestone.m5-consistency-heuristics/1 {
     slot after
     to @audit.milestone.m4-signatures/1
-    hash "sha256:7bdf29f19dc7e70bd0b6d0739c9f7ea3ca52f1b51a60a8c514ee472c762c65bd"
+    hash "sha256:3143200224a463d3508b6e22d53ad4d02986aec0525f58e3c9e22ad246bbd3bb"
 }
 
 resolution @audit.milestone.m5-consistency-heuristics/1 {
@@ -198,70 +221,82 @@ resolution @audit.milestone.m5-consistency-heuristics/1 {
 resolution @audit.observation.fact-layer-surface-gap/1 {
     slot blocks
     to @audit.work.m1-plan/1
-    hash "sha256:1eae6984058b1070f9549f63512fdf975b100838f5d7eaca2dff57d7c3006aca"
+    hash "sha256:d43cc84ec084cea1d68622db4fd85eb3fba1085bc82f1cd9922fc6b6aa65056e"
 }
 
 resolution @audit.observation.fact-layer-surface-gap/2 {
     slot blocks
     to @audit.work.m1-plan/1
-    hash "sha256:1eae6984058b1070f9549f63512fdf975b100838f5d7eaca2dff57d7c3006aca"
+    hash "sha256:d43cc84ec084cea1d68622db4fd85eb3fba1085bc82f1cd9922fc6b6aa65056e"
 }
 
 resolution @audit.observation.fact-layer-surface-gap/3 {
     slot blocks
     to @audit.work.m1-plan/1
-    hash "sha256:1eae6984058b1070f9549f63512fdf975b100838f5d7eaca2dff57d7c3006aca"
+    hash "sha256:d43cc84ec084cea1d68622db4fd85eb3fba1085bc82f1cd9922fc6b6aa65056e"
 }
 
 resolution @audit.observation.fact-layer-surface-gap/4 {
     slot blocks
     to @audit.work.m1-plan/1
-    hash "sha256:1eae6984058b1070f9549f63512fdf975b100838f5d7eaca2dff57d7c3006aca"
+    hash "sha256:d43cc84ec084cea1d68622db4fd85eb3fba1085bc82f1cd9922fc6b6aa65056e"
 }
 
 resolution @audit.observation.fact-layer-surface-gap/5 {
     slot blocks
     to @audit.work.m1-plan/1
-    hash "sha256:1eae6984058b1070f9549f63512fdf975b100838f5d7eaca2dff57d7c3006aca"
+    hash "sha256:d43cc84ec084cea1d68622db4fd85eb3fba1085bc82f1cd9922fc6b6aa65056e"
 }
 
 resolution @audit.observation.fact-layer-surface-gap/6 {
     slot blocks
     to @audit.work.m1-plan/1
-    hash "sha256:1eae6984058b1070f9549f63512fdf975b100838f5d7eaca2dff57d7c3006aca"
+    hash "sha256:d43cc84ec084cea1d68622db4fd85eb3fba1085bc82f1cd9922fc6b6aa65056e"
 }
 
 resolution @audit.question.crypto-crate/1 {
     slot blocks
     to @audit.milestone.m4-signatures/1
-    hash "sha256:7bdf29f19dc7e70bd0b6d0739c9f7ea3ca52f1b51a60a8c514ee472c762c65bd"
+    hash "sha256:3143200224a463d3508b6e22d53ad4d02986aec0525f58e3c9e22ad246bbd3bb"
+}
+
+resolution @audit.question.crypto-crate/2 {
+    slot blocks
+    to @audit.milestone.m4-signatures/1
+    hash "sha256:3143200224a463d3508b6e22d53ad4d02986aec0525f58e3c9e22ad246bbd3bb"
 }
 
 resolution @audit.question.encrypted-input-policy/1 {
     slot blocks
     to @audit.milestone.m1-factual-audit/1
-    hash "sha256:ab0f33a10f4509c28b311fc7cad105bb265ca2dd8323da3f722f6230eae9f0fb"
+    hash "sha256:22c2cf29b286c53a371b08856f38f79871c2108c16ab9ccfc6f557b411260624"
 }
 
 resolution @audit.question.encrypted-input-policy/2 {
     slot blocks
     to @audit.milestone.m1-factual-audit/1
-    hash "sha256:ab0f33a10f4509c28b311fc7cad105bb265ca2dd8323da3f722f6230eae9f0fb"
+    hash "sha256:22c2cf29b286c53a371b08856f38f79871c2108c16ab9ccfc6f557b411260624"
 }
 
 resolution @audit.question.forensics-crate-home/1 {
     slot blocks
     to @audit.work.m1-plan/1
-    hash "sha256:1eae6984058b1070f9549f63512fdf975b100838f5d7eaca2dff57d7c3006aca"
+    hash "sha256:d43cc84ec084cea1d68622db4fd85eb3fba1085bc82f1cd9922fc6b6aa65056e"
 }
 
 resolution @audit.question.forensics-crate-home/2 {
     slot blocks
     to @audit.work.m1-plan/1
-    hash "sha256:1eae6984058b1070f9549f63512fdf975b100838f5d7eaca2dff57d7c3006aca"
+    hash "sha256:d43cc84ec084cea1d68622db4fd85eb3fba1085bc82f1cd9922fc6b6aa65056e"
 }
 
 resolution @audit.question.heuristic-validation-corpus/1 {
+    slot blocks
+    to @audit.milestone.m5-consistency-heuristics/1
+    hash "sha256:3df9da6be9988445df720a8505450b4a43997d8f5341f55d09cd3e4ba38a8309"
+}
+
+resolution @audit.question.heuristic-validation-corpus/2 {
     slot blocks
     to @audit.milestone.m5-consistency-heuristics/1
     hash "sha256:3df9da6be9988445df720a8505450b4a43997d8f5341f55d09cd3e4ba38a8309"
@@ -288,7 +323,7 @@ resolution @audit.work.edit-provenance-facts/1 {
 resolution @audit.work.edit-provenance-facts/1 {
     slot part_of
     to @audit.milestone.m1-factual-audit/1
-    hash "sha256:ab0f33a10f4509c28b311fc7cad105bb265ca2dd8323da3f722f6230eae9f0fb"
+    hash "sha256:22c2cf29b286c53a371b08856f38f79871c2108c16ab9ccfc6f557b411260624"
 }
 
 resolution @audit.work.intra-run-font-fragmentation/1 {
@@ -312,7 +347,7 @@ resolution @audit.work.m1-plan/1 {
 resolution @audit.work.m1-plan/1 {
     slot plan_of_record
     to @audit.milestone.m1-factual-audit/1
-    hash "sha256:ab0f33a10f4509c28b311fc7cad105bb265ca2dd8323da3f722f6230eae9f0fb"
+    hash "sha256:22c2cf29b286c53a371b08856f38f79871c2108c16ab9ccfc6f557b411260624"
 }
 
 resolution @audit.work.m2-plan/1 {
@@ -324,7 +359,7 @@ resolution @audit.work.m2-plan/1 {
 resolution @audit.work.m2-plan/1 {
     slot plan_of_record
     to @audit.milestone.m2-revision-history/1
-    hash "sha256:67029605073aa10e7966f7e2592cbf8139d97093a5adb4ab51c21fa5217a2f7b"
+    hash "sha256:3c7f800eb3341c60020472b7f75759c89f269d74c2f612123e2ddb374c3476de"
 }
 
 resolution @audit.work.m3-plan/1 {
@@ -336,7 +371,7 @@ resolution @audit.work.m3-plan/1 {
 resolution @audit.work.m3-plan/1 {
     slot plan_of_record
     to @audit.milestone.m3-diff-and-overlay/1
-    hash "sha256:8cc5329b9df392845deec62f5fce5bceb15a2767015bb80b4d1ead2a6f5e73e4"
+    hash "sha256:63bfb122ad0c7e52ff036fffea9e8ea51ab69f800844488d709e3639bec96b22"
 }
 
 resolution @audit.work.m4-plan/1 {
@@ -348,7 +383,7 @@ resolution @audit.work.m4-plan/1 {
 resolution @audit.work.m4-plan/1 {
     slot plan_of_record
     to @audit.milestone.m4-signatures/1
-    hash "sha256:7bdf29f19dc7e70bd0b6d0739c9f7ea3ca52f1b51a60a8c514ee472c762c65bd"
+    hash "sha256:3143200224a463d3508b6e22d53ad4d02986aec0525f58e3c9e22ad246bbd3bb"
 }
 
 resolution @audit.work.m5-plan/1 {
@@ -378,19 +413,19 @@ resolution @lege.work.annotation-forensic-metadata/1 {
 resolution @lege.work.annotation-forensic-metadata/1 {
     slot part_of
     to @audit.work.m3-plan/1
-    hash "sha256:f3013188315f2baab0ffbbec390efff37e8012e4a5dff25baaaec6d323dfea39"
+    hash "sha256:bdc2da7ecbd757e7ae07040dbbcf92cb809e90aec35c9acdb7f03025e64bd452"
 }
 
 resolution @lege.work.page-trace-sidecar/1 {
     slot part_of
     to @audit.work.m3-plan/1
-    hash "sha256:f3013188315f2baab0ffbbec390efff37e8012e4a5dff25baaaec6d323dfea39"
+    hash "sha256:bdc2da7ecbd757e7ae07040dbbcf92cb809e90aec35c9acdb7f03025e64bd452"
 }
 
 resolution @lege.work.prefix-source/1 {
     slot part_of
     to @audit.work.m2-plan/1
-    hash "sha256:e0c7f25976f9a3e979e1a534874f656e8b71e18a51421e590ee14b30d3992ad1"
+    hash "sha256:30237815eb4b8f0b4a389ec1eca344185e2e41181db689367879adca8f456ffd"
 }
 
 resolution @lege.work.xref-section-preservation/1 {
@@ -402,7 +437,102 @@ resolution @lege.work.xref-section-preservation/1 {
 resolution @lege.work.xref-section-preservation/1 {
     slot part_of
     to @audit.work.m2-plan/1
-    hash "sha256:e0c7f25976f9a3e979e1a534874f656e8b71e18a51421e590ee14b30d3992ad1"
+    hash "sha256:30237815eb4b8f0b4a389ec1eca344185e2e41181db689367879adca8f456ffd"
+}
+
+seal @audit.evidence.m1-encrypted-modes/1 {
+    state verified
+    hash "sha256:06ca326c2c8e7ba294194e78a347506c57839ab7ded156daf7d77ee5342f0f8e"
+}
+
+seal @audit.evidence.m1-fixture-suite/1 {
+    state verified
+    hash "sha256:b2cb03d6f2da9f61a989653be3100c131f4ec5ba3c46852447de602de3d9849e"
+}
+
+seal @audit.evidence.m1-pdfverse/1 {
+    state verified
+    hash "sha256:c555889862a2cc64d9d54075f30a0563ef541e647534ace78cd6e3d803930332"
+}
+
+seal @audit.evidence.m1-schema/1 {
+    state verified
+    hash "sha256:b54e481dddff90464dd36572ddac113c4fb12e8ef8bfde066a4ea6c882eead09"
+}
+
+seal @audit.evidence.m2-hybrid/1 {
+    state verified
+    hash "sha256:31f43229841d49ba09e5b3db82dbadf258785b30ebdfaabdffd7e63c0194091f"
+}
+
+seal @audit.evidence.m2-qpdf-oracle/1 {
+    state verified
+    hash "sha256:2de5b0f57ea387e891d5de4df5c147c8fdd3576e7792adbea262f49c209abd8a"
+}
+
+seal @audit.evidence.m2-replay/1 {
+    state verified
+    hash "sha256:cab568226ca7e869a61c0152a04d178146a4589df7d256a0e9603185eb632e99"
+}
+
+seal @audit.evidence.m2-revision-fixtures/1 {
+    state verified
+    hash "sha256:34455903008db74772db423ef3458bfec72a52b624f839bc8f7b989d3aa78072"
+}
+
+seal @audit.evidence.m3-determinism/1 {
+    state verified
+    hash "sha256:bc4cd37e52b68e3d1839d34220154265aed864c64ea5bcda46e3b4fb9ce3b6ea"
+}
+
+seal @audit.evidence.m3-gpa/1 {
+    state verified
+    hash "sha256:238eaf14dcf9eac5f7b8df3192ee01e551e7d5d9441b3de4ab61b95da555a76c"
+}
+
+seal @audit.evidence.m3-occlusion/1 {
+    state verified
+    hash "sha256:52027acc3cbc240d9834ac13721b2149a89078f9d607920ea2dfa02c2dfea91d"
+}
+
+seal @audit.evidence.m3-overlays/1 {
+    state verified
+    hash "sha256:21d53d800186051f9aa65860bf040908ac5957b9e71fca7ad4db6bab4f8f5dfd"
+}
+
+seal @audit.evidence.m4-byterange/1 {
+    state verified
+    hash "sha256:9bc1cc9a43a1155c9d0453fa344c89b686b7d4f7c3e9cb049d587f616a607c95"
+}
+
+seal @audit.evidence.m4-digest/1 {
+    state verified
+    hash "sha256:1193b6ad3faf27a06d13127e134d1b203db61686d0ec067ff1facc2d05e1c332"
+}
+
+seal @audit.evidence.m4-docmdp/1 {
+    state verified
+    hash "sha256:7ab50136191c76375ef62a700c3e4e5b92b3a11a7df6a279ad83c50719bb2e9c"
+}
+
+seal @audit.milestone.m1-factual-audit/1 {
+    state completed
+    hash "sha256:22c2cf29b286c53a371b08856f38f79871c2108c16ab9ccfc6f557b411260624"
+}
+
+seal @audit.milestone.m2-revision-history/1 {
+    state completed
+    hash "sha256:3c7f800eb3341c60020472b7f75759c89f269d74c2f612123e2ddb374c3476de"
+}
+
+seal @audit.milestone.m3-diff-and-overlay/1 {
+    state completed
+    hash "sha256:63bfb122ad0c7e52ff036fffea9e8ea51ab69f800844488d709e3639bec96b22"
+}
+
+seal @audit.milestone.m4-signatures/1 {
+    state completed
+    hash "sha256:3143200224a463d3508b6e22d53ad4d02986aec0525f58e3c9e22ad246bbd3bb"
 }
 
 seal @audit.observation.fact-layer-surface-gap/1 {
@@ -431,8 +561,33 @@ seal @audit.observation.fact-layer-surface-gap/5 {
 }
 
 seal @audit.observation.fact-layer-surface-gap/6 {
+    state superseded
+    hash "sha256:e377406d031c43ccb4d8abc19101334849a9175dabf9447c8c5b199dd3c2d0d7"
+}
+
+seal @audit.observation.fact-layer-surface-gap/7 {
+    state superseded
+    hash "sha256:ca67adb29d7716985fa54ed5334fcb41b8f6169c0d65d91ca636c899b240ef19"
+}
+
+seal @audit.observation.fact-layer-surface-gap/8 {
+    state superseded
+    hash "sha256:4e7d5e4d3d4b8c5b85c79e23dc8070b44d90d0afe131f4626c5b48677f477bff"
+}
+
+seal @audit.observation.fact-layer-surface-gap/9 {
+    state superseded
+    hash "sha256:0cb3b0af8cd28088d91324d6623572edb3e4de04606d1676724359ecb2a21560"
+}
+
+seal @audit.observation.fact-layer-surface-gap/10 {
+    state superseded
+    hash "sha256:68e52b247db67e88b9135e4c6a741a7ecebb5be2472650c113503ace661896ed"
+}
+
+seal @audit.observation.fact-layer-surface-gap/11 {
     state verified
-    hash "sha256:641191533f2cb5d14aad365ea53f738a3868333b82a42046422434bba8cb925a"
+    hash "sha256:c85e42832f43e10474aaa11d833fe1212bcf5544957004bb3f98781de437e5af"
 }
 
 seal @audit.papercut.after-the-move-into-lege-ecosystem-cargo-test-p/1 {
@@ -456,8 +611,13 @@ seal @audit.papercut.revising-the-proposed-forensics-repo-home/1 {
 }
 
 seal @audit.question.crypto-crate/1 {
-    state open
-    hash "sha256:fcbd5b2203574e3d0f6889dff2749ebc3a868aed0669895f547ee673ee8735a8"
+    state superseded
+    hash "sha256:b34ed7e992444aaf7598b45656552fbaadb9740d9ffa10891c7fa5bf107c0fca"
+}
+
+seal @audit.question.crypto-crate/2 {
+    state resolved
+    hash "sha256:39b92b4ca1a02eafc83f540cb7df189399650877901d954654f79884de8858aa"
 }
 
 seal @audit.question.encrypted-input-policy/1 {
@@ -481,11 +641,61 @@ seal @audit.question.forensics-crate-home/2 {
 }
 
 seal @audit.question.heuristic-validation-corpus/1 {
-    state open
-    hash "sha256:79a268b7091b7238722d02ec406a411875b16cea8861aed5a61a47339c3d950c"
+    state superseded
+    hash "sha256:767ae67aeb0a5e4d8de3459a9452cfb92f748faa338d7c226a8623bc382ec676"
+}
+
+seal @audit.question.heuristic-validation-corpus/2 {
+    state resolved
+    hash "sha256:78ca0398cbe755c4f00c730513e8ebb60533dad91c87ea95e23b3af164e426aa"
 }
 
 seal @audit.question.ocr-accuracy-sufficient/1 {
     state open
     hash "sha256:82728292d465e01f34f955b358273695e65fa60b0bf93423979bc0da89cf8858"
+}
+
+seal @audit.work.edit-provenance-facts/1 {
+    state completed
+    hash "sha256:f5ec87a766c8de4e91314330980ada4ed373adbf1d7e2f5b1b36729d45dca708"
+}
+
+seal @audit.work.m1-plan/1 {
+    state completed
+    hash "sha256:d43cc84ec084cea1d68622db4fd85eb3fba1085bc82f1cd9922fc6b6aa65056e"
+}
+
+seal @audit.work.m2-plan/1 {
+    state completed
+    hash "sha256:30237815eb4b8f0b4a389ec1eca344185e2e41181db689367879adca8f456ffd"
+}
+
+seal @audit.work.m3-plan/1 {
+    state completed
+    hash "sha256:bdc2da7ecbd757e7ae07040dbbcf92cb809e90aec35c9acdb7f03025e64bd452"
+}
+
+seal @audit.work.m4-plan/1 {
+    state completed
+    hash "sha256:3ad3179f9e44716cae8a2b2e31e5f2e9eba93f7df445052ebf908b6a63fef6c7"
+}
+
+seal @lege.work.annotation-forensic-metadata/1 {
+    state completed
+    hash "sha256:81b36131821fb2187118230be10e8d9132146db7dea98a4e196a70faa7b41b14"
+}
+
+seal @lege.work.page-trace-sidecar/1 {
+    state completed
+    hash "sha256:f186596d79ea8101e8c474c3285990551b066d15d209a3e0d4f936835349193c"
+}
+
+seal @lege.work.prefix-source/1 {
+    state completed
+    hash "sha256:bfdb05736389605e3b673d3c1da4ec19cfe8ec1b32d38349b37269cdcfd930ce"
+}
+
+seal @lege.work.xref-section-preservation/1 {
+    state completed
+    hash "sha256:8d2439df3add46d047c7845349111a2620b836a0fd024576356c8cfd01662173"
 }

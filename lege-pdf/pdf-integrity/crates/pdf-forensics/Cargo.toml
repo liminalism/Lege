@@ -9,13 +9,34 @@ description = "Interpretation layer for PDF integrity triage: report schema, fin
 [dependencies]
 serde = { workspace = true }
 sha2 = { workspace = true }
+cms = { workspace = true }
+x509-cert = { workspace = true }
+der = { workspace = true }
+const-oid = { workspace = true }
+png = { workspace = true }
 pdf-read = { workspace = true }
 pdf-source = { workspace = true }
 pdf-document = { workspace = true }
+pdf-object = { workspace = true }
+pdf-structure = { workspace = true }
+pdf-syntax = { workspace = true }
+pdf-content = { workspace = true }
+pdf-text = { workspace = true }
+pdf-page-ir = { workspace = true }
+pdf-render-api = { workspace = true }
+pdf-render-cpu = { workspace = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }
 pdf-test-support = { workspace = true }
+# Real CMS signer for m4_digest fixtures: RSA key generation plus the CMS and
+# X.509 builders. Builder features apply to test builds only; the library
+# itself parses CMS and never builds it.
+cms = { workspace = true, features = ["builder"] }
+x509-cert = { workspace = true, features = ["builder"] }
+rsa = { workspace = true }
+rand = { workspace = true }
+sha2_10 = { workspace = true }
 
 [lints]
 workspace = true

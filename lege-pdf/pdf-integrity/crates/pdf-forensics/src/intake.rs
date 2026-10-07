@@ -7,18 +7,20 @@
 
 use std::sync::Arc;
 
-use pdf_document::DocumentLimits;
+use pdf_document::{DocumentLimits, DocumentSnapshot};
 use pdf_read::{CompileStatus, DocumentReport, OpenOutcome};
-use pdf_source::OwnedBytesSource;
-use sha2::{Digest, Sha256};
+use pdf_source::{OwnedBytesSource, PdfSource};
 
 use crate::document::{
-    AnnotationFacts, CompileOutcome, DocumentFacts, EncryptionFacts, FeatureFacts, FileIdentity,
-    FontFacts, HeaderFacts, ImageFacts, LineageFacts, MetadataFacts, OpenState, PageFacts,
-    PageRepresentation, ParseAssessment, PendingSection, SignatureFacts, SignatureInventoryFacts,
-    XmpHistoryEventFacts, XmpLineageFacts,
+    AnnotationFacts, AnnotationIdentityFacts, ByteRangeSpan, ByteRangeValidity, CompileOutcome,
+    DocMdpPermission, DocMdpPolicyFacts, DocumentFacts, EditMarkerFacts, EncryptionFacts,
+    FeatureFacts, FieldMdpAction, FieldMdpPolicyFacts, FileIdentity, FontFacts, HeaderFacts,
+    ImageFacts, LineageFacts, LinearizationFacts, MetadataFacts, OpenState, PageEditMarkers,
+    PageFacts, PageRepresentation, ParseAssessment, PendingSection, RevisionHistoryFacts,
+    SignatureFacts, SignatureInventoryFacts, XmpHistoryEventFacts, XmpLineageFacts,
 };
-use crate::report::{AnalysisMode, AuditReport, Availability, Disposition, UnavailableReason};
+use crate::findings::AuditEvidence;
+use crate::report::{AnalysisMode, AuditReport, Availability, UnavailableReason};
 use crate::representation;
 
 /// Audit the bytes of a PDF.
@@ -30,23 +32,52 @@ use crate::representation;
 ///
 /// `password` is tried against an encrypted document. Without one, an encrypted
 /// document is still audited, structurally, and the report says which happened.
+///
+/// A full audit runs the findings engine over the translated facts:
+/// signature byte ranges, CMS digests, post-signature DocMDP/FieldMDP policy,
+/// revision text diffs, annotation overlays, and flattened occlusion become
+/// findings, and the disposition follows from them (see
+/// [`decide_disposition`](crate::findings::decide_disposition)).
+/// A structure-only run collects no findings — every detector finding
+/// needs full evidence — and the verdict follows from the pending
+/// inventory.
 #[must_use]
 pub fn audit_bytes(bytes: &[u8], password: Option<&str>) -> AuditReport {
+    audit_bytes_with_evidence(bytes, password).0
+}
+
+/// Audit the bytes of a PDF, plus the evidence behind the findings.
+///
+/// The same report [`audit_bytes`] returns, with the
+/// [`AuditEvidence`] bundle the findings were drawn from: the detector
+/// outcomes and their renders, for PNG export via
+/// [`write_evidence_pngs`](crate::findings::write_evidence_pngs).
+///
+/// Like [`audit_bytes`], never fails and never panics.
+#[must_use]
+pub fn audit_bytes_with_evidence(
+    bytes: &[u8],
+    password: Option<&str>,
+) -> (AuditReport, AuditEvidence) {
     let identity = FileIdentity {
         sha256: hex_sha256(bytes),
         size_bytes: bytes.len() as u64,
     };
 
-    let source = Arc::new(OwnedBytesSource::new(bytes.to_vec()));
-    let report = pdf_read::examine_with_password(source, DocumentLimits::default(), password);
+    let source: Arc<dyn PdfSource> = Arc::new(OwnedBytesSource::new(bytes.to_vec()));
+    let report =
+        pdf_read::examine_with_password(Arc::clone(&source), DocumentLimits::default(), password);
 
-    let facts = translate(&report, identity);
+    let facts = translate(bytes, &report, &source, password, identity);
     let mode = analysis_mode(&facts);
 
-    // No findings engine yet, and the inventory is still partial. INCONCLUSIVE
-    // is the only honest verdict: NO_REVIEW_INDICATOR_FOUND would assert that
-    // nothing was found by a run that did not finish looking.
-    AuditReport::new_with_facts(mode, Disposition::Inconclusive, Vec::new(), facts)
+    let evidence = crate::findings::collect_evidence(bytes, password, &facts, mode);
+    let findings = evidence.findings();
+    let disposition = crate::findings::decide_disposition(&findings, &facts.pending);
+    (
+        AuditReport::new_with_facts(mode, disposition, findings, facts),
+        evidence,
+    )
 }
 
 /// How much of the document this run could see.
@@ -63,7 +94,13 @@ fn analysis_mode(facts: &DocumentFacts) -> AnalysisMode {
     }
 }
 
-fn translate(report: &DocumentReport, identity: FileIdentity) -> DocumentFacts {
+fn translate(
+    bytes: &[u8],
+    report: &DocumentReport,
+    source: &Arc<dyn PdfSource>,
+    password: Option<&str>,
+    identity: FileIdentity,
+) -> DocumentFacts {
     let (state, recovery_events) = match &report.open {
         OpenOutcome::Ok => (OpenState::Clean, Vec::new()),
         OpenOutcome::Recovered { how } => (OpenState::Recovered, how.clone()),
@@ -119,7 +156,7 @@ fn translate(report: &DocumentReport, identity: FileIdentity) -> DocumentFacts {
     // does fill in `uses_object_streams` on the failed path, but a FeatureFacts
     // with one real flag and five defaulted ones would read as five determined
     // negatives, so the section is reported unavailable as a whole.
-    let (features, annotations, pages, fonts, images) = if opened {
+    let (features, annotations, pages, fonts, images, edit_markers) = if opened {
         (
             Availability::available(FeatureFacts {
                 has_acroform: report.features.has_acroform,
@@ -132,13 +169,21 @@ fn translate(report: &DocumentReport, identity: FileIdentity) -> DocumentFacts {
             }),
             Availability::available(AnnotationFacts {
                 count_per_subtype: report.annotations.count_per_subtype.clone(),
+                annotations: report
+                    .annotations
+                    .annotations
+                    .iter()
+                    .map(translate_annotation)
+                    .collect(),
             }),
             Availability::available(report.pages.iter().map(translate_page).collect()),
             Availability::available(report.fonts.iter().map(translate_font).collect()),
             Availability::available(report.images.iter().map(translate_image).collect()),
+            Availability::available(translate_edit_markers(&report.pages)),
         )
     } else {
         (
+            Availability::unavailable(blocked_by.clone(), blocked_detail.clone()),
             Availability::unavailable(blocked_by.clone(), blocked_detail.clone()),
             Availability::unavailable(blocked_by.clone(), blocked_detail.clone()),
             Availability::unavailable(blocked_by.clone(), blocked_detail.clone()),
@@ -161,6 +206,63 @@ fn translate(report: &DocumentReport, identity: FileIdentity) -> DocumentFacts {
         ),
     };
 
+    // Linearization needs only the structural layer — the first object's
+    // offset and body — so it is determined whenever the structure loaded,
+    // which is exactly when the header is present.
+    let linearization = if report.header.is_some() {
+        Availability::available(LinearizationFacts {
+            linearized: report.linearized,
+        })
+    } else {
+        Availability::unavailable(UnavailableReason::Unparseable, blocked_detail.clone())
+    };
+
+    // Revision grouping needs the walked sections plus the raw bytes for
+    // `startxref`/`%%EOF` boundary pairing. A rebuilt xref is the honest
+    // gap: a full object scan has no section structure, so original revision
+    // membership cannot be established — and a zero-revision claim would be
+    // a fabrication.
+    let revisions = if report.xref.sections.is_empty() {
+        Availability::unavailable(blocked_by.clone(), blocked_detail.clone())
+    } else if report.xref.rebuilt {
+        Availability::unavailable(
+            UnavailableReason::Ambiguous,
+            "cross-reference table rebuilt by full object scan; original revision \
+             membership cannot be established",
+        )
+    } else {
+        let mut history =
+            crate::revisions::group_revisions(&report.xref.sections, bytes, report.linearized);
+        // Object-change classification over the same grouping: structural
+        // in every mode, with roles from the resolved document when the
+        // run opened one. The snapshot is opened here — rather than
+        // reused from the fact layer, which does not hand its own out —
+        // and only when the fact layer's identical open succeeded.
+        let snapshot = if opened {
+            DocumentSnapshot::open_with_password(
+                Arc::clone(source),
+                DocumentLimits::default(),
+                password,
+            )
+            .ok()
+        } else {
+            None
+        };
+        crate::changes::attach_changes(
+            &mut history,
+            crate::changes::ChangeInputs {
+                sections: &report.xref.sections,
+                bytes,
+                header_offset: report.header.as_ref().map(|header| header.header_offset),
+                linearized: report.linearized,
+                fonts: &report.fonts,
+                images: &report.images,
+                snapshot: snapshot.as_ref(),
+            },
+        );
+        Availability::available(history)
+    };
+
     // The trailer /ID pair is never encrypted; /Info is.
     let lineage = LineageFacts {
         id_permanent: report.identity.id_permanent.clone(),
@@ -176,24 +278,30 @@ fn translate(report: &DocumentReport, identity: FileIdentity) -> DocumentFacts {
         },
     };
 
-    let signatures = if opened {
+    let mut signatures = if opened {
+        let history = revisions.value();
         Availability::available(SignatureInventoryFacts {
             signatures: report
                 .signatures
                 .signatures
                 .iter()
-                .map(translate_signature)
+                .map(|signature| translate_signature(signature, history, bytes))
                 .collect(),
             unsigned_fields: report.signatures.unsigned_fields,
         })
     } else {
         Availability::unavailable(blocked_by, blocked_detail)
     };
+    if let Availability::Available { value } = &mut signatures {
+        crate::digest::attach_crypto(bytes, password, value.signatures.as_mut_slice());
+    }
 
     DocumentFacts {
         identity,
         parse,
+        revisions,
         header,
+        linearization,
         lineage,
         encryption,
         features,
@@ -201,6 +309,7 @@ fn translate(report: &DocumentReport, identity: FileIdentity) -> DocumentFacts {
         pages,
         fonts,
         images,
+        edit_markers,
         signatures,
         pending: pending_sections(),
     }
@@ -227,14 +336,83 @@ fn translate_xmp(xmp: &pdf_read::XmpLineage) -> XmpLineageFacts {
     }
 }
 
-fn translate_signature(sig: &pdf_read::SignatureInfo) -> SignatureFacts {
+fn translate_annotation(annot: &pdf_read::AnnotationRecord) -> AnnotationIdentityFacts {
+    AnnotationIdentityFacts {
+        page: annot.page,
+        object: annot.object.map(|id| id.to_string()),
+        subtype: annot.subtype.clone(),
+        contents: annot.contents.clone(),
+        name: annot.name.clone(),
+        modified: annot.modified.clone(),
+        creation_date: annot.creation_date.clone(),
+        author: annot.author.clone(),
+        subject: annot.subject.clone(),
+        intent: annot.intent.clone(),
+    }
+}
+
+fn translate_signature(
+    sig: &pdf_read::SignatureInfo,
+    history: Option<&RevisionHistoryFacts>,
+    bytes: &[u8],
+) -> SignatureFacts {
+    let covered_ranges: Vec<ByteRangeSpan> = sig
+        .covered_ranges
+        .iter()
+        .map(|span| ByteRangeSpan {
+            offset: span.offset,
+            length: span.length,
+        })
+        .collect();
+    let revision = history.and_then(|history| {
+        crate::byterange::introducing_revision(
+            sig.field_object.map(|id| id.number),
+            sig.value_object.map(|id| id.number),
+            history,
+        )
+    });
+    let revision_end = revision.and_then(|index| {
+        history.and_then(|history| {
+            history
+                .revisions
+                .iter()
+                .find(|revision| revision.index == index)
+                .and_then(|revision| revision.end)
+        })
+    });
     SignatureFacts {
         field_name: sig.field_name.clone(),
+        field_object: sig.field_object.map(|id| id.to_string()),
+        value_object: sig.value_object.map(|id| id.to_string()),
         filter: sig.filter.clone(),
         sub_filter: sig.sub_filter.clone(),
         signed_at: sig.signed_at.clone(),
         byte_range: sig.byte_range.clone(),
         covers_whole_file: sig.covers_whole_file,
+        byte_range_validity: match sig.byte_range_validity {
+            pdf_read::ByteRangeValidity::Valid => ByteRangeValidity::Valid,
+            pdf_read::ByteRangeValidity::GapContaining => ByteRangeValidity::GapContaining,
+            pdf_read::ByteRangeValidity::Truncated => ByteRangeValidity::Truncated,
+            pdf_read::ByteRangeValidity::Overlapping => ByteRangeValidity::Overlapping,
+            pdf_read::ByteRangeValidity::Malformed => ByteRangeValidity::Malformed,
+        },
+        ends_at_revision_end: crate::byterange::ends_at_revision_end(
+            &covered_ranges,
+            revision_end,
+            bytes,
+        ),
+        covered_ranges,
+        revision,
+        docmdp: sig.docmdp.as_ref().map(|policy| DocMdpPolicyFacts {
+            p: policy.p,
+            permission: policy.p.and_then(DocMdpPermission::from_p),
+        }),
+        fieldmdp: sig.fieldmdp.as_ref().map(|policy| FieldMdpPolicyFacts {
+            p: policy.p,
+            action: policy.action.as_deref().and_then(FieldMdpAction::from_name),
+            fields: policy.fields.clone(),
+        }),
+        crypto: None,
     }
 }
 
@@ -302,49 +480,67 @@ fn translate_image(image: &pdf_read::ImageRecord) -> ImageFacts {
     }
 }
 
-/// The M1 inventory this build does not reach yet.
+/// The fact layer reports every marked-content tag neutrally; this is the
+/// interpretation step that decides which of them count as edit markers:
+/// the `/TouchUp_*` family. Sparse: only pages carrying at least one
+/// appear.
+fn translate_edit_markers(pages: &[pdf_read::PageStatus]) -> Vec<PageEditMarkers> {
+    pages
+        .iter()
+        .filter_map(|page| {
+            let markers: Vec<EditMarkerFacts> = page
+                .marked_content
+                .iter()
+                .filter(|span| span.tag.starts_with("TouchUp_"))
+                .map(|span| EditMarkerFacts {
+                    tag: span.tag.clone(),
+                    open_offset: span.open_offset,
+                    close_offset: span.close_offset,
+                    bbox: span.bbox.and_then(millipoints),
+                })
+                .collect();
+            if markers.is_empty() {
+                None
+            } else {
+                Some(PageEditMarkers {
+                    page: page.index,
+                    markers,
+                })
+            }
+        })
+        .collect()
+}
+
+/// User-space points to thousandths of a point. `None` for a non-finite
+/// box, which the fact layer never emits but this crate will not bless
+/// into the report either.
+fn millipoints(bbox: [f64; 4]) -> Option<[i64; 4]> {
+    if !bbox.iter().all(|v| v.is_finite()) {
+        return None;
+    }
+    Some([
+        (bbox[0] * 1000.0).round() as i64,
+        (bbox[1] * 1000.0).round() as i64,
+        (bbox[2] * 1000.0).round() as i64,
+        (bbox[3] * 1000.0).round() as i64,
+    ])
+}
+
+/// The inventory this build does not reach yet.
 ///
-/// Every entry is a section named in the M1 milestone that the fact layer does
-/// not surface. Keeping the list in the report — rather than in a comment —
-/// means a consumer can tell a partial audit from a complete one, and means the
-/// list has to be shortened rather than quietly forgotten.
+/// Every entry is a section the milestones name that no layer computes.
+/// Keeping the list in the report — rather than in a comment — means a
+/// consumer can tell a partial audit from a complete one, and means the list
+/// has to be shortened rather than quietly forgotten.
 fn pending_sections() -> Vec<PendingSection> {
-    vec![
-        PendingSection::new(
-            "xref_sections",
-            "per-section offsets, types and entry counts; needs the XrefSection type from \
-             @audit.decision.revision-model",
-        ),
-        PendingSection::new(
-            "linearization",
-            "pdf-read must surface this as a neutral fact (M1 plan step 2)",
-        ),
-        PendingSection::new(
-            "annotation_identity",
-            "per-annotation object identity and forensic metadata; \
-             @lege.work.annotation-forensic-metadata",
-        ),
-        PendingSection::new(
-            "signature_cryptography",
-            "structural ByteRange coverage is reported, but nothing verifies the signature \
-             itself; that is M4",
-        ),
-        PendingSection::new(
-            "edit_markers",
-            "/TouchUp_TextEdit and related marked-content tags; \
-             @audit.work.edit-provenance-facts",
-        ),
-    ]
+    vec![PendingSection::new(
+        "signature_cryptography",
+        "CMS digest verification is reported per signature, but certificate trust \
+         and timestamp-token verification are explicitly unevaluated follow-up work \
+         per the crypto-crate decision",
+    )]
 }
 
 fn hex_sha256(bytes: &[u8]) -> String {
-    let digest = Sha256::digest(bytes);
-    let mut out = String::with_capacity(digest.len() * 2);
-    for byte in digest {
-        // Hand-rolled rather than pulling in a hex crate for sixteen nibbles.
-        const HEX: &[u8; 16] = b"0123456789abcdef";
-        out.push(HEX[(byte >> 4) as usize] as char);
-        out.push(HEX[(byte & 0x0f) as usize] as char);
-    }
-    out
+    crate::hashes::hex_sha256(bytes)
 }

@@ -52,6 +52,12 @@ pub struct DocumentLimits {
     pub max_revisions: usize,
     /// Maximum object number admitted to the xref map.
     pub max_objects: u32,
+    /// Retain every entry each xref section declared on
+    /// [`XrefSection::entries`](pdf_structure::XrefSection::entries).
+    /// Off by default: the render path never needs per-section entries, and
+    /// retaining them costs one small record per xref entry. Audit tooling
+    /// opts in to diff sections into per-object change histories.
+    pub preserve_section_entries: bool,
 }
 
 impl Default for DocumentLimits {
@@ -63,6 +69,7 @@ impl Default for DocumentLimits {
             max_pages: 0,
             max_revisions: 4096,
             max_objects: 8 * 1024 * 1024,
+            preserve_section_entries: false,
         }
     }
 }
@@ -104,14 +111,20 @@ pub enum AnnotationColor {
 }
 
 /// One annotation of a page, resolved at open to exactly what static
-/// appearance-stream rendering needs (ISO 32000-1 §12.5). `/Popup`
-/// annotations are dropped at parse time — PDFium's `CPDF_AnnotList` never
-/// even lists them (cpdf_annotlist.cpp).
+/// appearance-stream rendering needs (ISO 32000-1 §12.5), plus the neutral
+/// provenance facts read-only tooling needs (`/NM`, dates, authorship).
+/// `/Popup` annotations are dropped at parse time — PDFium's `CPDF_AnnotList`
+/// never even lists them (cpdf_annotlist.cpp).
 #[derive(Debug, Clone)]
 pub struct PageAnnotation {
     /// `/Subtype`, interned in the snapshot's name table. `None` when absent
     /// or unreadable (the annotation is kept: an `/AP` can still paint).
     pub subtype: Option<pdf_object::NameId>,
+    /// The `/Annots` entry this annotation was resolved from, when it is (as
+    /// the spec requires) an indirect reference; `None` for a direct inline
+    /// annotation dictionary. Rendering never needs it, but provenance
+    /// tooling keys revisions and identity off it.
+    pub source: Option<ObjectId>,
     /// `/Rect` in default user space, corner-normalized. Degenerate rects are
     /// preserved as-is; rendering skips them.
     pub rect: [f64; 4],
@@ -136,6 +149,23 @@ pub struct PageAnnotation {
     pub color: Option<AnnotationColor>,
     /// `/CA` constant opacity, clamped to `[0,1]` (default 1).
     pub opacity: f32,
+    /// `/Contents` text, decoded lossy. The annotation's human-readable body.
+    pub contents: Option<String>,
+    /// `/NM` annotation name: the writer-assigned identifier meant to be
+    /// unique within the document.
+    pub name: Option<String>,
+    /// `/M` last-modification date, verbatim and unparsed. A writer's claim,
+    /// not an observation.
+    pub modified: Option<String>,
+    /// `/CreationDate`, verbatim and unparsed. Like [`Self::modified`], a
+    /// claim by whatever wrote the annotation.
+    pub creation_date: Option<String>,
+    /// `/T` text label — for markup annotations, the author. Verbatim.
+    pub author: Option<String>,
+    /// `/Subj` subject: a short description of the annotation. Verbatim.
+    pub subject: Option<String>,
+    /// `/IT` intent name (e.g. `FreeTextTypewriter`), as authored.
+    pub intent: Option<String>,
 }
 
 impl PageAnnotation {
@@ -447,6 +477,7 @@ impl DocumentSnapshot {
             max_revisions: limits.max_revisions,
             max_objects: limits.max_objects,
             max_decoded_bytes: limits.max_decoded_bytes_per_context,
+            preserve_section_entries: limits.preserve_section_entries,
         };
         // Establish the security context *before* building the page tree (page
         // strings/streams are encrypted and decrypt as they resolve; `/Encrypt`

@@ -50,6 +50,7 @@ Thumbs.db
 # Small PDF fixtures are source inputs required by fresh-clone test builds.
 !lege-pdf/render/crates/pdf-document/tests/fixtures/*.pdf
 !lege-pdf/render/crates/pdf-chaos-tests/tests/fixtures/*.pdf
+!lege-pdf/pdf-integrity/fixtures/*.pdf
 /cargo-checker
 /cargo-checker.exe
 **/cargo-checker

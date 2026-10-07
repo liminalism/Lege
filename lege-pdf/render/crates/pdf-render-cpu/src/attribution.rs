@@ -168,6 +168,81 @@ pub fn render_attribution_with_threshold(
     map
 }
 
+/// Where the text pass stamped: one flag per device pixel, row-major, true
+/// where a glyph run's geometric coverage reached the pixel.
+///
+/// This mirrors the glyph-run arm of [`render_attribution_with_threshold`] —
+/// same coverage threshold, same run-bounds gating, same clip-mask
+/// combination, same soft-mask scope skipping — recording *that* the text
+/// pass stamped instead of *what* won. Forensic occlusion analysis
+/// intersects this mask with the attribution map: a glyph pixel whose winner
+/// is later path or image paint is covered text, and the painter order is
+/// proven rather than assumed — the glyph stamped first, so whatever won
+/// over it painted later. Text lowered as outlines or placement boxes
+/// (non-fill render modes, rotated or oversized runs, fonts without outline
+/// programs) stamps `Path`, not `Text`, and never appears here; that bounds
+/// this mask's recall, never its precision.
+pub fn glyph_stamp_mask(page: &CpuPreparedPage, threshold: u8) -> Vec<bool> {
+    let width = page.size.width as usize;
+    let height = page.size.height as usize;
+    let mut mask = vec![false; width.saturating_mul(height)];
+    let mut raster = RasterKernel::default();
+    let mut clips: Vec<Option<ClipMask>> = (0..page.clips.len()).map(|_| None).collect();
+
+    let mut i = 0usize;
+    while i < page.ops.len() {
+        match &page.ops[i] {
+            PreparedOp::GlyphRun(run) => {
+                ensure_clip(
+                    page,
+                    &mut raster,
+                    &mut clips,
+                    run.clip.filter(|_| run.clip_has_mask),
+                );
+                for placement in &run.placements {
+                    let bitmap = &placement.bitmap;
+                    for by in 0..bitmap.height as i32 {
+                        let y = placement.dy + by;
+                        if y < run.bounds.y
+                            || y >= run.bounds.y + run.bounds.height as i32
+                            || y < 0
+                            || y >= page.size.height as i32
+                        {
+                            continue;
+                        }
+                        for bx in 0..bitmap.width as i32 {
+                            let x = placement.dx + bx;
+                            if x < run.bounds.x
+                                || x >= run.bounds.x + run.bounds.width as i32
+                                || x < 0
+                                || x >= page.size.width as i32
+                            {
+                                continue;
+                            }
+                            let glyph =
+                                bitmap.cov[by as usize * bitmap.width as usize + bx as usize];
+                            let coverage = combined_coverage(
+                                glyph,
+                                clip_at(&clips, run.clip.filter(|_| run.clip_has_mask), x, y),
+                            );
+                            if coverage >= threshold {
+                                mask[y as usize * width + x as usize] = true;
+                            }
+                        }
+                    }
+                }
+                i += 1;
+            }
+            PreparedOp::PushSoftMask { content_end, .. } => {
+                // The enclosed ops paint only into the mask's offscreen.
+                i = (*content_end as usize).max(i + 1);
+            }
+            _ => i += 1,
+        }
+    }
+    mask
+}
+
 impl AttributionMap {
     #[inline]
     fn stamp(&mut self, x: u32, y: u32, leaf: PaintLeaf, origin: PaintOrigin) {

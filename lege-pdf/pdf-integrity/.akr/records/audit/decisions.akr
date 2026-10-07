@@ -17,6 +17,24 @@ record audit.decision.crate-shape/1 : decision {
         """
 }
 
+record audit.decision.crypto-crate-choice/1 : decision {
+    title "M4 crypto layer uses the RustCrypto cms/x509-cert stack"
+    state proposed
+    scope [ all ]
+    topic crypto-crate
+    decision """
+        M4 signature layer two is built on the RustCrypto stack: `cms` for CMS SignedData parsing and CAdES attribute extraction, `x509-cert` for certificate parsing, `rsa`/`ecdsa` for signature math, and the already-depended `sha2` for digest computation. Pure Rust, actively maintained, no C toolchain, fully offline-capable.
+        """
+    context """
+        pdf-security hand-rolls its symmetric primitives (AES/MD5/RC4) and has no ASN.1, CMS, or X.509 capability, so layer two needs a new dependency in any case. The alternatives fail the question's criteria: rasn has no maintained CMS/CAdES implementation on top, so choosing it would mean writing our own CMS parser — exactly what @audit.decision.signature-layering forbids; ring/aws-lc-rs offer primitives and partial X.509 path validation but no CMS parsing, and aws-lc adds a C/CMake build; shelling out to openssl for trust decisions would break the Rust-native release and pin behavior to ambient toolchain versions.
+        """
+    consequences """
+        New crates.io dependencies in the pdf-integrity workspace (auditable, no system libraries). RFC 3161 timestamp-token verification and full trust-anchor chain validation are explicitly out of M4: M4 reports digest validity, signer identity, certificate validity windows, and structural issuer chaining, and reports timestamp-token presence without verifying the TSA chain. Those become follow-up work, not silent claims.
+        """
+    implements [ @audit.decision.signature-layering ]
+    resolves [ @audit.question.crypto-crate ]
+}
+
 record audit.decision.encrypted-input-handling/1 : decision {
     title "Encrypted PDFs get a structure-only audit, upgraded by an optional password"
     state proposed
@@ -51,6 +69,23 @@ record audit.decision.forensics-repo-home/1 : decision {
         """
     depends_on [ @audit.decision.crate-shape ]
     resolves [ @audit.question.forensics-crate-home ]
+}
+
+record audit.decision.heuristic-corpus-size/1 : decision {
+    title "M5 heuristics need 200 labeled docs per family over 8 families"
+    state proposed
+    scope [ all ]
+    topic heuristic-corpus
+    decision """
+        An M5 heuristic ships only after measurement on at least 200 provenance-labeled documents per in-scope producer family, across at least 8 producer families from the fixture track's producer list. The per-producer false-positive budget is at most 1 miss per 200-document sample, measured directly — no extrapolation from smaller samples. The render-corpus files in this checkout may contribute only where the producer is labelable from the file's own metadata; the 11k sweep corpus is not present in this checkout and is not the baseline unless re-acquired and provenance-labeled. Collection and labeling is fixture-track work that precedes any heuristic.
+        """
+    context """
+        A rate needs a denominator, and the checkout was verified to hold only 324 render-corpus files plus 22 sweep files — the 11k sweep corpus the question asks about is absent, and it was collected for rendering coverage rather than provenance labeling in any case. 200 per family is the floor at which a sub-1% claim has any contact with observation; larger families strengthen the claim and are welcome.
+        """
+    consequences """
+        M5 is gated on corpus-collection work before any heuristic lands. Each heuristic arrives with its measured per-producer miss counts or it does not land, per the M5 plan of record.
+        """
+    resolves [ @audit.question.heuristic-validation-corpus ]
 }
 
 record audit.decision.product-framing/1 : decision {
