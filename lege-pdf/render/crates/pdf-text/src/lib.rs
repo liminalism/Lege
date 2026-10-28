@@ -787,37 +787,7 @@ fn loose_glyph_box(
 }
 
 fn transform_rect(rect: Rect, matrix: Matrix) -> Rect {
-    let points = [
-        matrix.apply(Point {
-            x: rect.x0,
-            y: rect.y0,
-        }),
-        matrix.apply(Point {
-            x: rect.x1,
-            y: rect.y0,
-        }),
-        matrix.apply(Point {
-            x: rect.x1,
-            y: rect.y1,
-        }),
-        matrix.apply(Point {
-            x: rect.x0,
-            y: rect.y1,
-        }),
-    ];
-    let mut result = Rect {
-        x0: points[0].x,
-        y0: points[0].y,
-        x1: points[0].x,
-        y1: points[0].y,
-    };
-    for point in &points[1..] {
-        result.x0 = result.x0.min(point.x);
-        result.y0 = result.y0.min(point.y);
-        result.x1 = result.x1.max(point.x);
-        result.y1 = result.y1.max(point.y);
-    }
-    result
+    matrix.transform_rect(rect)
 }
 
 fn canonical_display_matrix(page: &SemanticPage) -> Matrix {

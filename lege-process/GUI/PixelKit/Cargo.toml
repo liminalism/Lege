@@ -1,0 +1,40 @@
+[package]
+name = "lege-gui-pixelkit"
+version = "1.0.0"
+edition = "2024"
+license.workspace = true
+publish = false
+build = "../Freya/build.rs"
+
+[[bin]]
+name = "lege-gui-pixelkit"
+path = "src/main.rs"
+
+[features]
+default = []
+german = []
+debug-logging = []
+dark-mode = []
+
+[dependencies]
+pixelkit-shell = { path = "../../../../pixelkit/crates/pixelkit-shell" }
+pixelkit-windowing = { path = "../../../../pixelkit/crates/pixelkit-windowing" }
+pixelkit-ui = { path = "../../../../pixelkit/crates/pixelkit-ui" }
+pixelkit-raster = { path = "../../../../pixelkit/crates/pixelkit-raster" }
+pixelkit-text = { path = "../../../../pixelkit/crates/pixelkit-text" }
+rfd = { path = "../rfd" }
+lege-ipc = { path = "../../lege-ipc" }
+tokio = { version = "1.49", features = ["rt", "sync"] }
+anyhow.workspace = true
+serde = { version = "1.0", features = ["derive"] }
+serde_json.workspace = true
+dirs = "6.0"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+flume.workspace = true
+winit.workspace = true
+
+[build-dependencies]
+embed-resource = "3.0"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

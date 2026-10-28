@@ -2,7 +2,7 @@
 //! composition, impose, and hand the result to a spooler.
 //!
 //! This is the orchestration seam. It owns exactly one decision — which of
-//! the two pipelines in `PLAN.md` §2 a job takes — and then delegates: to the
+//! the two pipelines in `print-PLAN.md` §2 a job takes — and then delegates: to the
 //! spooler for pass-through, and to [`layout::impose`](crate::layout::impose)
 //! plus the spooler for composition. Nothing here knows about paper geometry
 //! or about any operating system.

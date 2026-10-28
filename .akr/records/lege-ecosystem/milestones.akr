@@ -67,7 +67,7 @@ record lege-ecosystem.milestone.business-pdf-ocr-cli/1 : milestone {
 
 record lege-ecosystem.milestone.business-pdf-ocr-cli/2 : milestone {
     title "Business-grade PDF OCR CLI"
-    state active
+    state completed
     scope [
         path "Cargo.toml",
         path "lege-document-ocr/**",
@@ -101,7 +101,10 @@ record lege-ecosystem.milestone.business-pdf-ocr-cli/2 : milestone {
                 """
             method command
             command "cargo test -p lege-document-ocr-cli"
-            verified_by [ @lege-ecosystem.evidence.document-ocr-cli-suite-20260908/1 ]
+            verified_by [
+                @lege-ecosystem.evidence.document-ocr-cli-lazy-backend-tests/1,
+                @lege-ecosystem.evidence.document-ocr-cli-suite-20260908/1
+            ]
         }
         check core-exports {
             statement """
@@ -137,4 +140,44 @@ record lege-ecosystem.milestone.business-pdf-ocr-cli/2 : milestone {
             Adopted architecture, backend policy, output stages, quality routing, and benchmark gates.
             """
     }
+}
+
+record lege-ecosystem.milestone.pagepress-mvp/1 : milestone {
+    title "PagePress MVP: image-to-PDF CLI plus GUI"
+    state completed
+    scope [ all ]
+    intent """
+        PagePress MVP: image-to-PDF assembly CLI plus visual GUI in the sibling pagepress repo, additive Flate8 support in lege-pdf-write, verified by unit, golden, and E2E byte-identity tests.
+        """
+    acceptance {
+        check boundary {
+            statement """
+                pagepress has zero references to lege-process; path deps only on lege-pdf-write and lege-codecs
+                """
+            method command
+            verified_by [ @lege-ecosystem.evidence.pagepress-boundary-clean/1 ]
+        }
+        check cli-assembly {
+            statement """
+                pagepress CLI builds dir/zip/@list inputs to a valid multi-page PDF (lege-pdf inspect recovery=false)
+                """
+            method command
+            verified_by [ @lege-ecosystem.evidence.pagepress-cli-assembly/1 ]
+        }
+        check gui-build {
+            statement """
+                pagepress-gui builds warning-free, its 31 tests pass, and it renders on DISPLAY
+                """
+            method command
+            verified_by [ @lege-ecosystem.evidence.pagepress-gui-build/1 ]
+        }
+        check tests {
+            statement """
+                cargo test pagepress (15 unit + 7 golden) and cargo test -p lege-pdf-write (66) pass with clippy clean
+                """
+            method command
+            verified_by [ @lege-ecosystem.evidence.pagepress-tests/1 ]
+        }
+    }
+    author "dk"
 }

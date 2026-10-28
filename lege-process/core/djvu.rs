@@ -111,6 +111,9 @@ pub struct PageData {
     /// Cleaned grayscale full page (0-255), `Some` only in grayscale/MRC mode;
     /// used as the IW44 background under the JB2 ink mask.
     pub cleaned_gray: Option<Vec<u8>>,
+    /// Preservation mode: the IW44 background is the colour page itself with
+    /// ink whitened under `binarized` (takes precedence over `cleaned_gray`).
+    pub preserved: bool,
     /// Detected regions from layout detection
     pub detections: Vec<Detection>,
     /// Optional HOCR text (already scaled to page coordinates) if OCR enabled
@@ -288,7 +291,11 @@ impl DjvuOrchestrator {
         //    - grayscale/MRC mode (cleaned_gray present): full-page grayscale
         //      canvas under the ink mask, always written;
         //    - otherwise: a colour canvas only when image regions exist.
-        let background = if let Some(cleaned) = page_data.cleaned_gray.as_deref() {
+        let background = if page_data.preserved {
+            let canvas = self.compose_preserved_canvas(page_data, image_regions, width, height);
+            dbglog!("[djvu] IW44 preserved-colour MRC background composed");
+            Some(rgb_image_to_pixmap(&canvas))
+        } else if let Some(cleaned) = page_data.cleaned_gray.as_deref() {
             let canvas =
                 self.compose_grayscale_canvas(cleaned, page_data, image_regions, width, height);
             dbglog!("[djvu] IW44 grayscale MRC background composed");
@@ -443,6 +450,37 @@ impl DjvuOrchestrator {
 
         paste_regions(&mut canvas, width, height, &page_data.rgb_image, regions);
         RgbImage::from_raw(width, height, canvas).expect("grayscale canvas buffer sized w*h*3")
+    }
+
+    /// Compose the IW44 background for a preserved (colour MRC) page: the
+    /// original RGB page with ink pixels filled toward paper white (the JB2
+    /// mask paints those back), then the original colour image regions pasted
+    /// on top. Subsample 1 here; IW44 subsamples on its own.
+    fn compose_preserved_canvas(
+        &self,
+        page_data: &PageData,
+        regions: &[ImageRegion],
+        width: u32,
+        height: u32,
+    ) -> RgbImage {
+        let n = (width as usize) * (height as usize);
+        let coverage: Vec<u8> = (0..n)
+            .map(|i| {
+                let val = page_data.binarized.get(i).copied().unwrap_or(255);
+                let is_black = if val <= 1 { val == 0 } else { val < 128 };
+                if is_black { 255 } else { 0 }
+            })
+            .collect();
+        let (mut canvas, _, _) = crate::clean_gray::mrc_background_with_coverage(
+            page_data.rgb_image.as_raw(),
+            &coverage,
+            width as usize,
+            height as usize,
+            3,
+            1,
+        );
+        paste_regions(&mut canvas, width, height, &page_data.rgb_image, regions);
+        RgbImage::from_raw(width, height, canvas).expect("preserved canvas buffer sized w*h*3")
     }
 
     /// Compose a white canvas with the original colour image regions pasted on.
@@ -949,6 +987,39 @@ mod tests {
     }
 
     #[test]
+    fn preserved_canvas_keeps_colour_and_whitens_ink() {
+        let work_dir = tempfile::tempdir().expect("tempdir");
+        let orchestrator = DjvuOrchestrator::new(DjvuConfig {
+            work_dir: work_dir.path().to_path_buf(),
+            ..Default::default()
+        })
+        .expect("orchestrator");
+        let mut binarized = vec![255u8; 64];
+        binarized[9] = 0; // ink at (1,1)
+        let page = PageData {
+            index: 0,
+            preserve_full_color: false,
+            rgb_image: RgbImage::from_pixel(8, 8, Rgb([200, 40, 40])),
+            binarized,
+            cleaned_gray: None,
+            preserved: true,
+            detections: Vec::new(),
+            hocr: None,
+        };
+        let canvas = orchestrator.compose_preserved_canvas(&page, &[], 8, 8);
+        assert_eq!(canvas.get_pixel(1, 1).0, [255, 255, 255]);
+        assert_eq!(canvas.get_pixel(5, 5).0, [200, 40, 40]);
+        let prepared = orchestrator.process_page(page).expect("preserved page");
+        assert_eq!(prepared.bg_subsample, None);
+        let doc = DjvuBuilder::new(1).with_dpi(300).build();
+        let encoded = prepared.encode(&doc, 75, 1).expect("encode preserved");
+        doc.add_encoded_page(encoded).expect("add page");
+        let bytes = doc.finalize().expect("finalize");
+        assert!(contains_chunk(&bytes, b"BG44"));
+        assert!(contains_chunk(&bytes, b"Sjbz"));
+    }
+
+    #[test]
     fn out_of_order_djvu_pages_drain_in_order() {
         let mut buffer = std::collections::BTreeMap::new();
         let mut next_expected = 0usize;
@@ -979,6 +1050,7 @@ mod tests {
                 rgb_image: RgbImage::from_pixel(8, 8, Rgb([20, 80, 140])),
                 binarized: vec![255; 64],
                 cleaned_gray: None,
+                preserved: false,
                 detections: Vec::new(),
                 hocr: None,
             })
@@ -995,6 +1067,7 @@ mod tests {
                 rgb_image: RgbImage::from_pixel(8, 8, Rgb([180, 180, 180])),
                 binarized: mask,
                 cleaned_gray: Some(vec![190; 64]),
+                preserved: false,
                 detections: Vec::new(),
                 hocr: Some(
                     "<span class='ocrx_word' title='bbox 1 1 6 6'>caf&amp;eacute;</span>"

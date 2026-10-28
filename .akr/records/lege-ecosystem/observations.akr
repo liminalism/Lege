@@ -543,7 +543,7 @@ record lege-ecosystem.observation.truetyping-text-identity-moved-letters-off-the
 
 record lege-ecosystem.observation.viewer-broken-page-was-retried-forever/1 : observation {
     title "A permanently failing viewer page was re-requested on every replan and burned a core on an idle document"
-    state verified
+    state superseded
     scope [ path "lege-viewer/src/app.rs", path "lege-viewer/src/document/conductor.rs" ]
     statement """
         Before commit 9f07c2f3, lege-viewer never quarantined a page that failed non-fatally. The viewport planner re-requested it on every replan, the worker refailed with the same error, and the application answered each PageError report with damage.mark_full() plus request_redraw(). One permanently broken page therefore kept a worker and the compositor busy indefinitely on a document nobody was touching. The page's placeholder was also an 18x18 corner square, which made a failed page read as blank. Fixed by setting a page aside after two ordinary failures or one panic, treating only a changed error as a visible change, and drawing a notice that names the page and the reason.
@@ -551,6 +551,20 @@ record lege-ecosystem.observation.viewer-broken-page-was-retried-forever/1 : obs
     observed_at git:9f07c2f3a77f5f29563dc2dc89ab1ed07f9ab48f
     method instrumented
     watches [ "lege-viewer/src/document/conductor.rs" ]
+}
+
+record lege-ecosystem.observation.viewer-broken-page-was-retried-forever/2 : observation {
+    title "A permanently failing viewer page was re-requested on every replan and burned a core on an idle document"
+    state withdrawn
+    scope [ path "lege-viewer/src/app.rs", path "lege-viewer/src/document/conductor.rs" ]
+    statement """
+        Before commit 9f07c2f3, lege-viewer never quarantined a page that failed non-fatally. The viewport planner re-requested it on every replan, the worker refailed with the same error, and the application answered each PageError report with damage.mark_full() plus request_redraw(). One permanently broken page therefore kept a worker and the compositor busy indefinitely on a document nobody was touching. The page's placeholder was also an 18x18 corner square, which made a failed page read as blank. Fixed by setting a page aside after two ordinary failures or one panic, treating only a changed error as a visible change, and drawing a notice that names the page and the reason.
+        """
+    observed_at git:9f07c2f3a77f5f29563dc2dc89ab1ed07f9ab48f
+    method instrumented
+    watches [ "lege-viewer/src/document/conductor.rs" ]
+    supersedes [ @lege-ecosystem.observation.viewer-broken-page-was-retried-forever/1 ]
+    author "dk"
 }
 
 record lege-ecosystem.observation.windows-ocr-200-page-benchmark-20260814/1 : observation {

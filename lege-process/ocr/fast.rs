@@ -91,6 +91,67 @@ pub async fn perform_page_rgb_ocr(
             (luma, true)
         }
     };
+    run_gray_ocr_job(
+        luma,
+        width,
+        height,
+        needs_cleaning,
+        invert_input,
+        lang,
+        frame,
+    )
+    .await
+}
+
+/// Run OCR on an already-cleaned grayscale page without a full-page RGB
+/// raster. Callers that only have gray (the planned gray path) use this
+/// instead of expanding to RGB for [`perform_page_rgb_ocr`], which would
+/// triple the page allocation purely to satisfy the signature.
+pub async fn perform_page_gray_ocr(
+    cleaned_gray: &[u8],
+    width: usize,
+    height: usize,
+    language: &str,
+    invert_input: bool,
+    frame: Option<PageFrame>,
+) -> Result<String> {
+    let _permit = OCR_SEMAPHORE
+        .acquire()
+        .await
+        .context("OCR concurrency limiter closed")?;
+    let expected = width
+        .checked_mul(height)
+        .context("OCR page dimensions overflow")?;
+    if cleaned_gray.len() != expected {
+        anyhow::bail!(
+            "cleaned OCR buffer length {} != {}x{}",
+            cleaned_gray.len(),
+            width,
+            height
+        );
+    }
+    run_gray_ocr_job(
+        cleaned_gray.to_vec(),
+        width,
+        height,
+        false,
+        invert_input,
+        language.to_string(),
+        frame,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn run_gray_ocr_job(
+    luma: Vec<u8>,
+    width: usize,
+    height: usize,
+    needs_cleaning: bool,
+    invert_input: bool,
+    lang: String,
+    frame: Option<PageFrame>,
+) -> Result<String> {
     let result = crate::runtime_stats::spawn_blocking_stage(
         crate::runtime_stats::Stage::Ocr,
         move || -> Result<String> {
@@ -468,6 +529,19 @@ fn reflow_output_text_blocks(page: &ReflowPage) -> Vec<PxRect> {
         blocks.push(l);
     }
     blocks
+}
+
+#[cfg(test)]
+mod gray_ocr_tests {
+    use super::*;
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn gray_ocr_rejects_mismatched_buffer_before_the_engine() {
+        let error = perform_page_gray_ocr(&[0u8; 10], 4, 4, "eng", false, None)
+            .await
+            .expect_err("mismatched gray buffer must bail");
+        assert!(error.to_string().contains("cleaned OCR buffer length"));
+    }
 }
 
 #[cfg(all(test, not(lege_paddle_ocr)))]

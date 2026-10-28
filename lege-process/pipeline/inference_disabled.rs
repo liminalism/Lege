@@ -3,7 +3,6 @@ use crate::pipeline::config::PipelineConfig;
 use anyhow::{Result, bail};
 use image::RgbImage;
 use std::sync::Arc;
-use tokio::sync::oneshot;
 
 #[derive(Clone)]
 pub struct InferenceHandle;
@@ -18,14 +17,6 @@ impl InferenceHandle {
         _page_index: usize,
         _image: Arc<RgbImage>,
     ) -> Result<Vec<Detection>> {
-        bail!("layout detection was not compiled into this Lege build")
-    }
-
-    pub async fn submit(
-        &self,
-        _page_index: usize,
-        _image: Arc<RgbImage>,
-    ) -> Result<oneshot::Receiver<Result<Vec<Detection>>>> {
         bail!("layout detection was not compiled into this Lege build")
     }
 

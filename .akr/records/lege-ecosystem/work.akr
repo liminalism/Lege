@@ -1190,7 +1190,7 @@ record lege-ecosystem.work.do-not-start-with/1 : work {
 
 record lege-ecosystem.work.document-ocr-cli-native-text-backend-init/1 : work {
     title "Decide whether a native-text-only OCR job may run without an available OCR backend"
-    state proposed
+    state completed
     scope [
         path "lege-document-ocr/cli/src/main.rs",
         path "lege-document-ocr/crates/pipeline/src/lib.rs"
@@ -1233,6 +1233,19 @@ record lege-ecosystem.work.document-ocr-cli-native-text-backend-init/1 : work {
         completed until it is settled, and the check is left deliberately unsatisfied rather than
         weakened.
         """
+    note """
+        2026-10-28: option (b) implemented. DocumentProcessor::new now keeps the OCR backend in a lazy OnceLock<Result<LiveBackend, BackendInitFailure>> (rejecting only the statically unimplemented WindowsAi up front); configuration_hash() hashes the requested configuration so resume identity does not depend on whether OCR ever ran; OCR-derived checkpoints validate that their text regions' provenance.provider matches the live backend on resume; and the document manifest includes OCR model identity and backend selection warnings only when the document contains OCR-derived pages. CLI doctor explicitly calls initialize_backend(). Evidence: lege-ecosystem.evidence.document-ocr-cli-lazy-backend-tests/1.
+        """
+    acceptance {
+        check core-cli-lazy-backend {
+            statement """
+                cargo test -p lege-document-ocr-cli and cargo test -p lege-document-pipeline pass on non-Windows hosts with lazy OCR backend initialization and checkpoint backend-provider validation.
+                """
+            method command
+            command "cargo test -p lege-document-ocr-cli"
+            verified_by [ @lege-ecosystem.evidence.document-ocr-cli-lazy-backend-tests/1 ]
+        }
+    }
 }
 
 record lege-ecosystem.work.document-ocr-layout-detection/1 : work {
@@ -1619,7 +1632,7 @@ record lege-ecosystem.work.fuse-tier-1-output-and-dequantization/1 : work {
 }
 
 record lege-ecosystem.work.glyph-font-text-output/1 : work {
-    title "Emit printed text as an embedded per-document glyph font (text_format glyphfont)"
+    title "Improve glyph-font quality and long-book growth"
     state proposed
     scope [
         path "lege-document-ocr/crates/export/src/lib.rs",
@@ -1637,12 +1650,8 @@ record lege-ecosystem.work.glyph-font-text-output/1 : work {
         path "lege-process/pipeline/helper_functions.rs",
         path "lege-process/pipeline/pdf_tokio_pipeline.rs"
     ]
-    intent """
-        Replace the JBIG2/CCITT raster text layer with a PDF text object drawn from one document-wide TrueType font whose glyphs are clustered connected components of the binarized pages. Staged: (1) pixel-exact staircase outlines, first-seen prototypes, incremental document-wide dictionary, writer emits the font at finalize under a reserved id; (2) font-oriented clustering: majority-vote prototypes, edge-tolerant structural matching, alias merging into TrueType composites, page-median descent and advance; (3) quadratic Bezier outlines fitted to the prototypes with a raster-back check and staircase fallback; (4) ToUnicode by aligning glyph placements to OCR words, replacing the invisible OCR layer on glyph pages; (5) text orientation and skew straightening from the components themselves, and deduplication under the printing-press prior (a book has one piece of type per letter, so like shapes inked differently are one glyph); (6) text at any angle, the same orientation measurement turning pages upright for OCR in every text format, and a matching path fast enough not to matter (no rayon; word-parallel kernels); (7) the rest of the page's cost at the raised render height: the renderer's fast paths for gray scans, the preserved mask's coverage plane, and the background encoded at the height the caller asked for.
-        """
-    note """
-        Pass 9 (2026-09-03) answered the two failures the user hit on the day truetyping became the default. Wrong letters: the gates could forgive a whole stroke, because a hairline is invisible to a measure of 2x2 blocks and a crossbar four pixels long has both ends touching the bowl. Counters are now identity (no fold across a different number of them, where the strokes are thick enough for the count to mean anything) and the strict gate gained the tolerant gate's far-pixel test. T.88's body text is now correct; what remains is a few substitutions in small bold type. The 836-page failure was the glyph id space, so the session keeps a dictionary per font bank and a page draws from one font; the same book also revealed that rendering an already-binarized source above its own resolution invents edges, so truetyping now traces such a book at the resolution it has. The book that failed after 7 minutes now finishes in 3 with two fonts. The writer actor also records what it died of, since the sender used to report only that the channel had closed. Costs: dictionaries grow 3-10%, Gobineau word recall 0.845 to 0.829-0.833, which is inside its run-to-run band.
-        """
+    intent "Improve the shipped per-document glyph-font text output. Investigate and correct remaining small-bold substitutions and excessive font and glyph growth on long books, with representative quality and performance measurements."
+    note "TrueTyping output, outline fitting, OCR ToUnicode, orientation and font banking are implemented. Earlier feature stages are historical context; residual quality and long-book growth remain open."
     claim the-user-found-it-on-two-books {
         text """
             The default's first day in a user's hands found both failures at once: the ITU T.88 specification came back with whole letters replaced in body text, and an 836-page book died after seven minutes on the 16-bit glyph id space while taking twenty minutes to get halfway.
@@ -1659,7 +1668,7 @@ record lege-ecosystem.work.glyph-font-text-output/1 : work {
 
 record lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps/1 : work {
     title "Handoff: remaining `jp2lam` JPEG 2000 decode gaps"
-    state proposed
+    state abandoned
     intent """
         **Audience:** an agent continuing the JPX decode work in `jp2lam`.
         **Context:** `jp2lam` is the JPEG 2000 codec behind the `pdf-renderer` port of
@@ -1667,6 +1676,9 @@ record lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps/1 : wo
         `pdf-renderer` against PDFium found ~610 corpus pages rendering **blank**
         because their JPX image failed to decode and the error was swallowed. That has
         been root-caused and mostly fixed; this document hands off the residual tail.
+        """
+    note """
+        Historical handoff diagnoses were resolved; remaining decoder work is tracked by @lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan/1.
         """
     source {
         kind legacy
@@ -1794,6 +1806,25 @@ record lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan/1 : work {
         before picking any hot-loop target. Items 2, 3, 5, 6 and 7 are independently landable
         without that.
         """
+    note """
+        Absorbs lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09 (superseded
+        2026-10-28 as a second view of this same tail). Constraints carried over from it:
+        - Parallelism: the PDF renderer already parallelizes documents/pages and sizes each JPX
+          decode from live in-flight load, clamped to Budgeted(2..8). No optimization here may
+          replace that with unrestricted nested Rayon parallelism without whole-document
+          throughput and tail-latency measurements.
+        - Correctness gates to retain on every change: OpenJPEG comparison, serial-versus-
+          budgeted, packed-versus-native, renderer output hash and the JPX census.
+        - Baseline to compare against: Structures.pdf page 0 on the final packed-Arc path keeps
+          hash fdc3994f80330ee0; a 21-run decode-only repeat measured 204.616 ms JPX median
+          (2026-08-09). Profile on a P-core-pinned stage flamegraph; the default decode_benchmark
+          measures decode_into.
+        - Direct Arc output demonstrated no throughput gain over the owned-Vec control (about 3.9%
+          slower, overlapping distributions); it is kept for removing one full-image allocation
+          and copy, not as a speedup.
+        """
+    supersedes [ @lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09/1 ]
+    author "dk"
     source {
         kind legacy
         path "lege-codecs/jp2lam/decode-fix-plan/decode-optimize.md"
@@ -1802,24 +1833,38 @@ record lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan/1 : work {
 
 record lege-ecosystem.work.jp2lam-ssim-controller/1 : work {
     title "jp2lam SSIMULACRA2 score-floor quality controller"
-    state proposed
-    intent """
-        Give jp2lam a SSIMULACRA2 score-floor quality controller: the smallest exact stream, within a bounded probe budget, whose reconstructed pixels meet a requested minimum score. Share JPXL's pinned production metric (`ssimulacra2-jpxl-1` in jpxl-perceptual) rather than a second implementation. Port JPXL controller mathematics (log-loss crossing, geometric bracket, work budgets, refuse-under-target) into a JPEG 2000-native two-dimensional search: outer global quantizer scale, inner PCRD body-bytes truncation over stored Tier-1 passes. Keep existing perceptual PCRD as the local allocator. Do not port the JPXL predictor, quantizer ladder, or structure-reuse rules. Do not change RateControl::Quality(u8) semantics until a later mapping session. v1 is Sessions 1-5 of the 2026-09-04 implementation plan (shared metric, Perceptual API, slow evaluator, PCRD-only proof, outer QuantRung).
-        """
-    note """
-        Session 1 (2026-09-04) landed: jpxl-perceptual default path no longer requires jpxl-core (AVX2 dispatch uses a local cpu module; jpxl-core is evaluator-only). jp2lam path-deps jpxl-perceptual with default-features=false, re-exports METRIC_VERSION, and has tests/metric_identity.rs. MSRV stays 1.95. Next: Session 2 RateControl::Perceptual types, no search.
-        """
+    state completed
+    intent "Implement a bounded JPEG 2000-native SSIMULACRA2 score-floor controller using the shared JPXL metric, an outer quantizer search and inner PCRD rate search."
+    note "The shared metric, perceptual targets and bounded search have landed. Quality now uses the verified scale and ApproxQuality retains the legacy ladder. Source inspection did not rerun integration tests or measure quality-per-byte; broader comparative quality remains in the photographic rate-control work."
+    acceptance {
+        check source {
+            statement """
+                The shared metric and bounded perceptual controller are implemented.
+                """
+            method observation
+            verified_by [ @lege-ecosystem.evidence.ssim-controller-source-review-20261027/1 ]
+        }
+    }
 }
 
 record lege-ecosystem.work.layout-vertical-bands-ocr-horizontal/1 : work {
     title "Correct DocLayout underdetection with vertical bands"
-    state proposed
+    state completed
     intent """
         After DocLayout NMS, keep the model's vertical text bands, expand those boxes horizontally from OCR-det line boxes plus ink, insert synthetic text boxes for uncovered ink/OCR gaps, grow image boxes to nearby illustration pixels, and optionally re-detect on an inverted raster when a large uncovered high-variance region looks like a missed plate. Apply the same correction in `--layout-visualize`.
         """
     note """
         Implemented in lege-process/core/layout_correct.rs and hooked from LayoutEngine::detect_single_blocking. LEGE_LAYOUT_OCR_DET=0 skips the extra DBNet pass; LEGE_LAYOUT_IMAGE_REDETECT=0/1 forces the invert pass off/on.
         """
+    acceptance {
+        check source {
+            statement """
+                The correction and its layout integration are implemented.
+                """
+            method observation
+            verified_by [ @lege-ecosystem.evidence.layout-correction-source-review-20261027/1 ]
+        }
+    }
 }
 
 record lege-ecosystem.work.level-local-operation/1 : work {
@@ -1842,13 +1887,22 @@ record lege-ecosystem.work.level-local-operation/1 : work {
 
 record lege-ecosystem.work.line-art-variance-postprocess/1 : work {
     title "Skip line-art image detections via bpg-rs variance classifier"
-    state proposed
+    state completed
     intent """
         After DocLayout image-class detections, classify each box with the bpg-rs 32x32 variance / Sobel / orientation preanalysis. Skip line-art boxes as raster overlays so they are binarized with the page or carried by the MRC JBIG2 mask; keep photographs, maps, and engravings as overlays. Do not revive the luma-histogram bimodality test removed in 2a86e46.
         """
     note """
         Classifier lives in lege-process/core/content_class.rs (thresholds copied from bpg-rs still265 preanalysis). PDF and DJVU pipelines call should_keep_image_overlay before premask. layout_correct also demotes line-art image boxes to text.
         """
+    acceptance {
+        check source {
+            statement """
+                The classifier and PDF and DjVu integration are implemented.
+                """
+            method observation
+            verified_by [ @lege-ecosystem.evidence.line-art-source-review-20261027/1 ]
+        }
+    }
     author "GitHub Uploader"
 }
 
@@ -2615,9 +2669,7 @@ record lege-ecosystem.work.open-source-monorepo-relaunch/1 : work {
     intent """
         Publish one sanitized Lege ecosystem source repository, restore Lege's direct DJVULibRust API integration without rolling back later behavior, retire duplicate codec mirrors, and provide checksum-pinned downloads for excluded Document OCR models.
         """
-    note """
-        Plan of record is to-do-plans/open-source-monorepo-relaunch.md. Licensing of the AGPL DJVULibRust/MIT Lege combined work and the rewritten public-history cutover are explicit blocking decisions.
-        """
+    note "Plan of record is to-do-plans/open-source-monorepo-relaunch.md. The top-level AGPL decision and direct DJVULibRust integration have landed. Remaining work includes consistent license declarations, sanitized history and public cutover, clean-clone verification and checksum-pinned optional OCR model bootstrap; publication status has not been verified."
     claim asset-policy {
         text """
             The four required embedded Lege ONNX models remain tracked, while optional large Document OCR/TurboOCR model tiers are fetched atomically from an immutable checksum-pinned manifest.
@@ -2799,14 +2851,37 @@ record lege-ecosystem.work.package-primary-tensorrt-ocr-runtime/1 : work {
     part_of [ @lege-ecosystem.milestone.business-pdf-ocr-cli ]
 }
 
+record lege-ecosystem.work.pagepress-gui-drop-sort/1 : work {
+    title "PagePress GUI: OS drag-and-drop plus sort button"
+    state completed
+    intent """
+        Add OS file drag-and-drop intake (new pixelkit-windowing on_file_drop plumbing) and a GUI sort-by-filename control to pagepress-gui, with headless tests; jxl-batch-studio must build unchanged.
+        """
+    after [ @lege-ecosystem.milestone.pagepress-mvp/1 ]
+    author "dk"
+}
+
+record lege-ecosystem.work.pagepress-pdf-import-followup/1 : work {
+    title "PagePress followup: PDF page import via lege-pdf-read"
+    state proposed
+    scope [ all ]
+    intent "Replace or augment PagePress's temporary lopdf PDF import backend with lege-pdf-read. OCR text layers and automatic deskew remain separately scoped."
+    note "PagePress already imports and merges existing PDF pages through its temporary lopdf backend; lege-pdf-read integration is the remaining backend follow-up."
+    after [ @lege-ecosystem.milestone.pagepress-mvp ]
+    author "dk"
+}
+
 record lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec/1 : work {
     title "PDF renderer follow-ups (outside pure codec)"
     state proposed
     intent """
-        1. Keep using session `Jp2Decoder` + packed Rgb8 (already done)
+        1. Keep using session `Jp2Decoder` + packed Rgb8 (done)
         2. When GPU compositing wants 4-byte pixels: map `DecodeOutputFormat::Bgra8`/`Rgbx8` through a new `DecodedFormat` and skip RGB→BGRA swizzle
-        3. Optional decode telemetry line (`JP2LAM_DECODE_TRACE`) for one-shot integration diagnosis
+        3. Optional decode telemetry line (`JP2LAM_DECODE_TRACE`) for one-shot integration diagnosis (done)
         4. Re-run pdfium-diff on a JPX-heavy page after Phase 3
+        """
+    note """
+        2026-10-28: items 1 and 3 are done (pdf-image/src/jpx.rs uses thread-local Jp2Decoder sessions with direct packed output and now emits a one-line stderr trace when JP2LAM_DECODE_TRACE=1/true/yes; evidence: lege-ecosystem.evidence.jpx-decode-trace-landed/1). Remaining: item 2 (Bgra8/Rgbx8 plumbing when GPU/BGRA surface compositing wants 4-byte pixels) and item 4 (fresh pdfium-diff run on a JPX-heavy page).
         """
     source {
         kind legacy
@@ -2926,6 +3001,372 @@ record lege-ecosystem.work.phase-6-isa-pgo-optional-gpu/1 : work {
             Only after Phases 3–4:
             """
     }
+}
+
+record lege-ecosystem.work.pipeline-memory-follow-ups/1 : work {
+    title "Deferred pipeline memory follow-ups"
+    state proposed
+    scope [ path "lege-process/pipeline/**" ]
+    intent """
+        Deferred items from the external memory review: bring DjVu stages under the shared page-memory governor or carry one reservation per page through its queues (source stage is now capped, queues are not byte-bounded); measure peak RSS on the decisive workloads (oversized natives, slow writer, one-worker margin, illustration-heavy pages, mid-decode cancel) to size the savings the review could only identify statically.
+        """
+    note """
+        2026-10-28: three of the five original items have landed:
+        - Report native dims for JPEG 2000 inputs instead of None: lege-process/pipeline/source.rs gained jp2_header_dimensions (JP2 ihdr box or bare/jp2c codestream SIZ marker from a 64 KiB prefix) used by both ZipImagePageSource and ImageFolderPageSource native_page_size. Evidence: lege-ecosystem.evidence.jp2-native-dims-sniff-tests/1.
+        - Move PDF writer blocking work off the current-thread control loop: spawn_pdf_writer_actor in lege-process/pipeline/helper_functions.rs now runs on a dedicated blocking worker thread (runtime_stats::spawn_blocking + blocking_recv) instead of tokio::spawn. Evidence: lege-ecosystem.evidence.pipeline-writer-and-spooled-epub-tests/1.
+        - Stream EPUB sidecar packaging instead of re-reading all spooled hOCR into one Vec: lege-process/pipeline/epub_pipeline.rs gained build_epub_from_spooled_hocr_pages_with_outline_cancellable, which sorts SpooledHocrPage handles and reads/parses one spooled .hocr file at a time into PageText inside the blocking packaging task. Evidence: lege-ecosystem.evidence.pipeline-writer-and-spooled-epub-tests/1.
+        """
+    depends_on [ @lege-ecosystem.decision.pipeline-memory-policy-from-external-review ]
+    author "dk"
+}
+
+record lege-ecosystem.work.pixelkit-gui-1-5-2/1 : work {
+    title "Replace the Freya processor GUI with PixelKit in 1.5.2"
+    state superseded
+    scope [ path "lege-process/GUI/**", path "to-do-plans/lege-process-1.5.2-pixelkit-gui.md" ]
+    intent """
+        For lege-process 1.5.2, replace the Freya desktop GUI with PixelKit while keeping status-panel tooltips, the Sanzo and Default theme system, every current control in a more compact four-band layout, the embedded HTML documentation, the --gui-worker progress protocol, and a CPU software renderer. The scope is written. Implementation has not started.
+        """
+    note """
+        Scope: to-do-plans/lege-process-1.5.2-pixelkit-gui.md. Current GUI remains lege-process/GUI/Freya on freya cpu-renderer. Sheet-music GUI follows after lege-gui matches the scope.
+        """
+    acceptance {
+        check controls {
+            statement """
+                Every control listed in the scope is reachable, and the mutual exclusions match the current GUI.
+                """
+            method manual
+        }
+        check cpu-presenter {
+            statement """
+                cargo gui produces lege-gui with no freya or Skia crate in that package dependency graph, and the window opens on the PixelKit CPU presenter.
+                """
+            method observation
+        }
+        check docs {
+            statement """
+                Readme and Licenses open the embedded HTML in the system browser.
+                """
+            method manual
+        }
+        check languages {
+            statement """
+                English and german builds take their chrome strings from language_service.
+                """
+            method observation
+        }
+        check progress {
+            statement """
+                A multi-page job shows the stage title, the bar, and an ETA, and Cancel stops the child without a successful completion record.
+                """
+            method manual
+        }
+        check theme {
+            statement """
+                Accepting a Sanzo dark theme writes appearance.json and reloads it. Cancel restores the previous theme.
+                """
+            method manual
+        }
+        check tooltips {
+            statement """
+                Hovering a control shows its note in the status panel in the active theme colors, and the note hides while a job runs.
+                """
+            method manual
+        }
+    }
+    author "dk"
+}
+
+record lege-ecosystem.work.pixelkit-gui-1-5-2/2 : work {
+    title "Replace the Freya processor GUI with PixelKit in 1.5.2"
+    state superseded
+    scope [ path "lege-process/GUI/**", path "to-do-plans/lege-process-1.5.2-pixelkit-gui.md" ]
+    intent "Replace the Freya desktop GUI with PixelKit for visual parity and flexible resizing, with Preserve mode available from the start. Keep the existing controls, themes, tooltips, language strings, embedded documentation and worker progress/cancellation. Measure memory against Freya on comparable workloads; a memory reduction is preferred, while improved flexibility may justify comparable use."
+    note "Scope: to-do-plans/lege-process-1.5.2-pixelkit-gui.md. Preserve mode includes the existing CLI behavior; its separate work record retains the remaining fidelity and verification gates. Sheet-music GUI follows after lege-gui matches the scope."
+    acceptance {
+        check controls {
+            statement """
+                Every control listed in the scope, including Preserve mode, is reachable and mutual exclusions match the intended behavior.
+                """
+            method manual
+        }
+        check cpu-presenter {
+            statement """
+                cargo gui produces lege-gui with no freya or Skia crate in that package dependency graph, and the window opens on the PixelKit CPU presenter.
+                """
+            method observation
+        }
+        check docs {
+            statement """
+                Readme and Licenses open the embedded HTML in the system browser.
+                """
+            method manual
+        }
+        check languages {
+            statement """
+                English and German builds take their chrome strings from language_service.
+                """
+            method observation
+        }
+        check memory {
+            statement """
+                Comparable Freya and PixelKit workloads have measured memory usage recorded, with any tradeoff against resize flexibility documented.
+                """
+            method observation
+        }
+        check progress {
+            statement """
+                A multi-page job shows the stage title, the bar, and an ETA, and Cancel stops the child without a successful completion record.
+                """
+            method manual
+        }
+        check theme {
+            statement """
+                Accepting a Sanzo dark theme writes appearance.json and reloads it. Cancel restores the previous theme.
+                """
+            method manual
+        }
+        check tooltips {
+            statement """
+                Hovering a control shows its note in the status panel in the active theme colors, and the note hides while a job runs.
+                """
+            method manual
+        }
+        check visual-resize {
+            statement """
+                The GUI achieves visual parity with Freya and remains usable when resized across representative window sizes.
+                """
+            method manual
+        }
+    }
+    supersedes [ @lege-ecosystem.work.pixelkit-gui-1-5-2/1 ]
+    author "dk"
+}
+
+record lege-ecosystem.work.pixelkit-gui-1-5-2/3 : work {
+    title "Replace the Freya processor GUI with PixelKit in 1.5.2"
+    state superseded
+    scope [ path "lege-process/GUI/**", path "to-do-plans/lege-process-1.5.2-pixelkit-gui.md" ]
+    intent """
+        Replace the Freya desktop GUI with PixelKit for visual parity and flexible resizing, with Preserve mode available from the start. Keep the existing controls, themes, tooltips, language strings, embedded documentation and worker progress/cancellation. Measure memory against Freya on comparable workloads; a memory reduction is preferred, while improved flexibility may justify comparable use.
+        """
+    note """
+        Scope accepted 2026-10-27. A runnable preview exists in lege-process/GUI/PixelKit (package/bin lege-gui-pixelkit; cargo gui-pixelkit and cargo gui-pixelkit-run), reusing the toolkit-independent frontend support. Preserve is a first-class mode with conflicting preparation flags removed. The current worker builds with it. Theme, resize, locale, lifecycle and real-worker smoke checks pass; the frontend graph excludes Freya/Skia engine/processor. Empty-queue Linux/X11 medians at equal 1980x1452 physical size: RSS 47.57 MiB Freya vs 31.90 MiB PixelKit (-32.94%); PSS 37.35 vs 22.35 MiB. docs/PIXELKIT-GUI-PREVIEW.md and docs/measurements/pixelkit-idle-memory-2026-10-27.json retain the checkpoint and measurements. Freya remains default until full visual/control/tooltip, platform and processing-workload gates pass; sheet-music follows afterward.
+        """
+    acceptance {
+        check controls {
+            statement """
+                Every control listed in the scope, including Preserve mode, is reachable and mutual exclusions match the intended behavior.
+                """
+            method manual
+        }
+        check cpu-presenter {
+            statement """
+                cargo gui produces lege-gui with no freya or Skia crate in that package dependency graph, and the window opens on the PixelKit CPU presenter.
+                """
+            method observation
+        }
+        check docs {
+            statement """
+                Readme and Licenses open the embedded HTML in the system browser.
+                """
+            method manual
+        }
+        check languages {
+            statement """
+                English and German builds take their chrome strings from language_service.
+                """
+            method observation
+        }
+        check memory {
+            statement """
+                Comparable Freya and PixelKit workloads have measured memory usage recorded, with any tradeoff against resize flexibility documented.
+                """
+            method observation
+        }
+        check progress {
+            statement """
+                A multi-page job shows the stage title, the bar, and an ETA, and Cancel stops the child without a successful completion record.
+                """
+            method manual
+        }
+        check theme {
+            statement """
+                Accepting a Sanzo dark theme writes appearance.json and reloads it. Cancel restores the previous theme.
+                """
+            method manual
+        }
+        check tooltips {
+            statement """
+                Hovering a control shows its note in the status panel in the active theme colors, and the note hides while a job runs.
+                """
+            method manual
+        }
+        check visual-resize {
+            statement """
+                The GUI achieves visual parity with Freya and remains usable when resized across representative window sizes.
+                """
+            method manual
+        }
+    }
+    supersedes [ @lege-ecosystem.work.pixelkit-gui-1-5-2/2 ]
+    author "dk"
+}
+
+record lege-ecosystem.work.pixelkit-gui-1-5-2/4 : work {
+    title "Replace the Freya processor GUI with PixelKit in 1.5.2"
+    state superseded
+    scope [ path "lege-process/GUI/**", path "to-do-plans/lege-process-1.5.2-pixelkit-gui.md" ]
+    intent """
+        Replace the Freya desktop GUI with PixelKit for visual parity and flexible resizing, with Preserve mode available from the start. Keep the existing controls, themes, tooltips, language strings, embedded documentation and worker progress/cancellation. Measure memory against Freya on comparable workloads; a memory reduction is preferred, while improved flexibility may justify comparable use.
+        """
+    note """
+        Scope accepted 2026-10-27. A runnable preview exists in lege-process/GUI/PixelKit (package/bin lege-gui-pixelkit; cargo gui-pixelkit and cargo gui-pixelkit-run), reusing the toolkit-independent frontend support. Preserve is a first-class mode with conflicting preparation flags removed. The current worker builds with it. Theme, resize, locale, lifecycle and real-worker smoke checks pass; the frontend graph excludes Freya/Skia engine/processor. Empty-queue Linux/X11 medians at equal 1980x1452 physical size: RSS 47.57 MiB Freya vs 31.90 MiB PixelKit (-32.94%); PSS 37.35 vs 22.35 MiB. docs/PIXELKIT-GUI-PREVIEW.md and docs/measurements/pixelkit-idle-memory-2026-10-27.json retain the checkpoint and measurements. Freya remains default until full visual/control/tooltip, platform and processing-workload gates pass; sheet-music follows afterward.
+        """
+    acceptance {
+        check controls {
+            statement """
+                Every control listed in the scope, including Preserve mode, is reachable and mutual exclusions match the intended behavior.
+                """
+            method manual
+        }
+        check cpu-presenter {
+            statement """
+                cargo gui produces lege-gui with no freya or Skia crate in that package dependency graph, and the window opens on the PixelKit CPU presenter.
+                """
+            method observation
+        }
+        check docs {
+            statement """
+                Readme and Licenses open the embedded HTML in the system browser.
+                """
+            method manual
+        }
+        check languages {
+            statement """
+                English and German builds take their chrome strings from language_service.
+                """
+            method observation
+            verified_by [ @lege-ecosystem.evidence.pixelkit-locale-chrome-20261027/1 ]
+        }
+        check memory {
+            statement """
+                Comparable Freya and PixelKit workloads have measured memory usage recorded, with any tradeoff against resize flexibility documented.
+                """
+            method observation
+            verified_by [ @lege-ecosystem.evidence.pixelkit-idle-memory-20261027/1 ]
+        }
+        check progress {
+            statement """
+                A multi-page job shows the stage title, the bar, and an ETA, and Cancel stops the child without a successful completion record.
+                """
+            method manual
+        }
+        check theme {
+            statement """
+                Accepting a Sanzo dark theme writes appearance.json and reloads it. Cancel restores the previous theme.
+                """
+            method manual
+            verified_by [ @lege-ecosystem.evidence.pixelkit-native-theme-resize-20261027/1 ]
+        }
+        check tooltips {
+            statement """
+                Hovering a control shows its note in the status panel in the active theme colors, and the note hides while a job runs.
+                """
+            method manual
+        }
+        check visual-resize {
+            statement """
+                The GUI achieves visual parity with Freya and remains usable when resized across representative window sizes.
+                """
+            method manual
+        }
+    }
+    supersedes [ @lege-ecosystem.work.pixelkit-gui-1-5-2/3 ]
+    verified_by [
+        @lege-ecosystem.evidence.pixelkit-preview-build-20261027/1,
+        @lege-ecosystem.evidence.pixelkit-preview-tests-20261027/1,
+        @lege-ecosystem.evidence.pixelkit-real-worker-smoke-20261027/1
+    ]
+    author "dk"
+}
+
+record lege-ecosystem.work.pixelkit-gui-1-5-2/5 : work {
+    title "Replace the Freya processor GUI with PixelKit in 1.5.2"
+    state active
+    scope [ path "lege-process/GUI/**", path "to-do-plans/lege-process-1.5.2-pixelkit-gui.md" ]
+    intent """
+        Replace the Freya desktop GUI with PixelKit for visual parity and flexible resizing, with Preserve mode available from the start. Keep the existing controls, themes, tooltips, language strings, embedded documentation and worker progress/cancellation. Measure memory against Freya on comparable workloads; a memory reduction is preferred, while improved flexibility may justify comparable use.
+        """
+    note """
+        Scope accepted 2026-10-27. A runnable preview exists in lege-process/GUI/PixelKit (package/bin lege-gui-pixelkit; cargo gui-pixelkit and cargo gui-pixelkit-run), reusing toolkit-independent frontend support. Preserve is a first-class mode with conflicting preparation flags removed. The current worker builds with it. Theme, resize, locale, lifecycle and real-worker smoke checks pass; the frontend graph excludes Freya/Skia engine/processor. Initial empty-queue Linux/X11 medians at equal 1980x1452 physical size: RSS 47.57 MiB Freya vs 31.90 MiB PixelKit (-32.94%); PSS 37.35 vs 22.35 MiB. docs/PIXELKIT-GUI-PREVIEW.md and docs/measurements/pixelkit-idle-memory-2026-10-27.json retain the checkpoint and measurements. The subsequent compact layout uses equal sibling buttons including Reflow, compact independent parameter fields, row-aligned output controls and a 280px settings band with 110px recovered for the queue. Process is a larger primary action separated from equal small About/Queue/Log utilities. 55 tests pass with 2 worker tests ignored by default; narrow/scaled English/German and dark Preserve render checks pass. Memory was not remeasured after this layout revision. Freya remains default until full visual/control/tooltip, platform and processing-workload gates pass; sheet-music follows afterward.
+        """
+    acceptance {
+        check controls {
+            statement """
+                Every control listed in the scope, including Preserve mode, is reachable and mutual exclusions match the intended behavior.
+                """
+            method manual
+        }
+        check cpu-presenter {
+            statement """
+                cargo gui produces lege-gui with no freya or Skia crate in that package dependency graph, and the window opens on the PixelKit CPU presenter.
+                """
+            method observation
+        }
+        check docs {
+            statement """
+                Readme and Licenses open the embedded HTML in the system browser.
+                """
+            method manual
+        }
+        check languages {
+            statement """
+                English and German builds take their chrome strings from language_service.
+                """
+            method observation
+            verified_by [ @lege-ecosystem.evidence.pixelkit-locale-chrome-20261027/1 ]
+        }
+        check memory {
+            statement """
+                Comparable Freya and PixelKit workloads have measured memory usage recorded, with any tradeoff against resize flexibility documented.
+                """
+            method observation
+            verified_by [ @lege-ecosystem.evidence.pixelkit-idle-memory-20261027/1 ]
+        }
+        check progress {
+            statement """
+                A multi-page job shows the stage title, the bar, and an ETA, and Cancel stops the child without a successful completion record.
+                """
+            method manual
+        }
+        check theme {
+            statement """
+                Accepting a Sanzo dark theme writes appearance.json and reloads it. Cancel restores the previous theme.
+                """
+            method manual
+            verified_by [ @lege-ecosystem.evidence.pixelkit-native-theme-resize-20261027/1 ]
+        }
+        check tooltips {
+            statement """
+                Hovering a control shows its note in the status panel in the active theme colors, and the note hides while a job runs.
+                """
+            method manual
+        }
+        check visual-resize {
+            statement """
+                The GUI achieves visual parity with Freya and remains usable when resized across representative window sizes.
+                """
+            method manual
+        }
+    }
+    supersedes [ @lege-ecosystem.work.pixelkit-gui-1-5-2/4 ]
+    verified_by [
+        @lege-ecosystem.evidence.pixelkit-preview-build-20261027/1,
+        @lege-ecosystem.evidence.pixelkit-preview-tests-20261027/1,
+        @lege-ecosystem.evidence.pixelkit-real-worker-smoke-20261027/1
+    ]
+    author "dk"
 }
 
 record lege-ecosystem.work.post-precinct-census-2026-07-19-from-pdf/1 : work {
@@ -3061,25 +3502,25 @@ record lege-ecosystem.work.prepared-onnx-shared-gpu-session/1 : work {
 
 record lege-ecosystem.work.preservation-mode/1 : work {
     title "Preservation mode: an MRC document beside the e-ink preparation mode"
-    state proposed
+    state active
     scope [
+        path "dev-notes/lege-process/PRESERVATION-MODE-PLAN.md",
         path "lege-codecs/djvulibrust/**",
-        path "lege-process/GUI/Freya/**",
-        path "lege-process/PRESERVATION-MODE-PLAN.md",
+        path "lege-process/GUI/**",
         path "lege-process/core/clean_gray.rs",
         path "lege-process/core/djvu.rs",
         path "lege-process/pipeline/config.rs",
         path "lege-process/pipeline/pdf_tokio_pipeline.rs"
     ]
     intent """
-        Give Lege a second top-level mode. Preparation, everything it does today, rebuilds a book for an e-ink screen: binarize, dither, drop the colour, re-encode at the device's height. Preservation would keep the book as it is — no binarization of the page, no colour touched — and compress it as layers instead: a JPEG 2000 background under a crisp JBIG2 ink layer (or the DjVu equivalent, IW44 under JB2), at a requested resolution, with hOCR still running and truetyping available as an opt-in. The plan is written; nothing is implemented.
+        Give Lege a second top-level mode beside e-ink Preparation. Preserve retains page colour and compresses the page as layers: JPEG 2000 background plus crisp JBIG2 ink for PDF, IW44 plus JB2 for DjVu, at the requested resolution. hOCR remains independent and TrueTyping is explicit opt-in. CLI steps 1-5 and the PixelKit preview's mode control/worker arguments are implemented; ink remains black in this cut.
         """
     note """
-        The plan is `lege-process/PRESERVATION-MODE-PLAN.md` (2026-09-03). The load-bearing finding is that the one path that already preserves a page's own colour and ink, `encode_preserved_mrc_base_layer`, is reachable only when the input PDF is *already* MRC: `qualifying_jbig2_smask` is a strict structural probe over the compiled page, and nothing synthesizes its shape for an ordinary scan. Every other route converts to luma and normalizes contrast in `clean_page_for_mrc` before thresholding. So the mode cannot be built before the encoder it needs, which is why this is a plan and not a branch. Order: (1) an ink coverage plane from a fresh render, by supersampling the Sauvola mask into the existing exact-area `coverage_spans`; (2) colour through the MRC encoder — three-channel `mrc_background_with_coverage`, RGB JP2 and RGB IW44 backgrounds; (3) `PageMode::Preserved` with its own region policies and a CLI switch; (4) DjVu parity, a full-page colour background under the JB2 layer, and the `with_shared_dict` the encoder exposes and Lege never calls; (5) the GUI preparation/preservation toggle, first control in the left column with one sentence of tooltip each; (6) ink colour, which is what makes the result correct rather than merely faithful in shape. Not to be confused with `lege-document-ocr/PRESERVE-MODE-PLAN.md`, which is the business OCR CLI keeping a source PDF's own page images byte for byte.
+        Plan: dev-notes/lege-process/PRESERVATION-MODE-PLAN.md §8. GUI integration now exists in the PixelKit preview and shares its active migration work. A two-page colour PDF completed through the GUI supervisor with JPX backgrounds and JBIG2 masks; cancellation smoke passed. This does not close DjVu decode-and-look, the three-book size/time measurements, the pre-refactor grayscale identity gate, or deferred fidelity work (coloured ink and colour source-MRC passthrough included). See docs/PIXELKIT-GUI-PREVIEW.md. The shared dark-painting binarizer defect predates Preserve.
         """
     claim coverage-has-no-producer {
         text """
-            `mrc_background_with_coverage` consumes a continuous 0-255 ink coverage plane, but the only producer is the decoded source /SMask; binarization emits bilevel, so a preservation mode needs a coverage plane derived from a fresh render (supersampled Sauvola through `coverage_spans`).
+            `mrc_background_with_coverage` consumes a continuous 0-255 ink coverage plane, but the only producer is the decoded source /SMask; binarization emits bilevel. The first cut feeds it the Sauvola mask as 0/255 coverage, which under the ×2 gain and box downsample equals an area-averaged coverage at background resolution; a supersampled plane is deferred until glyph rings or background size justify it.
             """
     }
     claim hocr-is-already-independent {
@@ -3087,17 +3528,27 @@ record lege-ecosystem.work.preservation-mode/1 : work {
             On the default PP-OCR backend the recognizer reads the RGB raster rather than the bilevel mask and the text reaches the writer on its own channel, so hOCR carries into preservation mode unchanged.
             """
     }
+    claim legacy-path-still-has-colour {
+        text """
+            The legacy page path holds the RGB render (`binarization_image`, `adjusted_image`) right up to the grayscale-MRC branch, and the planned path already declines grayscale mode, so a preservation branch there needs no renderer change.
+            """
+    }
     claim preserved-path-needs-an-mrc-input {
         text """
-            The colour-preserving MRC path fires only when the input PDF is already MRC: `RenderSession::preserved_jbig2_smask` returns None unless the page is one full-page image whose /SMask is itself JBIG2, and no code synthesizes that shape for a plain scan.
+            The source-MRC passthrough fires only when the input PDF is already MRC: `RenderSession::preserved_jbig2_smask` returns None unless the page is one full-page image whose /SMask is itself JBIG2, and no code synthesizes that shape for a plain scan. Its background is built from the planned path's Gray8 base tripled to RGB, so it does not preserve colour either.
             """
     }
     claim the-writers-already-layer {
         text """
-            Neither writer blocks the mode: `lege-pdf-write` already stacks a JPX background (RGB or grey) under a JBIG2 /ImageMask stencil, and djvulibrust's LayerData already models Background(Pixmap) with Foreground/Mask(Bitmap). What is missing is a colour-capable segmentation, not a container.
+            Both writers already support MRC layers: the PDF writer stacks a colour JPX background under a JBIG2 ink stencil, and djvulibrust represents colour backgrounds and JB2 masks. Colour segmentation and the --preserve CLI path are implemented; GUI mode selection is now wired in the PixelKit preview. The remaining fidelity and corpus gates are retained in the note.
             """
     }
     derived_from [ @lege-ecosystem.work.glyph-font-text-output ]
+    verified_by [
+        @lege-ecosystem.evidence.preservation-mode-djvu-e2e,
+        @lege-ecosystem.evidence.preservation-mode-pdf-e2e,
+        @lege-ecosystem.evidence.preservation-mode-unit-tests
+    ]
 }
 
 record lege-ecosystem.work.preserve-jbig2-smask-text-plane/1 : work {
@@ -3387,6 +3838,7 @@ record lege-ecosystem.work.renderer-efficiency-deferrals/1 : work {
                 lege-pdf/render/crates/pdf-color/src/cie.rs xyz_to_srgb_white_point rebuilds the full white-point adaptation matrix (two 3x3 inversions) on every call, though only the final transform depends on the sample. Dispositioned when the build is split from the application and cached per CalRGB colour space, or when the per-operator (not per-pixel) call rate is shown to make it not worth the API change.
                 """
             method manual
+            verified_by [ @lege-ecosystem.evidence.calrgb-adaptation-matrix-cache-landed/1 ]
         }
         check ccitt-bulk-skip {
             statement """
@@ -3417,6 +3869,7 @@ record lege-ecosystem.work.renderer-efficiency-deferrals/1 : work {
                 The transformed-rect bounding box is implemented twice: lege-pdf/render/crates/pdf-text/src/lib.rs transform_rect and lege-pdf/render/crates/pdf-content/src/lower.rs include_transformed_rect, in two crates that both already depend on pdf-geom. Dispositioned when a single Matrix::transform_rect lands in pdf-geom and both call it, or the duplication is accepted with a reason.
                 """
             method manual
+            verified_by [ @lege-ecosystem.evidence.transform-rect-shared-helper-landed/1 ]
         }
     }
     author "GitHub Uploader"
@@ -3950,13 +4403,13 @@ record lege-ecosystem.work.vertical-lifting-layout/1 : work {
 
 record lege-ecosystem.work.viewer-movement-and-reliability/1 : work {
     title "Complete lege-viewer stage 6 movement and start stage 7 reliability"
-    state proposed
+    state abandoned
     scope [ path "lege-viewer/**" ]
     intent """
         Finish the one-scroll-model interaction vocabulary lege-viewer/STAGES.md calls stage 6 -- drag-to-pan, middle-click autoscroll, kinetic movement, configurable wheel scaling, page snapping, track and thumb refinement, and deterministic trace replay -- then take stage 7's two highest-value reliability items: the encrypted-document password flow and page-local failure handling.
         """
     note """
-        Stage 6's exit gate is met for the scroll model: every movement source now applies a ScrollCommand to the one f64 model, and Page Up/Down semantics from Optimization A were not touched. Anchor-level trace replay is still not asserted.
+        The reader moved to sibling liminaldoc/crates/liminal-reader; movement, password flow and page failure handling are recorded there. Anchor-level trace replay remains to be validated in that project; this repository no longer owns the code.
         """
     claim a-broken-page-is-quarantined {
         text """
@@ -4179,7 +4632,7 @@ record lege-ecosystem.work.windows-tensorrt-ocr-runtime/1 : work {
 
 record lege-ecosystem.work.zero-length-code-block-contribution-truncated/1 : work {
     title "3. Zero-length code-block contribution (truncated streams) — ~6 files"
-    state proposed
+    state abandoned
     intent """
         - **Error:** `non-empty code-block contribution has zero byte length`
         - **Repro:** was seen on `Stalin…` (that hit is an `.epub`, not a PDF — find a
@@ -4202,6 +4655,9 @@ record lege-ecosystem.work.zero-length-code-block-contribution-truncated/1 : wor
           output matches OpenJPEG's partial output**, not just "it doesn't error" — a
           partial decode that diverges from OpenJPEG is a silent quality regression.
         - **Priority:** lower than §1 — truncation is inherently lossy and rare.
+        """
+    note """
+        The original truncation diagnosis was wrong: the cited cases were packet-header byte alignment defects subsequently resolved; genuine truncation remains strict. See @lege-ecosystem.requirement.update-sections-3-and-4-resolved-the-4/1.
         """
     source {
         kind legacy

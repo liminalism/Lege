@@ -6,7 +6,7 @@ CLI PDF integrity / forensic-triage checker, built on the lege-pdf crates in
 ## Planning docs live in AKR, not Markdown
 
 This project's plan is a typed knowledge ledger in `.akr/`, served by the `akr` MCP
-server. `initial-plan-shape.md` is the historical source document; the ledger is
+server. `../../dev-notes/lege-pdf/pdf-integrity-initial-plan-shape.md` is the historical source document; the ledger is
 authoritative. Do not write new plan/roadmap/decision Markdown files — write AKR
 records.
 

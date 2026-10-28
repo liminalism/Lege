@@ -101,6 +101,18 @@ fn jpx_concurrency_override() -> Option<DecodeConcurrency> {
     })
 }
 
+/// Optional one-line stderr telemetry per JPX decode when `JP2LAM_DECODE_TRACE`
+/// is set (`1`, `true`, `yes`). Off by default.
+fn jpx_decode_trace_enabled() -> bool {
+    use std::sync::OnceLock;
+    static TRACE: OnceLock<bool> = OnceLock::new();
+    *TRACE.get_or_init(|| {
+        std::env::var("JP2LAM_DECODE_TRACE")
+            .ok()
+            .is_some_and(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
+    })
+}
+
 /// Live count of JPX decodes in flight across all render workers. Used to size
 /// each decode's internal Tier-1 thread budget to the *current* machine load.
 static JPX_IN_FLIGHT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
@@ -284,6 +296,7 @@ impl ImageCodec for JpxCodec {
         // component is decoded as Gray8.
         let packed_direct =
             all_8bit && (meta.container_palette_channels.is_none() || ignore_container_palette);
+        let trace_start = jpx_decode_trace_enabled().then(std::time::Instant::now);
         let result = if packed_direct {
             let (decoded_width, decoded_height) = meta
                 .decoded_dimensions(resolution)
@@ -312,7 +325,22 @@ impl ImageCodec for JpxCodec {
                 ignore_container_palette,
             )
         };
+        let in_flight_now = in_flight.current();
         drop(in_flight);
+        if let (Some(started), Ok(image)) = (trace_start, &result) {
+            eprintln!(
+                "[jpx-trace] src={}x{} out={}x{} fmt={:?} path={} conc={:?} in_flight={} elapsed_ms={:.3}",
+                width,
+                height,
+                image.width,
+                image.height,
+                image.format,
+                if packed_direct { "packed" } else { "planar" },
+                concurrency,
+                in_flight_now,
+                started.elapsed().as_secs_f64() * 1000.0
+            );
+        }
         if limits.is_cancelled() {
             return Err(ImageError::Cancelled);
         }

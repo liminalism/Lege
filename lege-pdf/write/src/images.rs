@@ -1,6 +1,6 @@
 //! Typed image XObject writers, one per codec: DCTDecode (rgb/gray),
 //! JPXDecode, JBIG2Decode (+globals, +ImageMask stencil), CCITTFaxDecode
-//! (K -1, BlackIs1, Decode [1 0]), Indexed8 palette. PLAN.md §4.3 fidelity table.
+//! (K -1, BlackIs1, Decode [1 0]), Indexed8 palette. write-PLAN.md §4.3 fidelity table.
 //!
 //! Each writer emits the exact dictionary the current `accumulator.rs` produces
 //! for that codec, so output is a parity port validated differentially. The
@@ -136,6 +136,24 @@ pub fn write_image_xobject<W: Write>(
             dict.extend_from_slice(b">>");
             key(&mut dict, b"Decode");
             dict.extend_from_slice(b"[1 0]");
+            end_dict(&mut dict);
+            write_body(sink, &dict, data)
+        }
+        PdfImageResource::Flate8 {
+            data,
+            width,
+            height,
+            color,
+        } => {
+            let mut dict = Vec::new();
+            begin_image(&mut dict, *width, *height, data.len());
+            key(&mut dict, b"Interpolate");
+            dict.extend_from_slice(b"true");
+            colorspace_name(&mut dict, *color);
+            key(&mut dict, b"BitsPerComponent");
+            write_i64(&mut dict, 8);
+            key(&mut dict, b"Filter");
+            write_name(&mut dict, b"FlateDecode");
             end_dict(&mut dict);
             write_body(sink, &dict, data)
         }
@@ -325,6 +343,37 @@ mod tests {
         assert!(t.contains("/EndOfBlock false"));
         assert!(t.contains("/EncodedByteAlign false"));
         assert!(t.contains("/Decode [1 0]"));
+    }
+
+    #[test]
+    fn flate8_rgb_dictionary() {
+        let t = render(&PdfImageResource::Flate8 {
+            data: Arc::from(&[0x78u8, 0x9C, 0x03, 0x00][..]),
+            width: 320,
+            height: 240,
+            color: ColorModel::Rgb,
+        });
+        assert!(t.contains("/Subtype /Image"));
+        assert!(t.contains("/Width 320"));
+        assert!(t.contains("/Height 240"));
+        assert!(t.contains("/Length 4"));
+        assert!(t.contains("/ColorSpace /DeviceRGB"));
+        assert!(t.contains("/BitsPerComponent 8"));
+        assert!(t.contains("/Filter /FlateDecode"));
+        assert!(t.contains("/Interpolate true"));
+        assert!(!t.contains("/DecodeParms"), "no predictor parms: {t}");
+    }
+
+    #[test]
+    fn flate8_gray_dictionary() {
+        let t = render(&PdfImageResource::Flate8 {
+            data: Arc::from(&[0x78u8, 0x9C][..]),
+            width: 16,
+            height: 16,
+            color: ColorModel::Gray,
+        });
+        assert!(t.contains("/ColorSpace /DeviceGray"));
+        assert!(t.contains("/Filter /FlateDecode"));
     }
 
     #[test]

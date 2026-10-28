@@ -36,6 +36,17 @@ record audit.papercut.knowledge-propose-accepted-an-observation-with/1 : papercu
     created_at 2026-08-13
 }
 
+record audit.papercut.pdf-integrity-has-its-own-nested-akr-ledger/1 : papercut {
+    title "pdf-integrity has its own nested AKR ledger; running akr from the…"
+    state verified
+    statement """
+        pdf-integrity has its own nested AKR ledger; running akr from the ecosystem root silently searches a different project. Pass --dir lege-pdf/pdf-integrity (or set the working directory) for audit roadmap records and commands.
+        """
+    observed_at git:b4fb52b5851b94911e12524bb7836debdb42afb1
+    author "codex"
+    created_at 2026-10-15
+}
+
 record audit.papercut.revising-the-proposed-forensics-repo-home/1 : papercut {
     title "Revising the proposed forensics-repo-home decision in place dropped its…"
     state verified

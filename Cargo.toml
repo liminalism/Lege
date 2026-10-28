@@ -20,6 +20,7 @@ members = [
     "lege-process/lege-ipc",    # shared IPC/log types
     "lege-process/GUI/musicsheet", # `lege-music-gui`
     "lege-process/GUI/Freya",   # `lege-gui`: Skia/Freya processor GUI (default frontend)
+    "lege-process/GUI/PixelKit", # CPU immediate-mode processor frontend
     "lege-process/GUI/rfd",     # vendored file-dialog crate used by both GUIs
     "lege-gpu",                 # `lege_gpu`
     "lege-ocr",                 # `lege_ocr`

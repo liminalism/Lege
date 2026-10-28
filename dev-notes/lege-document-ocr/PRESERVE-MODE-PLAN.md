@@ -169,7 +169,7 @@ from `Rendered` to `ScannedImage` and cut intake time.
   Add `Flate { data, width, height, color, bits_per_component, decode_parms }`
   emitting `/Filter /FlateDecode` with the source's `/DecodeParms` copied
   verbatim. Adding a variant is explicitly a plan change under
-  `artifact.rs:1` — update `lege-pdf/PLAN.md` §4.2/§4.3 in the same commit.
+  `artifact.rs:1` — update `dev-notes/lege-pdf/write-PLAN.md` §4.2/§4.3 in the same commit.
 - **Page rotation.** The writer emits no `/Rotate`
   (no match in `lege-pdf/write/src/`). Do *not* add it: bake rotation into the
   page's `Affine` and swap the media box in the export. Cheaper, and it keeps

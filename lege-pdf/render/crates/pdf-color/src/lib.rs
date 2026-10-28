@@ -143,28 +143,57 @@ pub fn lab_to_rgb(l: f32, a: f32, b: f32, white_point: [f32; 3], range: [f32; 4]
 /// propagate a NaN into the raster; PDFium would let it through and land on 0
 /// only by way of the final clamp. The sRGB transfer itself is the ultimate
 /// backstop — it clamps and sanitises every output channel.
+/// Precomputed CalRGB colour-space transform (sanitised `/Gamma`, `/Matrix`,
+/// and the inverted `/WhitePoint` adaptation matrix).
+///
+/// Building this once per CalRGB colour space avoids recomputing the two 3×3
+/// inversions in [`cie::white_point_adaptation_matrix`] on every colour
+/// operator or separation sample while preserving bit-identical output with
+/// [`calrgb_to_rgb`].
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CalRgbTransform {
+    gamma: [f32; 3],
+    matrix: [f32; 9],
+    adaptation: [f32; 9],
+}
+
+impl CalRgbTransform {
+    /// Precompute the adaptation matrix and sanitise `/Gamma` for a CalRGB
+    /// dictionary.
+    pub fn new(white_point: [f32; 3], gamma: [f32; 3], matrix: [f32; 9]) -> Self {
+        Self {
+            gamma: gamma.map(|x| if x.is_finite() { x } else { 1.0 }),
+            matrix,
+            adaptation: cie::white_point_adaptation_matrix(
+                white_point[0],
+                white_point[1],
+                white_point[2],
+            ),
+        }
+    }
+
+    /// Convert an `abc` sample through the cached transform into sRGB.
+    pub fn apply(&self, abc: [f32; 3]) -> [f32; 3] {
+        let a = cie::sanitize(abc[0]).powf(self.gamma[0]);
+        let b = cie::sanitize(abc[1]).powf(self.gamma[1]);
+        let c = cie::sanitize(abc[2]).powf(self.gamma[2]);
+
+        let m = self.matrix;
+        let x = m[0] * a + m[3] * b + m[6] * c;
+        let y = m[1] * a + m[4] * b + m[7] * c;
+        let z = m[2] * a + m[5] * b + m[8] * c;
+
+        cie::xyz_to_srgb_with_adaptation(x, y, z, self.adaptation)
+    }
+}
+
 pub fn calrgb_to_rgb(
     abc: [f32; 3],
     white_point: [f32; 3],
     gamma: [f32; 3],
     matrix: [f32; 9],
 ) -> [f32; 3] {
-    // NaN-tolerance: sanitise components (→0) and gamma (→1, the identity/
-    // default) so `powf` cannot manufacture a NaN from garbage. See the
-    // divergence note above.
-    let g = gamma.map(|x| if x.is_finite() { x } else { 1.0 });
-    let a = cie::sanitize(abc[0]).powf(g[0]);
-    let b = cie::sanitize(abc[1]).powf(g[1]);
-    let c = cie::sanitize(abc[2]).powf(g[2]);
-
-    // ABC → XYZ through the /Matrix (column-per-component), exactly as
-    // CPDF_CalRGBCS::GetRGB indexes it.
-    let m = matrix;
-    let x = m[0] * a + m[3] * b + m[6] * c;
-    let y = m[1] * a + m[4] * b + m[7] * c;
-    let z = m[2] * a + m[5] * b + m[8] * c;
-
-    cie::xyz_to_srgb_white_point(x, y, z, white_point[0], white_point[1], white_point[2])
+    CalRgbTransform::new(white_point, gamma, matrix).apply(abc)
 }
 
 /// CalGray → gray (ISO 32000-1 §8.6.5.2).

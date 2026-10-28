@@ -137,6 +137,39 @@ record lege-ecosystem.decision.nup-grid-is-read-in-the-sheets-own-frame/1 : deci
     derived_from [ @lege-ecosystem.work.office-printing ]
 }
 
+record lege-ecosystem.decision.pagepress-boundary-rasterizer-vs-editor/1 : decision {
+    title "PagePress boundary: rasterizer stays in lege-process, editor suite starts in PagePress"
+    state proposed
+    scope [ all ]
+    decision """
+        lege-process stays the rasterizer pipeline; PagePress (sibling repo) is the start of a PDF-editor suite with its own page model, depending only on lege-pdf-write and lege-codecs via path deps.
+        """
+    context """
+        PagePress MVP (CLI+GUI) was built with zero references to lege-process (grep-verified). Shared ideas (margin handling, binarize, straighten) are re-implemented concepts, not copied code.
+        """
+    consequences """
+        Rasterizer work stays in lege-process; editor/assembly features go to PagePress. PagePress must not gain a lege-process dependency; merge stays clean.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.decision.pipeline-memory-policy-from-external-review/1 : decision {
+    title "Pipeline memory policy adopted from external review"
+    state proposed
+    scope [
+        path "lege-process/core/runtime_stats.rs",
+        path "lege-process/ocr/fast.rs",
+        path "lege-process/pipeline/**"
+    ]
+    decision """
+        Adopt the review's first two changesets, adapted: (1) source-aware page admission (native dims for PDF geometry, folder headers, ZIP header sniff; post-load top-up; oversized pages admitted alone with warn-first logging, not silent clamp or error), LEGE_GPU_SESSIONS=1 honored plus a session cap at max_parallel_pages, margin pass under the same byte governor with min() concurrency and analysis-resolution PDF loads, direct InferenceHandle::detect() instead of the detached submit() wrapper, encoded-byte reservations until the writer consumes each page, and bounded blocking-drain waits on every cancel path; (2) gray-native fast OCR (no full-page RGB expansion), staged planned rendering (base, then OCR surface on demand, then one region at a time). LEGE_MEMORY_BUDGET_MB is documented as an admission setting, not an RSS promise. The runtime report (schema 2) gains GPU session count and admitted/queued MiB gauges.
+        """
+    context """
+        An external static review of lege-process at 883393dc (Tokio pipeline memory behavior; dagrs comparison explicitly out of scope) recommended source-aware admission, a genuine one-session GPU mode, margin/DjVu memory policy, shorter raster lifetimes, cancellation-safe reservations, and moving writer blocking work off the control thread. Verified against code at b4fb52b5: all cited behaviors were still present.
+        """
+    author "dk"
+}
+
 record lege-ecosystem.decision.printing-defers-prepress-to-lege-pdf-write/1 : decision {
     title "Office printing is built; prepress is deferred, and belongs in lege-pdf/write rather than the rasterizer"
     state proposed

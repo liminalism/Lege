@@ -278,6 +278,9 @@ async fn await_reflow_step<T>(
         result = future => result,
         signal = shutdown_rx.recv() => {
             cancellation.cancel();
+            // Dropping the step future cannot stop a started blocking
+            // worker; wait for it to release its buffers first.
+            crate::runtime_stats::drain_blocking_workers_on_cancel(stage).await;
             let message = signal
                 .ok()
                 .and_then(|signal| signal.message)
@@ -832,7 +835,11 @@ pub(crate) async fn run_raster_reflow_pipeline(
             binarized: None,
             quarter_turns: 0,
         };
-        pdf_writer_handle.send_page(page, reflow_page.index).await?;
+        // Sequential sender: at most the channel capacity is ever queued, so
+        // no encoded-byte reservation is needed here.
+        pdf_writer_handle
+            .send_page(page, reflow_page.index, None)
+            .await?;
 
         let done = reflow_page.index + 1;
         progress_tracker.publish_reflow_progress(ReflowStage::OutputPages, done, total_out_pages);
@@ -871,6 +878,8 @@ pub(crate) async fn run_raster_reflow_pipeline(
                 cancellation.cancel();
                 outline_task.abort();
                 pdf_writer_task.abort();
+                crate::runtime_stats::drain_blocking_workers_on_cancel("reflow outline extraction")
+                    .await;
                 let message = signal
                     .ok()
                     .and_then(|signal| signal.message)
@@ -1093,6 +1102,7 @@ pub(crate) async fn run_raster_reflow_djvu_pipeline(
             rgb_image: canvas,
             binarized,
             cleaned_gray: None,
+            preserved: false,
             detections,
             hocr: hocr_text,
         };

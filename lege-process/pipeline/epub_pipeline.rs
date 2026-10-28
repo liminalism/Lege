@@ -46,6 +46,14 @@ pub struct HocrPage {
     pub hocr: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct SpooledHocrPage {
+    pub page_index: usize,
+    pub width_px: u32,
+    pub height_px: u32,
+    pub path: std::path::PathBuf,
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn epub_inference_stage(
     inference_handle: Option<Arc<crate::pipeline::inference::InferenceHandle>>,
@@ -222,6 +230,7 @@ pub async fn create_and_run_epub_pipeline(
         progress_tracker.clone(),
         total_pages,
         layout_enabled,
+        limits.page_workers,
     ));
 
     // Stage 2: layout detection
@@ -302,6 +311,7 @@ pub async fn create_and_run_epub_pipeline(
         signal = shutdown_rx.recv() => {
             cancellation.cancel();
             ocr_task.abort();
+            crate::runtime_stats::drain_blocking_workers_on_cancel("EPUB OCR").await;
             let msg = signal
                 .ok()
                 .and_then(|s| s.message)
@@ -367,6 +377,7 @@ pub async fn create_and_run_epub_pipeline(
         signal = shutdown_rx.recv() => {
             cancellation.cancel();
             packaging_task.abort();
+            crate::runtime_stats::drain_blocking_workers_on_cancel("EPUB packaging").await;
             let message = signal
                 .ok()
                 .and_then(|signal| signal.message)
@@ -442,6 +453,41 @@ pub(crate) fn build_epub_from_hocr_pages_with_outline_cancellable(
         .filter(|page| !page.blocks.is_empty())
         .collect();
     pages.sort_by_key(|page| page.page_index);
+    build_epub_with_outline_cancellable(&pages, title, output_path, outline, cancellation)
+}
+
+/// Stream spooled hOCR files into parsed [`PageText`] one page at a time so
+/// the raw hOCR strings are never all resident in memory together.
+pub(crate) fn build_epub_from_spooled_hocr_pages_with_outline_cancellable(
+    spooled_pages: &[SpooledHocrPage],
+    title: &str,
+    output_path: &Path,
+    outline: &[lege_pdf_write::outline::OutlineItem],
+    cancellation: Option<&lege_pdf_read::CancellationToken>,
+) -> Result<()> {
+    let mut ordered: Vec<&SpooledHocrPage> = spooled_pages.iter().collect();
+    ordered.sort_by_key(|page| page.page_index);
+    let mut pages: Vec<PageText> = Vec::with_capacity(ordered.len());
+    for spooled in ordered {
+        if cancellation.is_some_and(lege_pdf_read::CancellationToken::is_cancelled) {
+            return Err(anyhow!("EPUB sidecar packaging cancelled"));
+        }
+        let hocr = std::fs::read_to_string(&spooled.path).map_err(|error| {
+            anyhow!(
+                "failed to read spooled hOCR {}: {error}",
+                spooled.path.display()
+            )
+        })?;
+        let page = HocrPage {
+            page_index: spooled.page_index,
+            width_px: spooled.width_px,
+            height_px: spooled.height_px,
+            hocr,
+        };
+        if let Some(parsed) = page_text_from_hocr(&page).filter(|page| !page.blocks.is_empty()) {
+            pages.push(parsed);
+        }
+    }
     build_epub_with_outline_cancellable(&pages, title, output_path, outline, cancellation)
 }
 
@@ -1387,5 +1433,58 @@ mod tests {
     fn epub_output_preflight_accepts_a_bare_filename() {
         preflight_epub_output(Path::new("book.epub"))
             .expect("a bare filename should use the current directory");
+    }
+
+    #[test]
+    fn spooled_hocr_pages_stream_in_page_order_into_epub() {
+        let directory = tempfile::tempdir().unwrap();
+        let hocr_for = |word: &str| {
+            format!(
+                r#"<div class='ocr_page' title='bbox 0 0 800 1000'><span class='ocr_line' title='bbox 80 120 720 150'><span class='ocrx_word' title='bbox 80 120 200 150'>{word}</span></span></div>"#
+            )
+        };
+        let p1 = directory.path().join("00000001.hocr");
+        let p0 = directory.path().join("00000000.hocr");
+        std::fs::write(&p1, hocr_for("SecondPageToken")).unwrap();
+        std::fs::write(&p0, hocr_for("FirstPageToken")).unwrap();
+        let output = directory.path().join("spooled.epub");
+
+        // Passed out of order; packaging sorts by page_index before streaming.
+        let spooled = vec![
+            SpooledHocrPage {
+                page_index: 1,
+                width_px: 800,
+                height_px: 1000,
+                path: p1,
+            },
+            SpooledHocrPage {
+                page_index: 0,
+                width_px: 800,
+                height_px: 1000,
+                path: p0,
+            },
+        ];
+        build_epub_from_spooled_hocr_pages_with_outline_cancellable(
+            &spooled,
+            "Spooled Book",
+            &output,
+            &[],
+            None,
+        )
+        .expect("spooled EPUB packaging succeeds");
+
+        let file = std::fs::File::open(&output).unwrap();
+        let mut archive = zip::ZipArchive::new(file).unwrap();
+        let mut xhtml = String::new();
+        for index in 0..archive.len() {
+            let mut entry = archive.by_index(index).unwrap();
+            if entry.name().ends_with(".xhtml") && !entry.name().ends_with("nav.xhtml") {
+                use std::io::Read;
+                entry.read_to_string(&mut xhtml).unwrap();
+            }
+        }
+        let first_pos = xhtml.find("FirstPageToken").expect("first page text");
+        let second_pos = xhtml.find("SecondPageToken").expect("second page text");
+        assert!(first_pos < second_pos, "page 0 must precede page 1");
     }
 }

@@ -2,6 +2,7 @@
 // User-facing copy lives in language_service/<locale>/gui_text.json.
 
 use serde::Deserialize;
+use std::collections::BTreeMap;
 use std::sync::LazyLock;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -11,6 +12,7 @@ pub struct GuiText {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct GuiInteractiveText {
+    pub pixelkit: BTreeMap<String, String>,
     pub buttons: GuiButtonsText,
     pub labels: GuiLabelsText,
     pub controls: GuiControlsText,
@@ -163,6 +165,16 @@ pub static GUI_TEXT: LazyLock<GuiText> = LazyLock::new(|| {
     serde_json::from_str(json).expect("gui_text.json failed to parse")
 });
 
+/// Look up a PixelKit string in the selected bundled locale.
+pub fn tr(key: &'static str) -> &'static str {
+    GUI_TEXT
+        .interactive
+        .pixelkit
+        .get(key)
+        .map(String::as_str)
+        .unwrap_or(key)
+}
+
 #[cfg(test)]
 mod tests {
     use super::GuiText;
@@ -173,7 +185,52 @@ mod tests {
             include_str!("../../../language_service/en/gui_text.json"),
             include_str!("../../../language_service/de/gui_text.json"),
         ] {
-            serde_json::from_str::<GuiText>(json).expect("bundled GUI text should deserialize");
+            let text =
+                serde_json::from_str::<GuiText>(json).expect("bundled GUI text should deserialize");
+            for key in [
+                "pages_device",
+                "output",
+                "page_mode",
+                "preparation",
+                "preserve",
+                "text_rendering",
+                "binarized",
+                "grayscale",
+                "original",
+                "dithered",
+                "center_margins",
+                "crop_margins",
+                "theme",
+                "default_theme",
+                "light",
+                "dark",
+                "accept",
+                "queued",
+                "processing",
+                "completed",
+                "failed",
+                "more",
+                "progress",
+                "invalid_resolution",
+                "invalid_k",
+                "invalid_threshold",
+                "invalid_page_range",
+                "preserve_note",
+                "grayscale_pdf",
+                "grayscale_djvu",
+                "preparation_note",
+                "theme_colors",
+                "theme_preview",
+                "resolution_width_ignored",
+            ] {
+                assert!(
+                    text.interactive
+                        .pixelkit
+                        .get(key)
+                        .is_some_and(|value| !value.trim().is_empty()),
+                    "missing PixelKit translation: {key}"
+                );
+            }
         }
     }
 }

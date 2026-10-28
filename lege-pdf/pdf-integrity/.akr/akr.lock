@@ -2,10 +2,10 @@ akr-lock 0.1
 project pdf-integrity
 
 build {
-    tool "akr 0.5.1"
+    tool "akr 0.6.1"
     grammar "0.1"
     vocabulary "0.2"
-    source_graph "sha256:5c3fb04c92cf274ce7cbfef53f7c0ce3b5988544b57d1e8ca738233ac0835fde"
+    source_graph "sha256:c58f6ec8d76d6239ea02d2cc43db5a5e03e89fa700f10a3cb3bce8d2969d4ec9"
 }
 
 source ".akr/project.akr" {
@@ -34,8 +34,8 @@ source ".akr/records/audit/observations.akr" {
 }
 
 source ".akr/records/audit/papercuts.akr" {
-    hash "sha256:f25bc2405e18367d86a55d2cb9761a37d7bf1a8761b445c75d91b8a3430b81d8"
-    records 4
+    hash "sha256:2505c01fe79c4d409c4afbff86d495d39ad6d79ad8972d1a36d67813c2460295"
+    records 5
 }
 
 source ".akr/records/audit/questions.akr" {
@@ -603,6 +603,11 @@ seal @audit.papercut.akr-mcp-failed-to-connect-at-session-start/1 {
 seal @audit.papercut.knowledge-propose-accepted-an-observation-with/1 {
     state verified
     hash "sha256:e55e6dc82e9c52f9da69d97a79a552291c65117b914226290a7bebce7058adbf"
+}
+
+seal @audit.papercut.pdf-integrity-has-its-own-nested-akr-ledger/1 {
+    state verified
+    hash "sha256:7556a763d5b6d6671f55298969fe77bac7fa06b73e9a4c25f7377308739bc452"
 }
 
 seal @audit.papercut.revising-the-proposed-forensics-repo-home/1 {

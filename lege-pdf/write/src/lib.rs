@@ -4,7 +4,7 @@
 //! completion order, writes their objects immediately (arrival-order object
 //! IDs), and at finalization writes the page tree, outlines, metadata, xref,
 //! and trailer. No parser, no editing, no encryption, no incremental update,
-//! no linearization. See ../../PLAN.md for the module contract.
+//! no linearization. See ../../../dev-notes/lege-pdf/write-PLAN.md for the module contract.
 
 pub mod artifact;
 pub mod catalog;

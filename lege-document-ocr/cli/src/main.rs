@@ -290,13 +290,6 @@ fn run_batch(args: BatchArgs) -> Result<(), String> {
     let config_hash = processor
         .configuration_hash()
         .map_err(|error| error.to_string())?;
-    eprintln!(
-        "lege-ocr: selected `{}` before starting the batch; this backend is fixed for every job",
-        processor.selected_backend_name()
-    );
-    if let Some(warning) = processor.backend_selection_warning() {
-        eprintln!("lege-ocr: {warning}");
-    }
     if let Some(warning) = processor.layout_warning() {
         eprintln!("lege-ocr: {warning}");
     }
@@ -413,6 +406,12 @@ fn run_batch(args: BatchArgs) -> Result<(), String> {
         }
     });
     drop(result_sender);
+    if let Some(selected) = processor.resolved_backend_name() {
+        eprintln!("lege-ocr: selected `{selected}` for OCR pages in this batch");
+    }
+    if let Some(warning) = processor.backend_selection_warning() {
+        eprintln!("lege-ocr: {warning}");
+    }
     let mut first_error = None;
     for (source, job_id, result) in result_receiver {
         if let Err(error) = result {
@@ -470,7 +469,9 @@ fn run_doctor(args: DoctorArgs) -> Result<(), String> {
         ..PipelineConfig::default()
     };
     let processor = DocumentProcessor::new(config).map_err(|error| error.to_string())?;
-    let selected = processor.selected_backend_name();
+    let selected = processor
+        .initialize_backend()
+        .map_err(|error| error.to_string())?;
     let warning = processor.backend_selection_warning();
     if args.json {
         println!(

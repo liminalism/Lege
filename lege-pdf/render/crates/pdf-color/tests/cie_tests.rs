@@ -7,7 +7,7 @@
 //! (the real functional changes); CalGray gets a pass-through pinning test
 //! (pass-through IS what `CPDF_CalGray::GetRGB` does).
 
-use pdf_color::{calgray_to_gray, calrgb_to_rgb, lab_to_rgb};
+use pdf_color::{CalRgbTransform, calgray_to_gray, calrgb_to_rgb, lab_to_rgb};
 
 /// Default Lab `/Range` (a\*/b\* in [-100, 100]).
 const DEFAULT_RANGE: [f32; 4] = [-100.0, 100.0, -100.0, 100.0];
@@ -224,4 +224,20 @@ fn calrgb_zero_whitepoint_and_nan_are_finite() {
     // A non-finite gamma is treated as the identity (1.0), not propagated.
     let nan_gamma = calrgb_to_rgb([0.5, 0.5, 0.5], D65, [f32::NAN, 1.0, 1.0], IDENTITY_MATRIX);
     assert!(nan_gamma.iter().all(|c| c.is_finite()), "{nan_gamma:?}");
+}
+
+#[test]
+fn calrgb_cached_transform_matches_direct_conversion() {
+    let transform = CalRgbTransform::new(D65, [2.2, 1.8, f32::NAN], SRGB_TO_XYZ);
+    for sample in [
+        [0.0, 0.0, 0.0],
+        [0.25, 0.5, 0.75],
+        [1.0, 1.0, 1.0],
+        [f32::NAN, 0.4, 0.9],
+    ] {
+        assert_eq!(
+            transform.apply(sample),
+            calrgb_to_rgb(sample, D65, [2.2, 1.8, f32::NAN], SRGB_TO_XYZ)
+        );
+    }
 }

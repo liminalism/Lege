@@ -54,6 +54,8 @@ pub struct DjvuBinarizedData {
     pub adjusted_image: Arc<RgbImage>,
     pub binarized: Vec<u8>,
     pub cleaned_gray: Option<Vec<u8>>,
+    /// Preservation mode page: colour IW44 background under the JB2 mask.
+    pub preserved: bool,
     pub detections: Vec<Detection>,
     pub original_width_pts: f32,
     pub original_height_pts: f32,
@@ -203,6 +205,11 @@ pub async fn create_and_run_djvu_source_pipeline(
             | crate::margin::MarginSettings::CropAndResize
     );
     let (margin_analysis, detection_cache) = if needs_margin_pass {
+        // The staged DjVu pipeline does not share the PDF page-job governor
+        // yet; the margin pass at least admits its own jobs (notably native
+        // image decodes) against the same budget sizing.
+        let margin_budget_mb = crate::pipeline::source::page_memory_budget_mb();
+        let margin_budget = Arc::new(tokio::sync::Semaphore::new(margin_budget_mb));
         let analysis_future = perform_document_margin_analysis(
             source.clone(),
             config.clone(),
@@ -212,11 +219,14 @@ pub async fn create_and_run_djvu_source_pipeline(
             pipeline_config.page_workers,
             progress_tracker,
             cancellation.clone(),
+            margin_budget,
+            margin_budget_mb,
         );
         let (analysis, cache) = tokio::select! {
             result = analysis_future => result?,
             signal = shutdown_rx.recv() => {
                 cancellation.cancel();
+                crate::runtime_stats::drain_blocking_workers_on_cancel("margin analysis").await;
                 let message = signal
                     .ok()
                     .and_then(|signal| signal.message)
@@ -282,6 +292,7 @@ pub async fn create_and_run_djvu_source_pipeline(
             tracker,
             total_pages,
             layout_enabled,
+            pipeline_config.page_workers,
         ))
     };
     // Spawn inference stage with TRUE concurrency (similar to PDF pipeline) (mut for tokio::select!)
@@ -456,21 +467,12 @@ pub async fn create_and_run_djvu_source_pipeline(
     // Background subsample: binarized mode keeps c44's ×3 default. Grayscale
     // mode is resolution-aware — the IW44 background carries the ~1px
     // antialiasing ring around the mask, which ×3 erases at low renders.
-    let bg_subsample = if config.is_grayscale_mode() {
-        config.mrc_bg_subsample_override().unwrap_or_else(|| {
-            let auto = match config.target_height() {
-                0..=1799 => 1,
-                1800..=2399 => 2,
-                _ => 3,
-            };
-            // Adaptive-mask mode: synthetic rings only — ×2 floor smooths
-            // them into gradients (see pdf_tokio_pipeline).
-            if config.mrc_adaptive_mask() {
-                auto.max(2)
-            } else {
-                auto
-            }
-        })
+    let bg_subsample = if config.is_mrc_mode() {
+        crate::pipeline::pdf_tokio_pipeline::mrc_background_subsample(
+            config.target_height() as usize,
+            config.mrc_bg_subsample_override(),
+            config.mrc_adaptive_mask() || config.is_preserve_mode(),
+        )
     } else {
         3
     };
@@ -553,6 +555,7 @@ pub async fn create_and_run_djvu_source_pipeline(
                                 rgb_image: Arc::unwrap_or_clone(binarized_data.adjusted_image),
                                 binarized: binarized_data.binarized,
                                 cleaned_gray: binarized_data.cleaned_gray,
+                                preserved: binarized_data.preserved,
                                 detections: binarized_data.detections,
                                 hocr: binarized_data.hocr_text,
                             };
@@ -793,10 +796,8 @@ fn build_djvu_inference_future(
         Some(handle) => Box::pin(async move {
             let page_index = rendered.index;
             let detections = handle
-                .submit(page_index, rendered.inference_image.clone())
-                .await?
+                .detect(page_index, rendered.inference_image.clone())
                 .await
-                .map_err(|_| anyhow!("Inference actor dropped response"))?
                 .unwrap_or_else(|e| {
                     warn_log!("Page {}: inference failed: {}", page_index, e);
                     Vec::new()
@@ -875,6 +876,7 @@ async fn process_single_djvu_page(
         ocr_image,
         binarized,
         cleaned_gray,
+        preserved,
         width,
         height,
         original_width_pts,
@@ -914,6 +916,7 @@ async fn process_single_djvu_page(
         adjusted_image: Arc::new(adjusted_image),
         binarized,
         cleaned_gray,
+        preserved,
         detections: adjusted_detections,
         original_width_pts,
         original_height_pts,
@@ -937,6 +940,8 @@ struct DjvuPageProcessingOutput {
     binarized: Vec<u8>,
     /// Cleaned grayscale full page, `Some` only in grayscale/MRC mode.
     cleaned_gray: Option<Vec<u8>>,
+    /// `true` in preservation mode (colour page kept under the ink mask).
+    preserved: bool,
     width: usize,
     height: usize,
     original_width_pts: f32,
@@ -1120,7 +1125,21 @@ fn process_djvu_cpu_intensive_work(
     // In grayscale/MRC mode, clean the page and derive an ink-core bilevel buffer
     // (the JB2 mask); keep the cleaned gray for the IW44 background.
     let mut cleaned_gray: Option<Vec<u8>> = None;
-    let mut binarized = if config.is_grayscale_mode() && config.text_format() != "jpeg" {
+    let preserved = config.is_preserve_mode() && config.text_format() != "jpeg";
+    let mut binarized = if preserved {
+        // Preservation mode: the page itself is never cleaned. The JB2 layer
+        // is where Sauvola and the grey-clean mask agree (see
+        // `preserve_ink_mask`); the composer keeps the colour page (ink
+        // whitened) as the IW44 background.
+        crate::clean_gray::preserve_ink_mask(
+            binarization_image.as_raw(),
+            width,
+            height,
+            &crate::clean_gray::CleanOptions::production_for_height(height, config.invert_input()),
+            config.mrc_ink_threshold(),
+            binarize_djvu_image(&binarization_image, &config, false),
+        )
+    } else if config.is_grayscale_mode() && config.text_format() != "jpeg" {
         let opts =
             crate::clean_gray::CleanOptions::production_for_height(height, config.invert_input());
         // Adaptive-mask mode: Sauvola mask over the cleaned-gray background
@@ -1226,6 +1245,7 @@ fn process_djvu_cpu_intensive_work(
         ocr_image,
         binarized,
         cleaned_gray,
+        preserved,
         width,
         height,
         original_width_pts: inference_result.original_width_pts,

@@ -103,10 +103,8 @@ pub(crate) fn build_inference_future(
     match inference_handle {
         Some(handle) => Box::pin(async move {
             let detections = handle
-                .submit(page_index, rendered.inference_image.clone())
-                .await?
+                .detect(page_index, rendered.inference_image.clone())
                 .await
-                .map_err(|_| anyhow!("Inference actor dropped response"))?
                 .unwrap_or_else(|e| {
                     warn_log!("Page {}: inference failed: {}", page_index, e);
                     Vec::new()
@@ -193,6 +191,7 @@ async fn process_single_page(
         ocr_image,
         binarized,
         cleaned_gray,
+        preserved_rgb,
         deferred_binarize,
         width,
         height,
@@ -300,7 +299,7 @@ async fn process_single_page(
     } else if config.enable_ocr() {
         perform_ocr(
             &binarized,
-            &adjusted_image,
+            Some(&adjusted_image),
             cleaned_gray.as_deref(),
             width,
             height,
@@ -377,24 +376,42 @@ async fn process_single_page(
     // Grayscale/MRC base layer: a JP2 grayscale background plus a JBIG2 ink-mask
     // stencil. Two elements — background at the bottom (index 0), mask on top
     // (drawn after image-region overlays). All other modes emit one base element.
-    if let (true, Some(cleaned)) = (config.is_grayscale_mode(), cleaned_gray) {
+    let mrc_layers = match (cleaned_gray, preserved_rgb) {
+        (Some(cleaned), _) if config.is_grayscale_mode() => Some((Some(cleaned), None)),
+        (_, Some(rgb)) if config.is_preserve_mode() => Some((None, Some(rgb))),
+        _ => None,
+    };
+    if let Some((cleaned, rgb)) = mrc_layers {
         // Same Abandon-region protection as the bilevel base layer, but not
         // gated on text_format — the MRC mask is always JBIG2.
         let mask_force_generic = adjusted_detections
             .iter()
             .any(|d| d.category.force_generic_jbig2());
-        match encode_mrc_base_layer(
-            cleaned,
-            binarized,
-            width,
-            height,
-            &config,
-            page_index,
-            mask_force_generic,
-            glyph_session,
-        )
-        .await
-        {
+        let encoded = if let Some(rgb) = rgb {
+            encode_preserved_rgb_base_layer(
+                rgb,
+                binarized,
+                width,
+                height,
+                &config,
+                page_index,
+                glyph_session,
+            )
+            .await
+        } else {
+            encode_mrc_base_layer(
+                cleaned.expect("grayscale MRC layers carry the cleaned page"),
+                binarized,
+                width,
+                height,
+                &config,
+                page_index,
+                mask_force_generic,
+                glyph_session,
+            )
+            .await
+        };
+        match encoded {
             Ok((bg_content, mask_content)) => {
                 elements.insert(
                     0,
@@ -521,6 +538,10 @@ struct PageProcessingOutput {
     /// Cleaned grayscale full page (0-255), `Some` only in `PageMode::Grayscale`.
     /// Feeds the MRC background layer; `binarized` holds its ink-core mask.
     cleaned_gray: Option<Vec<u8>>,
+    /// Raw adjusted RGB (`width*height*3`) with picture regions painted white,
+    /// `Some` only in `PageMode::Preserved`. Feeds the colour MRC background;
+    /// `binarized` holds the Sauvola ink mask. Never normalized or cleaned.
+    preserved_rgb: Option<Vec<u8>>,
     /// When `Some`, binarization was deferred — `binarized` is empty and the encoder
     /// must binarize from `adjusted_image` using these options. Set only when the
     /// binarized buffer is guaranteed not to require post-binarization mutation
@@ -568,6 +589,46 @@ impl NativeTextTransform {
 
 fn identity_margin_correction() -> MarginCorrection {
     MarginCorrection::new(0.0, 0.0, 1.0, 1.0)
+}
+
+/// Paint every picture-region box white in a packed RGB buffer, grown by
+/// `pad` pixels on each side (negative insets it), skipping a near-full-page
+/// "image" detection when `skip_full_page_pictures` is set. The premask grows
+/// the box so no picture edge reaches the ink mask; the preservation-mode
+/// background insets it, because there the paper is not white and a white
+/// rim the region overlay does not cover would show.
+fn paint_image_regions_white(
+    rgb: &mut [u8],
+    w: u32,
+    h: u32,
+    detections: &[crate::engine::Detection],
+    classifier: &crate::types::LabelClassifier,
+    skip_full_page_pictures: bool,
+    pad: i32,
+) {
+    let width = w as usize;
+    for det in detections {
+        if !classifier.is_image_label(det) {
+            continue;
+        }
+        if skip_full_page_pictures && bbox_is_effectively_full_page(det.bbox, w, h, 0.90) {
+            continue;
+        }
+        let (ix1, iy1, ix2, iy2) = rounded_clamped_bbox(det.bbox, w, h);
+        let grow =
+            |v: u32, by: i32, limit: u32| (v as i64 + by as i64).clamp(0, limit as i64) as u32;
+        let mx1 = grow(ix1, -pad, w);
+        let my1 = grow(iy1, -pad, h);
+        let mx2 = grow(ix2, pad, w);
+        let my2 = grow(iy2, pad, h);
+        for y in my1..my2 {
+            let row_start = (y as usize * width + mx1 as usize) * 3;
+            let row_end = (y as usize * width + mx2 as usize) * 3;
+            if mx1 < mx2 && row_end <= rgb.len() {
+                rgb[row_start..row_end].fill(255);
+            }
+        }
+    }
 }
 
 fn bbox_is_effectively_full_page(
@@ -928,33 +989,26 @@ fn process_page_cpu_work(input: PageProcessingInput) -> Result<PageProcessingOut
         (config.crop_free_aspect() && config.text_format() != "jpeg" && !force_blank_threshold)
             .then(|| normalize_crop_binarization_input(&adjusted_image));
 
+    // A near-full-page picture on a page that also has text is normally left
+    // to the base layer rather than cut out as a region. Preservation keeps
+    // it as a region: in the base layer it would go through the ink mask,
+    // which is exactly what that mode must not do to a picture.
+    let skip_full_page_pictures = has_substantive_text_detection && !config.is_preserve_mode();
+
     let binarization_image: std::borrow::Cow<'_, RgbImage> = if has_image_regions {
         let premask_source = normalized_page.as_ref().unwrap_or(&adjusted_image);
         let mut masked_rgb = premask_source.as_raw().clone();
         let w = width as u32;
         let h = height as u32;
-        const MASK_PAD: u32 = 3;
-        for det in &adjusted_detections {
-            if !classifier.is_image_label(det) {
-                continue;
-            }
-            if has_substantive_text_detection && bbox_is_effectively_full_page(det.bbox, w, h, 0.90)
-            {
-                continue;
-            }
-            let (ix1, iy1, ix2, iy2) = rounded_clamped_bbox(det.bbox, w, h);
-            let mx1 = ix1.saturating_sub(MASK_PAD);
-            let my1 = iy1.saturating_sub(MASK_PAD);
-            let mx2 = (ix2 + MASK_PAD).min(w);
-            let my2 = (iy2 + MASK_PAD).min(h);
-            for y in my1..my2 {
-                let row_start = (y as usize * width + mx1 as usize) * 3;
-                let row_end = (y as usize * width + mx2 as usize) * 3;
-                if row_end <= masked_rgb.len() {
-                    masked_rgb[row_start..row_end].fill(255);
-                }
-            }
-        }
+        paint_image_regions_white(
+            &mut masked_rgb,
+            w,
+            h,
+            &adjusted_detections,
+            classifier,
+            skip_full_page_pictures,
+            3,
+        );
         std::borrow::Cow::Owned(RgbImage::from_raw(w, h, masked_rgb).unwrap())
     } else if let Some(normalized) = normalized_page {
         std::borrow::Cow::Owned(normalized)
@@ -977,8 +1031,38 @@ fn process_page_cpu_work(input: PageProcessingInput) -> Result<PageProcessingOut
     // ink-core bilevel buffer (0=ink, 255=paper) that feeds OCR, region masking,
     // and the JBIG2 mask; keep the cleaned grayscale for the MRC background.
     let mut cleaned_gray: Option<Vec<u8>> = None;
+    let mut preserved_rgb: Option<Vec<u8>> = None;
     let (mut binarized, deferred_binarize) = if force_blank_threshold {
         (vec![255; width * height], None)
+    } else if config.is_preserve_mode() && !is_cover_page && config.text_format() != "jpeg" {
+        // Preservation mode: the ink mask is where Sauvola and the grey-clean
+        // mask agree (see `preserve_ink_mask`), both on the premasked
+        // binarization image; the colour page is `adjusted_image` itself. Never
+        // from `normalized_page`: preservation must not alter colour or levels.
+        let mask = crate::clean_gray::preserve_ink_mask(
+            binarization_image.as_raw(),
+            width,
+            height,
+            &crate::clean_gray::CleanOptions::production_for_height(height, config.invert_input()),
+            config.mrc_ink_threshold(),
+            binarize_image(&binarization_image, &config, false),
+        );
+        let mut rgb = adjusted_image.as_raw().clone();
+        if has_image_regions {
+            paint_image_regions_white(
+                &mut rgb,
+                width as u32,
+                height as u32,
+                &adjusted_detections,
+                classifier,
+                skip_full_page_pictures,
+                // Inset past the background's box-downsample footprint, so
+                // no whitened pixel averages into the visible rim.
+                -8,
+            );
+        }
+        preserved_rgb = Some(rgb);
+        (mask, None)
     } else if config.is_grayscale_mode() && !is_cover_page && config.text_format() != "jpeg" {
         let opts =
             crate::clean_gray::CleanOptions::production_for_height(height, config.invert_input());
@@ -1121,7 +1205,7 @@ fn process_page_cpu_work(input: PageProcessingInput) -> Result<PageProcessingOut
         if !classifier.is_image_label(det) {
             continue;
         }
-        if has_substantive_text_detection
+        if skip_full_page_pictures
             && bbox_is_effectively_full_page(det.bbox, width as u32, height as u32, 0.90)
         {
             continue;
@@ -1444,6 +1528,7 @@ fn process_page_cpu_work(input: PageProcessingInput) -> Result<PageProcessingOut
         ocr_image,
         binarized,
         cleaned_gray,
+        preserved_rgb,
         deferred_binarize,
         width,
         height,
@@ -1665,10 +1750,14 @@ fn encode_region_image_sync(
     Ok((data, fmt_str, pixel_width, pixel_height))
 }
 
-/// Perform OCR on binarized image
+/// Perform OCR on binarized image.
+///
+/// `page_rgb` is optional: callers that only have a cleaned grayscale page
+/// pass `None` and the paddle backend recognizes the gray buffer directly
+/// instead of requiring a full-page RGB expansion.
 async fn perform_ocr(
     binarized: &[u8],
-    page_rgb: &RgbImage,
+    page_rgb: Option<&RgbImage>,
     cleaned_gray: Option<&[u8]>,
     width: usize,
     height: usize,
@@ -1683,15 +1772,42 @@ async fn perform_ocr(
     // and does its own text-line detection. Run it on the page raster directly.
     #[cfg(lege_paddle_ocr)]
     {
-        let _ = (binarized, width, height, detections);
-        let result = crate::ocr::fast::perform_page_rgb_ocr(
-            page_rgb,
-            cleaned_gray,
-            config.ocr_language(),
-            config.invert_input(),
-            frame,
-        )
-        .await;
+        let _ = (binarized, detections);
+        let expected = width.checked_mul(height);
+        let result = match cleaned_gray {
+            Some(gray) if Some(gray.len()) == expected => {
+                crate::ocr::fast::perform_page_gray_ocr(
+                    gray,
+                    width,
+                    height,
+                    config.ocr_language(),
+                    config.invert_input(),
+                    frame,
+                )
+                .await
+            }
+            Some(gray) => Err(anyhow!(
+                "cleaned OCR buffer length {} != {}x{}",
+                gray.len(),
+                width,
+                height
+            )),
+            None => match page_rgb {
+                Some(rgb) => {
+                    crate::ocr::fast::perform_page_rgb_ocr(
+                        rgb,
+                        None,
+                        config.ocr_language(),
+                        config.invert_input(),
+                        frame,
+                    )
+                    .await
+                }
+                None => Err(anyhow!(
+                    "Page {page_index}: OCR needs a page raster or a cleaned grayscale buffer"
+                )),
+            },
+        };
         return match result {
             Ok(text) => Ok(Some(text)),
             Err(e) => Err(anyhow!("Page {}: PaddleOCR failed: {e:#}", page_index)),
@@ -1865,6 +1981,98 @@ fn map_native_text_words(
         .collect()
 }
 
+/// Background subsample factor for an MRC page: the explicit
+/// `--mrc-subsample`, or the resolution-aware auto ladder. Auto follows
+/// RENDER RESOLUTION: the residual layer is the ~1px-per-1200px
+/// antialiasing ring around the mask, and downsampling below full
+/// resolution at 1200px averages that ring into pure white. At 2600px the
+/// ring is ~3px, so ×3 is safe.
+pub(crate) fn mrc_background_subsample(
+    height: usize,
+    subsample_override: Option<usize>,
+    adaptive_mask: bool,
+) -> usize {
+    subsample_override.unwrap_or_else(|| {
+        let auto = match height {
+            0..=1799 => 1,
+            1800..=2399 => 2,
+            _ => 3,
+        };
+        if adaptive_mask {
+            // Adaptive-mask mode: the background holds only the synthetic
+            // antialiasing rings (no real structure to smear), and ×1
+            // encodes their hard steps expensively with visible wavelet
+            // ringing at high zoom. ×2 box-downsampling turns the rings
+            // into smooth gradients — cleaner AND ~2.5× smaller.
+            auto.max(2)
+        } else {
+            auto
+        }
+    })
+}
+
+/// Encode the MRC ink layer from `binarized` (0 = ink, 255 = paper): a JBIG2
+/// Generic `/ImageMask` stencil, or glyph-font text runs when a truetyping
+/// session is given. Blocking; call it from inside an encode stage.
+fn encode_mrc_mask(
+    binarized: &[u8],
+    width: usize,
+    height: usize,
+    glyph_session: Option<Arc<GlyphFontSession>>,
+) -> Result<crate::accumulator::ContentType> {
+    use crate::encoding::{
+        EncodingManager, EncodingResult, EncodingSettings, ImageBuffer as LegeImageBuffer,
+        Jbig2Settings,
+    };
+    Ok(if let Some(session) = glyph_session {
+        let runs = session.process_page_pixels(
+            binarized,
+            width,
+            height,
+            crate::encoding::straighten::analysis_dpi(height),
+        )?;
+        crate::accumulator::ContentType::GlyphText {
+            runs: Arc::new(runs),
+            pixel_width: width as u32,
+            pixel_height: height as u32,
+        }
+    } else {
+        let buffer = LegeImageBuffer {
+            data: binarized,
+            width: width as u32,
+            height: height as u32,
+            channels: 1u8,
+        };
+        let settings = EncodingSettings::Jbig2(Jbig2Settings {
+            pdf_fragment_mode: true,
+            mode: crate::encoding::Jbig2Mode::Generic,
+            use_jbig2_halftone_segments: false,
+        });
+        let (page_data, global_data) = match EncodingManager::encode(&buffer, &settings)
+            .map_err(|e| anyhow!("jbig2 mask encode: {e}"))?
+        {
+            EncodingResult::Standard(data) => (data, Vec::new()),
+            EncodingResult::Jbig2WithGlobals {
+                page_data,
+                global_data,
+            } => {
+                // Inlining dictionary segments before page segments is legal
+                // embedded JBIG2 and avoids reader-specific globals handling.
+                let mut inline = global_data;
+                inline.extend_from_slice(&page_data);
+                (inline, Vec::new())
+            }
+        };
+        crate::accumulator::ContentType::Jbig2Mask {
+            page_data: Arc::from(page_data),
+            global_data: Arc::from(global_data),
+            pixel_width: width as u32,
+            pixel_height: height as u32,
+            paint_one: false,
+        }
+    })
+}
+
 /// Encode the MRC (grayscale) base layer: a JP2 grayscale background plus a
 /// JBIG2 ink-mask stencil. Returns `(background, mask)` — the caller draws the
 /// background first and the mask last so ink paints over the antialiased gray.
@@ -1889,10 +2097,6 @@ async fn encode_mrc_base_layer(
     crate::accumulator::ContentType,
     crate::accumulator::ContentType,
 )> {
-    use crate::encoding::{
-        EncodingManager, EncodingResult, EncodingSettings, ImageBuffer as LegeImageBuffer,
-        Jbig2Settings,
-    };
     let bg_quality = config.mrc_bg_quality();
     let subsample_override = config.mrc_bg_subsample_override();
     let adaptive_mask = config.mrc_adaptive_mask();
@@ -1900,60 +2104,13 @@ async fn encode_mrc_base_layer(
     // `force_generic` is kept in the signature so the Abandon-region rule stays
     // wired for the day symbol becomes usable here.
     let _ = force_generic;
-    let jbig2_mode = crate::encoding::Jbig2Mode::Generic;
     // Glyph-font output keeps the JP2 background and draws the ink layer as
     // text instead of a JBIG2 stencil. A truetyping page without a session
     // is one whose ink was already one bit, and it keeps the stencil.
     let glyph_session =
         glyph_session.filter(|_| config.text_format() == crate::pipeline::config::TRUETYPING);
     crate::runtime_stats::spawn_blocking_stage(crate::runtime_stats::Stage::Encode, move || {
-        let mask_content = if let Some(session) = glyph_session {
-            let runs = session.process_page_pixels(
-                &binarized,
-                width,
-                height,
-                crate::encoding::straighten::analysis_dpi(height),
-            )?;
-            crate::accumulator::ContentType::GlyphText {
-                runs: Arc::new(runs),
-                pixel_width: width as u32,
-                pixel_height: height as u32,
-            }
-        } else {
-            let buffer = LegeImageBuffer {
-                data: &binarized,
-                width: width as u32,
-                height: height as u32,
-                channels: 1u8,
-            };
-            let settings = EncodingSettings::Jbig2(Jbig2Settings {
-                pdf_fragment_mode: true,
-                mode: jbig2_mode,
-                use_jbig2_halftone_segments: false,
-            });
-            let (page_data, global_data) = match EncodingManager::encode(&buffer, &settings)
-                .map_err(|e| anyhow!("jbig2 mask encode: {e}"))?
-            {
-                EncodingResult::Standard(data) => (data, Vec::new()),
-                EncodingResult::Jbig2WithGlobals {
-                    page_data,
-                    global_data,
-                } => {
-                    // Inlining dictionary segments before page segments is legal
-                    // embedded JBIG2 and avoids reader-specific globals handling.
-                    let mut inline = global_data;
-                    inline.extend_from_slice(&page_data);
-                    (inline, Vec::new())
-                }
-            };
-            crate::accumulator::ContentType::Jbig2Mask {
-                page_data: Arc::from(page_data),
-                global_data: Arc::from(global_data),
-                pixel_width: width as u32,
-                pixel_height: height as u32,
-                paint_one: false,
-            }
-        };
+        let mask_content = encode_mrc_mask(&binarized, width, height, glyph_session)?;
 
         // Background: cleaned gray with ink filled white, box-downsampled, then
         // encoded as document-profile grayscale JP2. Auto subsample follows
@@ -1963,23 +2120,7 @@ async fn encode_mrc_base_layer(
         // the antialiasing that grayscale mode exists to preserve. At 2600px
         // the ring is ~3px, so ×3 is safe. Size stays modest at ×1 because
         // the threshold-180 mask leaves only the ring in this layer.
-        let subsample = subsample_override.unwrap_or_else(|| {
-            let auto = match height {
-                0..=1799 => 1,
-                1800..=2399 => 2,
-                _ => 3,
-            };
-            if adaptive_mask {
-                // Adaptive-mask mode: the background holds only the synthetic
-                // antialiasing rings (no real structure to smear), and ×1
-                // encodes their hard steps expensively with visible wavelet
-                // ringing at high zoom. ×2 box-downsampling turns the rings
-                // into smooth gradients — cleaner AND ~2.5× smaller.
-                auto.max(2)
-            } else {
-                auto
-            }
-        });
+        let subsample = mrc_background_subsample(height, subsample_override, adaptive_mask);
         let (bg, ow, oh) =
             crate::clean_gray::mrc_background(&cleaned_gray, &binarized, width, height, subsample);
         let jp2 = crate::encoding::jp2::encode_gray_document(&bg, ow as u32, oh as u32, bg_quality)
@@ -2003,6 +2144,60 @@ async fn encode_mrc_base_layer(
     })
     .await
     .map_err(|e| anyhow!("MRC encode task panicked: {e}"))?
+}
+
+/// Encode the preservation-mode base layer: a colour JPX background (the page
+/// with ink filled by its neighbours) plus a JBIG2 ink-mask stencil. Returns
+/// `(background, mask)` like `encode_mrc_base_layer`. `rgb` is packed RGB;
+/// `binarized` is the Sauvola mask (0 = ink, 255 = paper).
+async fn encode_preserved_rgb_base_layer(
+    rgb: Vec<u8>,
+    binarized: Vec<u8>,
+    width: usize,
+    height: usize,
+    config: &Arc<PipelineConfig>,
+    page_index: usize,
+    glyph_session: Option<Arc<GlyphFontSession>>,
+) -> Result<(
+    crate::accumulator::ContentType,
+    crate::accumulator::ContentType,
+)> {
+    let bg_quality = config.mrc_bg_quality();
+    let subsample_override = config.mrc_bg_subsample_override();
+    let glyph_session =
+        glyph_session.filter(|_| config.text_format() == crate::pipeline::config::TRUETYPING);
+    crate::runtime_stats::spawn_blocking_stage(crate::runtime_stats::Stage::Encode, move || {
+        let mask_content = encode_mrc_mask(&binarized, width, height, glyph_session)?;
+
+        // Coverage: ink (0) becomes 255 so the background fill replaces it
+        // with neighbouring page colour.
+        let coverage: Vec<u8> = binarized.iter().map(|&v| 255 - v).collect();
+        drop(binarized);
+        let subsample = mrc_background_subsample(height, subsample_override, true);
+        let (bg, ow, oh) = crate::clean_gray::mrc_background_with_coverage(
+            &rgb, &coverage, width, height, 3, subsample,
+        );
+        let jp2 = crate::encoding::jp2::encode_rgb(&bg, ow as u32, oh as u32, bg_quality)
+            .map_err(|e| anyhow!("jp2 rgb background encode: {e}"))?;
+        let bg_content = crate::accumulator::ContentType::EncodedImage {
+            data: Arc::from(jp2),
+            pixel_width: ow as u32,
+            pixel_height: oh as u32,
+            format: "jp2".to_string(),
+        };
+
+        crate::bbox_trace!(
+            "PAGE {} preserved base bg={}x{} bytes={} mask_bytes={}",
+            page_index,
+            ow,
+            oh,
+            bg_content.as_bytes().len(),
+            mask_content.as_bytes().len()
+        );
+        Ok((bg_content, mask_content))
+    })
+    .await
+    .map_err(|e| anyhow!("preserved encode task panicked: {e}"))?
 }
 
 /// Encode only the cleaned continuous-tone background while passing the
@@ -2048,6 +2243,7 @@ async fn encode_preserved_mrc_base_layer(
             &working_coverage,
             width,
             height,
+            1,
             background_subsample,
         );
         let ow = ow as u32;
@@ -2827,10 +3023,8 @@ fn build_margin_analysis_future(
                     .unwrap_or_else(|_| analysis_image.clone());
 
                 handle
-                    .submit(page_index, Arc::new(inference_img))
-                    .await?
+                    .detect(page_index, Arc::new(inference_img))
                     .await
-                    .map_err(|_| anyhow!("Inference actor dropped margin-analysis response"))?
                     .unwrap_or_default()
             } else {
                 Vec::new()
@@ -3010,15 +3204,8 @@ async fn perform_document_analysis(
 //==============================================================================
 
 struct PageOwnedJobOutput {
-    hocr_page: Option<SpilledHocrPage>,
+    hocr_page: Option<crate::pipeline::epub_pipeline::SpooledHocrPage>,
     toc: crate::toc::PageTocData,
-}
-
-struct SpilledHocrPage {
-    page_index: usize,
-    width_px: u32,
-    height_px: u32,
-    path: std::path::PathBuf,
 }
 
 struct PlannedPdfContext {
@@ -3085,8 +3272,7 @@ async fn prepare_planned_pdf_page(
             page_index + 1
         );
         if preserved_mask.is_none()
-            && (config.is_grayscale_mode()
-                || (config.dither_images() && !config.keep_original_images()))
+            && (config.is_mrc_mode() || (config.dither_images() && !config.keep_original_images()))
         {
             return Ok(None);
         }
@@ -3337,19 +3523,50 @@ fn gray_to_rgb_image(gray: &[u8], width: u32, height: u32) -> Result<RgbImage> {
     RgbImage::from_raw(width, height, rgb).ok_or_else(|| anyhow!("failed to expand Gray8 to RGB"))
 }
 
+/// Process one planned PDF page with staged product lifetimes: the base
+/// renders first, the OCR surface renders only when slow OCR consumes it,
+/// and each region renders immediately before its own encode. Region
+/// *descriptions* stay resident throughout (masking and placement read
+/// them); region *pixels* never outlive their encode. This keeps an
+/// illustration-heavy page from holding the base, every region raster and
+/// the OCR raster simultaneously.
 #[allow(clippy::too_many_arguments)]
 async fn process_planned_pdf_products(
     config: Arc<PipelineConfig>,
     document_session: Arc<lege_pdf_read::RenderSession>,
     page_index: usize,
     page_start: usize,
-    products: lege_pdf_read::PageRasterProducts,
+    page: Arc<lege_pdf_read::CompiledDocumentPage>,
+    plan: lege_pdf_read::PageOutputPlan,
     preserved_mask: Option<lege_pdf_read::PreservedJbig2Smask>,
     detections: Vec<crate::engine::Detection>,
     cancellation: lege_pdf_read::CancellationToken,
     glyph_session: Option<Arc<GlyphFontSession>>,
 ) -> Result<ProcessedPage> {
-    let lege_pdf_read::RasterPlane::Gray8(base_surface) = products.base else {
+    let base_product = plan.base.product;
+    let render_session = document_session.clone();
+    let render_page = page.clone();
+    let render_cancellation = cancellation.clone();
+    let t_base = std::time::Instant::now();
+    let base_plane = crate::runtime_stats::spawn_blocking_stage(
+        crate::runtime_stats::Stage::Render,
+        move || {
+            render_session.render_cancellable(
+                &render_page,
+                &base_product,
+                Some(&render_cancellation),
+            )
+        },
+    )
+    .await
+    .map_err(|error| anyhow!("page base render task panicked: {error}"))?
+    .map_err(|error| anyhow!("page base render failed: {error}"))?;
+    crate::perf_log!(
+        t_base,
+        "[PROFILING] Page {} planned base render",
+        page_index + 1
+    );
+    let lege_pdf_read::RasterPlane::Gray8(base_surface) = base_plane else {
         return Err(anyhow!("planned gray path received a non-gray base"));
     };
     let width = base_surface.width;
@@ -3360,8 +3577,8 @@ async fn process_planned_pdf_products(
         .map(|mask| compact_gray_surface(mask.working_coverage.clone()))
         .transpose()?;
     let uses_preserved_mask = working_coverage.is_some();
-    for region in &products.regions {
-        if let Some(crop) = region.target.product.crop {
+    for target in &plan.regions {
+        if let Some(crop) = target.product.crop {
             const PAD: u32 = 3;
             let x1 = (crop.x.max(0) as u32).saturating_sub(PAD);
             let y1 = (crop.y.max(0) as u32).saturating_sub(PAD);
@@ -3442,9 +3659,27 @@ async fn process_planned_pdf_products(
             )
             .await?
         } else {
-            let ocr_plane = products
+            let ocr_product = plan
                 .ocr
-                .ok_or_else(|| anyhow!("slow OCR plan did not render an OCR surface"))?;
+                .as_ref()
+                .ok_or_else(|| anyhow!("slow OCR plan did not render an OCR surface"))?
+                .product;
+            let render_session = document_session.clone();
+            let render_page = page.clone();
+            let render_cancellation = cancellation.clone();
+            let ocr_plane = crate::runtime_stats::spawn_blocking_stage(
+                crate::runtime_stats::Stage::Render,
+                move || {
+                    render_session.render_cancellable(
+                        &render_page,
+                        &ocr_product,
+                        Some(&render_cancellation),
+                    )
+                },
+            )
+            .await
+            .map_err(|error| anyhow!("page OCR render task panicked: {error}"))?
+            .map_err(|error| anyhow!("page OCR render failed: {error}"))?;
             let lege_pdf_read::RasterPlane::Rgb8(surface) = ocr_plane else {
                 return Err(anyhow!("slow OCR target returned a non-RGB plane"));
             };
@@ -3464,10 +3699,9 @@ async fn process_planned_pdf_products(
             .await?
         }
     } else if config.enable_ocr() {
-        let ocr_rgb = gray_to_rgb_image(&gray, width, height)?;
         perform_ocr(
             &binarized,
-            &ocr_rgb,
+            None,
             Some(&gray),
             width as usize,
             height as usize,
@@ -3490,13 +3724,32 @@ async fn process_planned_pdf_products(
 
     let mut elements = Vec::new();
     let t_regions = std::time::Instant::now();
-    let region_count = products.regions.len();
-    for region in products.regions {
+    let region_count = plan.regions.len();
+    for target in &plan.regions {
         checkpoint(&cancellation, "during planned region encoding")?;
-        let Some(crop) = region.target.product.crop else {
+        let Some(crop) = target.product.crop else {
             continue;
         };
-        let lege_pdf_read::RasterPlane::Rgb8(surface) = region.plane else {
+        // Render one region, encode it, and release its pixels before the
+        // next: only one region raster is ever resident here.
+        let region_product = target.product;
+        let render_session = document_session.clone();
+        let render_page = page.clone();
+        let render_cancellation = cancellation.clone();
+        let region_plane = crate::runtime_stats::spawn_blocking_stage(
+            crate::runtime_stats::Stage::Render,
+            move || {
+                render_session.render_cancellable(
+                    &render_page,
+                    &region_product,
+                    Some(&render_cancellation),
+                )
+            },
+        )
+        .await
+        .map_err(|error| anyhow!("page region render task panicked: {error}"))?
+        .map_err(|error| anyhow!("page region render failed: {error}"))?;
+        let lege_pdf_read::RasterPlane::Rgb8(surface) = region_plane else {
             continue;
         };
         // The source raster can be far larger than the box it is drawn in on
@@ -3622,30 +3875,21 @@ async fn process_planned_pdf_products(
     })
 }
 
-fn page_memory_budget_mb() -> usize {
-    if let Some(override_mb) = std::env::var("LEGE_MEMORY_BUDGET_MB")
-        .ok()
-        .and_then(|value| value.parse::<usize>().ok())
-        .filter(|&value| value > 0)
-    {
-        return override_mb;
-    }
-    crate::pipeline::helper_functions::get_available_ram_gb()
-        .saturating_mul(512)
-        .clamp(1024, 8192)
-}
-
-fn estimated_page_memory_mb(config: &PipelineConfig, budget_mb: usize) -> u32 {
-    let height = config.source_render_height() as usize;
-    let width = config
-        .source_render_width()
-        .map(|width| width as usize)
-        .unwrap_or_else(|| height.saturating_mul(3).div_ceil(2));
-    // Render RGB + inference RGB + adjusted RGB + gray/binary planes + codec
-    // scratch. This deliberately overestimates ordinary pages so admission
-    // happens before the large allocations, not after them.
-    let bytes = width.saturating_mul(height).saturating_mul(16);
-    bytes.div_ceil(1024 * 1024).max(1).min(budget_mb.max(1)) as u32
+/// Abort the page-job set and the writer after a failure or shutdown
+/// signal, then wait for already-started blocking workers to release their
+/// buffers. Aborting the async wrappers cannot stop those workers, so the
+/// drain — not the emptied join set — is what makes cancellation
+/// resource-safe.
+async fn abort_page_jobs(
+    jobs: &mut tokio::task::JoinSet<Result<PageOwnedJobOutput>>,
+    pdf_writer_task: &tokio::task::JoinHandle<Result<(), anyhow::Error>>,
+    cancellation: &lege_pdf_read::CancellationToken,
+) {
+    cancellation.cancel();
+    jobs.abort_all();
+    pdf_writer_task.abort();
+    while jobs.join_next().await.is_some() {}
+    crate::runtime_stats::drain_blocking_workers_on_cancel("PDF page jobs").await;
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -3670,14 +3914,31 @@ async fn run_page_owned_job(
     layout_enabled: bool,
     memory_budget: Arc<Semaphore>,
     memory_budget_mb: usize,
+    encoded_budget: Arc<Semaphore>,
+    encoded_budget_mb: usize,
     hocr_spool_dir: Option<Arc<std::path::PathBuf>>,
     glyph_session: Option<Arc<GlyphFontSession>>,
 ) -> Result<PageOwnedJobOutput> {
-    let estimated_mb = estimated_page_memory_mb(&config, memory_budget_mb);
+    let (target_width, target_height) = crate::pipeline::source::configured_render_dims(&config);
+    let charge = crate::pipeline::source::estimate_page_charge_mb(
+        target_width,
+        target_height,
+        source.native_page_size(page_index),
+        source.decodes_at_native_size(),
+        memory_budget_mb,
+    );
+    if charge.oversized {
+        crate::pipeline::source::note_oversized_page(page_index, &charge, memory_budget_mb);
+    }
     let _memory_permit = memory_budget
-        .acquire_many_owned(estimated_mb)
+        .clone()
+        .acquire_many_owned(charge.acquire_mb)
         .await
         .map_err(|_| anyhow!("page memory admission semaphore closed"))?;
+    let _memory_tracked = crate::runtime_stats::track_memory_bytes(
+        crate::runtime_stats::MemoryGauge::PageWorkingSet,
+        charge.acquire_mb as usize,
+    );
     checkpoint(&cancellation, "before render")?;
     let planned_pdf = if margin_analysis.is_none() {
         match document_session.clone() {
@@ -3704,6 +3965,28 @@ async fn run_page_owned_job(
         .await?
     };
     checkpoint(&cancellation, "after render")?;
+    // The pre-admission charge used configured/native sizes; top up when the
+    // actual page is bigger (unknown native size, wider aspect). The planned
+    // path works at output resolution — its analysis image is only the small
+    // inference input, so it must not size the top-up.
+    let (actual_width, actual_height) = match &planned_pdf {
+        Some(planned) => (planned.output_width, planned.output_height),
+        None => (source_page.image.width(), source_page.image.height()),
+    };
+    let top_up_mb = crate::pipeline::source::top_up_charge_mb(&charge, actual_width, actual_height);
+    let (_memory_top_up, _memory_top_up_tracked) = if top_up_mb > 0 {
+        let permit = memory_budget
+            .acquire_many_owned(top_up_mb)
+            .await
+            .map_err(|_| anyhow!("page memory admission semaphore closed"))?;
+        let tracked = crate::runtime_stats::track_memory_bytes(
+            crate::runtime_stats::MemoryGauge::PageWorkingSet,
+            top_up_mb as usize,
+        );
+        (Some(permit), Some(tracked))
+    } else {
+        (None, None)
+    };
 
     crate::pipeline::set_standard_dimensions_once(
         source_page.image.width(),
@@ -3812,40 +4095,19 @@ async fn run_page_owned_job(
                     })
                     .collect()
             };
-            let render_session = session.clone();
-            let compiled_page = planned.page.clone();
             // A page whose ink is already one bit keeps it (its own mask, or
             // JBIG2); truetyping traces only rendered scans.
             let glyph_session =
                 glyph_session.filter(|_| planned.page.bilevel_raster_height().is_none());
-            let plan = planned.plan.clone();
-            let render_cancellation = cancellation.clone();
-            let products = crate::runtime_stats::spawn_blocking_stage(
-                crate::runtime_stats::Stage::Render,
-                move || {
-                    let t_render = std::time::Instant::now();
-                    let products = render_session.render_output_plan(
-                        &compiled_page,
-                        &plan,
-                        Some(&render_cancellation),
-                    );
-                    crate::perf_log!(
-                        t_render,
-                        "[PROFILING] Page {} planned output render",
-                        page_index + 1
-                    );
-                    products
-                },
-            )
-            .await
-            .map_err(|error| anyhow!("page product render task panicked: {error}"))?
-            .map_err(|error| anyhow!("page product render failed: {error}"))?;
+            // Products render in stages inside: base, then the OCR surface
+            // only when slow OCR consumes it, then one region at a time.
             process_planned_pdf_products(
                 config,
                 session,
                 page_index,
                 page_start,
-                products,
+                planned.page.clone(),
+                planned.plan.clone(),
                 planned.preserved_mask,
                 detections,
                 cancellation.clone(),
@@ -3903,7 +4165,7 @@ async fn run_page_owned_job(
             .await
             .map_err(|error| anyhow!("hOCR spool task panicked: {error}"))?
             .map_err(|error| anyhow!("failed to spool hOCR {}: {error}", path.display()))?;
-            Some(SpilledHocrPage {
+            Some(crate::pipeline::epub_pipeline::SpooledHocrPage {
                 page_index: processed_page.index,
                 width_px: processed_page.width,
                 height_px: processed_page.height,
@@ -3926,7 +4188,18 @@ async fn run_page_owned_job(
         quarter_turns: processed_page.quarter_turns,
     };
     let output_index = page.index;
-    pdf_writer_handle.send_page(page, output_index).await?;
+    // The raster reservation releases with this job; the encoded payload
+    // carries its own smaller reservation until the writer consumes it.
+    let reservation = crate::pipeline::helper_functions::reserve_encoded_bytes(
+        &encoded_budget,
+        encoded_budget_mb,
+        output_index,
+        &page,
+    )
+    .await?;
+    pdf_writer_handle
+        .send_page(page, output_index, Some(reservation))
+        .await?;
 
     Ok(PageOwnedJobOutput { hocr_page, toc })
 }
@@ -4052,6 +4325,19 @@ pub async fn create_and_run_pdf_source_pipeline(
     );
     let cancellation = lege_pdf_read::CancellationToken::new();
 
+    // The page-memory semaphore is created before the margin pass so the
+    // low-resolution analysis obeys the same byte governor as the page jobs.
+    let memory_budget_mb = crate::pipeline::source::page_memory_budget_mb();
+    let memory_budget = Arc::new(Semaphore::new(memory_budget_mb));
+    info_log!(
+        "[PDF-Parallel] Memory admission budget: {} MiB",
+        memory_budget_mb
+    );
+    // Encoded payloads queued on the writer carry their own smaller
+    // reservation; it releases when the writer consumes the page.
+    let encoded_budget_mb = crate::pipeline::helper_functions::encoded_budget_mb();
+    let encoded_budget = Arc::new(Semaphore::new(encoded_budget_mb));
+
     let (margin_analysis, detection_cache) = if needs_two_pass {
         info_log!("[PDF-Parallel] Margin mode enabled - running 2-pass document analysis");
         let analysis_future = perform_document_margin_analysis(
@@ -4063,11 +4349,14 @@ pub async fn create_and_run_pdf_source_pipeline(
             page_concurrency,
             progress_tracker,
             cancellation.clone(),
+            memory_budget.clone(),
+            memory_budget_mb,
         );
         let (analysis, cache) = tokio::select! {
             result = analysis_future => result?,
             signal = shutdown_rx.recv() => {
                 cancellation.cancel();
+                crate::runtime_stats::drain_blocking_workers_on_cancel("margin analysis").await;
                 let message = signal
                     .ok()
                     .and_then(|signal| signal.message)
@@ -4127,12 +4416,6 @@ pub async fn create_and_run_pdf_source_pipeline(
     let detection_cache_arc = Arc::new(detection_cache);
     let analysis_width = if needs_two_pass { 640 } else { 0 };
     let margin_analysis_arc = margin_analysis.map(Arc::new);
-    let memory_budget_mb = page_memory_budget_mb();
-    let memory_budget = Arc::new(Semaphore::new(memory_budget_mb));
-    info_log!(
-        "[PDF-Parallel] Memory admission budget: {} MiB",
-        memory_budget_mb
-    );
     // One glyph dictionary for the whole document: pages match against it as
     // they finish (any order) and the font is emitted once at finalize.
     let glyph_session = (config.text_format() == crate::pipeline::config::TRUETYPING)
@@ -4170,6 +4453,8 @@ pub async fn create_and_run_pdf_source_pipeline(
                 layout_enabled,
                 memory_budget.clone(),
                 memory_budget_mb,
+                encoded_budget.clone(),
+                encoded_budget_mb,
                 hocr_spool_dir.clone(),
                 glyph_session.clone(),
             ));
@@ -4179,10 +4464,7 @@ pub async fn create_and_run_pdf_source_pipeline(
             biased;
             signal = shutdown_rx.recv() => {
                 if let Ok(signal) = signal {
-                    cancellation.cancel();
-                    jobs.abort_all();
-                    pdf_writer_task.abort();
-                    while jobs.join_next().await.is_some() {}
+                    abort_page_jobs(&mut jobs, &pdf_writer_task, &cancellation).await;
                     return Err(anyhow!(
                         "Processing cancelled: {}",
                         signal.message.unwrap_or_else(|| "User requested cancellation".to_string())
@@ -4193,17 +4475,11 @@ pub async fn create_and_run_pdf_source_pipeline(
                 let output = match result {
                     Some(Ok(Ok(output))) => output,
                     Some(Ok(Err(error))) => {
-                        cancellation.cancel();
-                        jobs.abort_all();
-                        pdf_writer_task.abort();
-                        while jobs.join_next().await.is_some() {}
+                        abort_page_jobs(&mut jobs, &pdf_writer_task, &cancellation).await;
                         return Err(error);
                     }
                     Some(Err(error)) => {
-                        cancellation.cancel();
-                        jobs.abort_all();
-                        pdf_writer_task.abort();
-                        while jobs.join_next().await.is_some() {}
+                        abort_page_jobs(&mut jobs, &pdf_writer_task, &cancellation).await;
                         return Err(anyhow!("page job panicked: {error}"));
                     }
                     None => {
@@ -4242,6 +4518,7 @@ pub async fn create_and_run_pdf_source_pipeline(
                 cancellation.cancel();
                 outline_task.abort();
                 pdf_writer_task.abort();
+                crate::runtime_stats::drain_blocking_workers_on_cancel("outline extraction").await;
                 let message = signal
                     .ok()
                     .and_then(|signal| signal.message)
@@ -4347,24 +4624,6 @@ pub async fn create_and_run_pdf_source_pipeline(
 
     if let Some(epub_path) = epub_sidecar_output {
         if !hocr_pages.is_empty() {
-            hocr_pages.sort_by_key(|page| page.page_index);
-            let hocr_pages = hocr_pages
-                .into_iter()
-                .map(|page| {
-                    let hocr = std::fs::read_to_string(&page.path).map_err(|error| {
-                        anyhow!(
-                            "failed to read spooled hOCR {}: {error}",
-                            page.path.display()
-                        )
-                    })?;
-                    Ok(crate::pipeline::epub_pipeline::HocrPage {
-                        page_index: page.page_index,
-                        width_px: page.width_px,
-                        height_px: page.height_px,
-                        hocr,
-                    })
-                })
-                .collect::<Result<Vec<_>>>()?;
             let title = epub_path
                 .file_stem()
                 .and_then(|s| s.to_str())
@@ -4379,7 +4638,7 @@ pub async fn create_and_run_pdf_source_pipeline(
             let mut sidecar_task = crate::runtime_stats::spawn_blocking_stage(
                 crate::runtime_stats::Stage::Writer,
                 move || {
-                    crate::pipeline::epub_pipeline::build_epub_from_hocr_pages_with_outline_cancellable(
+                    crate::pipeline::epub_pipeline::build_epub_from_spooled_hocr_pages_with_outline_cancellable(
                         &hocr_pages,
                         &title,
                         &epub_path,
@@ -4395,6 +4654,8 @@ pub async fn create_and_run_pdf_source_pipeline(
                 signal = shutdown_rx.recv() => {
                     sidecar_cancellation.cancel();
                     sidecar_task.abort();
+                    crate::runtime_stats::drain_blocking_workers_on_cancel("EPUB sidecar packaging")
+                        .await;
                     let message = signal
                         .ok()
                         .and_then(|signal| signal.message)
@@ -4637,8 +4898,18 @@ mod phase4_ocr_baseline_tests {
     #[tokio::test(flavor = "current_thread")]
     async fn ocr_sized_pages_obey_mib_admission_before_render() {
         let config = slow_ocr_config();
-        let permits = estimated_page_memory_mb(&config, 1024);
-        assert!(permits > 1);
+        let (target_width, target_height) =
+            crate::pipeline::source::configured_render_dims(&config);
+        let charge = crate::pipeline::source::estimate_page_charge_mb(
+            target_width,
+            target_height,
+            None,
+            false,
+            1024,
+        );
+        assert!(charge.acquire_mb > 1);
+        assert!(!charge.oversized);
+        let permits = charge.acquire_mb;
         let budget = Arc::new(Semaphore::new(permits as usize));
         let first = budget
             .clone()
@@ -4656,5 +4927,58 @@ mod phase4_ocr_baseline_tests {
             .acquire_many_owned(permits)
             .await
             .expect("page admitted after previous handoff");
+    }
+}
+
+#[cfg(test)]
+mod planned_products_tests {
+    use super::*;
+    use crate::pipeline::page_output_plan::{PagePlanInput, plan_page_output, region_target};
+
+    /// The staged planned path renders and consumes one product at a time:
+    /// base first, then one region render+encode with nothing else resident.
+    /// A blank fixture page with OCR, layout detection and auto-TOC off keeps
+    /// this free of GPU and OCR engines.
+    #[tokio::test(flavor = "current_thread")]
+    async fn staged_base_and_region_processing_on_blank_page() {
+        let pdf_bytes = pdf_test_support::builder::multipage_classic(1);
+        let session =
+            Arc::new(lege_pdf_read::RenderSession::open(Arc::from(pdf_bytes), None).expect("open"));
+        let page = session.compile(0).expect("compile");
+        let mut config = PipelineConfig::new().expect("config");
+        config.set_enable_layout_detection(false);
+        config.set_enable_ocr(false);
+        config.set_enable_auto_toc(false);
+        config.set_text_format("ccitt4").expect("format");
+        config.set_target_height(200).expect("height");
+        config.set_high_res_render_height(200).expect("render");
+        let config = Arc::new(config);
+        let mut plan = plan_page_output(
+            &config,
+            PagePlanInput {
+                output_width: 150,
+                output_height: 200,
+                gray_suitability: lege_pdf_read::GraySuitability::Exact,
+            },
+        );
+        plan.regions
+            .push(region_target([10.0, 10.0, 60.0, 80.0], 150, 200, 1).expect("region"));
+        let processed = process_planned_pdf_products(
+            config,
+            session,
+            0,
+            0,
+            page,
+            plan,
+            None,
+            Vec::new(),
+            lege_pdf_read::CancellationToken::new(),
+            None,
+        )
+        .await
+        .expect("process");
+        assert_eq!((processed.width, processed.height), (150, 200));
+        // Base layer plus the one encoded region.
+        assert_eq!(processed.elements.len(), 2);
     }
 }

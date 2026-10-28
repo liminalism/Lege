@@ -23,6 +23,7 @@ lege-android/app/src/main/jniLibs/
 lege-android/.gradle/
 lege-android/build/
 lege-android/app/build/
+lege-android/app/release/
 
 # Local caches, logs, and databases
 *.log
@@ -55,12 +56,17 @@ Thumbs.db
 /cargo-checker.exe
 **/cargo-checker
 **/cargo-checker.exe
+/agent-pack
+**/agent-pack
 /wipe-github-remote.sh
 /wipe.ps1
 
 # Screenshots and scratch captures (dev artifacts; some names are invalid on Windows)
 Screenshot*.png
 Screenshot*.PNG
+# The processor README ships these two images.
+!lege-process/Screenshot2.png
+!lege-process/page_0002-original.png
 
 # Downloaded third-party build tools (re-fetched by packaging scripts)
 *.AppImage

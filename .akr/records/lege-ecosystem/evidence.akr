@@ -368,6 +368,20 @@ record lege-ecosystem.evidence.automatic-toc-workspace-regression/1 : evidence {
         """
 }
 
+record lege-ecosystem.evidence.calrgb-adaptation-matrix-cache-landed/1 : evidence {
+    title "Uncommitted working tree on top of b4fb52b5: pdf-color gained CalRgbTransform (precomputing the white-point adaptation matrix M^-1 and sanitised gamma once per CalRGB colour space) and pdf-content's CieSpace::CalRgb caches CalRgbTransform directly instead of rebuilding two 3x3 matrix inversions per colour operator/sample. New unit test calrgb_cached_transform_matches_direct_conversion and all pdf-color/pdf-content tests pass."
+    state verified
+    result pass
+    method command
+    observed_at git:b4fb52b5851b94911e12524bb7836debdb42afb1
+    command "cd lege-pdf/render && cargo test -p pdf-color -p pdf-content"
+    summary """
+        Uncommitted working tree on top of b4fb52b5: pdf-color gained CalRgbTransform (precomputing the white-point adaptation matrix M^-1 and sanitised gamma once per CalRGB colour space) and pdf-content's CieSpace::CalRgb caches CalRgbTransform directly instead of rebuilding two 3x3 matrix inversions per colour operator/sample. New unit test calrgb_cached_transform_matches_direct_conversion and all pdf-color/pdf-content tests pass.
+        Capture ".agent/scratch/calrgb-cache-tests.txt": 18039 bytes; sha256:7b8b41764dc3b190a93e0b5e1d49d96c8ae752b1feaa04d58199ff8c9585d751 (identity only; raw capture is not a retained artifact).
+        """
+    author "dk"
+}
+
 record lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1 : evidence {
     title "jp2lam decode-fix-plan import fully dispositioned"
     state verified
@@ -606,6 +620,20 @@ record lege-ecosystem.evidence.document-export-tests-20260908/1 : evidence {
         correction lives alongside them in lege-document-ocr/crates/pipeline/src/correction.rs.
         Run on Linux at repo HEAD 823d46dd during the 2026-09-08 ledger-cleanup pass.
         """
+}
+
+record lege-ecosystem.evidence.document-ocr-cli-lazy-backend-tests/1 : evidence {
+    title "Uncommitted working tree on top of b4fb52b5: lazy OCR backend initialization implemented per option (b). cargo test -p lege-document-ocr-cli (6 passed, 0 failed, including native_text_batch_exports_and_resumes_without_invoking_ocr on Linux with BackendArg::WinocrLegacy) and cargo test -p lege-document-pipeline (26 passed, 0 failed, including ocr_checkpoint_requires_matching_backend_while_native_text_does_not and unimplemented_backend_stays_eagerly_rejected_while_host_backend_starts_lazily) pass."
+    state verified
+    result pass
+    method command
+    observed_at git:b4fb52b5851b94911e12524bb7836debdb42afb1
+    command "cargo test -p lege-document-ocr-cli"
+    summary """
+        Uncommitted working tree on top of b4fb52b5: lazy OCR backend initialization implemented per option (b). cargo test -p lege-document-ocr-cli (6 passed, 0 failed, including native_text_batch_exports_and_resumes_without_invoking_ocr on Linux with BackendArg::WinocrLegacy) and cargo test -p lege-document-pipeline (26 passed, 0 failed, including ocr_checkpoint_requires_matching_backend_while_native_text_does_not and unimplemented_backend_stays_eagerly_rejected_while_host_backend_starts_lazily) pass.
+        Capture ".agent/scratch/document-ocr-cli-tests.txt": 3444 bytes; sha256:adb7ff6e2037647746ab8d03154237d87ca73cff12afd45dba3a926d6094f0bd (identity only; raw capture is not a retained artifact).
+        """
+    author "dk"
 }
 
 record lege-ecosystem.evidence.document-ocr-cli-suite-20260908/1 : evidence {
@@ -1053,6 +1081,20 @@ record lege-ecosystem.evidence.jbig2-generic-gernet-75p/1 : evidence {
         """
 }
 
+record lege-ecosystem.evidence.jp2-native-dims-sniff-tests/1 : evidence {
+    title "Uncommitted working tree on top of b4fb52b5: 12 passed, 0 failed, including new jp2_header_sniffer_reads_bare_codestream_siz and jp2_sources_report_native_dimensions_from_the_header (a jp2lam-encoded 41x67 JP2 reports (41, 67) through jp2_header_dimensions, ImageFolderPageSource::native_page_size and ZipImagePageSource::native_page_size)."
+    state verified
+    result pass
+    method command
+    observed_at git:b4fb52b5851b94911e12524bb7836debdb42afb1
+    command "cargo test -p lege --lib pipeline::source"
+    summary """
+        Uncommitted working tree on top of b4fb52b5: 12 passed, 0 failed, including new jp2_header_sniffer_reads_bare_codestream_siz and jp2_sources_report_native_dimensions_from_the_header (a jp2lam-encoded 41x67 JP2 reports (41, 67) through jp2_header_dimensions, ImageFolderPageSource::native_page_size and ZipImagePageSource::native_page_size).
+        Capture ".agent/scratch/jp2-dims-tests.txt": 1278 bytes; sha256:80d217ba88ab21af668a52fe858edc73588c0fed35d87b4c0b67999963d9c343 (identity only; raw capture is not a retained artifact).
+        """
+    author "dk"
+}
+
 record lege-ecosystem.evidence.jp2lam-perceptual-curve-2026-08-12/1 : evidence {
     title "Size-matched jp2lam perceptual curve qualification"
     state superseded
@@ -1104,6 +1146,32 @@ record lege-ecosystem.evidence.jp2lam-perceptual-pcrd-tests-2026-08-12/1 : evide
     summary """
         All jp2lam targets passed after the size-matched perceptual allocator: 342 library tests passed, 5 ignored, and all integration/example targets passed.
         """
+}
+
+record lege-ecosystem.evidence.jpx-decode-trace-landed/1 : evidence {
+    title "Uncommitted working tree on top of b4fb52b5: pdf-image jpx.rs gained optional one-line stderr telemetry behind JP2LAM_DECODE_TRACE=1/true/yes, logging source/decoded dimensions, format, packed-vs-planar path, concurrency, in-flight count and elapsed ms. All pdf-image tests pass."
+    state verified
+    result pass
+    method command
+    observed_at git:b4fb52b5851b94911e12524bb7836debdb42afb1
+    command "cd lege-pdf/render && cargo test -p pdf-image"
+    summary """
+        Uncommitted working tree on top of b4fb52b5: pdf-image jpx.rs gained optional one-line stderr telemetry behind JP2LAM_DECODE_TRACE=1/true/yes, logging source/decoded dimensions, format, packed-vs-planar path, concurrency, in-flight count and elapsed ms. All pdf-image tests pass.
+        Capture ".agent/scratch/pdf-image-tests.txt": 6184 bytes; sha256:c800b384356fed5388134cec511062f1eb5b50b6933933da688fa5fc63826dee (identity only; raw capture is not a retained artifact).
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.layout-correction-source-review-20261027/1 : evidence {
+    title "Inspected layout_correct.rs and layout detection integration: correction, OCR gap handling, image growth and optional redetection are present. Tests were not run in this inspection."
+    state verified
+    result pass
+    method observation
+    observed_at git:b4fb52b5851b94911e12524bb7836debdb42afb1
+    summary """
+        Inspected layout_correct.rs and layout detection integration: correction, OCR gap handling, image growth and optional redetection are present. Tests were not run in this inspection.
+        """
+    author "dk"
 }
 
 record lege-ecosystem.evidence.lege-gpu-layout-init-overlap-2026-08-09/1 : evidence {
@@ -1240,6 +1308,18 @@ record lege-ecosystem.evidence.lege-process-about-gpu-focused-checks-2026-08-09/
     summary """
         Touched Rust modules passed focused formatting, both GUI locale tests passed, the GPU sharing test passed on hardware WGPU, Lege and lege-gpu checks passed, and the patch has no whitespace errors. Existing dependency and legacy-code warnings remain non-fatal.
         """
+}
+
+record lege-ecosystem.evidence.line-art-source-review-20261027/1 : evidence {
+    title "Inspected content_class.rs and PDF and DjVu pipeline calls to should_keep_image_overlay; layout correction also demotes line art. Tests were not run in this inspection."
+    state verified
+    result pass
+    method observation
+    observed_at git:b4fb52b5851b94911e12524bb7836debdb42afb1
+    summary """
+        Inspected content_class.rs and PDF and DjVu pipeline calls to should_keep_image_overlay; layout correction also demotes line art. Tests were not run in this inspection.
+        """
+    author "dk"
 }
 
 record lege-ecosystem.evidence.linux-document-ocr-auto-tensorrt-20260919/1 : evidence {
@@ -1573,6 +1653,109 @@ record lege-ecosystem.evidence.packaged-tensorrt-layout-discovery-20260815/1 : e
         """
 }
 
+record lege-ecosystem.evidence.pagepress-boundary-clean/1 : evidence {
+    title "pagepress has zero lege-process refs; path deps only lege-pdf-write, jp2lam, jbig2enc-rust (+pagepress, pixelkit x5 for GUI)"
+    state verified
+    result pass
+    method command
+    observed_at git:b4fb52b5851b94911e12524bb7836debdb42afb1
+    command "grep -rn lege-process|lege_process pagepress --include=*.toml --include=*.rs (no matches); grep path Cargo.toml pagepress-gui/Cargo.toml"
+    summary """
+        pagepress has zero lege-process refs; path deps only lege-pdf-write, jp2lam, jbig2enc-rust (+pagepress, pixelkit x5 for GUI)
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.pagepress-cli-assembly/1 : evidence {
+    title "CLI wrote 3-page v1.7 PDF, recovery=false, mediaboxes px*72/300; extracted JPEG byte-identical sha256 30e8ca50"
+    state verified
+    result pass
+    method command
+    observed_at git:b4fb52b5851b94911e12524bb7836debdb42afb1
+    command "./target/debug/pagepress f_nightshot.bmp d_earth.jpg e_icon.png -o /tmp/pagepress-repro.pdf && lege-pdf inspect /tmp/pagepress-repro.pdf"
+    summary """
+        CLI wrote 3-page v1.7 PDF, recovery=false, mediaboxes px*72/300; extracted JPEG byte-identical sha256 30e8ca50
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.pagepress-drop-compat/1 : evidence {
+    title "Old-style PixelApp without on_file_drop compiles vs edited pixelkit; jxl itself unrunnable offline"
+    state verified
+    result pass
+    method command
+    observed_at git:b4fb52b5851b94911e12524bb7836debdb42afb1
+    command "cd /tmp/pp-compat && cargo check --offline (ok); jxl-batch-studio unbuildable here: no cached `directories` crate (pre-existing env gap)"
+    summary """
+        Old-style PixelApp without on_file_drop compiles vs edited pixelkit; jxl itself unrunnable offline
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.pagepress-drop-pixelkit/1 : evidence {
+    title "pixelkit on_file_drop plumbing + note_dropped_file + DroppedFile arm; new tests green"
+    state verified
+    result pass
+    method command
+    observed_at git:b4fb52b5851b94911e12524bb7836debdb42afb1
+    command "cargo test --offline -p pixelkit-windowing (69 pass incl 2 new drop tests)"
+    summary """
+        pixelkit on_file_drop plumbing + note_dropped_file + DroppedFile arm; new tests green
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.pagepress-drop-sort-gui/1 : evidence {
+    title "GUI Sort button + sort_by_name + on_file_drop intake; tests green, clippy clean, builds"
+    state verified
+    result pass
+    method command
+    observed_at git:b4fb52b5851b94911e12524bb7836debdb42afb1
+    command "cargo test --offline (33 pass incl sort+drop tests) && cargo clippy --all-targets (0 warnings) && cargo build"
+    summary """
+        GUI Sort button + sort_by_name + on_file_drop intake; tests green, clippy clean, builds
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.pagepress-gui-build/1 : evidence {
+    title "GUI builds warning-free, 31 tests pass, renders correctly (toolbar/strip/viewer/settings observed in screenshots)"
+    state verified
+    result pass
+    method command
+    observed_at git:b4fb52b5851b94911e12524bb7836debdb42afb1
+    command "cargo clippy --offline --all-targets (0 warnings after 6 lint fixes) && cargo test --offline (31 passed); rendered frames on DISPLAY=:1"
+    summary """
+        GUI builds warning-free, 31 tests pass, renders correctly (toolbar/strip/viewer/settings observed in screenshots)
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.pagepress-owner-signoff/1 : evidence {
+    title "Owner signed off GUI as-is (jxl-gallery blueprint works); later issues to be reported"
+    state verified
+    result pass
+    method manual
+    observed_at git:b4fb52b5851b94911e12524bb7836debdb42afb1
+    summary """
+        Owner signed off GUI as-is (jxl-gallery blueprint works); later issues to be reported
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.pagepress-tests/1 : evidence {
+    title "All pagepress and lege-pdf-write suites green with clippy clean"
+    state verified
+    result pass
+    method command
+    observed_at git:b4fb52b5851b94911e12524bb7836debdb42afb1
+    command "cargo test --offline (lib 15 + golden 7 incl JPEG byte-identity) && cargo test --offline -p lege-pdf-write (66 incl 3 flate8) && lib clippy clean"
+    summary """
+        All pagepress and lege-pdf-write suites green with clippy clean
+        """
+    author "dk"
+}
+
 record lege-ecosystem.evidence.pdf-intake-writer-tests-20260908/1 : evidence {
     title "PDF intake, classification and writer tests pass at 823d46dd"
     state verified
@@ -1591,6 +1774,128 @@ record lege-ecosystem.evidence.pdf-intake-writer-tests-20260908/1 : evidence {
         classification the record asks for, is in lege-document-ocr/crates/docir/src/lib.rs.
         Run on Linux at repo HEAD 823d46dd during the 2026-09-08 ledger-cleanup pass.
         """
+}
+
+record lege-ecosystem.evidence.pipeline-writer-and-spooled-epub-tests/1 : evidence {
+    title "Uncommitted working tree on top of b4fb52b5: spawn_pdf_writer_actor now runs its blocking DocumentWriter loop on a dedicated blocking worker thread (runtime_stats::spawn_blocking + blocking_recv) off the current-thread control executor, and PDF EPUB sidecar packaging streams spooled hOCR files into PageText one page at a time via build_epub_from_spooled_hocr_pages_with_outline_cancellable without collecting all raw hOCR strings into memory at once. 15 helper_functions tests and 15 epub_pipeline tests (including new spooled_hocr_pages_stream_in_page_order_into_epub) pass."
+    state verified
+    result pass
+    method command
+    observed_at git:b4fb52b5851b94911e12524bb7836debdb42afb1
+    command "cargo test -p lege --lib pipeline::helper_functions && cargo test -p lege --lib pipeline::epub_pipeline"
+    summary """
+        Uncommitted working tree on top of b4fb52b5: spawn_pdf_writer_actor now runs its blocking DocumentWriter loop on a dedicated blocking worker thread (runtime_stats::spawn_blocking + blocking_recv) off the current-thread control executor, and PDF EPUB sidecar packaging streams spooled hOCR files into PageText one page at a time via build_epub_from_spooled_hocr_pages_with_outline_cancellable without collecting all raw hOCR strings into memory at once. 15 helper_functions tests and 15 epub_pipeline tests (including new spooled_hocr_pages_stream_in_page_order_into_epub) pass.
+        Capture ".agent/scratch/pipeline-memory-tests.txt": 4272 bytes; sha256:8eda7d8117f810a7dbcfe8164793dcbf39581964ea6ac2045a1ec0f914f396b1 (identity only; raw capture is not a retained artifact).
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.pixelkit-compact-layout-review-20261027/1 : evidence {
+    title "Compact PixelKit layout render review"
+    state verified
+    result pass
+    method manual
+    observed_at git:b4fb52b5851b94911e12524bb7836debdb42afb1
+    artifact "docs/PIXELKIT-GUI-PREVIEW.md"
+    summary """
+        Reviewed actual renderer snapshots at 620x680 and 940x700, German narrow/Heavy, English at 1.5x scale and dark Preserve. Choice groups use equal sibling dimensions; 52px binarization field is smaller and disabled in place under Heavy; resolution is 64px; settings shortened 390 to 280 logical px and queue band expanded 86 to 196; Process is separated from equal smaller utilities. This is a layout checkpoint, not full Freya parity or a new memory measurement.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.pixelkit-compact-layout-tests-20261027/1 : evidence {
+    title "Compact PixelKit layout and input tests"
+    state verified
+    result pass
+    method command
+    observed_at git:b4fb52b5851b94911e12524bb7836debdb42afb1
+    command "cargo test -p lege-gui-pixelkit --all-features --offline"
+    artifact "docs/PIXELKIT-GUI-PREVIEW.md"
+    summary """
+        Working-tree suite: 55 passed, 0 failed, 2 environment-dependent worker tests ignored. Includes equal choice geometry at 620/940/1400 widths and 1/1.5/2 scales, smaller parameter fields, exclusive/off margin buttons, resolution text fit, Preserve clicks, and disabled Heavy parameter input. After making threshold setup independent of legacy settings, its targeted test also passed.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.pixelkit-idle-memory-20261027/1 : evidence {
+    title "Matched idle PixelKit frontend uses less RSS and PSS than Freya CPU"
+    state verified
+    result pass
+    method observation
+    observed_at git:b4fb52b5851b94911e12524bb7836debdb42afb1
+    artifact "docs/measurements/pixelkit-idle-memory-2026-10-27.json"
+    summary """
+        Three interleaved Linux/X11 runs per frontend, debug-fast profile, empty queues, isolated XDG data and equal 1980x1452 physical windows at host 2x scale. Median RSS: Freya 48716 KiB, PixelKit 32668 KiB (-32.94%). PSS: 38245 versus 22886 KiB (-40.16%). Idle threads: 5 versus 1. This measures idle frontends only, not processing/OCR peak memory; report and reusable helper retained.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.pixelkit-locale-chrome-20261027/1 : evidence {
+    title "PixelKit English and German chrome comes from the shared locale JSON"
+    state verified
+    result pass
+    method observation
+    observed_at git:b4fb52b5851b94911e12524bb7836debdb42afb1
+    artifact "docs/PIXELKIT-GUI-PREVIEW.md"
+    summary """
+        Inspected the shared gui_text loader and PixelKit tr/GUI_TEXT call sites: GUI chrome comes from language_service/en/gui_text.json or the German feature's de/gui_text.json, including Preserve and grayscale notes. Both locale maps/schema tests passed and English and German/debug-logging frontends built; a narrow German Preserve/dark screenshot was inspected. Brand/format names and existing worker protocol display sentences remain as in the reused frontend support.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.pixelkit-native-theme-resize-20261027/1 : evidence {
+    title "PixelKit native theme acceptance and flexible resizing exercised"
+    state verified
+    result pass
+    method manual
+    observed_at git:b4fb52b5851b94911e12524bb7836debdb42afb1
+    artifact "docs/PIXELKIT-GUI-PREVIEW.md"
+    summary """
+        Native X11 GUI at host scale2 accepted a Sanzo dark theme and wrote appearance.json with stable source colour names and dark=true. A subsequent different preview was cancelled; saved JSON remained unchanged. Native windows accepted physical 1240x1360 and 2400x1400 sizes without an aspect lock. Shared theme serialization/loading tests pass; default, dark/Preserve, narrow, German and 1.5x snapshots were visually inspected.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.pixelkit-preview-build-20261027/1 : evidence {
+    title "Processor and PixelKit preview build with separate frontend dependency graph"
+    state verified
+    result pass
+    method command
+    observed_at git:b4fb52b5851b94911e12524bb7836debdb42afb1
+    command "cargo gui-pixelkit --offline"
+    artifact "docs/PIXELKIT-GUI-PREVIEW.md"
+    summary """
+        The current lege processor and distinct lege-gui-pixelkit preview binary built. Separate cargo tree inspection found no Freya, Skia engine or processor crate linked into the frontend; shared lege-ipc is present. tiny-skia remains winit's CPU decoration dependency. German/debug-logging preview also built. Shipping cargo gui still targets Freya until migration acceptance passes.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.pixelkit-preview-tests-20261027/1 : evidence {
+    title "PixelKit all-features GUI tests pass"
+    state verified
+    result pass
+    method command
+    observed_at git:b4fb52b5851b94911e12524bb7836debdb42afb1
+    command "cargo test -p lege-gui-pixelkit --all-features --offline"
+    artifact "docs/PIXELKIT-GUI-PREVIEW.md"
+    summary """
+        Working tree on b4fb52b5: 51 GUI tests passed, 0 failed, 2 environment-dependent worker smoke tests ignored by default. Includes bilingual schema/key coverage, Preserve PDF/DjVu/TrueTyping flags, UI click-to-worker mapping, transient resolution edits, cancellation, queued-startup ownership, layout scaling and bounded-channel wakeup.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.pixelkit-real-worker-smoke-20261027/1 : evidence {
+    title "PixelKit supervisor converts a two-page Preserve PDF and cancels without success"
+    state verified
+    result pass
+    method command
+    observed_at git:b4fb52b5851b94911e12524bb7836debdb42afb1
+    command "PATH=\"$PWD/target/debug:$PATH\" XDG_DATA_HOME=/tmp/lege-gui-worker-smoke-data LEGE_GUI_SMOKE_INPUT=/tmp/lege-preserve-ui-smoke.pdf LEGE_GUI_SMOKE_OUTPUT=/tmp/lege-gui-worker-smoke-output cargo test -p lege-gui-pixelkit --offline real_worker_smoke -- --ignored --test-threads=1 --nocapture"
+    artifact "docs/PIXELKIT-GUI-PREVIEW.md"
+    summary """
+        Both real-worker tests passed (2 passed, 0 failed). A generated two-page colour PDF completed through the GUI's real supervisor with output JPX backgrounds and JBIG2 masks; progress metrics arrived and completed inputs left the queue. Immediate cancellation retained the input and did not mark a row completed. Isolated XDG data and /tmp input/output were used; this is not a scan-corpus fidelity or long-running ETA measurement.
+        """
+    author "dk"
 }
 
 record lege-ecosystem.evidence.portable-tensorrt-worker-images-20260815/1 : evidence {
@@ -1655,6 +1960,45 @@ record lege-ecosystem.evidence.presentation-layout-build-20260813/2 : evidence {
         The presentation and layout-detection feature combination compiled successfully.
         """
     supersedes [ @lege-ecosystem.evidence.presentation-layout-build-20260813/1 ]
+}
+
+record lege-ecosystem.evidence.preservation-mode-djvu-e2e/1 : evidence {
+    title "Preservation mode DjVu end to end: structure only"
+    state verified
+    result inconclusive
+    method manual
+    observed_at git:b4fb52b5851b94911e12524bb7836debdb42afb1
+    command "target/debug-fast/lege medievalclothing0000scot_1.pdf 20-24 --preserve --no-ocr --text-format djvu"
+    summary """
+        Runs and writes INFO, colour BG44, FGbz, Sjbz, TXTz per page (113 KB vs 132 KB --grayscale), but no page was decoded: ddjvu is not installed and the grayscale path also writes RGB IW44, so colour survival is shown only by the composer unit test.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.preservation-mode-pdf-e2e/1 : evidence {
+    title "Preservation mode PDF end to end on a colour scan"
+    state verified
+    result pass
+    method manual
+    observed_at git:b4fb52b5851b94911e12524bb7836debdb42afb1
+    command "target/debug-fast/lege medievalclothing0000scot_1.pdf 20-24 --preserve --no-ocr; gs -sDEVICE=png16m -r72"
+    summary """
+        5 pages: per page an 8-bit DeviceRGB JPX background (437x600, subsample 2) under an 873x1200 JBIG2 ImageMask; Ghostscript renders keep paper tone and saturation near the input (e.g. mean sat 23.7 vs 25.5), the full-page painting stays colour after keeping near-full-page pictures as regions; 249 KB vs 258 KB for --grayscale. Residue: coloured ornaments/stamp edges black, faint line where a picture box cuts a caption.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.preservation-mode-unit-tests/1 : evidence {
+    title "Preservation mode: lege lib and bin tests pass"
+    state verified
+    result pass
+    method command
+    observed_at git:b4fb52b5851b94911e12524bb7836debdb42afb1
+    command "cargo test -p lege --lib && cargo test -p lege --bin lege"
+    summary """
+        Uncommitted working tree on b4fb52b5: lib 369 passed / 0 failed / 1 ignored (incl. rgb_coverage_matches_grey_per_channel, preserve_mask_keeps_only_ink_both_masks_agree_on, preserved_canvas_keeps_colour_and_whitens_ink); bin 23 passed (incl. preserve parser tests).
+        """
+    author "dk"
 }
 
 record lege-ecosystem.evidence.preserved-jbig2-mixed-page-fallback/1 : evidence {
@@ -1804,6 +2148,18 @@ record lege-ecosystem.evidence.smask-layout-regressions/1 : evidence {
     summary """
         Five session mask-qualification tests and eight layout-correction tests passed; the Lege binary check completed.
         """
+}
+
+record lege-ecosystem.evidence.ssim-controller-source-review-20261027/1 : evidence {
+    title "Inspected jp2lam perceptual rate-control models, planning and native backend search; shared metric, effort budgets, quantizer and rate search, score floor handling and Quality/ApproxQuality APIs are present. Tests were not run in this inspection."
+    state verified
+    result pass
+    method observation
+    observed_at git:b4fb52b5851b94911e12524bb7836debdb42afb1
+    summary """
+        Inspected jp2lam perceptual rate-control models, planning and native backend search; shared metric, effort budgets, quantizer and rate search, score floor handling and Quality/ApproxQuality APIs are present. Tests were not run in this inspection.
+        """
+    author "dk"
 }
 
 record lege-ecosystem.evidence.stale-observation-requeue-20260908/1 : evidence {
@@ -2027,6 +2383,20 @@ record lege-ecosystem.evidence.top-level-agpl-license-consistency-20260822/1 : e
     summary """
         Cargo metadata reports AGPL-3.0-only for all six top-level application packages checked; the root and processor AGPL texts match, explicit root/process/Android declarations match, and NOTICE preserves mixed-license subtree boundaries.
         """
+}
+
+record lege-ecosystem.evidence.transform-rect-shared-helper-landed/1 : evidence {
+    title "Uncommitted working tree on top of b4fb52b5: pdf-geom gained Matrix::transform_rect (axis-aligned bounds of the four transformed corners) with the new unit test transform_rect_bounds_rotated_and_flipped_corners. pdf-text's transform_rect is now a one-line delegate to it, and pdf-content lower.rs include_transformed_rect calls it before include_rect; the duplicated corner/min/max bodies are gone. All pdf-geom, pdf-text and pdf-content test binaries passed with no failures."
+    state verified
+    result pass
+    method command
+    observed_at git:b4fb52b5851b94911e12524bb7836debdb42afb1
+    command "cd lege-pdf/render && cargo test -p pdf-geom -p pdf-text -p pdf-content"
+    summary """
+        Uncommitted working tree on top of b4fb52b5: pdf-geom gained Matrix::transform_rect (axis-aligned bounds of the four transformed corners) with the new unit test transform_rect_bounds_rotated_and_flipped_corners. pdf-text's transform_rect is now a one-line delegate to it, and pdf-content lower.rs include_transformed_rect calls it before include_rect; the duplicated corner/min/max bodies are gone. All pdf-geom, pdf-text and pdf-content test binaries passed with no failures.
+        Capture ".agent/scratch/transform-rect-tests.txt": 18244 bytes; sha256:e4faec0990efc51dcaf846a1fa4df6492d69296141429568ef90a0a23f0b4323 (identity only; raw capture is not a retained artifact).
+        """
+    author "dk"
 }
 
 record lege-ecosystem.evidence.truetyping-exact-placement-lege-lib/1 : evidence {

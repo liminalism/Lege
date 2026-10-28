@@ -108,7 +108,7 @@ decoded samples vs a limited rendered appearance (RGB samples only).
 
 `lege-pdf print` drives `lege-pdf-print`: office printing — paper, margins,
 scaling, N-up, booklet, duplex, copies, page ranges. Prepress (CMYK,
-separations, PDF/X) is deliberately out of scope; see `lege-pdf/print/PLAN.md`
+separations, PDF/X) is deliberately out of scope; see `dev-notes/lege-pdf/print-PLAN.md`
 §7.
 
 A job takes one of two routes, and the record says which:

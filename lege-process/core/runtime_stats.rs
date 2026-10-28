@@ -14,6 +14,68 @@ use std::time::{Duration, Instant};
 const SAMPLE_INTERVAL: Duration = Duration::from_millis(250);
 pub const MAX_BLOCKING_THREADS: usize = 4;
 
+/// How long cancellation paths wait for already-started blocking workers to
+/// exit before giving up and reporting the remainder.
+pub const BLOCKING_DRAIN_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Blocking-pool jobs currently executing. Unlike the opt-in [`Collector`]
+/// gauges below, this is maintained whether or not [`enable`] ran, so
+/// cancellation paths can wait for worker-held buffers to drain. Every
+/// pipeline blocking job goes through [`spawn_blocking`] or
+/// [`spawn_blocking_stage`], which both hold the guard.
+static IN_FLIGHT_BLOCKING: AtomicUsize = AtomicUsize::new(0);
+
+/// Number of blocking-pool jobs currently executing. Aborting an async page
+/// task does not stop a started blocking worker, so this — not the async
+/// join set — says whether page buffers are still alive.
+pub fn outstanding_blocking_jobs() -> usize {
+    IN_FLIGHT_BLOCKING.load(Ordering::Relaxed)
+}
+
+/// Wait until no blocking-pool job is executing, up to `timeout`. Returns the
+/// number still outstanding: 0 on a clean drain. Cancellation paths call this
+/// after aborting async page tasks and stopping admission; a nonzero return is
+/// logged, not retried, since the workers check the cancellation token
+/// themselves and exit on their own schedule.
+pub async fn wait_for_blocking_drain(timeout: Duration) -> usize {
+    let start = Instant::now();
+    loop {
+        let outstanding = outstanding_blocking_jobs();
+        if outstanding == 0 || start.elapsed() >= timeout {
+            return outstanding;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+}
+
+/// Drain helper for cancellation paths: wait for already-started blocking
+/// workers to exit and warn when some outlive the timeout. `context` names
+/// the aborted stage. The disappearance of the async tasks is not proof
+/// their workers released the buffers — this wait is.
+pub async fn drain_blocking_workers_on_cancel(context: &str) {
+    let remaining = wait_for_blocking_drain(BLOCKING_DRAIN_TIMEOUT).await;
+    if remaining > 0 {
+        crate::warn_log!(
+            "{context}: {remaining} blocking worker(s) still held buffers after cancellation; they exit on their own schedule"
+        );
+    }
+}
+
+struct InFlightBlockingGuard;
+
+impl InFlightBlockingGuard {
+    fn enter() -> Self {
+        IN_FLIGHT_BLOCKING.fetch_add(1, Ordering::Relaxed);
+        Self
+    }
+}
+
+impl Drop for InFlightBlockingGuard {
+    fn drop(&mut self) {
+        IN_FLIGHT_BLOCKING.fetch_sub(1, Ordering::Relaxed);
+    }
+}
+
 /// Build the small Tokio control runtime used by synchronous CLI entry points.
 /// CPU work belongs on Rayon; Tokio owns channels, timers, cancellation and
 /// true blocking I/O only.
@@ -128,6 +190,83 @@ impl Gauge {
     }
 }
 
+/// Current/peak admitted MiB for one byte budget. Unlike [`Gauge`], which
+/// counts jobs, this counts a quantity: each admission adds its megabytes and
+/// each release subtracts them.
+#[derive(Default)]
+struct ByteGauge {
+    current_mb: AtomicUsize,
+    peak_mb: AtomicUsize,
+    admissions: AtomicUsize,
+}
+
+impl ByteGauge {
+    fn add(&self, mb: usize) {
+        self.admissions.fetch_add(1, Ordering::Relaxed);
+        let current = self.current_mb.fetch_add(mb, Ordering::AcqRel) + mb;
+        self.peak_mb.fetch_max(current, Ordering::Relaxed);
+    }
+
+    fn sub(&self, mb: usize) {
+        self.current_mb.fetch_sub(mb, Ordering::Relaxed);
+    }
+
+    fn snapshot(&self) -> ByteGaugeSnapshot {
+        ByteGaugeSnapshot {
+            current_mb: self.current_mb.load(Ordering::Relaxed),
+            peak_mb: self.peak_mb.load(Ordering::Relaxed),
+            admissions: self.admissions.load(Ordering::Relaxed),
+        }
+    }
+}
+
+/// Which byte budget a reservation counts against in the runtime report.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MemoryGauge {
+    /// Page working sets admitted by the page-memory semaphore.
+    PageWorkingSet,
+    /// Encoded page payloads queued on the PDF writer.
+    QueuedEncoded,
+}
+
+/// Count `mb` megabytes against one byte budget until the returned guard
+/// drops. A no-op unless [`enable`] ran.
+pub fn track_memory_bytes(gauge: MemoryGauge, mb: usize) -> MemoryBytesGuard {
+    let collector = COLLECTOR.get().cloned();
+    if let Some(collector) = collector.as_ref() {
+        collector.byte_gauge(gauge).add(mb);
+    }
+    MemoryBytesGuard {
+        collector,
+        gauge,
+        mb,
+    }
+}
+
+pub struct MemoryBytesGuard {
+    collector: Option<Arc<Collector>>,
+    gauge: MemoryGauge,
+    mb: usize,
+}
+
+impl Drop for MemoryBytesGuard {
+    fn drop(&mut self) {
+        if let Some(collector) = &self.collector {
+            collector.byte_gauge(self.gauge).sub(self.mb);
+        }
+    }
+}
+
+/// Record how many resident GPU inference sessions the pool constructed.
+/// Keeps the maximum across pools; a no-op unless [`enable`] ran.
+pub fn record_gpu_sessions(sessions: usize) {
+    if let Some(collector) = COLLECTOR.get() {
+        collector
+            .gpu_sessions
+            .fetch_max(sessions, Ordering::Relaxed);
+    }
+}
+
 struct Collector {
     started: Instant,
     stop: AtomicBool,
@@ -136,11 +275,21 @@ struct Collector {
     peak_rss_kib: AtomicUsize,
     stages: [Gauge; STAGES.len()],
     blocking: Gauge,
+    page_working_set_mb: ByteGauge,
+    queued_encoded_mb: ByteGauge,
+    gpu_sessions: AtomicUsize,
     samples: Mutex<Vec<RuntimeSample>>,
     sampler: Mutex<Option<JoinHandle<()>>>,
 }
 
 impl Collector {
+    fn byte_gauge(&self, gauge: MemoryGauge) -> &ByteGauge {
+        match gauge {
+            MemoryGauge::PageWorkingSet => &self.page_working_set_mb,
+            MemoryGauge::QueuedEncoded => &self.queued_encoded_mb,
+        }
+    }
+
     fn new() -> Self {
         Self {
             started: Instant::now(),
@@ -150,6 +299,9 @@ impl Collector {
             peak_rss_kib: AtomicUsize::new(0),
             stages: std::array::from_fn(|_| Gauge::default()),
             blocking: Gauge::default(),
+            page_working_set_mb: ByteGauge::default(),
+            queued_encoded_mb: ByteGauge::default(),
+            gpu_sessions: AtomicUsize::new(0),
             samples: Mutex::new(Vec::new()),
             sampler: Mutex::new(None),
         }
@@ -176,6 +328,8 @@ impl Collector {
                 threads: status.threads,
                 rss_kib: status.rss_kib,
                 blocking_in_flight: self.blocking.current.load(Ordering::Relaxed),
+                admitted_page_mb: self.page_working_set_mb.current_mb.load(Ordering::Relaxed),
+                queued_encoded_mb: self.queued_encoded_mb.current_mb.load(Ordering::Relaxed),
                 stages,
             });
     }
@@ -273,6 +427,7 @@ where
     R: Send + 'static,
 {
     tokio::task::spawn_blocking(move || {
+        let _in_flight = InFlightBlockingGuard::enter();
         let _blocking = BlockingGuard::enter();
         work()
     })
@@ -285,6 +440,7 @@ where
     R: Send + 'static,
 {
     tokio::task::spawn_blocking(move || {
+        let _in_flight = InFlightBlockingGuard::enter();
         let _blocking = BlockingGuard::enter();
         let _stage = enter_stage(stage);
         work()
@@ -313,11 +469,14 @@ pub fn dump() {
     let now = Instant::now();
     let elapsed_seconds = collector.started.elapsed().as_secs_f64();
     let report = RuntimeReport {
-        schema: 1,
+        schema: 2,
         elapsed_seconds,
         peak_threads: collector.peak_threads.load(Ordering::Relaxed),
         peak_rss_kib: collector.peak_rss_kib.load(Ordering::Relaxed),
         rayon_pool_size: rayon::current_num_threads(),
+        gpu_sessions: collector.gpu_sessions.load(Ordering::Relaxed),
+        admitted_page_mb: collector.page_working_set_mb.snapshot(),
+        queued_encoded_mb: collector.queued_encoded_mb.snapshot(),
         blocking_pool: collector.blocking.snapshot(now),
         stages: STAGES
             .iter()
@@ -352,6 +511,8 @@ struct RuntimeSample {
     threads: usize,
     rss_kib: usize,
     blocking_in_flight: usize,
+    admitted_page_mb: usize,
+    queued_encoded_mb: usize,
     stages: Vec<StageCurrent>,
 }
 
@@ -368,9 +529,19 @@ struct RuntimeReport {
     peak_threads: usize,
     peak_rss_kib: usize,
     rayon_pool_size: usize,
+    gpu_sessions: usize,
+    admitted_page_mb: ByteGaugeSnapshot,
+    queued_encoded_mb: ByteGaugeSnapshot,
     blocking_pool: GaugeSnapshot,
     stages: Vec<StageReport>,
     samples: Vec<RuntimeSample>,
+}
+
+#[derive(Serialize)]
+struct ByteGaugeSnapshot {
+    current_mb: usize,
+    peak_mb: usize,
+    admissions: usize,
 }
 
 #[derive(Serialize)]
@@ -448,5 +619,48 @@ mod tests {
     fn linux_process_status_has_threads() {
         let status = read_process_status();
         assert!(status.threads >= 1);
+    }
+
+    #[test]
+    fn byte_gauge_tracks_current_and_peak() {
+        let gauge = ByteGauge::default();
+        gauge.add(100);
+        gauge.add(50);
+        let snapshot = gauge.snapshot();
+        assert_eq!(snapshot.current_mb, 150);
+        assert_eq!(snapshot.peak_mb, 150);
+        assert_eq!(snapshot.admissions, 2);
+        gauge.sub(100);
+        let snapshot = gauge.snapshot();
+        assert_eq!(snapshot.current_mb, 50);
+        assert_eq!(snapshot.peak_mb, 150);
+    }
+
+    // One test, not three: the in-flight counter is process-global, so
+    // parallel drain tests would observe each other's workers.
+    #[tokio::test(flavor = "current_thread")]
+    async fn blocking_drain_reports_idle_timeout_and_clean_exit() {
+        assert_eq!(outstanding_blocking_jobs(), 0);
+        let remaining = wait_for_blocking_drain(Duration::from_millis(10)).await;
+        assert_eq!(remaining, 0);
+
+        let (tx, rx) = std::sync::mpsc::channel::<()>();
+        let job = spawn_blocking_stage(Stage::Processing, move || {
+            let _ = rx.recv_timeout(Duration::from_millis(200));
+        });
+        // Give the blocking thread a chance to start; the timeout path below
+        // must observe it outstanding rather than win a race.
+        let mut waited = 0;
+        while outstanding_blocking_jobs() == 0 && waited < 50 {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            waited += 1;
+        }
+        assert_eq!(outstanding_blocking_jobs(), 1);
+        let remaining = wait_for_blocking_drain(Duration::from_millis(20)).await;
+        assert_eq!(remaining, 1);
+        drop(tx);
+        let remaining = wait_for_blocking_drain(Duration::from_secs(5)).await;
+        assert_eq!(remaining, 0);
+        let _ = job.await;
     }
 }

@@ -3,7 +3,7 @@
   <img src="page_0002-original.png" alt="Lege Processing" width="45%">
 </div>
 
-# Lege - 1.4.5
+# Lege - 1.5.2
 Releases are updated with every new version --> https://github.com/liminalism/lege/releases/
 
 Lege is a document-processing program (CLI + desktop GUI) that converts scanned documents into reader-optimized **PDF** or **DjVu**, focusing on **better readability**, **smaller output size**, and **fast page turns** on e-ink devices. It uses optional layout-aware processing to detect image areas so that they can be excluded from the text binarization process, which makes the original scanned documents readable on e-ink readers with small file size.
@@ -25,17 +25,11 @@ There are 2 generally intended usages for the program; outputs of commercial boo
 
 ```bash
 git clone https://github.com/liminalism/lege.git
-cd Lege
+cd lege
 cargo build --release
 ```
 
-#### Linux dependencies
-
-On Linux, you need to install the following system dependencies:
-
-```bash
-sudo apt-get install tesseract-ocr libtesseract-dev libleptonica-dev
-```
+The default build embeds PP-OCR, layout detection, and JPEG 2000. It does not need a system Tesseract install. The legacy Tesseract backend is opt-in (`--features tesseract-ocr`) and then needs `tesseract-ocr`, `libtesseract-dev`, and `libleptonica-dev`.
 
 You'll get:
 
@@ -75,7 +69,7 @@ Ubuntu repositories; download the official AppImage from
 it with `APPIMAGETOOL=/path/to/appimagetool cargo appimage`. You can also build
 a `.deb` with `cargo deb`.
 
-See `docs/linux-packaging.md` for the full flow and the real-GPU OCR release
+See `../lege-misc/docs/linux-packaging.md` for the full flow and the real-GPU OCR release
 gate.
 
 ### Run
@@ -112,16 +106,14 @@ the CLI also supports an interactive guided mode when run without arguments.
 
 ### External Dependencies
 
-The default layout, PaddleOCR, and heavy neural binarization models are
+The default layout, PP-OCR, and heavy neural binarization models are
 embedded. Runtime model files are optional development overrides.
 
-**Platform data:**
-
-- Tesseract language data (system installation, where that backend is enabled)
-
-> PaddleOCR, layout detection, and page rotation run through the native
-> **WebGPU** backend built into Lege. PaddleOCR and layout models are embedded;
-> no external OCR program or model is required.
+> PP-OCR, layout detection, and page rotation run through the native
+> **WebGPU** backend built into Lege. No external OCR program is required
+> for the default build. On Windows the OCR engine is the system WinRT OCR
+> service. Tesseract remains an opt-in legacy backend on Linux and macOS,
+> and only that backend needs system language data.
 
 ---
 
@@ -189,8 +181,9 @@ Lege can run GPU-accelerated layout detection to segment a page into regions and
 
 OCR is optional:
 
-* **Linux/macOS**: Tesseract (in-process via the `tesseract` Rust crate)
-* **Windows**: WinRT OCR
+* **Linux, macOS, and Android**: embedded PP-OCR, on the GPU, through `lege-ocr`. This is the default.
+* **Windows**: WinRT OCR, also through `lege-ocr`.
+* **Linux/macOS, opt-in**: Tesseract (`--features tesseract-ocr`), in-process via the `tesseract` crate.
 
 Strategy:
 
@@ -203,8 +196,9 @@ Strategy:
 Lege keeps its in-memory encoding and color-processing modules in the process
 crate. The JBIG2 and JPEG2000 implementations live under
 `../lege-codecs/{jbig2enc-rust,jp2lam}` and are patched into the root ecosystem
-workspace. The native DjVu encoder remains a separate executable under
-`../lege-codecs/djvulibrust`.
+workspace. The DjVu encoder is the in-tree `djvu_encoder` library under
+`../lege-codecs/djvulibrust`, linked into the processor. A diagnostic
+`djvu-encoder` binary is still built from that crate with `--features cli`.
 
 ### Bi-level / "text compression" codecs
 
@@ -236,13 +230,14 @@ Lege Process is one application family inside the ecosystem workspace rooted at
 * `ocr/`, `reflow/` — process-level OCR/reflow integration
 * `models/`, `language_service/` — process runtime/embedded data
 * `lege-ipc/` — IPC and shared log types for the CLI and GUIs
-* `GUI/Freya/` — desktop GUI frontend
+* `GUI/Freya/` — desktop GUI frontend (`lege-gui`), drawn with the CPU renderer
 * `GUI/musicsheet/` — Sheet Music Edition frontend
 
 Shared ecosystem crates are siblings of this folder: `../lege-gpu`,
-`../lege-ocr`, and `../lege-pdf/write`. Codecs live in `../lege-codecs`, shared
-assets/tools live in `../lege-misc`, and the future renderer has its assigned
-location at `../lege-pdf/render`.
+`../lege-ocr`, `../lege-pdf/read`, and `../lege-pdf/write`. Page rendering
+goes through the native engine in `../lege-pdf/render`. Codecs live in
+`../lege-codecs`. Shared assets, packaging, and the in-app HTML docs live in
+`../lege-misc`.
 
 ---
 

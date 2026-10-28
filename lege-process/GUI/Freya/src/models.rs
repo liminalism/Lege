@@ -149,6 +149,8 @@ pub struct ProcessingOptions {
     /// JP2/IW44 grayscale background (keeps antialiasing). Mutually exclusive
     /// with the bilevel binarization options above; image regions stay JP2/IW44.
     pub grayscale_mode: bool,
+    /// Colour-preserving MRC, exposed as a top-level mode in the PixelKit UI.
+    pub preserve_mode: bool,
 }
 
 impl ProcessingOptions {
@@ -214,7 +216,7 @@ impl ProcessingOptions {
         // every speck into a glyph (41 pages of a book scan: 0.77 MB against
         // 2.56 MB). Grayscale therefore comes on with truetyping, and stays
         // selectable on its own.
-        if matches!(encoder, CompressionType::Truetyping) {
+        if matches!(encoder, CompressionType::Truetyping) && !self.preserve_mode {
             self.grayscale_mode = true;
         }
         self.compression_type = encoder;
@@ -270,6 +272,7 @@ impl ProcessingOptions {
     pub fn set_invert_input(&mut self, enabled: bool) {
         self.invert_input = enabled;
         if enabled {
+            self.preserve_mode = false;
             self.layout_analysis = false;
             self.reflow = false;
         }
@@ -278,6 +281,7 @@ impl ProcessingOptions {
     pub fn set_reflow(&mut self, enabled: bool) {
         self.reflow = enabled;
         if enabled {
+            self.preserve_mode = false;
             // Reflow's ccitt4 pages cannot carry JBIG2 halftone regions;
             // the image choice falls back to conventional dithering.
             self.use_jbig2_halftone = false;
@@ -294,7 +298,9 @@ impl ProcessingOptions {
     /// arguments. An explicit reflow selection wins over hidden incompatible
     /// state because it is the most constrained mode.
     pub fn normalize_processing_dependencies(&mut self) {
-        if self.reflow {
+        if self.preserve_mode {
+            self.set_preserve_mode(true);
+        } else if self.reflow {
             self.set_reflow(true);
         } else if self.invert_input {
             self.set_invert_input(true);
@@ -302,11 +308,49 @@ impl ProcessingOptions {
             self.set_layout_analysis(false);
         }
     }
+
+    /// Preserve colour and generic ink; only explicitly chosen TrueTyping
+    /// may replace the bit-exact raster text. Hidden preparation options must
+    /// never leak conflicting flags into the worker command.
+    pub fn set_preserve_mode(&mut self, enabled: bool) {
+        self.preserve_mode = enabled;
+        if enabled {
+            self.grayscale_mode = false;
+            self.jpeg_compat = false;
+            self.symbol_mode = false;
+            self.invert_input = false;
+            self.reflow = false;
+            self.use_jbig2_halftone = false;
+            self.image_processing_type = ImageProcessingType::Original;
+            if self.compression_type == CompressionType::Ccitt4 {
+                self.compression_type = CompressionType::Jbig2;
+            }
+        }
+    }
 }
 
 #[cfg(test)]
 mod reflow_tests {
     use super::ProcessingOptions;
+
+    #[test]
+    fn legacy_settings_default_preserve_to_false_and_explicit_toggles_win() {
+        let mut options: ProcessingOptions = serde_json::from_str("{}").unwrap();
+        assert!(!options.preserve_mode);
+        options.set_preserve_mode(true);
+        assert!(options.preserve_mode);
+        options.set_reflow(true);
+        assert!(!options.preserve_mode);
+        assert!(options.reflow);
+        options.set_preserve_mode(true);
+        assert!(!options.reflow);
+        options.set_invert_input(true);
+        assert!(!options.preserve_mode);
+        options.set_preserve_mode(true);
+        assert!(!options.invert_input);
+        options.set_preserve_mode(false);
+        assert!(!options.preserve_mode);
+    }
 
     #[test]
     fn reflow_enables_layout_and_clears_incompatible_geometry_state() {

@@ -161,7 +161,7 @@ pub fn render_session_page_rgb_cancellable(
     })
 }
 
-fn render_dimensions(
+pub(crate) fn render_dimensions(
     page_width: f64,
     page_height: f64,
     target_height: u32,

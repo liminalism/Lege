@@ -125,15 +125,55 @@ pub enum BackendChoice {
     WinOcrLegacy,
 }
 
+/// Processes PDFs into `lege_docir` documents.
+///
+/// The OCR backend is started lazily, the first time a page actually needs
+/// OCR (or an OCR checkpoint has to be validated against it), so a document
+/// whose pages all carry trustworthy native text runs on a host with no OCR
+/// backend at all. The identity seam this creates is settled as follows:
+///
+/// - [`DocumentProcessor::configuration_hash`] identifies the *requested*
+///   configuration (the backend asked for, not the one `auto` resolves to),
+///   because it must be known before any job starts and must not depend on
+///   whether OCR ever ran.
+/// - The *resolved* backend is a per-page fact: OCR regions record it as
+///   their provenance provider. On resume, an OCR-derived checkpoint is reused
+///   only when that provider matches the live backend; otherwise the page is
+///   recomputed, so a resumed job never silently mixes OCR backends.
+/// - A document's manifest lists the OCR model identity and backend-selection
+///   warning only when the document contains OCR-derived pages.
 pub struct DocumentProcessor {
     config: PipelineConfig,
-    backend: Box<dyn PageOcrBackend>,
+    backend: std::sync::OnceLock<Result<LiveBackend, BackendInitFailure>>,
     corrector: Option<correction::EnglishCorrector>,
-    model_identity: Option<lege_docir::ModelIdentity>,
     layout_identity: Option<lege_docir::ModelIdentity>,
     layout: Option<layout::LayoutEngine>,
-    backend_selection_warning: Option<String>,
     layout_warning: Option<String>,
+}
+
+/// A started OCR backend and the facts that depend on how it was resolved.
+struct LiveBackend {
+    backend: Box<dyn PageOcrBackend>,
+    resolved: BackendChoice,
+    model_identity: Option<lege_docir::ModelIdentity>,
+    selection_warning: Option<String>,
+}
+
+/// A cached initialization failure. Every page that needs OCR reports the
+/// same error rather than retrying a backend that already failed preflight.
+#[derive(Debug, Clone)]
+enum BackendInitFailure {
+    Unavailable(&'static str),
+    Failed(String),
+}
+
+impl From<BackendInitFailure> for PipelineError {
+    fn from(failure: BackendInitFailure) -> Self {
+        match failure {
+            BackendInitFailure::Unavailable(name) => PipelineError::UnavailableBackend(name),
+            BackendInitFailure::Failed(message) => PipelineError::BackendInitialization(message),
+        }
+    }
 }
 
 impl std::fmt::Debug for DocumentProcessor {
@@ -141,21 +181,27 @@ impl std::fmt::Debug for DocumentProcessor {
         formatter
             .debug_struct("DocumentProcessor")
             .field("config", &self.config)
-            .field("backend", &self.backend.name())
-            .field("model_identity", &self.model_identity)
+            .field(
+                "backend",
+                &self.resolved_backend_name().unwrap_or("not started"),
+            )
+            .field(
+                "model_identity",
+                &self
+                    .started_backend()
+                    .and_then(|live| live.model_identity.as_ref()),
+            )
             .finish()
     }
 }
 
 impl DocumentProcessor {
-    pub fn new(mut config: PipelineConfig) -> Result<Self, PipelineError> {
+    pub fn new(config: PipelineConfig) -> Result<Self, PipelineError> {
+        // A static choice this build can never honour is rejected up front;
+        // host availability is only discovered when OCR is first needed.
         if config.backend == BackendChoice::WindowsAi {
             return Err(PipelineError::UnavailableBackend("windows-ai"));
         }
-        let (backend, resolved, tensorrt_paddle, backend_selection_warning) =
-            initialize_backend(&config)?;
-        config.backend = resolved;
-        config.tensorrt_paddle = tensorrt_paddle;
         let corrector = config
             .correction_dictionary
             .as_deref()
@@ -166,60 +212,57 @@ impl DocumentProcessor {
                 )
             })
             .transpose()?;
-        let model_identity = if config.backend == BackendChoice::Paddle {
-            config
-                .paddle_model_pack
-                .as_deref()
-                .map(|directory| {
-                    let manifest_path = directory.join("manifest.json");
-                    let manifest_bytes = std::fs::read(&manifest_path)?;
-                    let manifest =
-                        lege_ocr::engine_paddle::PaddleOcrEngine::verify_model_pack(directory)
-                            .map_err(|error| PipelineError::ModelPack(error.to_string()))?;
-                    Ok::<_, PipelineError>(lege_docir::ModelIdentity {
-                        provider: manifest.provider,
-                        name: manifest.name,
-                        version: manifest.version,
-                        content_hash: Some(format!(
-                            "blake3:{}",
-                            blake3::hash(&manifest_bytes).to_hex()
-                        )),
-                        license: Some(manifest.license),
-                        source: Some(manifest.source),
-                    })
-                })
-                .transpose()?
-        } else {
-            None
-        }
-        .or_else(|| builtin_model_identity(&config));
         let (layout, layout_identity, layout_warning) = initialize_layout(&config);
         Ok(Self {
             config,
-            backend,
+            backend: std::sync::OnceLock::new(),
             corrector,
-            model_identity,
             layout_identity,
             layout,
-            backend_selection_warning,
             layout_warning,
         })
     }
 
-    fn backend(&self) -> Result<&dyn PageOcrBackend, PipelineError> {
-        Ok(self.backend.as_ref())
+    /// Start the OCR backend now if it has not started yet. Page processing
+    /// does this on demand; a preflight such as `doctor` calls it directly.
+    pub fn initialize_backend(&self) -> Result<&'static str, PipelineError> {
+        Ok(self.live_backend()?.backend.name())
     }
 
-    pub fn selected_backend(&self) -> BackendChoice {
+    fn live_backend(&self) -> Result<&LiveBackend, PipelineError> {
+        self.backend
+            .get_or_init(|| start_backend(&self.config))
+            .as_ref()
+            .map_err(|failure| failure.clone().into())
+    }
+
+    fn started_backend(&self) -> Option<&LiveBackend> {
+        self.backend.get().and_then(|result| result.as_ref().ok())
+    }
+
+    fn backend(&self) -> Result<&dyn PageOcrBackend, PipelineError> {
+        Ok(self.live_backend()?.backend.as_ref())
+    }
+
+    /// The backend the configuration asked for (`auto` stays `auto`).
+    pub fn requested_backend(&self) -> BackendChoice {
         self.config.backend
     }
 
-    pub fn selected_backend_name(&self) -> &'static str {
-        self.backend.name()
+    /// The backend `requested_backend` resolved to, once it has started.
+    pub fn resolved_backend(&self) -> Option<BackendChoice> {
+        self.started_backend().map(|live| live.resolved)
     }
 
+    /// The started backend's name; `None` while no page has needed OCR.
+    pub fn resolved_backend_name(&self) -> Option<&'static str> {
+        self.started_backend().map(|live| live.backend.name())
+    }
+
+    /// Why `auto` chose a fallback, once the backend has started.
     pub fn backend_selection_warning(&self) -> Option<&str> {
-        self.backend_selection_warning.as_deref()
+        self.started_backend()
+            .and_then(|live| live.selection_warning.as_deref())
     }
 
     pub fn layout_warning(&self) -> Option<&str> {
@@ -295,18 +338,8 @@ impl DocumentProcessor {
                 profile: self.config.profile,
                 quality: self.config.quality,
                 configuration_hash,
-                models: self
-                    .model_identity
-                    .clone()
-                    .into_iter()
-                    .chain(self.layout_identity.clone())
-                    .collect(),
-                warnings: self
-                    .backend_selection_warning
-                    .clone()
-                    .into_iter()
-                    .chain(self.layout_warning.clone())
-                    .collect(),
+                models: self.layout_identity.clone().into_iter().collect(),
+                warnings: self.layout_warning.clone().into_iter().collect(),
             },
         );
         document.metadata.title = path
@@ -320,13 +353,34 @@ impl DocumentProcessor {
                 {
                     return Err(PipelineError::InvalidCheckpoint(page_index));
                 }
-                page
+                if is_ocr_derived(&page) {
+                    let live = self.live_backend()?;
+                    if checkpoint_matches_backend(&page, live.backend.name()) {
+                        page
+                    } else {
+                        let page = self.process_page(&session, page_index)?;
+                        checkpoint(&page).map_err(PipelineError::Checkpoint)?;
+                        page
+                    }
+                } else {
+                    page
+                }
             } else {
                 let page = self.process_page(&session, page_index)?;
                 checkpoint(&page).map_err(PipelineError::Checkpoint)?;
                 page
             };
             document.pages.push(page);
+        }
+        if document.pages.iter().any(is_ocr_derived)
+            && let Some(live) = self.started_backend()
+        {
+            if let Some(model) = &live.model_identity {
+                document.processing.models.insert(0, model.clone());
+            }
+            if let Some(warning) = &live.selection_warning {
+                document.processing.warnings.insert(0, warning.clone());
+            }
         }
         document.outline = lege_pdf_read::extract_outline(&session)
             .into_iter()
@@ -1211,6 +1265,80 @@ fn auto_tensorrt_failure_action(nvidia_hardware_present: bool) -> AutoTensorRtFa
     }
 }
 
+/// Resolve and start the OCR backend, then derive the model identity from the
+/// resolved configuration (the TensorRT runtime `auto` discovered, the Paddle
+/// model pack it verified). Failures are flattened so they can be cached.
+fn start_backend(config: &PipelineConfig) -> Result<LiveBackend, BackendInitFailure> {
+    let flatten = |error: PipelineError| match error {
+        PipelineError::UnavailableBackend(name) => BackendInitFailure::Unavailable(name),
+        PipelineError::BackendInitialization(message) => BackendInitFailure::Failed(message),
+        other => BackendInitFailure::Failed(other.to_string()),
+    };
+    let (backend, resolved, tensorrt_paddle, selection_warning) =
+        initialize_backend(config).map_err(flatten)?;
+    let mut resolved_config = config.clone();
+    resolved_config.backend = resolved;
+    resolved_config.tensorrt_paddle = tensorrt_paddle;
+    let model_identity = resolved_model_identity(&resolved_config).map_err(flatten)?;
+    Ok(LiveBackend {
+        backend,
+        resolved,
+        model_identity,
+        selection_warning,
+    })
+}
+
+fn resolved_model_identity(
+    config: &PipelineConfig,
+) -> Result<Option<lege_docir::ModelIdentity>, PipelineError> {
+    let from_pack = if config.backend == BackendChoice::Paddle {
+        config
+            .paddle_model_pack
+            .as_deref()
+            .map(|directory| {
+                let manifest_path = directory.join("manifest.json");
+                let manifest_bytes = std::fs::read(&manifest_path)?;
+                let manifest =
+                    lege_ocr::engine_paddle::PaddleOcrEngine::verify_model_pack(directory)
+                        .map_err(|error| PipelineError::ModelPack(error.to_string()))?;
+                Ok::<_, PipelineError>(lege_docir::ModelIdentity {
+                    provider: manifest.provider,
+                    name: manifest.name,
+                    version: manifest.version,
+                    content_hash: Some(format!(
+                        "blake3:{}",
+                        blake3::hash(&manifest_bytes).to_hex()
+                    )),
+                    license: Some(manifest.license),
+                    source: Some(manifest.source),
+                })
+            })
+            .transpose()?
+    } else {
+        None
+    };
+    Ok(from_pack.or_else(|| builtin_model_identity(config)))
+}
+
+/// Pages whose evidence came from the OCR backend rather than a text layer.
+fn is_ocr_derived(page: &Page) -> bool {
+    matches!(
+        page.source_kind,
+        PageSourceKind::ScannedImage | PageSourceKind::Rendered
+    )
+}
+
+/// An OCR checkpoint is reusable only if its text regions were recognized by
+/// the backend now running. Specialist regions (tables, formulas) carry their
+/// specialist's provider and are not compared; a page with no text regions
+/// has no backend-specific evidence to conflict with.
+fn checkpoint_matches_backend(page: &Page, backend_name: &str) -> bool {
+    page.regions
+        .iter()
+        .filter(|region| matches!(region.content, RegionContent::Text(_)))
+        .all(|region| region.provenance.provider == backend_name)
+}
+
 fn initialize_backend(config: &PipelineConfig) -> Result<InitializedBackend, PipelineError> {
     match config.backend {
         BackendChoice::Auto => {
@@ -1614,5 +1742,58 @@ mod tests {
                 .map(|block| block.plain_text(lege_docir::TextView::Raw)),
             Some("x2".into())
         );
+    }
+
+    #[test]
+    fn ocr_checkpoint_requires_matching_backend_while_native_text_does_not() {
+        let mut page = Page {
+            index: 0,
+            source_size: Size {
+                width: 100,
+                height: 50,
+            },
+            page_size_points: SizeF {
+                width: 100.0,
+                height: 50.0,
+            },
+            source_to_page: Transform {
+                matrix: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+            },
+            source_kind: PageSourceKind::ScannedImage,
+            image: None,
+            regions: vec![text_region("r0", [0.0, 0.0, 100.0, 50.0], "ocr")],
+            reading_order: Vec::new(),
+            warnings: Vec::new(),
+        };
+        assert!(is_ocr_derived(&page));
+        assert!(checkpoint_matches_backend(&page, "test-ocr"));
+        assert!(!checkpoint_matches_backend(&page, "other-ocr"));
+
+        page.source_kind = PageSourceKind::NativeText;
+        assert!(!is_ocr_derived(&page));
+    }
+
+    #[test]
+    fn unimplemented_backend_stays_eagerly_rejected_while_host_backend_starts_lazily() {
+        assert!(matches!(
+            DocumentProcessor::new(PipelineConfig {
+                backend: BackendChoice::WindowsAi,
+                layout_enabled: false,
+                ..PipelineConfig::default()
+            }),
+            Err(PipelineError::UnavailableBackend("windows-ai"))
+        ));
+        let processor = DocumentProcessor::new(PipelineConfig {
+            backend: BackendChoice::BrokeredTensorRt,
+            brokered_tensorrt: None,
+            layout_enabled: false,
+            ..PipelineConfig::default()
+        })
+        .expect("lazy backend does not start in new()");
+        assert_eq!(processor.resolved_backend_name(), None);
+        assert!(matches!(
+            processor.initialize_backend(),
+            Err(PipelineError::BackendInitialization(_))
+        ));
     }
 }

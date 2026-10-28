@@ -16,6 +16,14 @@ pub struct HocrPage {
     pub hocr: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct SpooledHocrPage {
+    pub page_index: usize,
+    pub width_px: u32,
+    pub height_px: u32,
+    pub path: std::path::PathBuf,
+}
+
 fn unavailable<T>() -> Result<T> {
     bail!("EPUB output requires OCR support (enable the `ocr` feature)")
 }
@@ -58,6 +66,16 @@ pub(crate) fn build_epub_from_hocr_pages_cancellable(
 /// of this shim returns.
 pub(crate) fn build_epub_from_hocr_pages_with_outline_cancellable(
     _hocr_pages: &[HocrPage],
+    _title: &str,
+    _output_path: &Path,
+    _outline: &[lege_pdf_write::outline::OutlineItem],
+    _cancellation: Option<&lege_pdf_read::CancellationToken>,
+) -> Result<()> {
+    unavailable()
+}
+
+pub(crate) fn build_epub_from_spooled_hocr_pages_with_outline_cancellable(
+    _spooled_pages: &[SpooledHocrPage],
     _title: &str,
     _output_path: &Path,
     _outline: &[lege_pdf_write::outline::OutlineItem],

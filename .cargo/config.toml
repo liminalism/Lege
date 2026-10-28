@@ -35,6 +35,12 @@ gui-freya = "build --package lege --package lege-gui-freya"
 gui-freya-check = "check --package lege --package lege-gui-freya"
 gui-freya-run = "run --package lege-gui-freya --bin lege-gui --"
 
+# PixelKit migration preview. Keep its binary distinct until visual and worker
+# acceptance is complete, so building it cannot overwrite the Freya baseline.
+gui-pixelkit = "build --package lege --package lege-gui-pixelkit"
+gui-pixelkit-check = "check --package lege --package lege-gui-pixelkit"
+gui-pixelkit-run = "run --package lege-gui-pixelkit --bin lege-gui-pixelkit --"
+
 # Native document reader in the sibling Liminaldoc workspace.
 viewer = "build --manifest-path ../liminaldoc/Cargo.toml -p liminaldoc-reader"
 viewer-check = "check --manifest-path ../liminaldoc/Cargo.toml -p liminaldoc-reader"

@@ -480,7 +480,9 @@ pub fn gui_options_to_cli_args(
     }
 
     // Text rendering mode: grayscale/MRC overrides bilevel binarization.
-    if options.grayscale_mode {
+    if options.preserve_mode {
+        args.push("--preserve".into());
+    } else if options.grayscale_mode {
         args.push("--grayscale".into());
     } else if options.use_fixed_threshold {
         args.push("--binarization".into());
@@ -906,6 +908,72 @@ pub async fn probe_file_json(path: &PathBuf) -> Result<serde_json::Value> {
 mod tests {
     use super::*;
     use std::ffi::OsStr;
+
+    #[test]
+    fn preserve_normalizes_stale_preparation_flags_for_pdf_and_djvu() {
+        for (format, name, expected) in [
+            (OutputFormat::Pdf, "output.pdf", "jbig2"),
+            (OutputFormat::Djvu, "output.djvu", "djvu"),
+        ] {
+            let mut options = ProcessingOptions::new();
+            options.output_format = format;
+            options.preserve_mode = true;
+            options.grayscale_mode = true;
+            options.image_processing_type = ImageProcessingType::Dithered;
+            options.use_jbig2_halftone = true;
+            options.jpeg_compat = true;
+            options.symbol_mode = true;
+            options.reflow = true;
+            options.use_fixed_threshold = true;
+            options.use_heavy_binarization = true;
+            let args = gui_options_to_cli_args(
+                &PathBuf::from("input.pdf"),
+                &PathBuf::from(name),
+                &options,
+                true,
+            );
+            assert!(args.iter().any(|arg| arg == "--preserve"));
+            assert_eq!(
+                cli_arg_after(&args, "--text-format").as_deref(),
+                Some(expected)
+            );
+            for flag in [
+                "--grayscale",
+                "--dither",
+                "--halftone",
+                "--jpeg-compat",
+                "--sym-unify",
+                "--reflow",
+                "--binarization",
+                "--threshold",
+                "--sauvola-k",
+            ] {
+                assert!(
+                    !args.iter().any(|arg| arg == flag),
+                    "unexpected {flag}: {args:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn preserve_keeps_explicit_truetyping_without_grayscale() {
+        let mut options = ProcessingOptions::new();
+        options.set_preserve_mode(true);
+        options.set_text_encoder(CompressionType::Truetyping);
+        let args = gui_options_to_cli_args(
+            &PathBuf::from("input.pdf"),
+            &PathBuf::from("output.pdf"),
+            &options,
+            true,
+        );
+        assert_eq!(
+            cli_arg_after(&args, "--text-format").as_deref(),
+            Some("truetyping")
+        );
+        assert!(args.iter().any(|arg| arg == "--preserve"));
+        assert!(!args.iter().any(|arg| arg == "--grayscale"));
+    }
 
     fn cli_arg_after(args: &[OsString], flag: &str) -> Option<String> {
         args.windows(2)

@@ -67,6 +67,17 @@ pub mod fast {
         unavailable()
     }
 
+    pub async fn perform_page_gray_ocr(
+        _cleaned_gray: &[u8],
+        _width: usize,
+        _height: usize,
+        _language: &str,
+        _invert_input: bool,
+        _frame: Option<super::orient::PageFrame>,
+    ) -> Result<String> {
+        unavailable()
+    }
+
     pub async fn perform_ocr_on_binarized(
         _binarized: Vec<u8>,
         _width: usize,

@@ -816,7 +816,7 @@ record lege-ecosystem-perf.decode-optimization-vs-openjpeg/1 : work {
 
 record lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09/1 : work {
     title "Handoff: remaining JP2 decode optimization after renderer MRC pass"
-    state proposed
+    state superseded
     scope [
         path "lege-codecs/jp2lam/examples/decode_benchmark.rs",
         path "lege-codecs/jp2lam/src/**",
@@ -825,9 +825,7 @@ record lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09/1 : work {
     intent """
         Continue JP2 decoding optimization at the codec boundary now that warm renderer shading and final page ownership are no longer the dominant costs on JPX-heavy and MRC pages.
         """
-    note """
-        Full-image packed output duplication is resolved: decode_into now reconstructs directly into the caller's strided destination, and pdf-image allocates its final Arc before decoding. Region decode still allocates and crops, while palette and non-8-bit renderer inputs deliberately retain the planar compatibility path. Before choosing another arithmetic hot loop, refresh a P-core-pinned stage flamegraph on the same representative codestream; the current end-to-end Structures.pdf profile and direct-versus-owned A/B establish the new boundary but do not replace stage attribution. If that flamegraph still agrees with the 2026-08-06 result, prioritize irreversible 9/7 vertical memory traffic and Tier-1 MQ/FlagGrid work; do not retry the reverted fused-pack SIMD experiment unless layout/memory traffic changes first. Keep true windowed ROI subband/IDWT work as the next structural phase. Preserve renderer load-aware Budgeted(2..8) concurrency and verify whole-document throughput before increasing nested codec parallelism. Correctness gates remain OpenJPEG same-stream comparisons (reversible 5/3 max diff 0; irreversible 9/7 approximately <=2 absent documented color-floor exceptions), serial-vs-budgeted identity, packed-vs-native identity where applicable, renderer page hashes, and the JPX corpus census.
-        """
+    note "Full-image and ROI packed decode_into now reconstruct directly into the caller's strided destination; ROI clips each full-IDWT tile while packing. Palette and unsupported format combinations retain planar compatibility paths. This corrects the historical output-copy-gap claim below, which predates direct ROI packing. True windowed ROI subband/IDWT remains open. Refresh a P-core-pinned stage flamegraph before selecting the next arithmetic hot loop, preserve load-aware renderer concurrency, and retain the OpenJPEG, serial-versus-budgeted, packed-versus-native, renderer hash and JPX census correctness gates."
     claim current-boundary {
         text """
             On the supplied Structures.pdf page 0, the final packed-Arc path preserves hash fdc3994f80330ee0. A 21-run decode-only repeat measured 246.834 ms total: 204.616 ms JPX and 41.516 ms JBIG2; 11-run compiled and warm-decoded medians were 70.697 ms and 70.049 ms.

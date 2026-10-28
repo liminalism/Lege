@@ -13,7 +13,7 @@
 //! ```
 //!
 //! Prepress — CMYK separations, output ICC profiles, overprint simulation,
-//! PDF/X — is deliberately out of scope; see `PLAN.md` §7.
+//! PDF/X — is deliberately out of scope; see `dev-notes/lege-pdf/print-PLAN.md` §7.
 
 pub mod compose;
 pub mod job;

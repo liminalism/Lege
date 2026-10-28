@@ -1,6 +1,6 @@
 //! PdfPageArtifact: the page contract submitted by pipeline workers.
-//! PdfImageElement, PdfImageResource (Jpeg/Jpx/Jbig2/CcittGroup4/Indexed8),
-//! PreparedTextLayer, PreparedGlyphLayer, exact resident_bytes(). PLAN.md §4.2.
+//! PdfImageElement, PdfImageResource (Jpeg/Jpx/Jbig2/CcittGroup4/Indexed8/Flate8),
+//! PreparedTextLayer, PreparedGlyphLayer, exact resident_bytes(). write-PLAN.md §4.2.
 //!
 //! This is the *entire* public input vocabulary. Every variant maps to one PDF
 //! image dictionary shape (see `images.rs`). Adding a variant is a plan change,
@@ -164,6 +164,14 @@ pub enum PdfImageResource {
         width: u32,
         height: u32,
     },
+    /// 8-bit continuous-tone samples already zlib-deflated by the caller
+    /// (FlateDecode, no predictor). The writer embeds `data` verbatim.
+    Flate8 {
+        data: Arc<[u8]>,
+        width: u32,
+        height: u32,
+        color: ColorModel,
+    },
 }
 
 impl PdfImageResource {
@@ -173,7 +181,8 @@ impl PdfImageResource {
             | PdfImageResource::Jpx { width, .. }
             | PdfImageResource::Jbig2 { width, .. }
             | PdfImageResource::CcittGroup4 { width, .. }
-            | PdfImageResource::Indexed8 { width, .. } => *width,
+            | PdfImageResource::Indexed8 { width, .. }
+            | PdfImageResource::Flate8 { width, .. } => *width,
         }
     }
 
@@ -183,7 +192,8 @@ impl PdfImageResource {
             | PdfImageResource::Jpx { height, .. }
             | PdfImageResource::Jbig2 { height, .. }
             | PdfImageResource::CcittGroup4 { height, .. }
-            | PdfImageResource::Indexed8 { height, .. } => *height,
+            | PdfImageResource::Indexed8 { height, .. }
+            | PdfImageResource::Flate8 { height, .. } => *height,
         }
     }
 
@@ -205,7 +215,8 @@ impl PdfImageResource {
             PdfImageResource::Jpeg { data, .. }
             | PdfImageResource::Jpx { data, .. }
             | PdfImageResource::Jbig2 { data, .. }
-            | PdfImageResource::CcittGroup4 { data, .. } => data.len() as u64,
+            | PdfImageResource::CcittGroup4 { data, .. }
+            | PdfImageResource::Flate8 { data, .. } => data.len() as u64,
             PdfImageResource::Indexed8 {
                 palette, indices, ..
             } => (palette.len() + indices.len()) as u64,
@@ -333,5 +344,19 @@ mod tests {
             height: 10,
         };
         assert_eq!(img.owned_bytes(), 868);
+    }
+
+    #[test]
+    fn flate8_reports_dims_and_bytes() {
+        let img = PdfImageResource::Flate8 {
+            data: Arc::from(&[0u8; 42][..]),
+            width: 7,
+            height: 6,
+            color: ColorModel::Gray,
+        };
+        assert_eq!(img.width(), 7);
+        assert_eq!(img.height(), 6);
+        assert_eq!(img.owned_bytes(), 42);
+        assert!(!img.is_image_mask());
     }
 }

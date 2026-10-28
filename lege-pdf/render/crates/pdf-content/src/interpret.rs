@@ -1264,7 +1264,7 @@ impl<'a> Interpreter<'a> {
                 Some(CieSpace::Lab { white_point, range })
             }
             b"CalRGB" => {
-                // Defaults are load-bearing: pdf_color::calrgb_to_rgb always
+                // Defaults are load-bearing: pdf_color::CalRgbTransform always
                 // applies gamma and matrix, so absent entries must be the
                 // identity (§8.6.5.3), never zeros (a zero matrix is the
                 // singular-degrade-to-black path).
@@ -1274,11 +1274,11 @@ impl<'a> Interpreter<'a> {
                 f32s(b"WhitePoint", &mut white_point);
                 f32s(b"Gamma", &mut gamma);
                 f32s(b"Matrix", &mut matrix);
-                Some(CieSpace::CalRgb {
+                Some(CieSpace::CalRgb(pdf_color::CalRgbTransform::new(
                     white_point,
                     gamma,
                     matrix,
-                })
+                )))
             }
             b"CalGray" => {
                 let mut gamma = [1.0f32];
@@ -6563,11 +6563,7 @@ enum CieSpace {
         white_point: [f32; 3],
         range: [f32; 4],
     },
-    CalRgb {
-        white_point: [f32; 3],
-        gamma: [f32; 3],
-        matrix: [f32; 9],
-    },
+    CalRgb(pdf_color::CalRgbTransform),
     CalGray {
         gamma: f32,
     },
@@ -6584,13 +6580,8 @@ fn eval_cie(space: CieSpace, values: &[f64]) -> SemColor {
             let [r, g, b] = pdf_color::lab_to_rgb(v(0), v(1), v(2), white_point, range);
             SemColor::DeviceRgb(r as f64, g as f64, b as f64)
         }
-        CieSpace::CalRgb {
-            white_point,
-            gamma,
-            matrix,
-        } => {
-            let [r, g, b] =
-                pdf_color::calrgb_to_rgb([v(0), v(1), v(2)], white_point, gamma, matrix);
+        CieSpace::CalRgb(transform) => {
+            let [r, g, b] = transform.apply([v(0), v(1), v(2)]);
             SemColor::DeviceRgb(r as f64, g as f64, b as f64)
         }
         CieSpace::CalGray { gamma } => {

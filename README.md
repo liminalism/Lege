@@ -1,121 +1,72 @@
-# Lege Ecosystem
+# Lege
 
-This directory is the Rust workspace root for the Lege application family.
-The layout separates applications, shared compute/OCR/PDF libraries, codecs,
-and project tooling so the processor and native PDF viewer/manager can
-share the renderer and lower-level crates without becoming one monolithic app.
+Lege prepares scanned books and documents for e-ink readers. It takes PDFs, sequential image folders, and Internet Archive JP2 collections — the usual output of a book scanner, or an Archive.org download whose pages have yellowed and whose file is hundreds of megabytes — and writes a PDF or DjVu that turns pages quickly and stays small. Layout detection can keep photographs and diagrams out of the text binarizer, so the text becomes a compact bi-level layer while pictures stay continuous-tone.
 
-## Folder contract
+The same processing core ships as the `lege` command-line tool and the `lege-gui` desktop app. A page is rendered, optionally segmented, then encoded by region: JBIG2 or CCITT Group 4 for text, JPEG 2000 or JPEG for images, or a layered DjVu of JB2 plus IW44. OCR is optional. The default build embeds PP-OCR and runs it through Lege's own GPU runtime; Windows uses the system OCR service, and Tesseract is an opt-in legacy backend on Linux and macOS. Version 1.5.1 is the current processor release. The full guide, with the interface screenshots, build steps, and pipeline stages, is [lege-process/README.md](lege-process/README.md).
 
-```text
-Lege/
-├── Cargo.toml                 ecosystem workspace + shared dependency policy
-├── .cargo/config.toml         short build/check commands
-├── lege-process/              PDF processing CLI, library, and legacy GUIs
-│   ├── core/                  `lege` library and CLI roots + core services
-│   ├── pipeline/              processing pipelines
-│   ├── encoding/              encoder dispatch/adapters
-│   ├── color/                 binarization and color processing
-│   ├── colorquant/            color quantization
-│   ├── ocr/                   processor-facing OCR integration
-│   ├── reflow/                raster reflow
-│   ├── resize/                processor-facing resize helpers
-│   ├── lege-ipc/              CLI/GUI IPC types
-│   └── GUI/
-│       ├── Freya/             `lege-gui`: default desktop frontend
-│       ├── musicsheet/        `lege-music-gui`
-│       └── rfd/               vendored file dialog crate
-├── lege-document-ocr/         business-grade OCR product
-│   ├── crates/                document IR, pipeline, batch, and export libraries
-│   ├── cli/                   `lege-ocr` batch CLI
-│   └── installer-winsafe/     native Windows installer and uninstaller
-├── lege-android/              JNI library and Gradle Android application
-├── lege-gpu/                  shared GPU compute and ONNX runtime
-├── lege-ocr/                  shared OCR library and debug program
-├── lege-pdf/
-│   ├── agent/                 structured, agent-facing `lege-pdf` CLI
-│   ├── read/                  document intake/read seam
-│   ├── write/                 shared typed PDF writer
-│   ├── render/                native document and rendering engine
-│   └── pdf-integrity/         standalone forensic-triage workspace
-├── lege-codecs/
-│   ├── jbig2enc-rust/         canonical JBIG2 codec source
-│   ├── jp2lam/                canonical JPEG 2000 codec source
-│   └── djvulibrust/           canonical DjVu codec source
-├── lege-misc/                 assets, docs, packaging, scripts, and xtask
-└── freya-main/                vendored upstream UI workspace
-```
+## Projects
 
-The reader and writer now build from the sibling `../liminaldoc` repository.
-Their old source copies remain here during migration and are excluded from this
-workspace. Liminaldoc continues to use the Lege PDF crates through path
-dependencies while the repositories are being separated.
-`lege-pdf/render` retains semantic, text, compiled-IR, and tiled-raster APIs.
-The codec projects keep independent build graphs, while the root workspace
-uses the in-tree JBIG2 and JPEG2000 sources.
+### lege-process
 
-## Canonical codec source
+The e-ink processor: library, `lege` CLI, Freya desktop GUI (`lege-gui`), and the sheet-music edition (`lege-music-gui`). This is the application the two paragraphs above describe. [lege-process/README.md](lege-process/README.md).
 
-`lege-codecs/djvulibrust`, `lege-codecs/jbig2enc-rust`, and
-`lege-codecs/jp2lam` are the only maintained source locations for Lege's
-codecs. Their former standalone GitHub repositories are redirect-only archive
-pages; use this repository for source, issues, and development. Rust consumers
-should use published crate versions where available rather than a moving Git
-dependency.
+### lege-pdf
 
-## Common commands
+The PDF stack the processor and the sibling Liminaldoc tools share. `read` is the intake seam, `write` is the typed append-only emitter, `render` is the native document engine and CPU rasterizer, `print` imposes and spools office print jobs, `agent` is the structured `lege-pdf` CLI, and `pdf-integrity` is a separate forensic-triage workspace. [lege-pdf/README.md](lege-pdf/README.md).
 
-Run these from the ecosystem root:
+### lege-gpu
+
+Shared wgpu compute: Sauvola binarization, image resize, and the ONNX runtime that runs layout detection and PP-OCR. No ONNX Runtime or TensorRT dependency on the default path. [lege-gpu/README.md](lege-gpu/README.md).
+
+### lege-ocr
+
+The OCR library behind the processor (`lege_ocr`): line segmentation, hOCR assembly, embedded PP-OCR, Windows OCR, and an opt-in Tesseract backend. The batch product whose binary is also named `lege-ocr` lives in `lege-document-ocr`. [lege-ocr/README.md](lege-ocr/README.md).
+
+### lege-codecs
+
+In-tree JBIG2 (`jbig2enc-rust`), JPEG 2000 (`jp2lam`), and DjVu (`djvulibrust`). These keep their own build graphs and licenses. The root workspace patches the first two in, and the processor links the DjVu library directly. [lege-codecs/README.md](lege-codecs/README.md).
+
+### lege-document-ocr
+
+Business-grade batch OCR. The `lege-ocr` CLI classifies pages, keeps trustworthy native text, OCRs the rest, and writes text, Markdown, and other exports with resume support. It is a separate product from the e-ink converter. [lege-document-ocr/README.md](lege-document-ocr/README.md).
+
+### lege-android
+
+JNI library and Gradle host for arm64 Android 9 and later, aimed at e-ink devices. It runs the same pipeline in-process, including DjVu, and shows native progress. [lege-android/README.md](lege-android/README.md).
+
+### lege-misc
+
+Icons, the HTML pages the desktop app opens from About, Linux and macOS packaging notes, the `xtask` AppImage helper, the C ABI over the renderer, and the Python JBIG2 binding. [lege-misc/README.md](lege-misc/README.md).
+
+### freya-main
+
+Vendored fork of the Freya UI toolkit. `lege-gui` links it with the `cpu-renderer` feature (tiny-skia and softbuffer). A changeover to the sibling PixelKit toolkit is scoped for processor 1.5.2 in [to-do-plans/lege-process-1.5.2-pixelkit-gui.md](to-do-plans/lege-process-1.5.2-pixelkit-gui.md) and has not started. [freya-main/README.md](freya-main/README.md).
+
+The native reader and writer build from the sibling `../liminaldoc` checkout. They use these PDF crates through path dependencies.
+
+## Build
+
+From this directory:
 
 ```sh
-# Default members: processor CLI + main GUI
-cargo build
-
-# Individual applications
-cargo process
-cargo gui
-cargo music-gui
-cargo viewer
-cargo document-ocr
-
-# Shared crates
+cargo build          # lege CLI + lege-gui
+cargo cli            # CLI only
+cargo gui            # CLI + Freya GUI
+cargo music-sheet    # sheet-music edition, separate target dir
+cargo document-ocr   # batch OCR CLI
 cargo gpu
 cargo ocr
 cargo pdf-write
-cargo ipc
-
-# Standalone codecs
+cargo lege-pdf       # agent CLI
 cargo jbig2
 cargo jp2
 cargo djvu
-
-# Checks
-cargo process-check
-cargo gui-check
-cargo music-gui-check
-cargo gpu-check
-cargo ocr-check
-cargo pdf-write-check
-cargo ecosystem-check
-cargo fmt-all
-cargo fmt-all-check
-# For pdf-render workspace crates specifically, run package-scoped format checks, e.g.
-cargo fmt --package pdf-read --package pdf-text -- --check
-
-# Run the processor CLI
-cargo process-run -- path/to/input.pdf
-cargo viewer-run -- path/to/input.pdf
-cargo document-ocr-run batch <input.pdf-dir> --output <out-dir> --workers 4
-
-# Packaging task help
-cargo xtask-help
 ```
 
-Build profiles and shared dependency versions belong in the root
-`Cargo.toml`, not in application member manifests.
+`cargo viewer` and `cargo liminaldoc` build the sibling Liminaldoc workspace. Profiles and shared dependency versions belong in the root `Cargo.toml`.
+
+Working notes that used to sit beside crate sources — renderer sweep history, implementation plans, benchmarks — are indexed in [dev-notes/README.md](dev-notes/README.md).
 
 ## License
 
-The top-level Lege workspace and application packages are AGPL-3.0-only. See
-`LICENSE` and `NOTICE`. Independently usable codec and vendored third-party
-subtrees retain the licenses declared in their own manifests and license files.
+The workspace and application packages are AGPL-3.0-only. See `LICENSE` and `NOTICE`. Codec crates, the vendored Freya tree, and `lege-pdf/pdf-integrity` keep the licenses in their own manifests.

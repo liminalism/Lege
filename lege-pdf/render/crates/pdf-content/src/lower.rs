@@ -401,32 +401,7 @@ impl<'a> Lowerer<'a> {
     }
 
     fn include_transformed_rect(&mut self, rect: Rect, transform: Matrix) {
-        let corners = [
-            Point {
-                x: rect.x0,
-                y: rect.y0,
-            },
-            Point {
-                x: rect.x1,
-                y: rect.y0,
-            },
-            Point {
-                x: rect.x1,
-                y: rect.y1,
-            },
-            Point {
-                x: rect.x0,
-                y: rect.y1,
-            },
-        ];
-        let points = corners.map(|point| transform.apply(point));
-        let rect = Rect {
-            x0: points.iter().map(|p| p.x).fold(f64::INFINITY, f64::min),
-            y0: points.iter().map(|p| p.y).fold(f64::INFINITY, f64::min),
-            x1: points.iter().map(|p| p.x).fold(f64::NEG_INFINITY, f64::max),
-            y1: points.iter().map(|p| p.y).fold(f64::NEG_INFINITY, f64::max),
-        };
-        self.include_rect(rect);
+        self.include_rect(transform.transform_rect(rect));
     }
 
     fn include_path(&mut self, semantic_index: usize, stroke_half_width: f64) {

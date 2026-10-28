@@ -395,6 +395,38 @@ pub fn clean_page_for_mrc(
     Ok((cleaned.pixels, binarized))
 }
 
+/// The preservation-mode ink mask: a pixel is ink only where both the
+/// caller's local-contrast mask (Sauvola on the raw render) and the
+/// grayscale-clean mask of [`clean_page_for_mrc`] call it ink.
+///
+/// Each mask alone fails on tinted scans in a different place. Sauvola keeps
+/// paper grain as specks and outlines every edge between paper and a
+/// premasked white picture box; the clean mask has neither (it flattens the
+/// paper first) but fills whole mid-tone areas, such as a coloured stamp.
+/// Text strokes are in both. Nothing here touches the page itself: the
+/// cleaned grey is discarded, and pixels left out of the mask simply stay in
+/// the colour background at their own tone. If the clean fails, the Sauvola
+/// mask is returned unchanged.
+///
+/// Both masks and the result use the pipeline convention: 0 = ink, 255 = paper.
+pub fn preserve_ink_mask(
+    rgb: &[u8],
+    width: usize,
+    height: usize,
+    opts: &CleanOptions,
+    ink_threshold: u8,
+    sauvola_mask: Vec<u8>,
+) -> Vec<u8> {
+    match clean_page_for_mrc(rgb, width, height, opts, ink_threshold) {
+        Ok((_, clean_mask)) if clean_mask.len() == sauvola_mask.len() => sauvola_mask
+            .par_iter()
+            .zip(clean_mask.par_iter())
+            .map(|(&a, &b)| if a == 0 && b == 0 { 0 } else { 255 })
+            .collect(),
+        _ => sauvola_mask,
+    }
+}
+
 /// Like [`clean_page_for_mrc`], but the ink mask is supplied by the caller
 /// (e.g. the Sauvola binarizer in `mrc_adaptive_mask` mode) and only the
 /// cleaned background is produced.
@@ -627,42 +659,56 @@ pub fn mrc_background(
 /// mask of the ordinary path; lesser coverage whitens in proportion, so the
 /// scan's dark ring around each letter is taken out where the foreground
 /// layer will not hide it.
+///
+/// `cleaned` holds `channels` interleaved samples per pixel (1 = grey,
+/// 3 = RGB); every channel is whitened by the same one-channel `coverage`,
+/// and the result keeps the input's channel count.
 pub fn mrc_background_with_coverage(
     cleaned: &[u8],
     coverage: &[u8],
     width: usize,
     height: usize,
+    channels: usize,
     subsample: usize,
 ) -> (Vec<u8>, usize, usize) {
-    debug_assert_eq!(cleaned.len(), width.saturating_mul(height));
-    debug_assert_eq!(coverage.len(), cleaned.len());
+    let channels = channels.max(1);
+    debug_assert_eq!(
+        cleaned.len(),
+        width.saturating_mul(height).saturating_mul(channels)
+    );
+    debug_assert_eq!(coverage.len(), width.saturating_mul(height));
     let sub = subsample.max(1);
     let ow = width.div_ceil(sub);
     let oh = height.div_ceil(sub);
-    let mut out = vec![0u8; ow * oh];
-    out.par_chunks_mut(ow).enumerate().for_each(|(by, row)| {
-        for (bx, dst) in row.iter_mut().enumerate() {
-            let (mut sum, mut n) = (0u32, 0u32);
-            for dy in 0..sub {
-                let y = by * sub + dy;
-                if y >= height {
-                    break;
-                }
-                for dx in 0..sub {
-                    let x = bx * sub + dx;
-                    if x >= width {
-                        break;
+    let mut out = vec![0u8; ow * oh * channels];
+    out.par_chunks_mut(ow * channels)
+        .enumerate()
+        .for_each(|(by, row)| {
+            for (bx, dst) in row.chunks_exact_mut(channels).enumerate() {
+                for (c, dst) in dst.iter_mut().enumerate() {
+                    let (mut sum, mut n) = (0u32, 0u32);
+                    for dy in 0..sub {
+                        let y = by * sub + dy;
+                        if y >= height {
+                            break;
+                        }
+                        for dx in 0..sub {
+                            let x = bx * sub + dx;
+                            if x >= width {
+                                break;
+                            }
+                            let idx = y * width + x;
+                            let alpha = (u32::from(coverage[idx]) * 2).min(255);
+                            let sample = u32::from(cleaned[idx * channels + c]);
+                            let value = (sample * (255 - alpha) + 255 * alpha + 127) / 255;
+                            sum += value;
+                            n += 1;
+                        }
                     }
-                    let idx = y * width + x;
-                    let alpha = (u32::from(coverage[idx]) * 2).min(255);
-                    let value = (u32::from(cleaned[idx]) * (255 - alpha) + 255 * alpha + 127) / 255;
-                    sum += value;
-                    n += 1;
+                    *dst = (sum / n.max(1)) as u8;
                 }
             }
-            *dst = (sum / n.max(1)) as u8;
-        }
-    });
+        });
     (out, ow, oh)
 }
 
@@ -812,9 +858,60 @@ mod tests {
         // A third under ink whitens by two thirds; half or more is ink.
         let cleaned = [10, 20, 30, 40];
         let coverage = [0, 85, 170, 255];
-        let (out, width, height) = mrc_background_with_coverage(&cleaned, &coverage, 4, 1, 1);
+        let (out, width, height) = mrc_background_with_coverage(&cleaned, &coverage, 4, 1, 1, 1);
         assert_eq!((width, height), (4, 1));
         assert_eq!(out, [10, 177, 255, 255]);
+    }
+
+    #[test]
+    fn preserve_mask_keeps_only_ink_both_masks_agree_on() {
+        // A dark stroke on light paper: both masks see it. A Sauvola-only
+        // speck on the paper is dropped.
+        let (width, height) = (32, 32);
+        let mut gray = vec![230u8; width * height];
+        for y in 10..22 {
+            for x in 14..18 {
+                gray[y * width + x] = 20;
+            }
+        }
+        let rgb: Vec<u8> = gray.iter().flat_map(|&v| [v, v, v]).collect();
+        let mut sauvola: Vec<u8> = gray
+            .iter()
+            .map(|&v| if v < 128 { 0 } else { 255 })
+            .collect();
+        let speck = 3 * width + 3;
+        sauvola[speck] = 0;
+        let opts = CleanOptions::production_for_height(height, false);
+        let mask = preserve_ink_mask(&rgb, width, height, &opts, 0, sauvola);
+        assert_eq!(mask[15 * width + 15], 0, "stroke stays ink");
+        assert_eq!(mask[speck], 255, "speck is dropped");
+    }
+
+    #[test]
+    fn rgb_coverage_matches_grey_per_channel() {
+        // Each RGB channel is whitened exactly as a grey plane of the same
+        // samples would be, through the box downsample as well.
+        let (width, height) = (5, 3);
+        let coverage: Vec<u8> = (0..width * height).map(|i| (i * 37 % 256) as u8).collect();
+        let planes: [Vec<u8>; 3] = std::array::from_fn(|c| {
+            (0..width * height)
+                .map(|i| ((i * 53 + c * 71) % 256) as u8)
+                .collect()
+        });
+        let rgb: Vec<u8> = (0..width * height)
+            .flat_map(|i| [planes[0][i], planes[1][i], planes[2][i]])
+            .collect();
+        for subsample in [1, 2, 3] {
+            let (out, ow, oh) =
+                mrc_background_with_coverage(&rgb, &coverage, width, height, 3, subsample);
+            for (c, plane) in planes.iter().enumerate() {
+                let (grey, gw, gh) =
+                    mrc_background_with_coverage(plane, &coverage, width, height, 1, subsample);
+                assert_eq!((ow, oh), (gw, gh));
+                let channel: Vec<u8> = out.chunks_exact(3).map(|px| px[c]).collect();
+                assert_eq!(channel, grey, "channel {c} at subsample {subsample}");
+            }
+        }
     }
 
     #[test]

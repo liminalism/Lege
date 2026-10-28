@@ -1,0 +1,103 @@
+{
+  "workload": "empty queue, idle, matched physical window size",
+  "platform": "Linux/X11",
+  "profile": "debug-fast",
+  "medians": {
+    "freya": {
+      "Rss_KiB": 48716,
+      "Pss_KiB": 38245,
+      "threads": 5
+    },
+    "pixelkit": {
+      "Rss_KiB": 32668,
+      "Pss_KiB": 22886,
+      "threads": 1
+    }
+  },
+  "samples": [
+    {
+      "frontend": "freya",
+      "iteration": 0,
+      "width": 1980,
+      "height": 1452,
+      "metrics": {
+        "Rss_KiB": 48716,
+        "Pss_KiB": 38245,
+        "Shared_Clean_KiB": 5100,
+        "Private_Clean_KiB": 0,
+        "Private_Dirty_KiB": 32376,
+        "threads": 5
+      }
+    },
+    {
+      "frontend": "pixelkit",
+      "iteration": 0,
+      "width": 1980,
+      "height": 1452,
+      "metrics": {
+        "Rss_KiB": 32492,
+        "Pss_KiB": 22678,
+        "Shared_Clean_KiB": 4388,
+        "Private_Clean_KiB": 3844,
+        "Private_Dirty_KiB": 13028,
+        "threads": 1
+      }
+    },
+    {
+      "frontend": "freya",
+      "iteration": 1,
+      "width": 1980,
+      "height": 1452,
+      "metrics": {
+        "Rss_KiB": 48676,
+        "Pss_KiB": 38116,
+        "Shared_Clean_KiB": 5196,
+        "Private_Clean_KiB": 12,
+        "Private_Dirty_KiB": 32228,
+        "threads": 5
+      }
+    },
+    {
+      "frontend": "pixelkit",
+      "iteration": 1,
+      "width": 1980,
+      "height": 1452,
+      "metrics": {
+        "Rss_KiB": 32680,
+        "Pss_KiB": 22886,
+        "Shared_Clean_KiB": 4388,
+        "Private_Clean_KiB": 4036,
+        "Private_Dirty_KiB": 13024,
+        "threads": 1
+      }
+    },
+    {
+      "frontend": "freya",
+      "iteration": 2,
+      "width": 1980,
+      "height": 1452,
+      "metrics": {
+        "Rss_KiB": 48796,
+        "Pss_KiB": 38268,
+        "Shared_Clean_KiB": 5164,
+        "Private_Clean_KiB": 12,
+        "Private_Dirty_KiB": 32380,
+        "threads": 5
+      }
+    },
+    {
+      "frontend": "pixelkit",
+      "iteration": 2,
+      "width": 1980,
+      "height": 1452,
+      "metrics": {
+        "Rss_KiB": 32668,
+        "Pss_KiB": 22909,
+        "Shared_Clean_KiB": 4332,
+        "Private_Clean_KiB": 3972,
+        "Private_Dirty_KiB": 13132,
+        "threads": 1
+      }
+    }
+  ]
+}

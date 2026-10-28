@@ -6,13 +6,11 @@ immutable document snapshot, worker-local execution state, and a
 backend-neutral compiled-page IR that both a CPU rasterizer and (later) a WGPU
 backend consume.
 
-Design documents (in the parent directory):
+Design notes live in the repository working-note archive:
 
-- `../pdfium-concurrency-rust-port.md` — why PDFium is serial; the concurrency
-  architecture (immutable snapshot, once-publication, worker contexts).
-- `../expanded-rust-pdfrender-plan.md` — the phased roadmap (CPU-first phases
-  0–6, WGPU phases 7–11) and the `CompiledPage` rendering contract.
-- `../skeleton-blueprint.md` — repo-concrete decisions this workspace encodes.
+- `../../dev-notes/lege-pdf/render-refinement/plans/expanded-rust-pdfrender-plan.md` — the phased roadmap (CPU-first phases 0–6, WGPU phases 7–11) and the `CompiledPage` rendering contract.
+- `../../dev-notes/lege-pdf/render-refinement/plans/skeleton-blueprint.md` — repo-concrete decisions this workspace encodes.
+- `../../dev-notes/lege-pdf/render-refinement/README.md` — index of the sweep history.
 
 ## The one rule
 
@@ -92,7 +90,7 @@ Phases 1–6 (CPU path) and Font Phases 1–2 are implemented and tested.
 > workspace's geometry leaf crate. Still open after the pass: minification
 > weight quality (the second half of the image-AA workstream; **landed
 > 2026-07-21** — fractional-tap area weights, see
-> `docs/refinement/handoffs/DEFERRED.md` "Image
+> `../../dev-notes/lege-pdf/render-refinement/handoffs/DEFERRED.md` "Image
 > minification") and the full
 > Linux corpus re-sweep under the new annotations-on baseline (older sweep
 > CSVs are baseline-incompatible — `tools/pdfium-diff` now renders both
@@ -175,7 +173,7 @@ Phases 1–6 (CPU path) and Font Phases 1–2 are implemented and tested.
   `pdf-image`; together they render Internet Archive MRC scans (JPX background
   + JPX foreground masked by a JBIG2 `/SMask`). The July 2026 full-corpus
   later sweep history and remaining codec edges are indexed in
-  `docs/refinement/README.md`.
+  `../../dev-notes/lege-pdf/render-refinement/README.md`.
 
 `cargo run -p pdf-cli -- dump <file.pdf> <page>` prints the semantic display
 list; `render` compiles to the IR and runs it through the CPU backend.

@@ -419,6 +419,7 @@ struct CliOptions {
     image_only: bool, // --image-only
     original_images: bool, // --original-images (default is already original; explicit opt-in)
     grayscale: bool, // --grayscale: MRC grayscale-clean text (JBIG2 mask + JP2 gray bg)
+    preserve: bool, // --preserve: colour MRC (JBIG2 ink mask + colour JPX background)
     music_sheet: bool, // --music-sheet: sheet-music preset (no layout, OCR off, adaptive binarization default)
     // Undocumented MRC tuning knobs for development/testing.
     mrc_bg_quality: Option<u8>,    // --mrc-bg-quality <1-100>
@@ -922,6 +923,10 @@ fn extract_cli_options(args: Vec<String>) -> Result<(Vec<String>, CliOptions)> {
                 opts.grayscale = true;
                 i += 1;
             }
+            "--preserve" => {
+                opts.preserve = true;
+                i += 1;
+            }
             "--music-sheet" => {
                 opts.music_sheet = true;
                 i += 1;
@@ -990,7 +995,11 @@ fn extract_cli_options(args: Vec<String>) -> Result<(Vec<String>, CliOptions)> {
     // 0.77 MB and 1347 shapes against 2.56 MB and 13087. Grayscale is
     // therefore how truetyping is rendered unless a bilevel mode was asked
     // for by name.
+    if opts.preserve {
+        validate_preserve_options(&opts)?;
+    }
     if opts.text_format.as_deref() == Some("truetyping")
+        && !opts.preserve
         && !opts.grayscale
         && opts.binarization.is_none()
         && opts.threshold.is_none()
@@ -1000,6 +1009,39 @@ fn extract_cli_options(args: Vec<String>) -> Result<(Vec<String>, CliOptions)> {
     }
 
     Ok((remaining, opts))
+}
+
+/// `--preserve` writes the page as colour MRC layers, so it cannot be combined
+/// with options that pick another rendering of the page or of its pictures.
+/// These are hard errors rather than silent drops.
+fn validate_preserve_options(opts: &CliOptions) -> Result<()> {
+    let mut conflicts: Vec<String> = Vec::new();
+    for (flag, on) in [
+        ("--grayscale", opts.grayscale),
+        ("--dither", opts.dither),
+        ("--halftone", opts.halftone),
+        ("--gray-jp2", opts.gray_jp2),
+        ("--image-only", opts.image_only),
+        ("--music-sheet", opts.music_sheet),
+        ("--reflow", opts.reflow),
+    ] {
+        if on {
+            conflicts.push(flag.to_string());
+        }
+    }
+    if let Some(fmt) = opts.text_format.as_deref()
+        && matches!(fmt, "jpeg" | "ccitt4" | "epub")
+    {
+        conflicts.push(format!("--text-format {fmt}"));
+    }
+    if conflicts.is_empty() {
+        Ok(())
+    } else {
+        bail!(
+            "--preserve cannot be combined with {}",
+            conflicts.join(", ")
+        )
+    }
 }
 
 /// Normalize `CliOptions` for the sheet-music preset:
@@ -2168,6 +2210,12 @@ fn handle_simple_processing(
         pipeline_config.set_text_format(fmt)?;
     }
 
+    // Preservation mode pins the mask format to JBIG2 unless the user chose
+    // one (truetyping stays allowed); the config default would be truetyping.
+    if cli_opts.preserve && cli_opts.text_format.is_none() {
+        pipeline_config.set_text_format("jbig2")?;
+    }
+
     // Cover / image format
     if let Some(ref fmt) = cli_opts.cover_format {
         let cover = match fmt.as_str() {
@@ -2194,6 +2242,17 @@ fn handle_simple_processing(
     if cli_opts.grayscale {
         pipeline_config.set_page_mode(lege::pipeline::PageMode::Grayscale);
         pipeline_config.set_keep_original_images(true);
+    }
+    // Preservation mode: colour MRC (colour JPX background under a JBIG2 ink
+    // mask). Ink is rendered black for now. The mask is Sauvola, as in
+    // --mrc-adaptive-mask, unless the user picked a binarization method.
+    if cli_opts.preserve {
+        pipeline_config.set_page_mode(lege::pipeline::PageMode::Preserved);
+        pipeline_config.set_keep_original_images(true);
+        if cli_opts.binarization.is_none() {
+            pipeline_config
+                .set_binarization(lege::CliConfigBuilder::parse_binarization_method("1"));
+        }
     }
     if let Some(q) = cli_opts.mrc_bg_quality {
         pipeline_config.set_mrc_bg_quality(q);
@@ -3935,6 +3994,47 @@ mod cli_parser_tests {
         ])
         .expect("jbig2 args should parse");
         assert!(!opts.grayscale, "only truetyping asks for grayscale");
+    }
+
+    fn preserve_args(extra: &[&str]) -> Result<CliOptions> {
+        let mut args = vec!["lege".to_string(), "book.pdf".to_string()];
+        args.push("--preserve".to_string());
+        args.extend(extra.iter().map(|s| s.to_string()));
+        extract_cli_options(args).map(|(_, opts)| opts)
+    }
+
+    #[test]
+    fn preserve_parses_without_enabling_grayscale() {
+        let opts = preserve_args(&[]).expect("--preserve should parse");
+        assert!(opts.preserve);
+        assert!(!opts.grayscale);
+
+        // Truetyping stays allowed and must not auto-enable grayscale.
+        let opts = preserve_args(&["--text-format", "truetyping"])
+            .expect("--preserve with truetyping should parse");
+        assert!(opts.preserve);
+        assert!(!opts.grayscale, "preserve never auto-enables grayscale");
+        let opts = preserve_args(&["--text-format", "jbig2"]).expect("jbig2 is allowed");
+        assert_eq!(opts.text_format.as_deref(), Some("jbig2"));
+    }
+
+    #[test]
+    fn preserve_rejects_conflicting_flags() {
+        for flags in [
+            vec!["--grayscale"],
+            vec!["--dither"],
+            vec!["--halftone"],
+            vec!["--gray-jp2"],
+            vec!["--text-format", "jpeg"],
+            vec!["--text-format", "ccitt4"],
+            vec!["--text-format", "epub"],
+            vec!["--image-only"],
+        ] {
+            let Err(err) = preserve_args(&flags) else {
+                panic!("{flags:?} must be rejected");
+            };
+            assert!(err.to_string().contains("--preserve"), "{flags:?}: {err}");
+        }
     }
 
     #[test]

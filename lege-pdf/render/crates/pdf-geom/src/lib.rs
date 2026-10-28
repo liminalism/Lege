@@ -117,6 +117,43 @@ impl Matrix {
         }
     }
 
+    /// Axis-aligned bounding box of `rect`'s four transformed corners. A
+    /// rotated or skewed matrix yields the enclosing box, not the rectangle.
+    pub fn transform_rect(&self, rect: Rect) -> Rect {
+        let corners = [
+            Point {
+                x: rect.x0,
+                y: rect.y0,
+            },
+            Point {
+                x: rect.x1,
+                y: rect.y0,
+            },
+            Point {
+                x: rect.x1,
+                y: rect.y1,
+            },
+            Point {
+                x: rect.x0,
+                y: rect.y1,
+            },
+        ]
+        .map(|corner| self.apply(corner));
+        let mut result = Rect {
+            x0: corners[0].x,
+            y0: corners[0].y,
+            x1: corners[0].x,
+            y1: corners[0].y,
+        };
+        for point in &corners[1..] {
+            result.x0 = result.x0.min(point.x);
+            result.y0 = result.y0.min(point.y);
+            result.x1 = result.x1.max(point.x);
+            result.y1 = result.y1.max(point.y);
+        }
+        result
+    }
+
     pub fn determinant(&self) -> f64 {
         self.a * self.d - self.b * self.c
     }
@@ -225,6 +262,44 @@ mod tests {
         let p = m.apply(Point { x: 1.0, y: 1.0 });
         assert_eq!(p, Point { x: 12.0, y: 23.0 });
         assert_eq!(m.determinant(), 6.0);
+    }
+
+    #[test]
+    fn transform_rect_bounds_rotated_and_flipped_corners() {
+        let rect = Rect {
+            x0: 0.0,
+            y0: 0.0,
+            x1: 2.0,
+            y1: 1.0,
+        };
+        // 90° rotation then translate: corners land at x in [-1, 0], y in [0, 2].
+        let rotate = Matrix {
+            a: 0.0,
+            b: 1.0,
+            c: -1.0,
+            d: 0.0,
+            e: 5.0,
+            f: 0.0,
+        };
+        assert_eq!(
+            rotate.transform_rect(rect),
+            Rect {
+                x0: 4.0,
+                y0: 0.0,
+                x1: 5.0,
+                y1: 2.0,
+            }
+        );
+        // A y-flip still yields a normalized box.
+        assert_eq!(
+            Matrix::scale(1.0, -1.0).transform_rect(rect),
+            Rect {
+                x0: 0.0,
+                y0: -1.0,
+                x1: 2.0,
+                y1: 0.0,
+            }
+        );
     }
 
     #[test]

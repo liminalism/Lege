@@ -47,6 +47,7 @@
 
 mod byterange;
 mod changes;
+pub mod corpus;
 mod digest;
 mod docmdp;
 mod document;

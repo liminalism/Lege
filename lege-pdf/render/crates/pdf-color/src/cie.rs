@@ -153,23 +153,14 @@ fn mat3_transform(m: Mat3, v: [f32; 3]) -> [f32; 3] {
     ]
 }
 
-/// CIE XYZ → sRGB with a Bradford-free von-Kries-style adaptation to a given
-/// white point. Port of `XYZ_to_sRGB_WhitePoint` (cpdf_colorspace.cpp lines
-/// 385-412).
+/// Build `M⁻¹` where `M = RGB_xyz · diag(RGB_xyz⁻¹ · white)` is the
+/// linear-sRGB→XYZ matrix scaled so `[xw, yw, zw]` maps to `(1, 1, 1)`.
 ///
-/// It builds `M = RGB_xyz · diag(RGB_xyz⁻¹ · white)`, the linear-sRGB→XYZ
-/// matrix scaled so the white point maps to `(1,1,1)`, then applies `M⁻¹` and
-/// the sampled sRGB transfer ([`rgb_conversion`]). A singular `M` (e.g. a
-/// white point with a zero component) yields black via [`mat3_inverse`]'s
-/// guard, matching PDFium.
-pub(crate) fn xyz_to_srgb_white_point(
-    x: f32,
-    y: f32,
-    z: f32,
-    xw: f32,
-    yw: f32,
-    zw: f32,
-) -> [f32; 3] {
+/// Precomputing this once per CalRGB `/WhitePoint` skips both 3×3 inversions
+/// on every subsequent sample. A singular `M` (e.g. a white point with a zero
+/// component) returns the all-zero matrix via [`mat3_inverse`]'s guard, which
+/// maps every sample to black, matching PDFium.
+pub(crate) fn white_point_adaptation_matrix(xw: f32, yw: f32, zw: f32) -> Mat3 {
     // sRGB primary chromaticities; `1 - x - y` for the z-row, computed at
     // runtime in f32 exactly as PDFium does.
     let (rx, ry) = (0.64f32, 0.33f32);
@@ -192,12 +183,39 @@ pub(crate) fn xyz_to_srgb_white_point(
         rgb_sum[0], 0.0, 0.0, 0.0, rgb_sum[1], 0.0, 0.0, 0.0, rgb_sum[2],
     ];
     let m = mat3_mul(rgb_xyz, diag);
-    let rgb = mat3_transform(mat3_inverse(m), [x, y, z]);
+    mat3_inverse(m)
+}
+
+/// Apply a prebuilt [`white_point_adaptation_matrix`] and the sampled sRGB
+/// transfer ([`rgb_conversion`]) to `[x, y, z]`.
+pub(crate) fn xyz_to_srgb_with_adaptation(x: f32, y: f32, z: f32, inv_m: Mat3) -> [f32; 3] {
+    let rgb = mat3_transform(inv_m, [x, y, z]);
     [
         rgb_conversion(rgb[0]),
         rgb_conversion(rgb[1]),
         rgb_conversion(rgb[2]),
     ]
+}
+
+/// CIE XYZ → sRGB with a Bradford-free von-Kries-style adaptation to a given
+/// white point. Port of `XYZ_to_sRGB_WhitePoint` (cpdf_colorspace.cpp lines
+/// 385-412).
+///
+/// It builds `M = RGB_xyz · diag(RGB_xyz⁻¹ · white)`, the linear-sRGB→XYZ
+/// matrix scaled so the white point maps to `(1,1,1)`, then applies `M⁻¹` and
+/// the sampled sRGB transfer ([`rgb_conversion`]). A singular `M` (e.g. a
+/// white point with a zero component) yields black via [`mat3_inverse`]'s
+/// guard, matching PDFium.
+#[allow(dead_code)]
+pub(crate) fn xyz_to_srgb_white_point(
+    x: f32,
+    y: f32,
+    z: f32,
+    xw: f32,
+    yw: f32,
+    zw: f32,
+) -> [f32; 3] {
+    xyz_to_srgb_with_adaptation(x, y, z, white_point_adaptation_matrix(xw, yw, zw))
 }
 
 #[cfg(test)]

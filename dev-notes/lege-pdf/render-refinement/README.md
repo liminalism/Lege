@@ -1,8 +1,9 @@
 # Renderer refinement archive
 
-This is the single in-repository home for renderer development context after
-the 2026-07-25 move from `pdfium-port-plan/pdf-renderer` to
-`Lege-ecosystem/lege-pdf/render`.
+Historical renderer development context. It moved here from
+`lege-pdf/render/docs/refinement` so the crate tree keeps operational docs
+next to the code. The 2026-07-25 move into `lege-pdf/render` is the history
+this archive was written to record.
 
 Start with [CURRENT-STATE.md](CURRENT-STATE.md). It reconciles the latest
 Linux and Windows memories and separates still-relevant work from issues that
@@ -29,6 +30,7 @@ The remaining material is grouped by purpose:
 - `integration/` — the viewer-facing API change record.
 
 Operational documentation remains beside the code or tool it describes:
-`../../README.md`, `../../tools/README.md`, and crate-local README files.
+`../../../lege-pdf/render/README.md`, `../../../lege-pdf/render/tools/README.md`,
+and crate-local README files.
 The pre-move virtual workspace manifest is retained as
 `legacy-workspace-manifest.toml` for dependency and lint provenance only.

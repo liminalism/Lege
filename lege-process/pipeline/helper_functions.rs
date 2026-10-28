@@ -931,6 +931,7 @@ pub async fn await_stage_or_cancel_with_token(
                     for handle in abort_remaining {
                         handle.abort();
                     }
+                    crate::runtime_stats::drain_blocking_workers_on_cancel(stage_name).await;
                     return Err(anyhow::anyhow!(
                         "Processing cancelled during {}: {}",
                         stage_name,
@@ -1102,13 +1103,104 @@ fn drain_ready_values<T>(
     ready
 }
 
+/// Writer-queue byte reservation for one encoded page. It rides in the
+/// writer message and releases when the writer consumes the page, so a slow
+/// writer bounds queued payloads instead of holding the full raster budget.
+#[derive(Debug)]
+pub struct EncodedReservation {
+    _permit: tokio::sync::OwnedSemaphorePermit,
+    mb: u32,
+}
+
+impl EncodedReservation {
+    pub fn mb(&self) -> u32 {
+        self.mb
+    }
+}
+
+/// Queued-encoded-payload budget in MiB. Encoded pages are small next to
+/// rasters, so this only binds when the writer stalls behind very large
+/// pages; the default never blocks ordinary documents.
+pub fn encoded_budget_mb() -> usize {
+    std::env::var("LEGE_ENCODED_BUDGET_MB")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|&value| value > 0)
+        .unwrap_or(256)
+}
+
+/// Encoded payload bytes one page queues on the writer: element payloads
+/// plus the text layer and DjVu stencil, if present. Glyph-text placements
+/// are sub-megabyte and counted as zero.
+pub fn encoded_page_bytes(page: &crate::accumulator::Page) -> usize {
+    let mut bytes = page.hocr_text.as_ref().map_or(0, String::len);
+    bytes += page.binarized.as_ref().map_or(0, Vec::len);
+    for element in &page.elements {
+        bytes += match &element.content {
+            crate::accumulator::ContentType::EncodedImage { data, .. } => data.len(),
+            crate::accumulator::ContentType::Jbig2ImageWithGlobals {
+                page_data,
+                global_data,
+                ..
+            } => page_data.len() + global_data.len(),
+            crate::accumulator::ContentType::Jbig2Mask {
+                page_data,
+                global_data,
+                ..
+            } => page_data.len() + global_data.len(),
+            crate::accumulator::ContentType::GlyphText { .. } => 0,
+        };
+    }
+    bytes
+}
+
+/// Whole megabytes one page reserves from the encoded budget (at least one).
+pub fn encoded_charge_mb(page: &crate::accumulator::Page) -> u32 {
+    encoded_page_bytes(page)
+        .div_ceil(1024 * 1024)
+        .max(1)
+        .min(u32::MAX as usize) as u32
+}
+
+/// Reserve writer-queue bytes for one encoded page. A page bigger than the
+/// whole budget is admitted alone (and logged) rather than deadlocking the
+/// acquire.
+pub async fn reserve_encoded_bytes(
+    budget: &Arc<Semaphore>,
+    budget_mb: usize,
+    page_index: usize,
+    page: &crate::accumulator::Page,
+) -> Result<EncodedReservation> {
+    let charge_mb = encoded_charge_mb(page);
+    let clamped_mb = charge_mb.min(budget_mb.max(1).min(u32::MAX as usize) as u32);
+    if clamped_mb < charge_mb {
+        info_log!(
+            "Page {} queues ~{} MiB of encoded output, over the {} MiB encoded budget; admitting it alone",
+            page_index + 1,
+            charge_mb,
+            budget_mb.max(1),
+        );
+    }
+    let permit = budget
+        .clone()
+        .acquire_many_owned(clamped_mb)
+        .await
+        .map_err(|_| anyhow!("encoded output admission semaphore closed"))?;
+    Ok(EncodedReservation {
+        _permit: permit,
+        mb: clamped_mb,
+    })
+}
+
 /// Message sent to the PDF writer actor
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub enum WriterMessage {
-    /// Append a page to the PDF
+    /// Append a page to the PDF. The reservation releases when the writer
+    /// consumes the page; `None` for senders outside the byte governor.
     AppendPage {
         page: crate::accumulator::Page,
         page_index: usize,
+        reservation: Option<EncodedReservation>,
     },
     /// Supply the *source* document's bookmarks, to be resolved and written at
     /// finalize time (must arrive before Finalize).
@@ -1151,14 +1243,20 @@ impl PdfWriterHandle {
         }
     }
 
-    /// Send a page to be written to the PDF
+    /// Send a page to be written to the PDF, with its writer-queue byte
+    /// reservation when the sender admits encoded output.
     pub async fn send_page(
         &self,
         page: crate::accumulator::Page,
         page_index: usize,
+        reservation: Option<EncodedReservation>,
     ) -> Result<(), anyhow::Error> {
         self.sender
-            .send(WriterMessage::AppendPage { page, page_index })
+            .send(WriterMessage::AppendPage {
+                page,
+                page_index,
+                reservation,
+            })
             .await
             .map_err(|_| self.stopped())?;
         Ok(())
@@ -1248,7 +1346,7 @@ pub fn spawn_pdf_writer_actor(
         failure: Arc::clone(&failure),
     };
 
-    let task = tokio::spawn(async move {
+    let task = crate::runtime_stats::spawn_blocking(move || {
         // Recorded before the receiver is dropped, so a page worker that
         // finds the channel closed reports the cause and not the symptom.
         let fail = |error: anyhow::Error| -> anyhow::Error {
@@ -1301,15 +1399,25 @@ pub fn spawn_pdf_writer_actor(
 
         info_log!("[PdfWriterActor] Started (lege-pdf-write), waiting for pages...");
 
-        while let Some(msg) = rx.recv().await {
+        while let Some(msg) = rx.blocking_recv() {
             // The writer FREES memory by flushing pages to disk on arrival, so
             // it never blocks its own recv loop. Channel capacity is the
             // backpressure. Pages are written in arrival order; logical order
             // is restored by the page tree at finalize.
             match msg {
-                WriterMessage::AppendPage { page, page_index } => {
+                WriterMessage::AppendPage {
+                    page,
+                    page_index,
+                    reservation,
+                } => {
                     let _writer_stage =
                         crate::runtime_stats::enter_stage(crate::runtime_stats::Stage::Writer);
+                    let _queued_tracked = reservation.as_ref().map(|reservation| {
+                        crate::runtime_stats::track_memory_bytes(
+                            crate::runtime_stats::MemoryGauge::QueuedEncoded,
+                            reservation.mb() as usize,
+                        )
+                    });
                     let (artifact, globals) =
                         match crate::pdf_artifact::page_to_artifact(&page, embedded_available) {
                             Ok(v) => v,
@@ -1732,13 +1840,13 @@ mod tests {
         };
 
         handle
-            .send_page(empty_page(0), 0)
+            .send_page(empty_page(0), 0, None)
             .await
             .expect("first send");
 
         let second_send = tokio::spawn({
             let handle = handle.clone();
-            async move { handle.send_page(empty_page(1), 1).await }
+            async move { handle.send_page(empty_page(1), 1, None).await }
         });
         let mut second_send = Box::pin(second_send);
 
@@ -1774,5 +1882,66 @@ mod tests {
             std::fs::read(output).expect("preserved destination"),
             b"last-good-output"
         );
+    }
+
+    #[test]
+    fn encoded_charge_counts_payloads_text_and_stencil() {
+        use super::{encoded_charge_mb, encoded_page_bytes};
+
+        let mut page = empty_page(0);
+        assert_eq!(encoded_page_bytes(&page), 0);
+        assert_eq!(encoded_charge_mb(&page), 1);
+
+        page.elements.push(crate::accumulator::ContentElement {
+            x: 0.0,
+            y: 0.0,
+            width: 10.0,
+            height: 10.0,
+            content: crate::accumulator::ContentType::EncodedImage {
+                data: std::sync::Arc::from(vec![0u8; 100]),
+                pixel_width: 10,
+                pixel_height: 10,
+                format: "jpeg".to_string(),
+            },
+        });
+        page.hocr_text = Some("x".repeat(50));
+        page.binarized = Some(vec![0u8; 25]);
+        assert_eq!(encoded_page_bytes(&page), 175);
+        assert_eq!(encoded_charge_mb(&page), 1);
+
+        page.elements.push(crate::accumulator::ContentElement {
+            x: 0.0,
+            y: 0.0,
+            width: 10.0,
+            height: 10.0,
+            content: crate::accumulator::ContentType::Jbig2ImageWithGlobals {
+                page_data: std::sync::Arc::from(vec![0u8; 2 * 1024 * 1024]),
+                global_data: std::sync::Arc::from(vec![0u8; 1024]),
+                pixel_width: 10,
+                pixel_height: 10,
+            },
+        });
+        assert_eq!(encoded_charge_mb(&page), 3);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn encoded_reservation_releases_on_drop_and_clamps_oversize() {
+        use super::{encoded_budget_mb, reserve_encoded_bytes};
+        use std::sync::Arc;
+        use tokio::sync::Semaphore;
+
+        assert!(encoded_budget_mb() >= 1);
+        let budget = Arc::new(Semaphore::new(2));
+        let mut page = empty_page(0);
+        page.hocr_text = Some("x".repeat(3 * 1024 * 1024));
+
+        // 3 MiB page against a 2 MiB budget: admitted alone, not deadlocked.
+        let reservation = reserve_encoded_bytes(&budget, 2, 0, &page)
+            .await
+            .expect("oversized encoded page admitted");
+        assert_eq!(reservation.mb(), 2);
+        assert_eq!(budget.available_permits(), 0);
+        drop(reservation);
+        assert_eq!(budget.available_permits(), 2);
     }
 }

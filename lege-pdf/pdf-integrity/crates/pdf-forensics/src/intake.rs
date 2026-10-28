@@ -541,6 +541,6 @@ fn pending_sections() -> Vec<PendingSection> {
     )]
 }
 
-fn hex_sha256(bytes: &[u8]) -> String {
+pub(crate) fn hex_sha256(bytes: &[u8]) -> String {
     crate::hashes::hex_sha256(bytes)
 }

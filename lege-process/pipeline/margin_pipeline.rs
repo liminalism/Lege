@@ -17,6 +17,59 @@ use crate::pipeline::source::PageSource;
 use crate::progress::ProgressTracker;
 use crate::{info_log, warn_log};
 
+/// Width the margin pass reduces every page to before analysis.
+pub(crate) const MARGIN_ANALYSIS_WIDTH: u32 = 640;
+
+/// Margin-pass workers: never more than the caller allows, and never more
+/// than the GPU pool can serve at once — jobs past the session count only
+/// queue full-resolution pages behind inference. Without a GPU pool there is
+/// no inference to wait for, so the caller's limit stands alone. In
+/// particular a GPU pool must not widen a user-selected limit.
+pub(crate) fn margin_analysis_concurrency(
+    max_in_flight: usize,
+    gpu_sessions: Option<usize>,
+) -> usize {
+    match gpu_sessions {
+        Some(sessions) => max_in_flight.min(sessions).max(1),
+        None => max_in_flight.max(1),
+    }
+}
+
+/// Size one margin-analysis job against the page-memory budget. The working
+/// set is the small analysis raster, but decode-then-resize sources still
+/// allocate the full native decode before the downscale, so the native size
+/// drives the charge there.
+fn estimate_margin_job_charge(
+    source: &Arc<dyn PageSource>,
+    page_index: usize,
+    budget_mb: usize,
+) -> crate::pipeline::source::PageMemoryCharge {
+    let native = source.native_page_size(page_index);
+    let analysis_height = native
+        .and_then(|(width, height)| {
+            (width > 0 && height > 0).then(|| {
+                (u64::from(MARGIN_ANALYSIS_WIDTH) * u64::from(height) / u64::from(width))
+                    .clamp(1, u64::from(u32::MAX)) as u32
+            })
+        })
+        .unwrap_or(960);
+    // The margin job works at analysis resolution; only decode-then-resize
+    // sources additionally allocate their native size. A directly-rendered
+    // source reports full render dims, which must not size this charge.
+    let native_decode = if source.decodes_at_native_size() {
+        native
+    } else {
+        None
+    };
+    crate::pipeline::source::estimate_page_charge_mb(
+        MARGIN_ANALYSIS_WIDTH,
+        analysis_height,
+        native_decode,
+        source.decodes_at_native_size(),
+        budget_mb,
+    )
+}
+
 #[derive(Clone, Debug)]
 pub(crate) enum CachedDetections {
     Missing,
@@ -86,12 +139,22 @@ enum AnalysisJobResult {
 }
 
 fn prepare_analysis_page(page_index: usize, original_image: RgbImage) -> AnalysisPreparedPage {
-    const ANALYSIS_WIDTH: u32 = 640;
-
     let aspect_ratio = original_image.width() as f32 / original_image.height().max(1) as f32;
-    let analysis_height = (ANALYSIS_WIDTH as f32 / aspect_ratio).round().max(1.0) as u32;
+    let analysis_height = (MARGIN_ANALYSIS_WIDTH as f32 / aspect_ratio)
+        .round()
+        .max(1.0) as u32;
+    if original_image.width() == MARGIN_ANALYSIS_WIDTH && original_image.height() == analysis_height
+    {
+        // Already at analysis resolution (a source that renders directly at
+        // the analysis size). Resizing would only burn CPU for the same
+        // pixels.
+        return AnalysisPreparedPage {
+            page_index,
+            analysis_image: original_image,
+        };
+    }
     let params = crate::resize::ResizeParams {
-        target_width: ANALYSIS_WIDTH,
+        target_width: MARGIN_ANALYSIS_WIDTH,
         target_height: analysis_height,
         method: crate::resize::ResizeMethod::Bell,
         letterbox: false,
@@ -106,7 +169,7 @@ fn prepare_analysis_page(page_index: usize, original_image: RgbImage) -> Analysi
         3,
     )
     .ok()
-    .and_then(|bytes| RgbImage::from_raw(ANALYSIS_WIDTH, analysis_height, bytes))
+    .and_then(|bytes| RgbImage::from_raw(MARGIN_ANALYSIS_WIDTH, analysis_height, bytes))
     .unwrap_or_else(|| {
         warn_log!(
             "Page {}: resize for margin analysis failed; using original.",
@@ -141,10 +204,8 @@ fn build_margin_analysis_future(
                 let inference_image = build_inference_image(&analysis_image, &spec)
                     .unwrap_or_else(|_| analysis_image.clone());
                 handle
-                    .submit(page_index, Arc::new(inference_image))
-                    .await?
+                    .detect(page_index, Arc::new(inference_image))
                     .await
-                    .map_err(|_| anyhow!("Inference actor dropped margin-analysis response"))?
                     .unwrap_or_default()
             } else {
                 Vec::new()
@@ -205,6 +266,8 @@ pub(crate) async fn perform_document_margin_analysis(
     max_in_flight: usize,
     progress: &ProgressTracker,
     cancellation: lege_pdf_read::CancellationToken,
+    memory_budget: Arc<tokio::sync::Semaphore>,
+    memory_budget_mb: usize,
 ) -> Result<(DocumentMarginAnalysis, Vec<CachedDetections>)> {
     info_log!("[Margin-Analysis] Phase 1: Analyzing document margins (Low-Res Pass)...");
     progress.update(crate::progress::ProcessingStatus::MarginPass1Analyzing);
@@ -213,13 +276,12 @@ pub(crate) async fn perform_document_margin_analysis(
     let mut detection_cache = vec![CachedDetections::Missing; source.page_count()];
     let mut pending: FuturesUnordered<BoxFuture<'static, Result<AnalysisJobResult>>> =
         FuturesUnordered::new();
-    let analysis_concurrency = max_in_flight
-        .max(
-            inference_handle
-                .as_ref()
-                .map_or(1, |handle| handle.session_count()),
-        )
-        .max(1);
+    let analysis_concurrency = margin_analysis_concurrency(
+        max_in_flight,
+        inference_handle
+            .as_ref()
+            .map(|handle| handle.session_count()),
+    );
     info_log!(
         "[Margin-Analysis] Low-res page workers: {} (GPU sessions: {})",
         analysis_concurrency,
@@ -251,6 +313,11 @@ pub(crate) async fn perform_document_margin_analysis(
     let page_end = page_range.end;
     while next_page < page_end || !pending.is_empty() {
         if cancellation.is_cancelled() {
+            // Drop the pending analysis futures, then wait for their already
+            // started blocking workers: dropping the futures alone does not
+            // stop a decode, prep, or inference worker mid-flight.
+            drop(std::mem::take(&mut pending));
+            crate::runtime_stats::drain_blocking_workers_on_cancel("margin analysis").await;
             return Err(anyhow!("Margin analysis cancelled"));
         }
         while next_page < page_end && pending.len() < analysis_concurrency {
@@ -260,9 +327,28 @@ pub(crate) async fn perform_document_margin_analysis(
             let config = config.clone();
             let inference_handle = inference_handle.clone();
             let cancellation = cancellation.clone();
+            let memory_budget = memory_budget.clone();
             pending.push(Box::pin(async move {
+                // Same byte governor as the page jobs: the analysis raster is
+                // small, but image sources still decode at native size first.
+                let charge = estimate_margin_job_charge(&source, page_index, memory_budget_mb);
+                if charge.oversized {
+                    crate::pipeline::source::note_oversized_page(
+                        page_index,
+                        &charge,
+                        memory_budget_mb,
+                    );
+                }
+                let _permit = memory_budget
+                    .acquire_many_owned(charge.acquire_mb)
+                    .await
+                    .map_err(|_| anyhow!("page memory admission semaphore closed"))?;
+                let _tracked = crate::runtime_stats::track_memory_bytes(
+                    crate::runtime_stats::MemoryGauge::PageWorkingSet,
+                    charge.acquire_mb as usize,
+                );
                 let source_page = match source
-                    .load_page_cancellable(page_index, cancellation.clone())
+                    .load_analysis_page(page_index, MARGIN_ANALYSIS_WIDTH, cancellation.clone())
                     .await
                 {
                     Ok(page) => page,
@@ -740,10 +826,92 @@ mod tests {
             1,
             &progress,
             cancellation,
+            Arc::new(tokio::sync::Semaphore::new(1024)),
+            1024,
         )
         .await;
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn gpu_pool_never_widens_the_requested_limit() {
+        // One requested worker stays one worker even with two GPU sessions.
+        assert_eq!(margin_analysis_concurrency(1, Some(2)), 1);
+        // Jobs past the session count would only queue behind inference.
+        assert_eq!(margin_analysis_concurrency(4, Some(2)), 2);
+        assert_eq!(margin_analysis_concurrency(4, Some(4)), 4);
+        // Without a GPU pool there is no inference to wait for.
+        assert_eq!(margin_analysis_concurrency(4, None), 4);
+        assert_eq!(margin_analysis_concurrency(1, None), 1);
+    }
+
+    #[test]
+    fn margin_charge_covers_native_decode_for_image_sources() {
+        use crate::pipeline::source::PageSource;
+        use std::sync::Arc;
+
+        struct NativeSource;
+        #[async_trait::async_trait]
+        impl PageSource for NativeSource {
+            fn page_count(&self) -> usize {
+                1
+            }
+            fn source_concurrency(&self) -> usize {
+                1
+            }
+            fn native_page_size(&self, _page_index: usize) -> Option<(u32, u32)> {
+                Some((6000, 8000))
+            }
+            fn decodes_at_native_size(&self) -> bool {
+                true
+            }
+            async fn load_page(
+                &self,
+                _page_index: usize,
+            ) -> Result<crate::pipeline::source::SourcePage> {
+                panic!("charge sizing must not load a page");
+            }
+        }
+
+        let source: Arc<dyn PageSource> = Arc::new(NativeSource);
+        let charge = estimate_margin_job_charge(&source, 0, 8192);
+        // The analysis raster is small, but the job still decodes ~137 MiB
+        // before the downscale.
+        assert!(charge.estimated_mb > 137);
+        assert!(!charge.oversized);
+    }
+
+    #[test]
+    fn margin_charge_for_rendered_source_stays_at_analysis_size() {
+        use crate::pipeline::source::PageSource;
+        use std::sync::Arc;
+
+        struct RenderedSource;
+        #[async_trait::async_trait]
+        impl PageSource for RenderedSource {
+            fn page_count(&self) -> usize {
+                1
+            }
+            fn source_concurrency(&self) -> usize {
+                1
+            }
+            fn native_page_size(&self, _page_index: usize) -> Option<(u32, u32)> {
+                Some((1800, 2400))
+            }
+            async fn load_page(
+                &self,
+                _page_index: usize,
+            ) -> Result<crate::pipeline::source::SourcePage> {
+                panic!("charge sizing must not load a page");
+            }
+        }
+
+        let source: Arc<dyn PageSource> = Arc::new(RenderedSource);
+        let charge = estimate_margin_job_charge(&source, 0, 8192);
+        // Renders directly at 640 wide: full render dims must not size this.
+        assert_eq!(charge.charged_work_pixels, 640 * 853);
+        assert!(!charge.oversized);
     }
 
     #[test]

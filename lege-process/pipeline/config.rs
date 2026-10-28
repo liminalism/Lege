@@ -415,6 +415,11 @@ pub enum PageMode {
     /// into a JBIG2/JB2 ink-core mask painted over a JP2/IW44 grayscale
     /// background, preserving antialiasing. Image regions stay JP2/IW44.
     Grayscale,
+    /// Preservation: the page keeps its own colour and tone. Nothing is
+    /// cleaned, stretched or converted to luma; a Sauvola ink mask is
+    /// encoded as JBIG2/JB2 over the page itself, ink whitened out, as an
+    /// RGB JP2/IW44 background. Image regions stay original colour.
+    Preserved,
 }
 
 #[derive(Clone, Debug)]
@@ -484,7 +489,7 @@ pub struct PipelineConfig {
     pub(crate) slow_ocr: bool,
     /// Body-text rendering mode (bilevel vs grayscale-clean/MRC).
     pub(crate) page_mode: PageMode,
-    /// MRC/grayscale tuning (only used when `page_mode == Grayscale`).
+    /// MRC tuning (used when `page_mode` is `Grayscale` or `Preserved`).
     /// JP2 quality for the grayscale background layer. Q45 preserves the
     /// antialiasing halo of the subsampled background (see FINDINGS round 7).
     pub(crate) mrc_bg_quality: u8,
@@ -746,6 +751,16 @@ impl PipelineConfig {
     /// True when body text should use the grayscale-clean / MRC path.
     pub fn is_grayscale_mode(&self) -> bool {
         self.page_mode == PageMode::Grayscale
+    }
+    /// True in preservation mode: MRC layering over the page's own colour,
+    /// with no grey cleaning.
+    pub fn is_preserve_mode(&self) -> bool {
+        self.page_mode == PageMode::Preserved
+    }
+    /// True when the page is written as MRC layers (a continuous-tone
+    /// background under an ink stencil): grayscale and preservation mode.
+    pub fn is_mrc_mode(&self) -> bool {
+        matches!(self.page_mode, PageMode::Grayscale | PageMode::Preserved)
     }
     pub fn mrc_bg_quality(&self) -> u8 {
         self.mrc_bg_quality
