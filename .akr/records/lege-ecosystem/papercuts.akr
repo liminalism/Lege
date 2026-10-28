@@ -1338,6 +1338,18 @@ record lege-ecosystem.papercut.creating-the-publication-work-record-first/1 : pa
     created_at 2026-08-23
 }
 
+record lege-ecosystem.papercut.deleting-the-freya-gui-looked-like-removing/1 : papercut {
+    title "Deleting the Freya GUI looked like removing lege-process/GUI/Freya, but…"
+    state verified
+    statement """
+        Deleting the Freya GUI looked like removing lege-process/GUI/Freya, but PixelKit still compiled ten support modules and build.rs through #[path] and build = "../Freya/build.rs". The directory cannot be removed until those files move into the PixelKit crate.
+        """
+    observed_at git:b62c44dacc41d4107aa1e9b72e42b7162c13035d
+    about "lege-process GUI"
+    author "grok"
+    created_at 2026-10-28
+}
+
 record lege-ecosystem.papercut.djvu-page-parallel-test-shared-a-pid-keyed-scratch-path/1 : papercut {
     title "djvulibrust's page-parallel test raced itself on a pid-keyed scratch path"
     state superseded

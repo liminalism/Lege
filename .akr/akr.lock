@@ -5,8 +5,7 @@ build {
     tool "akr 0.6.1"
     grammar "0.1"
     vocabulary "0.2"
-    commit git:728a9ae02fa171f4d0dd6402f2f34c20777944b7
-    source_graph "sha256:abf84b3faad318e158122c93c08b9cce568505eceff17447b61ac2eb82b76cca"
+    source_graph "sha256:0cf484cd5ec14cb6074addf04bd7447552e90894f917498442f6638a03f23b65"
 }
 
 source ".akr/project.akr" {
@@ -80,8 +79,8 @@ source ".akr/records/lege-ecosystem/observations.akr" {
 }
 
 source ".akr/records/lege-ecosystem/papercuts.akr" {
-    hash "sha256:f3cc01367f3f574a86440ac5172a77d9f85a65cb6341e620d653ad57a358c756"
-    records 146
+    hash "sha256:5a60ec70fac96fbc02ff0ca77e3affd3c642fd0887c2924590c4dfd274a48dc9"
+    records 147
 }
 
 source ".akr/records/lege-ecosystem/policies.akr" {
@@ -1920,6 +1919,11 @@ seal @lege-ecosystem.papercut.configuring-the-lean-turboocr-tensorrt-text/1 {
 seal @lege-ecosystem.papercut.creating-the-publication-work-record-first/1 {
     state verified
     hash "sha256:823e10fd684fcdb33dad23b67b35f4f6881d386285ee41b7baa22c2ad3864dc4"
+}
+
+seal @lege-ecosystem.papercut.deleting-the-freya-gui-looked-like-removing/1 {
+    state verified
+    hash "sha256:5fb2cb97b3da3ae1babfa5d5a72904b713189576ed611ab2c7f616fcc777d649"
 }
 
 seal @lege-ecosystem.papercut.djvu-page-parallel-test-shared-a-pid-keyed-scratch-path/1 {
