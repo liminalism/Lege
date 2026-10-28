@@ -7,7 +7,7 @@
 
 What should not be trusted without re-checking: records the build flagged `stale` or `at_risk`. Neither flag means a record is wrong (D-003); both mean look at it. This view is generated on every successful build, including one that exits 0 with a long queue (D-024). An empty file on an active project is more often a sign the `watches` globs are wrong than a sign the knowledge is perfect.
 
-## Stale (3)
+## Stale (6)
 
 ### Windows OCR first-pass benchmark on a 200-page scanned book
 
@@ -27,6 +27,52 @@ What should not be trusted without re-checking: records the build flagged `stale
 
 **Cause** — `watches "lege-process/core/pdf_artifact.rs"` was matched by `3299468e`, which touched `lege-process/core/pdf_artifact.rs`.
 
-## At risk (0)
+### DocLayout-M underdetects text and some images
 
-_(none)_
+`verified` · `@lege-ecosystem.observation.doclayout-m-underdetects-text-and-images/3` · observation · **stale** · [DocLayout-M underdetects text and some images](CURRENT-STATE.md#doclayout-m-underdetects-text-and-some-images)
+
+**Cause** — `watches "lege-process/ocr/fast.rs"` was matched by `728a9ae0`, which touched `lege-process/ocr/fast.rs`.
+
+### Grayscale/MRC mode makes truetyping 3.3x smaller and cleaner on the crusades scan; the win is the MRC despeckle, not antialiasing
+
+`verified` · `@lege-ecosystem.observation.grayscale-mode-makes-truetyping-smaller-and-cleaner/2` · observation · **stale** · [Grayscale/MRC mode makes truetyping 3.3x smaller and cleaner on the crusades scan; the win is the MRC despeckle, not antialiasing](CURRENT-STATE.md#grayscalemrc-mode-makes-truetyping-33x-smaller-and-cleaner-on-the-crusades-scan-the-win-is-the-mrc-despeckle-not-antialiasing)
+
+**Cause** — `watches "lege-process/core/clean_gray.rs"` was matched by `728a9ae0`, which touched `lege-process/core/clean_gray.rs`.
+
+### Truetyping's shared glyph dictionary serialized every page's matching behind one mutex, and that lock was the whole critical path
+
+`verified` · `@lege-ecosystem.observation.truetyping-dictionary-lock-serialized-every-page/2` · observation · **stale** · [Truetyping's shared glyph dictionary serialized every page's matching behind one mutex, and that lock was the whole critical path](CURRENT-STATE.md#truetypings-shared-glyph-dictionary-serialized-every-pages-matching-behind-one-mutex-and-that-lock-was-the-whole-critical-path)
+
+**Cause** — `watches "lege-process/pipeline/pdf_tokio_pipeline.rs"` was matched by `728a9ae0`, which touched `lege-process/pipeline/pdf_tokio_pipeline.rs`.
+
+## At risk (5)
+
+### JBIG2 is the Freya GUI's default PDF text encoder again; truetyping is the opt-in checkbox
+
+`proposed` · `@lege-ecosystem.decision.jbig2-is-the-default-pdf-text-format-again/1` · decision · **depth 1** · [JBIG2 is the Freya GUI's default PDF text encoder again; truetyping is the opt-in checkbox](DECISION-HISTORY.md#revision-1--jbig2-is-the-freya-guis-default-pdf-text-encoder-again-truetyping-is-the-opt-in-checkbox)
+
+**Via** `supported_by` → `@lege-ecosystem.observation.truetyping-dictionary-lock-serialized-every-page/2` (stale: `watches "lege-process/pipeline/pdf_tokio_pipeline.rs"` was matched by `728a9ae0`, which touched `lege-process/pipeline/pdf_tokio_pipeline.rs`.)
+
+### Dropping isolated specks before glyph matching removes 18 percent of occurrences and 7 percent of bytes on the crusades scan
+
+`verified` · `@lege-ecosystem.evidence.glyphfont-speck-filter-crusades-20260906/1` · evidence · **depth 1** · [Dropping isolated specks before glyph matching removes 18 percent of occurrences and 7 percent of bytes on the crusades scan](CURRENT-STATE.md#dropping-isolated-specks-before-glyph-matching-removes-18-percent-of-occurrences-and-7-percent-of-bytes-on-the-crusades-scan)
+
+**Via** `derived_from` → `@lege-ecosystem.observation.grayscale-mode-makes-truetyping-smaller-and-cleaner/2` (stale: `watches "lege-process/core/clean_gray.rs"` was matched by `728a9ae0`, which touched `lege-process/core/clean_gray.rs`.)
+
+### Rasterizing truetyping's fitted glyph outlines into a JBIG2 text layer is feasible with existing pieces and would give regular glyphs at JBIG2 size
+
+`verified` · `@lege-ecosystem.assessment.glyph-outlines-rasterized-into-a-jbig2-layer/1` · assessment · **depth 2** · [Rasterizing truetyping's fitted glyph outlines into a JBIG2 text layer is feasible with existing pieces and would give regular glyphs at JBIG2 size](CURRENT-STATE.md#rasterizing-truetypings-fitted-glyph-outlines-into-a-jbig2-text-layer-is-feasible-with-existing-pieces-and-would-give-regular-glyphs-at-jbig2-size)
+
+**Via** `derived_from` → `@lege-ecosystem.decision.jbig2-is-the-default-pdf-text-format-again/1` → `@lege-ecosystem.observation.truetyping-dictionary-lock-serialized-every-page/2` (stale: `watches "lege-process/pipeline/pdf_tokio_pipeline.rs"` was matched by `728a9ae0`, which touched `lege-process/pipeline/pdf_tokio_pipeline.rs`.)
+
+### Truetyping is skipped when the source's ink is already one bit; source masks pass through
+
+`proposed` · `@lege-ecosystem.decision.truetyping-leaves-bilevel-sources-alone/1` · decision · **depth 2** · [Truetyping is skipped when the source's ink is already one bit; source masks pass through](DECISION-HISTORY.md#revision-1--truetyping-is-skipped-when-the-sources-ink-is-already-one-bit-source-masks-pass-through)
+
+**Via** `depends_on` → `@lege-ecosystem.decision.jbig2-is-the-default-pdf-text-format-again/1` → `@lege-ecosystem.observation.truetyping-dictionary-lock-serialized-every-page/2` (stale: `watches "lege-process/pipeline/pdf_tokio_pipeline.rs"` was matched by `728a9ae0`, which touched `lege-process/pipeline/pdf_tokio_pipeline.rs`.)
+
+### Truetyping on a lege JBIG2 output keeps the text as JBIG2 at the requested height
+
+`verified` · `@lege-ecosystem.evidence.truetyping-skips-a-jbig2-source-20260906/1` · evidence · **depth 3** · [Truetyping on a lege JBIG2 output keeps the text as JBIG2 at the requested height](CURRENT-STATE.md#truetyping-on-a-lege-jbig2-output-keeps-the-text-as-jbig2-at-the-requested-height)
+
+**Via** `derived_from` → `@lege-ecosystem.decision.truetyping-leaves-bilevel-sources-alone/1` → `@lege-ecosystem.decision.jbig2-is-the-default-pdf-text-format-again/1` → `@lege-ecosystem.observation.truetyping-dictionary-lock-serialized-every-page/2` (stale: `watches "lege-process/pipeline/pdf_tokio_pipeline.rs"` was matched by `728a9ae0`, which touched `lege-process/pipeline/pdf_tokio_pipeline.rs`.)

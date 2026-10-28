@@ -327,6 +327,8 @@ PP-DocLayout-M on Structures.pdf (Braudel scan) systematically underdetects: who
 
 **supersedes** `@lege-ecosystem.observation.doclayout-m-underdetects-text-and-images/2` · **verified_by** `@lege-ecosystem.evidence.stale-observation-requeue-20260908/1`
 
+> **Stale** — `watches "lege-process/ocr/fast.rs"` was matched by `728a9ae0`, which touched `lege-process/ocr/fast.rs`. See [REVIEW-REQUIRED.md](REVIEW-REQUIRED.md#doclayout-m-underdetects-text-and-some-images).
+
 ### Grayscale/MRC mode makes truetyping 3.3x smaller and cleaner on the crusades scan; the win is the MRC despeckle, not antialiasing
 
 `verified` · `@lege-ecosystem.observation.grayscale-mode-makes-truetyping-smaller-and-cleaner/2` · scope `path "lege-process/core/clean_gray.rs"`, `path "lege-process/encoding/glyphfont.rs"`
@@ -334,6 +336,8 @@ PP-DocLayout-M on Structures.pdf (Braudel scan) systematically underdetects: who
 crusadeswholesto0000lamb_1.pdf pages 1-41 (RGB JPEG scan), same debug-fast build on 2026-09-06: truetyping bilevel 2.56 MB in 18.2 s with 13087 distinct shapes of which 9792 were used once; truetyping plus --grayscale 0.77 MB in 13.9 s with 1347 distinct shapes; jbig2 plus --grayscale 1.62 MB in 7.7 s; bilevel jbig2 about 1.0 MB. The bilevel Sauvola mask keeps paper grain as thousands of small components that the font stores as one-off outlines, while clean_page_for_mrc thresholds a cleaned page and drops small components, so the grayscale run's glyph text is crisp on a faint JP2 background. Truetyping does not conflict with grayscale mode: the ink mask feeds the glyph session and the JP2 background sits under the vector text.
 
 **supersedes** `@lege-ecosystem.observation.grayscale-mode-makes-truetyping-smaller-and-cleaner/1` · **verified_by** `@lege-ecosystem.evidence.stale-observation-requeue-20260908/1`
+
+> **Stale** — `watches "lege-process/core/clean_gray.rs"` was matched by `728a9ae0`, which touched `lege-process/core/clean_gray.rs`. See [REVIEW-REQUIRED.md](REVIEW-REQUIRED.md#grayscalemrc-mode-makes-truetyping-33x-smaller-and-cleaner-on-the-crusades-scan-the-win-is-the-mrc-despeckle-not-antialiasing).
 
 ### JBIG2 symbol substitution is lossy, and its size win depends on content
 
@@ -374,6 +378,8 @@ The earlier finding that a Paddle/WGPU v6 model pack "failed detector constructi
 On the 886-page archive.org scan crusadeswholesto0000lamb_1.pdf (RGB JPEG pages, traced at 2400 px), truetyping took 17.4 s for 41 pages and 72.8 s for 201 pages where CCITT4 took 5.1 s for the same 41 pages and 35.3 s for the whole book. Rendering (1.7 s total) and binarization were not the cost. GlyphFontSession::process_page_pixels matched a page's 5000 components against the document dictionary while holding the dictionary mutex, single-threaded; the strict search alone was 38 s of the 73 s wall on 201 pages, and the per-instance cost grew with the dictionary (273 candidates per instance at 41 pages, 400 at 200). The four page workers spent most of their time waiting for the lock. Fix: the per-component search is a read-only parallel probe (rayon, one Comparator per thread) and only folding the answers (votes, refreshes, inserts) runs in sequence; a miss is re-searched only among the prototypes the page changed; the end-of-document alias passes probe in parallel the same way; banks finalize concurrently; the bucket index uses a multiplicative hasher. After: 41 pages 8.5 s, 201 pages 25.9 s, the whole book 2 min 0 s, with per-page glyph extraction flat at 143 to 168 ms across the book (98 s of pages, 19 s of finalize, font build and write for 22 font banks). A 65533-id bank fills in roughly 40 pages of this book: 41 pages made 13691 distinct shapes but 41794 glyph ids (13471 position variants, 4307 compounds, 8529 text variants), so the full book carries 22 fonts totalling 41 MB of a 45 MB output; glyph-id consumption by variants, not matching speed, is now the format's largest cost on long books.
 
 **supersedes** `@lege-ecosystem.observation.truetyping-dictionary-lock-serialized-every-page/1` · **verified_by** `@lege-ecosystem.evidence.stale-observation-requeue-20260908/1`
+
+> **Stale** — `watches "lege-process/pipeline/pdf_tokio_pipeline.rs"` was matched by `728a9ae0`, which touched `lege-process/pipeline/pdf_tokio_pipeline.rs`. See [REVIEW-REQUIRED.md](REVIEW-REQUIRED.md#truetypings-shared-glyph-dictionary-serialized-every-pages-matching-behind-one-mutex-and-that-lock-was-the-whole-critical-path).
 
 ### All ten findings of the 2026-09-05 TrueTyping/halftone review are fixed and corpus-validated
 
@@ -454,6 +460,8 @@ The current Windows release is viable for an internal WinOCR-based tester instal
 Every piece exists: PageAnalysis/GlyphDictionary give per-page placements of majority-voted prototypes at the 2400 px working height, vectorize fits quadratic curves to 0.6 px and rasterize (nonzero winding, pixel-centre sampling) already draws them back, and encode_base_layer takes any bilevel page. A new text-layer option would, per page, paint each placed prototype's fitted outline at output scale (1200-1600 px) onto a white page at positions snapped to the output grid, add the page residual downsampled from the binarized page, and hand the result to the JBIG2 symbol encoder; identical rasters per prototype make the symbol classifier's job exact, so dictionaries shrink. Costs: glyph analysis 140-170 ms/page on top of JBIG2, a scanline rasterizer with area coverage for the downscale (rasterize samples centres only), and no font, so the 65533-id bank limit disappears. The edges are regular rather than smooth: a bilevel layer at device resolution cannot carry antialiasing; the smoothness truetyping shows comes from the reader rendering outlines. Not a size win over plain JBIG2 on clean pages; a quality and consistency win on noisy scans. Not implemented as of 2026-09-06.
 
 **derived_from** `@lege-ecosystem.decision.jbig2-is-the-default-pdf-text-format-again/1`
+
+> **At risk** at depth 2 via `derived_from` → `@lege-ecosystem.decision.jbig2-is-the-default-pdf-text-format-again/1` → `@lege-ecosystem.observation.truetyping-dictionary-lock-serialized-every-page/2` (stale: `watches "lege-process/pipeline/pdf_tokio_pipeline.rs"` was matched by `728a9ae0`, which touched `lege-process/pipeline/pdf_tokio_pipeline.rs`.). See [REVIEW-REQUIRED.md](REVIEW-REQUIRED.md#rasterizing-truetypings-fitted-glyph-outlines-into-a-jbig2-text-layer-is-feasible-with-existing-pieces-and-would-give-regular-glyphs-at-jbig2-size).
 
 ### jp2lam photographic quality limited by MSE-only, disabled-perceptual, size-matched rate control
 
@@ -1207,6 +1215,8 @@ lege lib 317 passed / 1 ignored; pdf-render-cpu and lege-pdf-read suites green i
 PageAnalysis::of now drops a component that is grain: at most dpi^2/24000 ink pixels anywhere (2 at 240 dpi, cjb2's own 3 at 300), or at most dpi^2/4800 pixels (12 at 240) when it is no more than a quarter the page's upper-quartile component side and has no other ink within dpi/20 pixels of its box. Before: 224855 occurrences, 13087 shapes, 2.17 MB font, 2.56 MB PDF, 14.7 s. After: 184452 occurrences, 40403 specks dropped, 13060 shapes, 2.12 MB font, 2.38 MB PDF, 10.4 s. Full stops and tittles survive on page 20. The one-off shapes that dominate the font are not specks: of 11122 shapes used once, 5164 are letter-sized (17-64 px) unmatched impressions and 5782 are 4-16 px fragments, against 472 reused letter-sized prototypes.
 
 **derived_from** `@lege-ecosystem.observation.grayscale-mode-makes-truetyping-smaller-and-cleaner/2`
+
+> **At risk** at depth 1 via `derived_from` → `@lege-ecosystem.observation.grayscale-mode-makes-truetyping-smaller-and-cleaner/2` (stale: `watches "lege-process/core/clean_gray.rs"` was matched by `728a9ae0`, which touched `lege-process/core/clean_gray.rs`.). See [REVIEW-REQUIRED.md](REVIEW-REQUIRED.md#dropping-isolated-specks-before-glyph-matching-removes-18-percent-of-occurrences-and-7-percent-of-bytes-on-the-crusades-scan).
 
 ### Glyph font Stage 2 unit tests
 
@@ -2125,6 +2135,8 @@ lege lib 323 passed / 1 ignored, Freya GUI 43, writer 59, reader 13, ipc 2, expo
 Log line: The source's ink is already bilevel (1200 px): truetyping is skipped and the text stays JBIG2. Output 0.56 MB for 20 pages in 8 s, pages 1200 px tall with 18-20 content operations each (an image, no glyph runs, no font); the same build on the RGB scan traces glyphs at 2400 px with 480-660 operations per page. Config test leaving_truetyping_gives_the_requested_height_back and the 344-test lege lib suite pass.
 
 **derived_from** `@lege-ecosystem.decision.truetyping-leaves-bilevel-sources-alone/1`
+
+> **At risk** at depth 3 via `derived_from` → `@lege-ecosystem.decision.truetyping-leaves-bilevel-sources-alone/1` → `@lege-ecosystem.decision.jbig2-is-the-default-pdf-text-format-again/1` → `@lege-ecosystem.observation.truetyping-dictionary-lock-serialized-every-page/2` (stale: `watches "lege-process/pipeline/pdf_tokio_pipeline.rs"` was matched by `728a9ae0`, which touched `lege-process/pipeline/pdf_tokio_pipeline.rs`.). See [REVIEW-REQUIRED.md](REVIEW-REQUIRED.md#truetyping-on-a-lege-jbig2-output-keeps-the-text-as-jbig2-at-the-requested-height).
 
 ### Letter substitutions, the glyph id wall and the upscaled-scan slowdown all verify
 
