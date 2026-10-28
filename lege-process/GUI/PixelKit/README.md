@@ -1,25 +1,23 @@
-# PixelKit processor GUI preview
+# PixelKit processor GUI
 
-The first runnable migration checkpoint retains the Lege palette, two settings
-cards and four main bands, with Preserve mode included. Freya remains the default
-while visual and platform parity checks continue. The preview has a distinct
-binary and does not replace its desktop launcher.
+This is the desktop frontend. The package is `lege-gui-pixelkit` and the binary
+is `lege-gui`. Preserve mode is included. `cargo build` and `cargo gui` build
+this package together with the `lege` worker.
 
 From the workspace root:
 
 ```sh
-cargo gui-pixelkit
-cargo gui-pixelkit-run
+cargo gui
+cargo gui-run
 ```
 
-The build alias produces both the current worker and the new frontend. The GUI
-uses `lege --gui-worker` beside its executable; its dependency graph contains
-PixelKit and `lege-ipc`, without the processor, Freya or the Skia engine.
+`cargo gui-pixelkit` is the same build. The GUI uses `lege --gui-worker` beside
+its executable. Its dependency graph contains PixelKit and `lege-ipc`, without
+the processor or a Freya/Skia crate.
 
-The toolkit-independent models, worker supervisor, log/settings support,
-localization and Sanzo palettes are shared by source with `../Freya/src` during
-the port. The bundled Noto Sans face comes from the existing vendored tree. This
-avoids another copy of protocol and option rules while both frontends exist.
+Settings, the worker supervisor, localization, and the Sanzo palettes live in
+this crate. The bundled Noto Sans face is read from the vendored
+`freya-main` tree at compile time.
 
 The text raster cache is bounded to 512 entries and 2 MiB of bitmap payload.
 Idle frames wait for native input or worker wakes. A clipboard thread starts
@@ -36,9 +34,9 @@ Headless snapshots use the actual renderer. Dimensions are physical pixels and
 the final positional value is the display scale:
 
 ```sh
-target/debug/lege-gui-pixelkit --snapshot /tmp/lege-preview.png 940 700 1
-target/debug/lege-gui-pixelkit --snapshot /tmp/lege-preserve.png 1410 1050 1.5 --preserve --dark
-target/debug/lege-gui-pixelkit --snapshot /tmp/lege-heavy.png 940 700 1 --threshold --heavy
+target/debug/lege-gui --snapshot /tmp/lege-preview.png 940 700 1
+target/debug/lege-gui --snapshot /tmp/lege-preserve.png 1410 1050 1.5 --preserve --dark
+target/debug/lege-gui --snapshot /tmp/lege-heavy.png 940 700 1 --threshold --heavy
 ```
 
 The two ignored worker smoke tests require an explicit input PDF, an output

@@ -28,12 +28,12 @@ fn run() -> Result<(), String> {
 
 fn build_appimage(extra_args: Vec<String>) -> Result<(), String> {
     let gui_variant = match extra_args.as_slice() {
-        [] => "freya",
+        [] => "pixelkit",
         [arg] if arg == "viewer" || arg == "--viewer" => "viewer",
-        [arg] if arg == "freya" || arg == "--freya" => "freya",
+        [arg] if arg == "pixelkit" || arg == "--pixelkit" => "pixelkit",
         _ => {
             return Err(format!(
-                "unsupported cargo appimage arguments: {}\n\nRun `cargo appimage` (default freya GUI) or `cargo appimage viewer`.",
+                "unsupported cargo appimage arguments: {}\n\nRun `cargo appimage` (PixelKit GUI) or `cargo appimage viewer`.",
                 extra_args.join(" ")
             ));
         }
@@ -80,6 +80,6 @@ fn workspace_root() -> Result<PathBuf, String> {
 
 fn print_help() {
     println!(
-        "Lege packaging tasks\n\n  cargo appimage [viewer]\n      Build target/appimage/Lege-<version>-<arch>.AppImage\n      Defaults to Freya GUI; pass `viewer` to use legacy viewer GUI.\n\nEnvironment forwarded to scripts/build-appimage.sh:\n  APPIMAGETOOL                appimagetool executable/path\n  APPIMAGE_GUI                 gui variant: freya (default) or viewer\n  APPIMAGE_UPDATE_INFORMATION AppImage update metadata string\n  LEGE_CARGO_FEATURES         Additional Cargo features"
+        "Lege packaging tasks\n\n  cargo appimage [viewer]\n      Build target/appimage/Lege-<version>-<arch>.AppImage\n      Defaults to the PixelKit GUI; pass `viewer` to use the Liminaldoc reader.\n\nEnvironment forwarded to scripts/build-appimage.sh:\n  APPIMAGETOOL                appimagetool executable/path\n  APPIMAGE_GUI                 gui variant: pixelkit (default) or viewer\n  APPIMAGE_UPDATE_INFORMATION AppImage update metadata string\n  LEGE_CARGO_FEATURES         Additional Cargo features"
     );
 }

@@ -8,14 +8,14 @@ fmt-all-check = "fmt --all -- --check"
 # The processor frontends are workspace packages. Liminaldoc is a sibling
 # workspace with its own target directory:
 #
-#   lege          package `lege`            — the CLI
-#   lege-gui      package `lege-gui-freya`  — Freya processor GUI (default)
-#   liminaldoc-reader / liminaldoc-writer  — native reader and writer
+#   lege          package `lege`              — the CLI
+#   lege-gui      package `lege-gui-pixelkit` — PixelKit processor GUI
+#   liminaldoc-reader / liminaldoc-writer    — native reader and writer
 #
-# The three supported build configurations:
+# The supported build configurations:
 #
 #   cargo cli      CLI only
-#   cargo gui      CLI + Freya GUI  (same as a bare `cargo build`)
+#   cargo gui      CLI + PixelKit GUI  (same as a bare `cargo build`)
 #   cargo viewer   Liminaldoc reader backend
 
 # CLI only.
@@ -27,19 +27,13 @@ process = "build --package lege --bin lege"
 process-check = "check --package lege --bin lege"
 process-run = "run --package lege --bin lege --"
 
-# CLI + Freya processor GUI. This is what the workspace default-members build.
-gui = "build --package lege --package lege-gui-freya"
-gui-check = "check --package lege --package lege-gui-freya"
-gui-run = "run --package lege-gui-freya --bin lege-gui --"
-gui-freya = "build --package lege --package lege-gui-freya"
-gui-freya-check = "check --package lege --package lege-gui-freya"
-gui-freya-run = "run --package lege-gui-freya --bin lege-gui --"
-
-# PixelKit migration preview. Keep its binary distinct until visual and worker
-# acceptance is complete, so building it cannot overwrite the Freya baseline.
+# CLI + PixelKit processor GUI. This is what the workspace default-members build.
+gui = "build --package lege --package lege-gui-pixelkit"
+gui-check = "check --package lege --package lege-gui-pixelkit"
+gui-run = "run --package lege-gui-pixelkit --bin lege-gui --"
 gui-pixelkit = "build --package lege --package lege-gui-pixelkit"
 gui-pixelkit-check = "check --package lege --package lege-gui-pixelkit"
-gui-pixelkit-run = "run --package lege-gui-pixelkit --bin lege-gui-pixelkit --"
+gui-pixelkit-run = "run --package lege-gui-pixelkit --bin lege-gui --"
 
 # Native document reader in the sibling Liminaldoc workspace.
 viewer = "build --manifest-path ../liminaldoc/Cargo.toml -p liminaldoc-reader"
@@ -50,9 +44,6 @@ viewer-gui-check = "check --manifest-path ../liminaldoc/Cargo.toml -p liminaldoc
 viewer-gui-run = "run --manifest-path ../liminaldoc/Cargo.toml -p liminaldoc-reader --bin liminaldoc-reader --"
 liminaldoc = "build --manifest-path ../liminaldoc/Cargo.toml --workspace"
 liminaldoc-run = "run --manifest-path ../liminaldoc/Cargo.toml -p liminaldoc --bin liminaldoc --"
-
-music-gui = "build --package lege-music-gui"
-music-gui-check = "check --package lege-music-gui"
 
 # Shared libraries / development utilities
 gpu = "build --package lege-gpu"
@@ -102,5 +93,4 @@ android-build = "ndk -t arm64-v8a --platform 26 build --package lege-android --p
 ecosystem-check = "check --workspace"
 build-debug-logging = "build --package lege --bin lege --profile debug-fast --features debug-logging"
 run-debug-logging = "run --package lege --bin lege --profile debug-fast --features debug-logging --"
-music-sheet = "build --release --target-dir target/music-sheet --no-default-features --features lege/music-sheet --package lege --package lege-music-gui"
-music-sheet-check = "check --no-default-features --features lege/music-sheet --package lege --package lege-music-gui"
+

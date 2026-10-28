@@ -11,7 +11,7 @@ The `.deb` package metadata lives in `Cargo.toml` under
 `[package.metadata.deb]`.
 
 ```bash
-cargo build --release --package lege --package lege-gui-freya
+cargo build --release --package lege --package lege-gui-pixelkit
 cargo deb
 ```
 
@@ -28,7 +28,7 @@ location explicitly:
 ```bash
 chmod +x appimagetool-x86_64.AppImage
 # option A: place on PATH as `appimagetool`, then:
-# default Freya GUI
+# default PixelKit GUI
 cargo appimage
 # optional viewer GUI
 cargo appimage viewer
@@ -49,8 +49,8 @@ You can also force variant through env:
 APPIMAGE_GUI=viewer cargo appimage
 ```
 
-By default, `cargo appimage` builds the core CLI plus the Freya GUI (`lege-process/GUI/Freya`).
-Pass `viewer` (or `APPIMAGE_GUI=viewer`) to build the legacy viewer GUI instead.
+By default, `cargo appimage` builds the core CLI plus the PixelKit GUI (`lege-process/GUI/PixelKit`).
+Pass `viewer` (or `APPIMAGE_GUI=viewer`) to build the Liminaldoc reader instead.
 The task builds in release mode with the requested GUI target, creates
 `target/appimage/Lege.AppDir`, and emits:
 

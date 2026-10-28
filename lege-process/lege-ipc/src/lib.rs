@@ -1,8 +1,8 @@
-//! Small surface shared between the `lege` CLI and its GUI front-ends
-//! (`lege-gui`, `lege-music-gui`). The GUIs drive processing by spawning the
-//! `lege` CLI as a subprocess and reading its newline-delimited JSON; they need
+//! Small surface shared between the `lege` CLI and its GUI front-end
+//! (`lege-gui`). The GUI drives processing by spawning the
+//! `lege` CLI as a subprocess and reading its newline-delimited JSON; it needs
 //! only these log/interchange types, not the whole `lege` library. Keeping them
-//! here lets the GUIs avoid linking `lege` (and its wgpu/renderer/OCR build
+//! here lets the GUI avoid linking `lege` (and its wgpu/renderer/OCR build
 //! graph) entirely.
 
 use std::path::{Path, PathBuf};

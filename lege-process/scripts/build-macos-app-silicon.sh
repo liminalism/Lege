@@ -1,15 +1,12 @@
 #!/usr/bin/env bash
 # Build "Lege.app" (the MAIN program, +dmg/zip) for macOS.
 #
-# This is the sibling of scripts/build-macos-app.sh. That script builds the
-# Sheet Music Edition for Intel (x86_64). THIS script builds the standard Lege
-# application (CLI `lege` + GUI `lege-gui`). It targets Apple Silicon by
-# default; pass --intel to build the Intel version of the main application.
+# Builds the standard Lege application (CLI `lege` + GUI `lege-gui`). It
+# targets Apple Silicon by default; pass --intel to build the Intel version.
 #
-# Differences from the Sheet Music / Intel script:
 #   * Apple Silicon is the default; --intel selects x86_64-apple-darwin.
-#   * The GUI is the main crate GUI/Freya (binary `lege-gui`), NOT the Sheet
-#     Music crate (`lege-music-gui`).
+#   * The GUI is `lege-process/GUI/PixelKit` (package `lege-gui-pixelkit`,
+#     binary `lege-gui`).
 #   * The `lege` CLI is built with the full default feature set, including
 #     layout-detection. The current PP-DocLayout-M model is embedded in the
 #     binary (its source filename is models/doclayout.onnx), so no external
@@ -49,7 +46,7 @@
 #   MACOS_RUST_TOOLCHAIN Rust toolchain installed inside the cross container
 #
 # Notes:
-#   * The main GUI (GUI/Freya, binary lege-gui) drives the bundled `lege` CLI as
+#   * The PixelKit GUI (binary lege-gui) drives the bundled `lege` CLI as
 #     a subprocess; the CLI is where OCR, layout detection and binarization run.
 #     The CLI is built with the pure-Rust PP-OCR backend (paddle-ocr) so OCR
 #     works on macOS without any Tesseract native dependency. sauvola.onnx IS
@@ -321,7 +318,7 @@ else
 
   if [[ "$CLI_ONLY" != "1" ]]; then
     echo "== Building lege-gui (main GUI) for $TARGET"
-    cargo build --release --target "$TARGET" -p lege-gui-freya --bin lege-gui \
+    cargo build --release --target "$TARGET" -p lege-gui-pixelkit --bin lege-gui \
       --no-default-features
   else
     echo "== CLI-only build: skipping the lege-gui GUI binary"

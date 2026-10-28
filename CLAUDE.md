@@ -22,15 +22,15 @@ Lege is a fully-automatic PDF processor for E-Ink ebook readers. It renders PDF 
 | `jbig2enc-rust` | `lege-codecs/jbig2enc-rust/` | In-tree JBIG2 encoder/decoder (patched into `lege`) |
 | `jp2lam` | `lege-codecs/jp2lam/` | In-tree JPEG2000 codec (patched into `lege`) |
 | `djvu_encoder` | `lege-codecs/djvulibrust/` | AGPL DjVu library linked by Lege; standalone codec CLI retained |
-| `lege-gui-freya` | `lege-process/GUI/Freya/` | Freya/Skia GUI frontend; produces bin `lege-gui` (the default frontend) |
+| `lege-gui-pixelkit` | `lege-process/GUI/PixelKit/` | PixelKit GUI frontend; produces bin `lege-gui` (the only frontend) |
 | Liminaldoc reader and writer | `../liminaldoc/` | Separate native document product; old source copies remain here during migration |
-| `lege-music-gui` | `lege-process/GUI/musicsheet/` | Sheet Music Edition GUI |
 | Shared assets/tools | `lege-misc/` | Icons, packaging, scripts, docs, dev utilities, and `xtask` |
 
 The workspace default members are `lege-process` and
-`lege-process/GUI/Freya`, so plain `cargo build` builds the CLI and main GUI.
-The vendored Freya workspace and standalone codec projects retain their own
-build graphs; root patches make the processor use the in-tree linked codecs.
+`lege-process/GUI/PixelKit`, so plain `cargo build` builds the CLI and the GUI.
+`freya-main` is excluded from the workspace and is not linked by the GUI.
+Standalone codec projects retain their own build graphs; root patches make the
+processor use the in-tree linked codecs.
 
 Every binary in this workspace has a unique name, so any combination of
 packages can be selected in one Cargo invocation. In particular the `lege`
@@ -40,21 +40,20 @@ dependencies. Liminaldoc has its own Cargo workspace:
 | Binary | Package | Path |
 |---|---|---|
 | `lege` | `lege` | `lege-process/` |
-| `lege-gui` | `lege-gui-freya` | `lege-process/GUI/Freya/` |
+| `lege-gui` | `lege-gui-pixelkit` | `lege-process/GUI/PixelKit/` |
 | `liminaldoc-reader` | `liminaldoc-reader` | `../liminaldoc/crates/liminal-reader/` |
 | `liminaldoc-writer` | `docwrite-app` | `../liminaldoc/crates/docwrite-app/` |
-| `lege-music-gui` | `lege-music-gui` | `lege-process/GUI/musicsheet/` |
 
 ## Build commands
 
 ```sh
 # Frontend aliases in .cargo/config.toml:
 cargo cli                 # CLI only          -> lege
-cargo gui                 # CLI + Freya GUI   -> lege, lege-gui   (the default)
+cargo gui                 # CLI + PixelKit GUI -> lege, lege-gui   (the default)
 cargo viewer              # Liminaldoc reader -> liminaldoc-reader
 cargo liminaldoc          # all Liminaldoc binaries
 
-# Standard release build (CLI + Freya GUI, via workspace default-members)
+# Standard release build (CLI + PixelKit GUI, via workspace default-members)
 cargo build --release
 
 # Development build (incremental, 256 codegen units)
@@ -210,9 +209,9 @@ vars → `/usr/share/lege/models` (Linux). Models required:
 - **Linux/macOS**: Vulkan/Metal wgpu backend.
 - `lege-process/core/windows_dirs.rs` / `app_dirs.rs` — platform-specific config/data directory resolution.
 
-## Freya fork
+## Desktop GUI
 
-The workspace patches `https://github.com/LegeApp/freya.git` to a local path (`../freya-main/`). If that checkout is absent the GUI won't build. The `rfd` (file dialog) crate is also patched to a local clone (`../../../clones/rfd`).
+The only processor GUI is PixelKit (`lege-process/GUI/PixelKit`, package `lege-gui-pixelkit`, binary `lege-gui`). It does not link Freya or Skia. `freya-main` stays in the tree and is excluded from the workspace; the GUI embeds Noto Sans from that tree at compile time. File dialogs use the vendored `rfd` crate at `lege-process/GUI/rfd`.
 
 ## Debug tracing
 

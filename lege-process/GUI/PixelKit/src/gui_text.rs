@@ -1,4 +1,4 @@
-// Freya-side GUI localization loader.
+// GUI localization loader.
 // User-facing copy lives in language_service/<locale>/gui_text.json.
 
 use serde::Deserialize;

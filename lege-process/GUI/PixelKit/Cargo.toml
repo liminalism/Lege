@@ -4,10 +4,10 @@ version = "1.0.0"
 edition = "2024"
 license.workspace = true
 publish = false
-build = "../Freya/build.rs"
+build = "build.rs"
 
 [[bin]]
-name = "lege-gui-pixelkit"
+name = "lege-gui"
 path = "src/main.rs"
 
 [features]

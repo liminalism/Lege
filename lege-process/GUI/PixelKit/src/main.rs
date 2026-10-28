@@ -1,37 +1,25 @@
 #![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
 
 mod app;
+mod appearance;
+#[allow(dead_code, unused_imports)]
+mod backend;
+#[allow(dead_code)]
+mod gui_text;
 mod layout;
 #[cfg(target_os = "linux")]
 #[allow(dead_code)]
-#[path = "../../Freya/src/linux_desktop.rs"]
 mod linux_desktop;
-mod theme;
-// Reuse the toolkit-independent frontend support during migration. The
-// baseline Freya frontend consumes these exact same models and wire types.
-#[path = "../../Freya/src/appearance.rs"]
-mod appearance;
 #[allow(dead_code, unused_imports)]
-#[path = "../../Freya/src/backend.rs"]
-mod backend;
-#[allow(dead_code)]
-#[path = "../../Freya/src/gui_text.rs"]
-mod gui_text;
-#[allow(dead_code, unused_imports)]
-#[path = "../../Freya/src/logging.rs"]
 mod logging;
 #[allow(dead_code)]
-#[path = "../../Freya/src/models.rs"]
 mod models;
-#[path = "../../Freya/src/sanzowada.rs"]
 mod sanzowada;
 #[allow(dead_code)]
-#[path = "../../Freya/src/settings.rs"]
 mod settings;
-#[path = "../../Freya/src/version.rs"]
+mod theme;
 mod version;
 #[allow(dead_code)]
-#[path = "../../Freya/src/worker_process.rs"]
 mod worker_process;
 
 use pixelkit_windowing::PixelApp;

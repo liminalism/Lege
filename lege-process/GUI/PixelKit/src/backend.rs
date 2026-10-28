@@ -606,7 +606,7 @@ fn embedded_document_url(file_name: &str) -> Result<String> {
     Ok(format!("http://127.0.0.1:{port}/{file_name}"))
 }
 
-/// Open a document embedded in the Freya binary at compile time.
+/// Open a document embedded in the GUI binary at compile time.
 pub fn open_embedded_document(file_name: &str, contents: &str) -> Result<()> {
     anyhow::ensure!(
         embedded_document_response(&format!("/{file_name}"))

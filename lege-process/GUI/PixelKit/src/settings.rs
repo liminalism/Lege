@@ -1,5 +1,4 @@
-// Freya-side copy of the Dioxus GUI settings module.
-// Keep in sync manually until GUI support code is consolidated.
+// GUI settings module.
 
 use anyhow::Result;
 use std::fs;

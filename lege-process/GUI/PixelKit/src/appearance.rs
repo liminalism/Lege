@@ -20,12 +20,7 @@ pub enum ThemeChoice {
 
 impl Default for ThemeChoice {
     fn default() -> Self {
-        // "Sanzo Dark 17" — the picker numbers themes 1-based, so this is the
-        // 0-based index 16 in `sanzowada::SANZO_THEMES`.
-        ThemeChoice::Sanzo {
-            index: 16,
-            dark: true,
-        }
+        ThemeChoice::Default
     }
 }
 
@@ -37,7 +32,7 @@ pub struct AppearanceSettings {
 impl Default for AppearanceSettings {
     fn default() -> Self {
         Self {
-            theme: ThemeChoice::default(),
+            theme: ThemeChoice::Default,
         }
     }
 }
@@ -128,8 +123,7 @@ pub struct Palette {
 
 const BASE_APP_BG: Rgb = (226, 232, 235);
 
-// On Linux, Freya/Vulkan renders raw RGB without OS color management, so the light
-// surfaces use a slightly warmer base than on other platforms.
+// On Linux the light surfaces use a slightly warmer base than on other platforms.
 #[cfg(target_os = "linux")]
 const BASE_PANEL_BG: Rgb = (253, 249, 244);
 #[cfg(not(target_os = "linux"))]
@@ -214,11 +208,24 @@ pub fn active_palette() -> Palette {
         ThemeChoice::Default => BASE_DAY,
         ThemeChoice::Sanzo { index, dark } => match crate::sanzowada::theme_at(index) {
             Some(t) => {
-                if dark {
+                let mut palette = if dark {
                     t.dark
                 } else {
                     colorize_light_surfaces(t.light)
+                };
+
+                // Notifications use the combo's lightest source color instead of
+                // the built-in yellow. The raw light palette maps that color to
+                // app_bg before light-surface tinting.
+                palette.info_bg = t.light.app_bg;
+
+                // A few generated dark variants used a dark source color for text.
+                // Normalize both primary and secondary copy for dependable contrast.
+                if dark {
+                    palette.text = (255, 255, 255);
+                    palette.muted = (220, 220, 220);
                 }
+                palette
             }
             None => BASE_DAY,
         },
@@ -295,20 +302,10 @@ pub fn save_appearance_settings(settings: &AppearanceSettings) -> anyhow::Result
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
-
-    static PREVIEW_TEST_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
-    fn music_sheet_defaults_to_sanzo_dark_seventeen() {
-        let _preview_guard = PREVIEW_TEST_LOCK.lock().unwrap();
-        assert_eq!(
-            AppearanceSettings::default().theme,
-            ThemeChoice::Sanzo {
-                index: 16,
-                dark: true
-            }
-        );
+    fn default_theme_is_the_day_palette() {
+        assert_eq!(AppearanceSettings::default().theme, ThemeChoice::Default);
         set_theme_preview(Some(ThemeChoice::Default));
         assert_eq!(active_palette(), BASE_DAY);
         set_theme_preview(None);
@@ -316,20 +313,24 @@ mod tests {
 
     #[test]
     fn preview_drives_active_palette_light_and_dark() {
-        let _preview_guard = PREVIEW_TEST_LOCK.lock().unwrap();
         let t = crate::sanzowada::theme_at(0).unwrap();
 
         set_theme_preview(Some(ThemeChoice::Sanzo {
             index: 0,
             dark: false,
         }));
-        assert_eq!(active_palette(), colorize_light_surfaces(t.light));
+        let mut light = colorize_light_surfaces(t.light);
+        light.info_bg = t.light.app_bg;
+        assert_eq!(active_palette(), light);
 
         set_theme_preview(Some(ThemeChoice::Sanzo {
             index: 0,
             dark: true,
         }));
-        assert_eq!(active_palette(), t.dark);
+        let dark = active_palette();
+        assert_eq!(dark.info_bg, t.light.app_bg);
+        assert_eq!(dark.text, (255, 255, 255));
+        assert_eq!(dark.muted, (220, 220, 220));
 
         // Out-of-range index falls back to the default palette rather than panicking.
         set_theme_preview(Some(ThemeChoice::Sanzo {

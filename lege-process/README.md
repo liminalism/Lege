@@ -15,7 +15,7 @@ There are 2 generally intended usages for the program; outputs of commercial boo
 ## Interfaces
 
 * **CLI**: guided interactive mode (no args) + direct command modes
-* **GUI**: Freya desktop app using the same processing core; queue-based workflow with progress + cancel
+* **GUI**: PixelKit desktop app using the same processing core; queue-based workflow with progress + cancel
 
 ---
 
@@ -34,23 +34,7 @@ The default build embeds PP-OCR, layout detection, and JPEG 2000. It does not ne
 You'll get:
 
 * CLI: `target/release/lege`
-* GUI: `target/release/lege-gui`
-
-#### Sheet-music edition
-
-Build the optimized sheet-music CLI and GUI together with the workspace shortcut:
-
-```bash
-cargo music-sheet
-```
-
-For a faster compile-only validation, run `cargo music-sheet-check`. Both shortcuts
-disable the normal default features and enable only the `music-sheet` feature set.
-The resulting edition does not compile `lege-ocr`, the EPUB builder, either OCR
-backend, or layout detection (and it does not embed the layout model). The release
-artifacts go under `target/music-sheet/release/`, separate from the full edition,
-so building this edition cannot replace `target/release/lege` with a layout-free
-worker.
+* GUI: `target/release/lege-gui` (package `lege-gui-pixelkit`)
 
 ### Linux release packaging
 
@@ -229,9 +213,8 @@ Lege Process is one application family inside the ecosystem workspace rooted at
 * `encoding/`, `color/`, `colorquant/`, `resize/` — image treatment and codec adapters
 * `ocr/`, `reflow/` — process-level OCR/reflow integration
 * `models/`, `language_service/` — process runtime/embedded data
-* `lege-ipc/` — IPC and shared log types for the CLI and GUIs
-* `GUI/Freya/` — desktop GUI frontend (`lege-gui`), drawn with the CPU renderer
-* `GUI/musicsheet/` — Sheet Music Edition frontend
+* `lege-ipc/` — IPC and shared log types for the CLI and GUI
+* `GUI/PixelKit/` — desktop GUI frontend (`lege-gui`), drawn with PixelKit
 
 Shared ecosystem crates are siblings of this folder: `../lege-gpu`,
 `../lege-ocr`, `../lege-pdf/read`, and `../lege-pdf/write`. Page rendering

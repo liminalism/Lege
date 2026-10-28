@@ -9,7 +9,7 @@ OUT_DIR="${OUT_DIR:-$ROOT/target/appimage}"
 APPIMAGE_APPDATA_PATH="$ROOT/lege-process/packaging/appimage/com.legeapp.Lege.appdata.xml"
 APPIMAGETOOL_PATH=""
 LOCAL_APPIMAGETOOL="$ROOT/lege-process/packaging/appimage/tools/appimagetool-x86_64.AppImage"
-APPIMAGE_GUI="${APPIMAGE_GUI:-${1:-freya}}"
+APPIMAGE_GUI="${APPIMAGE_GUI:-${1:-pixelkit}}"
 PROFILE="${PROFILE:-release}"
 
 if [[ "$PROFILE" != "release" ]]; then
@@ -18,12 +18,12 @@ if [[ "$PROFILE" != "release" ]]; then
 fi
 
 case "$APPIMAGE_GUI" in
-  freya)
+  pixelkit)
     ;;
   viewer)
     ;;
   *)
-    echo "Unsupported GUI variant '$APPIMAGE_GUI'. Use 'freya' (default) or 'viewer'." >&2
+    echo "Unsupported GUI variant '$APPIMAGE_GUI'. Use 'pixelkit' (default) or 'viewer'." >&2
     exit 1
     ;;
 esac
@@ -85,7 +85,8 @@ else
   GUI_BINARY_PATH="$ROOT/target/release/lege-gui"
   cargo build --release \
     --manifest-path "$ROOT/Cargo.toml" \
-    --package lege-gui-freya \
+    --package lege-gui-pixelkit \
+    --bin lege-gui \
     "${features_args[@]}"
 fi
 
