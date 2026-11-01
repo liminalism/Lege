@@ -14,25 +14,25 @@ use std::time::{Duration, Instant};
 const SAMPLE_INTERVAL: Duration = Duration::from_millis(250);
 pub const MAX_BLOCKING_THREADS: usize = 4;
 
-/// How long cancellation paths wait for already-started blocking workers to
-/// exit before giving up and reporting the remainder.
+/// How long cancellation paths wait for submitted blocking work to finish
+/// before giving up and reporting the remainder.
 pub const BLOCKING_DRAIN_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// Blocking-pool jobs currently executing. Unlike the opt-in [`Collector`]
+/// Blocking-pool jobs queued or executing. Unlike the opt-in [`Collector`]
 /// gauges below, this is maintained whether or not [`enable`] ran, so
 /// cancellation paths can wait for worker-held buffers to drain. Every
 /// pipeline blocking job goes through [`spawn_blocking`] or
 /// [`spawn_blocking_stage`], which both hold the guard.
 static IN_FLIGHT_BLOCKING: AtomicUsize = AtomicUsize::new(0);
 
-/// Number of blocking-pool jobs currently executing. Aborting an async page
-/// task does not stop a started blocking worker, so this — not the async
-/// join set — says whether page buffers are still alive.
+/// Number of submitted blocking jobs still holding their closures. Queued
+/// closures own page buffers too; aborting an async waiter releases neither
+/// queued nor executing work.
 pub fn outstanding_blocking_jobs() -> usize {
     IN_FLIGHT_BLOCKING.load(Ordering::Relaxed)
 }
 
-/// Wait until no blocking-pool job is executing, up to `timeout`. Returns the
+/// Wait until no blocking-pool job is queued or executing, up to `timeout`. Returns the
 /// number still outstanding: 0 on a clean drain. Cancellation paths call this
 /// after aborting async page tasks and stopping admission; a nonzero return is
 /// logged, not retried, since the workers check the cancellation token
@@ -48,7 +48,7 @@ pub async fn wait_for_blocking_drain(timeout: Duration) -> usize {
     }
 }
 
-/// Drain helper for cancellation paths: wait for already-started blocking
+/// Drain helper for cancellation paths: wait for submitted blocking
 /// workers to exit and warn when some outlive the timeout. `context` names
 /// the aborted stage. The disappearance of the async tasks is not proof
 /// their workers released the buffers — this wait is.
@@ -426,8 +426,9 @@ where
     F: FnOnce() -> R + Send + 'static,
     R: Send + 'static,
 {
+    let in_flight = InFlightBlockingGuard::enter();
     tokio::task::spawn_blocking(move || {
-        let _in_flight = InFlightBlockingGuard::enter();
+        let _in_flight = in_flight;
         let _blocking = BlockingGuard::enter();
         work()
     })
@@ -439,8 +440,9 @@ where
     F: FnOnce() -> R + Send + 'static,
     R: Send + 'static,
 {
+    let in_flight = InFlightBlockingGuard::enter();
     tokio::task::spawn_blocking(move || {
-        let _in_flight = InFlightBlockingGuard::enter();
+        let _in_flight = in_flight;
         let _blocking = BlockingGuard::enter();
         let _stage = enter_stage(stage);
         work()
@@ -640,6 +642,28 @@ mod tests {
     // parallel drain tests would observe each other's workers.
     #[tokio::test(flavor = "current_thread")]
     async fn blocking_drain_reports_idle_timeout_and_clean_exit() {
+        // Production counters are process-global. Run these exact-count
+        // assertions in a child harness so parallel pipeline tests cannot
+        // contribute unrelated jobs.
+        if std::env::var_os("LEGE_BLOCKING_DRAIN_TEST_CHILD").is_none() {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "runtime_stats::tests::blocking_drain_reports_idle_timeout_and_clean_exit",
+                    "--test-threads=1",
+                ])
+                .env("LEGE_BLOCKING_DRAIN_TEST_CHILD", "1")
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
+
         assert_eq!(outstanding_blocking_jobs(), 0);
         let remaining = wait_for_blocking_drain(Duration::from_millis(10)).await;
         assert_eq!(remaining, 0);
@@ -662,5 +686,36 @@ mod tests {
         let remaining = wait_for_blocking_drain(Duration::from_secs(5)).await;
         assert_eq!(remaining, 0);
         let _ = job.await;
+
+        // A queued closure owns its input buffers before a blocking worker
+        // becomes available. Use a one-thread pool to exercise that interval.
+        std::thread::spawn(|| {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .max_blocking_threads(1)
+                .build()
+                .unwrap();
+            runtime.block_on(async {
+                let (release, wait) = std::sync::mpsc::channel::<()>();
+                let (started, ready) = tokio::sync::oneshot::channel();
+                let first = spawn_blocking(move || {
+                    let _ = started.send(());
+                    let _ = wait.recv();
+                });
+                ready.await.unwrap();
+                let queued = spawn_blocking(|| {});
+                assert_eq!(
+                    outstanding_blocking_jobs(),
+                    2,
+                    "queued buffers must count toward cancellation drain"
+                );
+                queued.abort();
+                drop(release);
+                first.await.unwrap();
+                assert!(queued.await.unwrap_err().is_cancelled());
+                assert_eq!(wait_for_blocking_drain(Duration::from_secs(2)).await, 0);
+            });
+        })
+        .join()
+        .unwrap();
     }
 }

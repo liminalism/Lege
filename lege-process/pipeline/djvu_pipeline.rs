@@ -199,6 +199,7 @@ pub async fn create_and_run_djvu_source_pipeline(
     // GPU session pool.
     let pipeline_config = PipelineRuntimeLimits::djvu_from_config(&config);
     let cancellation = lege_pdf_read::CancellationToken::new();
+    let _lifetime = crate::pipeline::helper_functions::PipelineLifetime(cancellation.clone());
     let needs_margin_pass = matches!(
         config.margin_settings(),
         crate::margin::MarginSettings::StandardizeAndCenter
@@ -224,12 +225,10 @@ pub async fn create_and_run_djvu_source_pipeline(
         );
         let (analysis, cache) = tokio::select! {
             result = analysis_future => result?,
-            signal = shutdown_rx.recv() => {
+            signal = crate::pipeline::helper_functions::shutdown_signal(&mut shutdown_rx) => {
                 cancellation.cancel();
                 crate::runtime_stats::drain_blocking_workers_on_cancel("margin analysis").await;
-                let message = signal
-                    .ok()
-                    .and_then(|signal| signal.message)
+                let message = signal.message
                     .unwrap_or_else(|| "User requested cancellation".to_string());
                 return Err(anyhow!("Processing cancelled during margin analysis: {message}"));
             }
@@ -271,7 +270,7 @@ pub async fn create_and_run_djvu_source_pipeline(
     );
     // Spawn source task. PDF and image-folder inputs advertise their own
     // can fan out through the same downstream pipeline.
-    let mut render_task: JoinHandle<Result<()>> = {
+    let render_task: JoinHandle<Result<()>> = {
         let config = config.clone();
         let source = source.clone();
         let tracker = progress_tracker.clone();
@@ -296,7 +295,7 @@ pub async fn create_and_run_djvu_source_pipeline(
         ))
     };
     // Spawn inference stage with TRUE concurrency (similar to PDF pipeline) (mut for tokio::select!)
-    let mut infer_task: JoinHandle<Result<()>> = {
+    let infer_task: JoinHandle<Result<()>> = {
         let tracker = progress_tracker.clone();
         let rc = render_count.clone();
         let dc = detect_count.clone();
@@ -369,7 +368,7 @@ pub async fn create_and_run_djvu_source_pipeline(
         })
     };
     // Spawn binarization & text extraction stage with TRUE concurrency (similar to PDF pipeline) (mut for tokio::select!)
-    let mut binarize_task: JoinHandle<Result<()>> = {
+    let binarize_task: JoinHandle<Result<()>> = {
         let config = config.clone();
         let document_session = document_session.clone();
         let tracker = progress_tracker.clone();
@@ -492,7 +491,7 @@ pub async fn create_and_run_djvu_source_pipeline(
     let document_toc = Arc::new(Mutex::new(Vec::new()));
 
     // Spawn encoding stage (encodes pages concurrently, then forwards to writer actor)
-    let mut encode_task: JoinHandle<Result<()>> = {
+    let encode_task: JoinHandle<Result<()>> = {
         let orchestrator = orchestrator.clone();
         let djvu_document = djvu_document.clone();
         let djvu_writer = djvu_writer.clone();
@@ -604,49 +603,19 @@ pub async fn create_and_run_djvu_source_pipeline(
     info_log!("[DJVU-Parallel] Waiting for pipeline stages to complete...");
 
     use crate::pipeline::helper_functions::await_stage_or_cancel_with_token;
-    let h_infer = infer_task.abort_handle();
-    let h_binarize = binarize_task.abort_handle();
-    let h_encode = encode_task.abort_handle();
-
-    await_stage_or_cancel_with_token(
-        &mut render_task,
+    crate::pipeline::helper_functions::supervise_pipeline_stages(
+        vec![
+            ("render", render_task),
+            ("inference", infer_task),
+            ("binarization", binarize_task),
+            ("encoding", encode_task),
+        ],
         &mut shutdown_rx,
-        "render",
-        &[h_infer.clone(), h_binarize.clone(), h_encode.clone()],
-        Some(&cancellation),
+        &cancellation,
+        &[writer_task.abort_handle()],
     )
     .await?;
-    info_log!("[DJVU-Parallel] Render stage complete");
-
-    await_stage_or_cancel_with_token(
-        &mut infer_task,
-        &mut shutdown_rx,
-        "inference",
-        &[h_binarize.clone(), h_encode.clone()],
-        Some(&cancellation),
-    )
-    .await?;
-    info_log!("[DJVU-Parallel] Inference stage complete");
-
-    await_stage_or_cancel_with_token(
-        &mut binarize_task,
-        &mut shutdown_rx,
-        "binarization",
-        &[h_encode.clone()],
-        Some(&cancellation),
-    )
-    .await?;
-    info_log!("[DJVU-Parallel] Binarization stage complete");
-
-    await_stage_or_cancel_with_token(
-        &mut encode_task,
-        &mut shutdown_rx,
-        "encoding",
-        &[],
-        Some(&cancellation),
-    )
-    .await?;
-    info_log!("[DJVU-Parallel] Encoding stage complete");
+    info_log!("[DJVU-Parallel] All page stages complete");
 
     let toc_pages = document_toc
         .lock()

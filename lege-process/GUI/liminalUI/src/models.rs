@@ -149,11 +149,144 @@ pub struct ProcessingOptions {
     /// JP2/IW44 grayscale background (keeps antialiasing). Mutually exclusive
     /// with the bilevel binarization options above; image regions stay JP2/IW44.
     pub grayscale_mode: bool,
-    /// Colour-preserving MRC, exposed as a top-level mode in the PixelKit UI.
+    /// Colour-preserving MRC, exposed as a top-level mode in the liminalUI UI.
     pub preserve_mode: bool,
 }
 
+/// The persisted options keep their historical fields for settings
+/// compatibility. Runtime choices are resolved once through these enums.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BinarizationKind {
+    Adaptive,
+    Fixed,
+    Heavy,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PageTreatment {
+    Preserved,
+    Grayscale,
+    Binarized(BinarizationKind),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkflowMode {
+    Prepare,
+    Preserve,
+    Reflow,
+    Inverted,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImageTreatment {
+    Original,
+    Dithered,
+    Jbig2Halftone,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GeometryMode {
+    Unchanged,
+    Centered,
+    Cropped { footnotes: bool, free_aspect: bool },
+    Reflow,
+}
+
 impl ProcessingOptions {
+    pub fn workflow_mode(&self) -> WorkflowMode {
+        if self.preserve_mode {
+            WorkflowMode::Preserve
+        } else if self.reflow {
+            WorkflowMode::Reflow
+        } else if self.invert_input {
+            WorkflowMode::Inverted
+        } else {
+            WorkflowMode::Prepare
+        }
+    }
+
+    pub fn image_treatment(&self) -> ImageTreatment {
+        match self.image_processing_type {
+            ImageProcessingType::Original => ImageTreatment::Original,
+            ImageProcessingType::Dithered
+                if self.use_jbig2_halftone && self.can_select_jbig2_halftone_images() =>
+            {
+                ImageTreatment::Jbig2Halftone
+            }
+            ImageProcessingType::Dithered => ImageTreatment::Dithered,
+        }
+    }
+
+    pub fn set_image_treatment(&mut self, mode: ImageTreatment) {
+        self.image_processing_type = if mode == ImageTreatment::Original {
+            ImageProcessingType::Original
+        } else {
+            ImageProcessingType::Dithered
+        };
+        self.use_jbig2_halftone =
+            mode == ImageTreatment::Jbig2Halftone && self.can_select_jbig2_halftone_images();
+    }
+    pub fn binarization_kind(&self) -> BinarizationKind {
+        // Preserve the legacy CLI precedence when repairing conflicting flags.
+        if self.use_fixed_threshold {
+            BinarizationKind::Fixed
+        } else if self.use_heavy_binarization {
+            BinarizationKind::Heavy
+        } else {
+            BinarizationKind::Adaptive
+        }
+    }
+
+    pub fn set_binarization_kind(&mut self, kind: BinarizationKind) {
+        self.use_custom_adaptive = kind == BinarizationKind::Adaptive;
+        self.use_fixed_threshold = kind == BinarizationKind::Fixed;
+        self.use_heavy_binarization = kind == BinarizationKind::Heavy;
+    }
+
+    pub fn page_treatment(&self) -> PageTreatment {
+        if self.preserve_mode {
+            PageTreatment::Preserved
+        } else if self.grayscale_mode {
+            PageTreatment::Grayscale
+        } else {
+            PageTreatment::Binarized(self.binarization_kind())
+        }
+    }
+
+    pub fn geometry_mode(&self) -> GeometryMode {
+        if self.reflow {
+            GeometryMode::Reflow
+        } else if self.crop_margins {
+            GeometryMode::Cropped {
+                footnotes: self.crop_footnotes,
+                free_aspect: self.crop_free_aspect,
+            }
+        } else if self.center_margins {
+            GeometryMode::Centered
+        } else {
+            GeometryMode::Unchanged
+        }
+    }
+
+    pub fn set_geometry_mode(&mut self, mode: GeometryMode) {
+        self.center_margins = matches!(mode, GeometryMode::Centered);
+        self.crop_margins = matches!(mode, GeometryMode::Cropped { .. });
+        self.crop_footnotes = matches!(
+            mode,
+            GeometryMode::Cropped {
+                footnotes: true,
+                ..
+            }
+        );
+        self.crop_free_aspect = matches!(
+            mode,
+            GeometryMode::Cropped {
+                free_aspect: true,
+                ..
+            }
+        );
+        self.set_reflow(matches!(mode, GeometryMode::Reflow));
+    }
     pub fn new() -> Self {
         Self {
             output_format: OutputFormat::Pdf,
@@ -227,15 +360,16 @@ impl ProcessingOptions {
     /// with existing saved settings, but behaves as a third exclusive choice
     /// in the GUI.
     pub fn set_image_processing_type(&mut self, image_type: ImageProcessingType) {
-        self.image_processing_type = image_type;
-        self.use_jbig2_halftone = false;
+        self.set_image_treatment(match image_type {
+            ImageProcessingType::Original => ImageTreatment::Original,
+            ImageProcessingType::Dithered => ImageTreatment::Dithered,
+        });
     }
 
     /// Select JBIG2 halftone encoding for detected image regions. This is
     /// independent of whether the page's text uses JBIG2 or truetyping.
     pub fn set_jbig2_halftone_images(&mut self) {
-        self.image_processing_type = ImageProcessingType::Dithered;
-        self.use_jbig2_halftone = true;
+        self.set_image_treatment(ImageTreatment::Jbig2Halftone);
     }
 
     /// JBIG2 halftone image regions need a JBIG2-capable page: the effective
@@ -246,9 +380,7 @@ impl ProcessingOptions {
     }
 
     pub fn uses_jbig2_halftone_images(&self) -> bool {
-        self.can_select_jbig2_halftone_images()
-            && matches!(self.image_processing_type, ImageProcessingType::Dithered)
-            && self.use_jbig2_halftone
+        self.image_treatment() == ImageTreatment::Jbig2Halftone
     }
 
     /// Keep GUI state aligned with the core pipeline's effective feature
@@ -295,18 +427,24 @@ impl ProcessingOptions {
     }
 
     /// Repair stale or hand-edited settings before they become worker
-    /// arguments. An explicit reflow selection wins over hidden incompatible
-    /// state because it is the most constrained mode.
+    /// arguments. Preserve wins first, then reflow, then inversion. This is
+    /// also the migration policy for conflicting legacy saved flags.
     pub fn normalize_processing_dependencies(&mut self) {
-        if self.preserve_mode {
-            self.set_preserve_mode(true);
-        } else if self.reflow {
-            self.set_reflow(true);
-        } else if self.invert_input {
-            self.set_invert_input(true);
-        } else if !self.layout_analysis {
-            self.set_layout_analysis(false);
+        match self.workflow_mode() {
+            WorkflowMode::Preserve => self.set_preserve_mode(true),
+            WorkflowMode::Reflow => self.set_reflow(true),
+            WorkflowMode::Inverted => self.set_invert_input(true),
+            WorkflowMode::Prepare => {}
         }
+        self.set_geometry_mode(self.geometry_mode());
+        self.set_binarization_kind(self.binarization_kind());
+        // Current setters keep these fields aligned. Older settings may only
+        // carry the compatibility flag; an explicit TrueTyping choice wins.
+        if self.jpeg_compat && self.compression_type == CompressionType::Jbig2 {
+            self.compression_type = CompressionType::Ccitt4;
+        }
+        self.jpeg_compat = self.compression_type == CompressionType::Ccitt4;
+        self.set_image_treatment(self.image_treatment());
     }
 
     /// Preserve colour and generic ink; only explicitly chosen TrueTyping
@@ -332,6 +470,60 @@ impl ProcessingOptions {
 #[cfg(test)]
 mod reflow_tests {
     use super::ProcessingOptions;
+
+    #[test]
+    fn lifecycle_legacy_flag_combinations_normalize_idempotently_to_exclusive_choices() {
+        for flags in 0..512 {
+            let mut options = ProcessingOptions::new();
+            options.preserve_mode = flags & 1 != 0;
+            options.reflow = flags & 2 != 0;
+            options.invert_input = flags & 4 != 0;
+            options.layout_analysis = flags & 8 != 0;
+            options.center_margins = flags & 16 != 0;
+            options.crop_margins = flags & 32 != 0;
+            options.use_fixed_threshold = flags & 64 != 0;
+            options.use_heavy_binarization = flags & 128 != 0;
+            options.jpeg_compat = flags & 256 != 0;
+            options.normalize_processing_dependencies();
+            assert_eq!(
+                [
+                    options.use_custom_adaptive,
+                    options.use_fixed_threshold,
+                    options.use_heavy_binarization
+                ]
+                .into_iter()
+                .filter(|selected| *selected)
+                .count(),
+                1
+            );
+            assert!(!(options.center_margins && options.crop_margins));
+            if options.preserve_mode {
+                assert!(
+                    !options.invert_input
+                        && !options.reflow
+                        && !options.grayscale_mode
+                        && !options.jpeg_compat
+                );
+            }
+            if options.reflow {
+                assert!(
+                    options.layout_analysis
+                        && !options.invert_input
+                        && !options.center_margins
+                        && !options.crop_margins
+                );
+            }
+            if options.invert_input {
+                assert!(!options.layout_analysis && !options.reflow);
+            }
+            let normalized = options.clone();
+            options.normalize_processing_dependencies();
+            assert_eq!(options, normalized);
+            let saved = serde_json::to_string(&options).unwrap();
+            let restored: ProcessingOptions = serde_json::from_str(&saved).unwrap();
+            assert_eq!(restored, options);
+        }
+    }
 
     #[test]
     fn legacy_settings_default_preserve_to_false_and_explicit_toggles_win() {
@@ -478,10 +670,6 @@ pub struct DocumentItem {
     pub file_name: String,
     pub input_kind: InputKind,
     pub page_count: Option<u32>,
-    pub status: DocumentStatus,
-    pub output_path: Option<PathBuf>,
-    pub progress: f32,
-    pub error_message: Option<String>,
 }
 
 impl DocumentItem {
@@ -499,24 +687,6 @@ impl DocumentItem {
             file_name,
             input_kind,
             page_count: None,
-            status: DocumentStatus::Queued,
-            output_path: None,
-            progress: 0.0,
-            error_message: None,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Default, PartialEq)]
-pub enum DocumentStatus {
-    #[default]
-    Queued,
-}
-
-impl std::fmt::Display for DocumentStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            DocumentStatus::Queued => write!(f, "Queued"),
         }
     }
 }

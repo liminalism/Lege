@@ -2495,6 +2495,7 @@ dependencies = [
  "jp2lam",
  "jpeg-encoder",
  "lege-gpu",
+ "lege-gui-liminalui",
  "lege-ipc",
  "lege-ocr",
  "lege-pdf-read",
@@ -2632,7 +2633,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "lege-gui-pixelkit"
+name = "lege-gui-liminalui"
 version = "1.0.0"
 dependencies = [
  "anyhow",
@@ -2642,14 +2643,15 @@ dependencies = [
  "flume",
  "lege-ipc",
  "libc",
- "pixelkit-raster",
- "pixelkit-shell",
- "pixelkit-text",
- "pixelkit-ui",
- "pixelkit-windowing",
+ "liminalkit-raster",
+ "liminalkit-shell",
+ "liminalkit-text",
+ "liminalkit-ui",
+ "liminalkit-windowing",
  "rfd",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
  "winit",
 ]
@@ -2836,6 +2838,52 @@ dependencies = [
  "cc",
  "pkg-config",
  "vcpkg",
+]
+
+[[package]]
+name = "liminalkit-raster"
+version = "0.1.0"
+dependencies = [
+ "wide",
+]
+
+[[package]]
+name = "liminalkit-shell"
+version = "0.1.0"
+dependencies = [
+ "arboard",
+ "liminalkit-raster",
+ "objc2-app-kit 0.3.2",
+ "objc2-foundation 0.3.2",
+ "zeroize",
+]
+
+[[package]]
+name = "liminalkit-text"
+version = "0.1.0"
+dependencies = [
+ "liminalkit-raster",
+]
+
+[[package]]
+name = "liminalkit-ui"
+version = "0.1.0"
+dependencies = [
+ "liminalkit-raster",
+ "liminalkit-shell",
+ "liminalkit-text",
+ "unicode-segmentation",
+ "zeroize",
+]
+
+[[package]]
+name = "liminalkit-windowing"
+version = "0.1.0"
+dependencies = [
+ "liminalkit-raster",
+ "liminalkit-shell",
+ "softbuffer",
+ "winit",
 ]
 
 [[package]]
@@ -4041,52 +4089,6 @@ name = "pin-project-lite"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
-
-[[package]]
-name = "pixelkit-raster"
-version = "0.1.0"
-dependencies = [
- "wide",
-]
-
-[[package]]
-name = "pixelkit-shell"
-version = "0.1.0"
-dependencies = [
- "arboard",
- "objc2-app-kit 0.3.2",
- "objc2-foundation 0.3.2",
- "pixelkit-raster",
- "zeroize",
-]
-
-[[package]]
-name = "pixelkit-text"
-version = "0.1.0"
-dependencies = [
- "pixelkit-raster",
-]
-
-[[package]]
-name = "pixelkit-ui"
-version = "0.1.0"
-dependencies = [
- "pixelkit-raster",
- "pixelkit-shell",
- "pixelkit-text",
- "unicode-segmentation",
- "zeroize",
-]
-
-[[package]]
-name = "pixelkit-windowing"
-version = "0.1.0"
-dependencies = [
- "pixelkit-raster",
- "pixelkit-shell",
- "softbuffer",
- "winit",
-]
 
 [[package]]
 name = "pkg-config"

@@ -407,6 +407,75 @@ fn pipeline_token_is_injected_into_backend_requests() {
     );
 }
 
+#[derive(Debug)]
+struct CancellingBackend {
+    pipeline: CancellationToken,
+}
+
+impl RenderBackend for CancellingBackend {
+    fn id(&self) -> BackendId {
+        BackendId::Other(2)
+    }
+    fn capabilities(&self) -> BackendCapabilities {
+        MockBackend::default().capabilities()
+    }
+    fn supports(&self, _: &pdf_page_ir::CompiledPage, _: &RenderRequest) -> SupportLevel {
+        SupportLevel::Native
+    }
+    fn submit(&self, request: RenderRequest) -> Result<RenderTicket, SubmitError> {
+        // Cancel after admission, while the backend owns a request that also
+        // has a separate caller token. Neither source may mask the other.
+        self.pipeline.cancel();
+        let (ticket, sender) = RenderTicket::new(0);
+        let error = if request
+            .limits
+            .cancellation
+            .as_ref()
+            .is_some_and(CancellationToken::is_cancelled)
+        {
+            RenderError::Cancelled
+        } else {
+            RenderError::Backend("pipeline cancellation was hidden by request token".into())
+        };
+        sender.send(Err(error)).unwrap();
+        Ok(ticket)
+    }
+}
+
+#[test]
+fn pipeline_cancellation_reaches_an_active_request_with_its_own_token() {
+    let snapshot = snapshot(1);
+    let pipeline = CancellationToken::new();
+    let local = CancellationToken::new();
+    let make = make_requester(
+        Arc::new(AtomicUsize::new(0)),
+        Arc::new(AtomicUsize::new(0)),
+        None,
+    );
+    let requester = |snapshot: &DocumentSnapshot, page| {
+        let mut request = make(snapshot, page)?;
+        request.limits.cancellation = Some(local.clone());
+        Ok(request)
+    };
+    let scheduler = RenderScheduler::new(
+        Arc::new(CancellingBackend {
+            pipeline: pipeline.clone(),
+        }),
+        SchedulerOptions::default(),
+    );
+    let mut results = Vec::new();
+    scheduler.render_range(&snapshot, 0..1, &requester, Some(&pipeline), &mut |out| {
+        results.push(out)
+    });
+    assert_eq!(results.len(), 1);
+    assert!(matches!(results[0].result, Err(RenderError::Cancelled)));
+    assert!(
+        !local.is_cancelled(),
+        "cancellation must not mutate the caller's token"
+    );
+    assert_eq!(scheduler.budget().in_use(), 0);
+}
+
 #[test]
 fn cancellation_stops_the_pipeline() {
     let snap = snapshot(6);

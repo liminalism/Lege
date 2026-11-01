@@ -1,5 +1,3 @@
-#![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
-
 mod app;
 mod appearance;
 #[allow(dead_code, unused_imports)]
@@ -22,9 +20,9 @@ mod version;
 #[allow(dead_code)]
 mod worker_process;
 
-use pixelkit_windowing::PixelApp;
+use liminalkit_windowing::PixelApp;
 
-fn main() -> anyhow::Result<()> {
+pub fn run() -> anyhow::Result<()> {
     let mut app = app::LegeApp::new();
     // The actual UI renderer, without a window or display server, for visual
     // review at different sizes/scales. Never changes the user's settings.
@@ -73,15 +71,15 @@ fn main() -> anyhow::Result<()> {
                 dark: true,
             }));
         }
-        let mut buffer = pixelkit_raster::WindowBuffer::new(width, height);
-        app.render(&mut buffer, pixelkit_shell::Scale(scale));
-        pixelkit_raster::png::write(path, &buffer)?;
+        let mut buffer = liminalkit_raster::WindowBuffer::new(width, height);
+        app.render(&mut buffer, liminalkit_shell::Scale(scale));
+        liminalkit_raster::png::write(path, &buffer)?;
         return Ok(());
     }
     // The preview must not replace the shipping GUI's lege.desktop launcher.
     // Reuse desktop registration when the default frontend switches.
     let mut config =
-        pixelkit_windowing::WindowConfig::new("Lege", 940.0, 700.0).min_size(620.0, 680.0);
+        liminalkit_windowing::WindowConfig::new("Lege", 1040.0, 700.0).min_size(720.0, 600.0);
     config.app_id = Some("org.lege.Lege".into());
-    pixelkit_windowing::run_app(app, config).map_err(|e| anyhow::anyhow!("{e}"))
+    liminalkit_windowing::run_app(app, config).map_err(|e| anyhow::anyhow!("{e}"))
 }

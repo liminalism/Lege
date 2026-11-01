@@ -196,10 +196,20 @@ pub fn set_theme_preview(choice: Option<ThemeChoice>) {
 pub fn commit_theme_choice(choice: ThemeChoice) -> anyhow::Result<()> {
     {
         let mut settings = SETTINGS.write().unwrap_or_else(|e| e.into_inner());
-        settings.theme = choice;
-        save_appearance_settings(&settings)?;
+        persist_theme_choice(&mut settings, choice, save_appearance_settings)?;
     }
     *PREVIEW.write().unwrap_or_else(|e| e.into_inner()) = None;
+    Ok(())
+}
+
+fn persist_theme_choice(
+    settings: &mut AppearanceSettings,
+    choice: ThemeChoice,
+    save: impl FnOnce(&AppearanceSettings) -> anyhow::Result<()>,
+) -> anyhow::Result<()> {
+    let candidate = AppearanceSettings { theme: choice };
+    save(&candidate)?;
+    *settings = candidate;
     Ok(())
 }
 
@@ -294,14 +304,40 @@ pub fn save_appearance_settings(settings: &AppearanceSettings) -> anyhow::Result
     let stored = StoredAppearanceSettings {
         theme: to_stored(settings.theme),
     };
-    let content = serde_json::to_string_pretty(&stored)?;
-    fs::write(&settings_path, content)?;
+    // Keep the previous settings file intact if serialization, writing or
+    // flushing fails. Commit the complete candidate with one rename.
+    let parent = settings_path
+        .parent()
+        .unwrap_or_else(|| std::path::Path::new("."));
+    let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
+    serde_json::to_writer_pretty(temporary.as_file_mut(), &stored)?;
+    temporary.as_file().sync_all()?;
+    temporary
+        .persist(&settings_path)
+        .map_err(|error| error.error)?;
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn lifecycle_failed_theme_persistence_preserves_the_committed_choice() {
+        let mut settings = AppearanceSettings::default();
+        let selected = ThemeChoice::Sanzo {
+            index: 1,
+            dark: true,
+        };
+        let result = persist_theme_choice(&mut settings, selected, |candidate| {
+            assert_eq!(candidate.theme, selected);
+            Err(anyhow::anyhow!("disk write failed"))
+        });
+        assert!(result.is_err());
+        assert_eq!(settings.theme, ThemeChoice::Default);
+        persist_theme_choice(&mut settings, selected, |_| Ok(())).unwrap();
+        assert_eq!(settings.theme, selected);
+    }
 
     #[test]
     fn default_theme_is_the_day_palette() {

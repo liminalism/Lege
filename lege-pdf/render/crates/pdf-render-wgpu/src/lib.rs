@@ -11,8 +11,8 @@
 use std::collections::{BTreeSet, HashMap};
 #[cfg(test)]
 use std::sync::atomic::AtomicU8;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use bytemuck::{Pod, Zeroable};
@@ -2431,10 +2431,8 @@ pub struct ImageRenderResult {
 /// [`ImageRendererPreference::Cpu`] to `Auto` without changing callers.
 pub struct ExperimentalImageRenderer {
     cpu: Arc<CpuBackend>,
-    gpu: Mutex<Option<Arc<WgpuBackend>>>,
+    gpu_state: Mutex<GpuLifecycle>,
     preference: ImageRendererPreference,
-    gpu_unavailable_reason: OnceLock<Arc<str>>,
-    gpu_recovery_pending: AtomicBool,
     job_counter: AtomicU64,
     gpu_pages: AtomicU64,
     cpu_pages: AtomicU64,
@@ -2445,13 +2443,24 @@ pub struct ExperimentalImageRenderer {
     gpu_recoveries: AtomicU64,
 }
 
+/// Process-level routing state; a page's transactional GPU attempt is
+/// independent of this lifecycle. All transitions happen under one mutex.
+#[derive(Debug)]
+enum GpuLifecycle {
+    CpuOnly,
+    Cold,
+    Ready(Arc<WgpuBackend>),
+    NeedsRecovery,
+    Disabled(Arc<str>),
+}
+
 impl std::fmt::Debug for ExperimentalImageRenderer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let gpu_adapter = self.current_gpu().map(|gpu| gpu.adapter_info().clone());
         f.debug_struct("ExperimentalImageRenderer")
             .field("gpu_adapter", &gpu_adapter)
             .field("preference", &self.preference)
-            .field("gpu_unavailable_reason", &self.gpu_unavailable_reason.get())
+            .field("gpu_unavailable_reason", &self.gpu_unavailable_reason())
             .finish_non_exhaustive()
     }
 }
@@ -2466,19 +2475,18 @@ impl ExperimentalImageRenderer {
         options: CpuBackendOptions,
     ) -> Result<Self, RenderError> {
         let cpu = Arc::new(CpuBackend::new(options));
-        let gpu = match preference {
-            ImageRendererPreference::Cpu | ImageRendererPreference::Auto => None,
+        let gpu_state = match preference {
+            ImageRendererPreference::Cpu => GpuLifecycle::CpuOnly,
+            ImageRendererPreference::Auto => GpuLifecycle::Cold,
             ImageRendererPreference::Gpu => {
-                Some(Arc::new(WgpuBackend::with_preparer(Arc::clone(&cpu))?))
+                GpuLifecycle::Ready(Arc::new(WgpuBackend::with_preparer(Arc::clone(&cpu))?))
             }
         };
-        let gpu_initializations = u64::from(gpu.is_some());
+        let gpu_initializations = u64::from(matches!(gpu_state, GpuLifecycle::Ready(_)));
         Ok(Self {
             cpu,
-            gpu: Mutex::new(gpu),
+            gpu_state: Mutex::new(gpu_state),
             preference,
-            gpu_unavailable_reason: OnceLock::new(),
-            gpu_recovery_pending: AtomicBool::new(false),
             job_counter: AtomicU64::new(0),
             gpu_pages: AtomicU64::new(0),
             cpu_pages: AtomicU64::new(0),
@@ -2494,8 +2502,15 @@ impl ExperimentalImageRenderer {
         self.current_gpu().map(|gpu| gpu.adapter_info().clone())
     }
 
-    pub fn gpu_unavailable_reason(&self) -> Option<&str> {
-        self.gpu_unavailable_reason.get().map(AsRef::as_ref)
+    pub fn gpu_unavailable_reason(&self) -> Option<Arc<str>> {
+        match &*self
+            .gpu_state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+        {
+            GpuLifecycle::Disabled(reason) => Some(Arc::clone(reason)),
+            _ => None,
+        }
     }
 
     /// Whether this policy executor currently owns an initialized GPU backend.
@@ -2517,29 +2532,33 @@ impl ExperimentalImageRenderer {
     }
 
     fn current_gpu(&self) -> Option<Arc<WgpuBackend>> {
-        self.gpu
+        match &*self
+            .gpu_state
             .lock()
             .unwrap_or_else(|error| error.into_inner())
-            .clone()
+        {
+            GpuLifecycle::Ready(gpu) => Some(Arc::clone(gpu)),
+            _ => None,
+        }
     }
 
     fn ensure_gpu(&self) -> Result<Option<Arc<WgpuBackend>>, RenderError> {
-        if self.preference == ImageRendererPreference::Cpu {
+        let mut state = self
+            .gpu_state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if let GpuLifecycle::Ready(gpu) = &*state {
+            if !gpu.device_is_lost() {
+                return Ok(Some(Arc::clone(gpu)));
+            }
+            *state = GpuLifecycle::NeedsRecovery;
+        }
+        if matches!(*state, GpuLifecycle::CpuOnly | GpuLifecycle::Disabled(_)) {
             return Ok(None);
         }
-
-        let mut slot = self.gpu.lock().unwrap_or_else(|error| error.into_inner());
-        if slot.as_ref().is_some_and(|gpu| gpu.device_is_lost()) {
-            *slot = None;
-            self.gpu_recovery_pending.store(true, Ordering::Release);
-        }
-        if let Some(gpu) = slot.as_ref() {
-            return Ok(Some(Arc::clone(gpu)));
-        }
-        if self.gpu_unavailable_reason.get().is_some() {
-            return Ok(None);
-        }
-
+        let recovering = matches!(*state, GpuLifecycle::NeedsRecovery);
+        // Serialize initialization too: parallel eligible pages share a single
+        // device, and failed recoveries remain retryable on the next request.
         let initialized = WgpuBackend::with_preparer(Arc::clone(&self.cpu));
         let gpu = match initialized {
             Ok(gpu)
@@ -2549,41 +2568,36 @@ impl ExperimentalImageRenderer {
                     "software adapter {:?} is not eligible for automatic rendering",
                     gpu.adapter_info()
                 ));
-                if self.gpu_recovery_pending.load(Ordering::Acquire) {
+                if recovering {
                     return Err(RenderError::GpuUnavailable(reason.to_string()));
                 }
-                let _ = self.gpu_unavailable_reason.set(reason);
+                *state = GpuLifecycle::Disabled(reason);
                 return Ok(None);
             }
             Ok(gpu) => Arc::new(gpu),
-            Err(error) if self.preference == ImageRendererPreference::Auto => {
-                if self.gpu_recovery_pending.load(Ordering::Acquire) {
-                    return Err(error);
-                }
-                let _ = self
-                    .gpu_unavailable_reason
-                    .set(Arc::from(error.to_string()));
+            Err(error) if self.preference == ImageRendererPreference::Auto && !recovering => {
+                *state = GpuLifecycle::Disabled(Arc::from(error.to_string()));
                 return Ok(None);
             }
             Err(error) => return Err(error),
         };
-
         self.gpu_initializations.fetch_add(1, Ordering::Relaxed);
-        if self.gpu_recovery_pending.swap(false, Ordering::AcqRel) {
+        if recovering {
             self.gpu_recoveries.fetch_add(1, Ordering::Relaxed);
         }
-        *slot = Some(Arc::clone(&gpu));
+        *state = GpuLifecycle::Ready(Arc::clone(&gpu));
         Ok(Some(gpu))
     }
 
     fn invalidate_gpu_after_loss(&self, gpu: &Arc<WgpuBackend>) {
-        let mut slot = self.gpu.lock().unwrap_or_else(|error| error.into_inner());
-        if slot
-            .as_ref()
-            .is_some_and(|current| Arc::ptr_eq(current, gpu))
-        {
-            *slot = None;
-            self.gpu_recovery_pending.store(true, Ordering::Release);
+        let mut state = self
+            .gpu_state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        // A late failure from an old generation must not invalidate a device
+        // already recovered by another page.
+        if matches!(&*state, GpuLifecycle::Ready(current) if Arc::ptr_eq(current, gpu)) {
+            *state = GpuLifecycle::NeedsRecovery;
         }
         if let Some(reason) = gpu.device_loss_reason() {
             eprintln!("pdf-render-wgpu: invalidated lost device: {reason}");
@@ -2591,24 +2605,18 @@ impl ExperimentalImageRenderer {
     }
 
     fn quarantine_gpu_after_panic(&self) {
-        let mut slot = self.gpu.lock().unwrap_or_else(|error| error.into_inner());
+        let mut state = self
+            .gpu_state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
         if self.preference == ImageRendererPreference::Auto {
-            // A panic indicates a violated backend invariant rather than a
-            // page-level capability decline. Keep this render transactional,
-            // then stop automatic pickup for the rest of the process so a
-            // deterministic backend bug cannot tax every later page. Arcs
-            // already held by parallel jobs remain valid; their own failures
-            // are independently contained by the same CPU fallback seam.
-            *slot = None;
-            let _ = self.gpu_unavailable_reason.set(Arc::from(
+            // Quarantine applies to the process, including parallel pages that
+            // still hold an Arc from an earlier generation.
+            *state = GpuLifecycle::Disabled(Arc::from(
                 "GPU renderer panicked; automatic routing disabled for this process",
             ));
-        } else if let Some(gpu) = slot.as_ref()
-            && gpu.device_is_lost()
-        {
-            let gpu = Arc::clone(gpu);
-            drop(slot);
-            self.invalidate_gpu_after_loss(&gpu);
+        } else if matches!(&*state, GpuLifecycle::Ready(gpu) if gpu.device_is_lost()) {
+            *state = GpuLifecycle::NeedsRecovery;
         }
     }
 
@@ -2658,7 +2666,7 @@ impl ExperimentalImageRenderer {
             }
             match self.preference {
                 ImageRendererPreference::Auto => {
-                    if self.gpu_unavailable_reason.get().is_some() {
+                    if self.gpu_unavailable_reason().is_some() {
                         None
                     } else {
                         let total_start = Instant::now();
@@ -2789,7 +2797,7 @@ impl RenderBackend for ExperimentalImageRenderer {
 
     fn supports(&self, page: &CompiledPage, request: &RenderRequest) -> SupportLevel {
         if self.preference != ImageRendererPreference::Cpu
-            && self.gpu_unavailable_reason.get().is_none()
+            && self.gpu_unavailable_reason().is_none()
             && match self.preference {
                 ImageRendererPreference::Gpu => request_shape_supported_forced(page, request),
                 ImageRendererPreference::Auto => request_shape_supported(page, request),
@@ -4570,6 +4578,27 @@ mod tests {
         assert_eq!(&*later.host.pixels, &*expected.pixels);
         assert_eq!(renderer.telemetry().cpu_pages, 2);
         assert_eq!(renderer.telemetry().gpu_fallbacks, 1);
+    }
+
+    #[test]
+    fn quarantine_is_terminal_even_before_the_first_gpu_initialization() {
+        let renderer = ExperimentalImageRenderer::new(
+            ImageRendererPreference::Auto,
+            CpuBackendOptions::default(),
+        )
+        .unwrap();
+        renderer.quarantine_gpu_after_panic();
+        for _ in 0..2 {
+            assert!(renderer.ensure_gpu().unwrap().is_none());
+        }
+        assert!(!renderer.gpu_initialized());
+        assert!(
+            renderer
+                .gpu_unavailable_reason()
+                .unwrap()
+                .contains("panicked")
+        );
+        assert_eq!(renderer.telemetry().gpu_initializations, 0);
     }
 
     #[test]

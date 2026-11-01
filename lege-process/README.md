@@ -15,7 +15,7 @@ There are 2 generally intended usages for the program; outputs of commercial boo
 ## Interfaces
 
 * **CLI**: guided interactive mode (no args) + direct command modes
-* **GUI**: PixelKit desktop app using the same processing core; queue-based workflow with progress + cancel
+* **GUI**: liminalUI desktop app using the same processing core; queue-based workflow with progress + cancel
 
 ---
 
@@ -29,12 +29,14 @@ cd lege
 cargo build --release
 ```
 
+The same `cargo build --release` command also builds both binaries when run from `lege-process/`. Output is in the workspace's `target/release/` directory. The GUI uses the sibling `liminalkit` checkout.
+
 The default build embeds PP-OCR, layout detection, and JPEG 2000. It does not need a system Tesseract install. The legacy Tesseract backend is opt-in (`--features tesseract-ocr`) and then needs `tesseract-ocr`, `libtesseract-dev`, and `libleptonica-dev`.
 
 You'll get:
 
 * CLI: `target/release/lege`
-* GUI: `target/release/lege-gui` (package `lege-gui-pixelkit`)
+* GUI: `target/release/lege-gui` (also available as package `lege-gui-liminalui`)
 
 ### Linux release packaging
 
@@ -214,7 +216,7 @@ Lege Process is one application family inside the ecosystem workspace rooted at
 * `ocr/`, `reflow/` — process-level OCR/reflow integration
 * `models/`, `language_service/` — process runtime/embedded data
 * `lege-ipc/` — IPC and shared log types for the CLI and GUI
-* `GUI/PixelKit/` — desktop GUI frontend (`lege-gui`), drawn with PixelKit
+* `GUI/liminalUI/` — desktop GUI frontend (`lege-gui`), drawn with liminalkit
 
 Shared ecosystem crates are siblings of this folder: `../lege-gpu`,
 `../lege-ocr`, `../lege-pdf/read`, and `../lege-pdf/write`. Page rendering

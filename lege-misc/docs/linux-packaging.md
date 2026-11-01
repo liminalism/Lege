@@ -11,7 +11,7 @@ The `.deb` package metadata lives in `Cargo.toml` under
 `[package.metadata.deb]`.
 
 ```bash
-cargo build --release --package lege --package lege-gui-pixelkit
+cargo build --release --package lege --package lege-gui-liminalui
 cargo deb
 ```
 
@@ -28,7 +28,7 @@ location explicitly:
 ```bash
 chmod +x appimagetool-x86_64.AppImage
 # option A: place on PATH as `appimagetool`, then:
-# default PixelKit GUI
+# default liminalUI GUI
 cargo appimage
 # optional viewer GUI
 cargo appimage viewer
@@ -49,7 +49,7 @@ You can also force variant through env:
 APPIMAGE_GUI=viewer cargo appimage
 ```
 
-By default, `cargo appimage` builds the core CLI plus the PixelKit GUI (`lege-process/GUI/PixelKit`).
+By default, `cargo appimage` builds the core CLI plus the liminalUI GUI (`lege-process/GUI/liminalUI`).
 Pass `viewer` (or `APPIMAGE_GUI=viewer`) to build the Liminaldoc reader instead.
 The task builds in release mode with the requested GUI target, creates
 `target/appimage/Lege.AppDir`, and emits:

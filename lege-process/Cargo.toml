@@ -1,6 +1,7 @@
 [package]
 build = "build.rs"
 name = "lege"
+default-run = "lege"
 version = "1.5.2"
 edition = "2024"
 description = "Document binarization and re-encoding especially for E-Ink ebook readers"
@@ -18,6 +19,10 @@ path = "core/lib.rs"
 name = "lege"
 path = "core/main.rs"
 
+[[bin]]
+name = "lege-gui"
+path = "GUI/liminalUI/src/main.rs"
+required-features = ["gui"]
 
 [build-dependencies]
 winres = "0.1.12"  # Updated
@@ -70,6 +75,9 @@ regex = "1.12.2"
 unicode-normalization = "0.1"
 flume = { workspace = true }
 zip = { workspace = true, features = ["deflate"] }
+[target.'cfg(not(target_os = "android"))'.dependencies]
+lege-gui-liminalui = { path = "GUI/liminalUI", optional = true }
+
 [target.'cfg(target_os = "linux")'.dependencies]
 ash = { version = "0.38", default-features = false, features = ["loaded"] }
 tesseract = { version = "0.15.2", optional = true }
@@ -107,9 +115,10 @@ windows = { workspace = true, features = [
 windows-core = { workspace = true }
 
 [features]
-# This crate builds the `lege` CLI only. The desktop GUI is `lege-gui-pixelkit`
-# (bin `lege-gui`). The reader and writer live in the sibling Liminaldoc workspace.
-default = ["jp2-lam", "paddle-ocr", "layout-detection"]
+# The default build includes the CLI and the LiminalKit desktop GUI. Disable
+# default features to build the processor without the optional GUI dependency.
+default = ["gui", "jp2-lam", "paddle-ocr", "layout-detection"]
+gui = ["dep:lege-gui-liminalui"]
 # Android platform support. Gates everything under `android/`; nothing new
 # compiles with the feature off, so desktop builds are unaffected. Building for
 # Android without it is a hard error (see `core/lib.rs`).
@@ -120,7 +129,7 @@ android = [
     # crate — it only forwards when an OCR feature already enabled it.
     "lege-ocr?/android",
 ]
-debug-logging = ["lege-gpu/debug-logging"]
+debug-logging = ["lege-gpu/debug-logging", "lege-gui-liminalui?/debug-logging"]
 jp2-lam = ["dep:jp2lam"]
 layout-detection = ["lege-gpu/layout-detection"]
 # Minimal worker feature set used by the Sheet Music Edition. Layout and the
@@ -139,7 +148,7 @@ profiling = ["debug-logging"]
 debug-layers = []
 no-include-shaders = []
 djvu_debug = []
-german = []
+german = ["lege-gui-liminalui?/german"]
 
 [dev-dependencies]
 flamegraph = "0.6.13"
@@ -160,7 +169,7 @@ profile = "release"
 assets = [
     # Install CLI and GUI binaries directly into PATH
     ["target/release/lege", "usr/bin/lege", "755"],
-    # Produced by the `lege-gui-pixelkit` package; build the workspace before `cargo deb`.
+    # Produced by the `lege-gui-liminalui` package; build the workspace before `cargo deb`.
     ["target/release/lege-gui", "usr/bin/lege-gui", "755"],
     # Desktop integration
     ["lege.desktop", "usr/share/applications/", "644"],

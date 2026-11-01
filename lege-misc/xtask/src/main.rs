@@ -28,12 +28,12 @@ fn run() -> Result<(), String> {
 
 fn build_appimage(extra_args: Vec<String>) -> Result<(), String> {
     let gui_variant = match extra_args.as_slice() {
-        [] => "pixelkit",
+        [] => "liminalui",
         [arg] if arg == "viewer" || arg == "--viewer" => "viewer",
-        [arg] if arg == "pixelkit" || arg == "--pixelkit" => "pixelkit",
+        [arg] if arg == "liminalui" || arg == "--liminalui" => "liminalui",
         _ => {
             return Err(format!(
-                "unsupported cargo appimage arguments: {}\n\nRun `cargo appimage` (PixelKit GUI) or `cargo appimage viewer`.",
+                "unsupported cargo appimage arguments: {}\n\nRun `cargo appimage` (liminalUI GUI) or `cargo appimage viewer`.",
                 extra_args.join(" ")
             ));
         }
@@ -80,6 +80,6 @@ fn workspace_root() -> Result<PathBuf, String> {
 
 fn print_help() {
     println!(
-        "Lege packaging tasks\n\n  cargo appimage [viewer]\n      Build target/appimage/Lege-<version>-<arch>.AppImage\n      Defaults to the PixelKit GUI; pass `viewer` to use the Liminaldoc reader.\n\nEnvironment forwarded to scripts/build-appimage.sh:\n  APPIMAGETOOL                appimagetool executable/path\n  APPIMAGE_GUI                 gui variant: pixelkit (default) or viewer\n  APPIMAGE_UPDATE_INFORMATION AppImage update metadata string\n  LEGE_CARGO_FEATURES         Additional Cargo features"
+        "Lege packaging tasks\n\n  cargo appimage [viewer]\n      Build target/appimage/Lege-<version>-<arch>.AppImage\n      Defaults to the liminalUI GUI; pass `viewer` to use the Liminaldoc reader.\n\nEnvironment forwarded to scripts/build-appimage.sh:\n  APPIMAGETOOL                appimagetool executable/path\n  APPIMAGE_GUI                 gui variant: liminalui (default) or viewer\n  APPIMAGE_UPDATE_INFORMATION AppImage update metadata string\n  LEGE_CARGO_FEATURES         Additional Cargo features"
     );
 }

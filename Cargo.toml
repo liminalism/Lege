@@ -18,7 +18,7 @@ resolver = "2"
 members = [
     "lege-process",             # `lege` CLI + core processing library
     "lege-process/lege-ipc",    # shared IPC/log types
-    "lege-process/GUI/PixelKit", # `lege-gui`: PixelKit processor GUI (the only frontend)
+    "lege-process/GUI/liminalUI", # `lege-gui`: liminalUI processor GUI (the only frontend)
     "lege-process/GUI/rfd",     # vendored file-dialog crate used by the GUI
     "lege-gpu",                 # `lege_gpu`
     "lege-ocr",                 # `lege_ocr`
@@ -53,11 +53,10 @@ exclude = [
     "lege-pdf/pdf-integrity",
     "lege-docwrite",
 ]
-# `cargo build` produces the `lege` CLI plus the PixelKit GUI (bin `lege-gui`).
+# `cargo build` produces the `lege` CLI plus the liminalUI GUI (bin `lege-gui`).
 # `cargo viewer` targets Liminaldoc.
 default-members = [
     "lege-process",
-    "lege-process/GUI/PixelKit",
 ]
 
 [workspace.package]

@@ -111,10 +111,13 @@ pub struct PathBuilder {
     verbs: Vec<PathVerb>,
     points: Vec<Point>,
     /// Start of the current subpath (target of `h`/close and `v`).
+    subpath: Option<Subpath>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Subpath {
     start: Point,
-    /// Current point.
     current: Point,
-    has_current: bool,
 }
 
 impl PathBuilder {
@@ -126,13 +129,14 @@ impl PathBuilder {
         let p = Point { x, y };
         self.verbs.push(PathVerb::MoveTo);
         self.points.push(p);
-        self.start = p;
-        self.current = p;
-        self.has_current = true;
+        self.subpath = Some(Subpath {
+            start: p,
+            current: p,
+        });
     }
 
     pub fn line_to(&mut self, x: f64, y: f64) {
-        if !self.has_current {
+        if self.subpath.is_none() {
             // A `l` with no current point starts a subpath (tolerant).
             self.move_to(x, y);
             return;
@@ -140,24 +144,30 @@ impl PathBuilder {
         let p = Point { x, y };
         self.verbs.push(PathVerb::LineTo);
         self.points.push(p);
-        self.current = p;
+        if let Some(subpath) = &mut self.subpath {
+            subpath.current = p;
+        }
     }
 
     /// `c`: cubic Bézier with two explicit control points.
     pub fn curve_to(&mut self, x1: f64, y1: f64, x2: f64, y2: f64, x3: f64, y3: f64) {
-        if !self.has_current {
+        if self.subpath.is_none() {
             self.move_to(x1, y1);
         }
         self.verbs.push(PathVerb::CurveTo);
         self.points.push(Point { x: x1, y: y1 });
         self.points.push(Point { x: x2, y: y2 });
         self.points.push(Point { x: x3, y: y3 });
-        self.current = Point { x: x3, y: y3 };
+        if let Some(subpath) = &mut self.subpath {
+            subpath.current = Point { x: x3, y: y3 };
+        }
     }
 
     /// `v`: cubic Bézier using the current point as the first control point.
     pub fn curve_v(&mut self, x2: f64, y2: f64, x3: f64, y3: f64) {
-        let c1 = self.current;
+        let c1 = self
+            .subpath
+            .map_or(Point::default(), |subpath| subpath.current);
         self.curve_to(c1.x, c1.y, x2, y2, x3, y3);
     }
 
@@ -174,24 +184,25 @@ impl PathBuilder {
         self.line_to(x, y + h);
         self.close();
         // Per spec the current point after `re` is the rectangle's origin.
-        self.current = Point { x, y };
-        self.start = Point { x, y };
-        self.has_current = true;
+        self.subpath = Some(Subpath {
+            start: Point { x, y },
+            current: Point { x, y },
+        });
     }
 
     /// `h`: close the current subpath.
     pub fn close(&mut self) {
-        self.verbs.push(PathVerb::Close);
-        self.current = self.start;
+        if let Some(subpath) = &mut self.subpath {
+            self.verbs.push(PathVerb::Close);
+            subpath.current = subpath.start;
+        }
     }
 
     /// Take the accumulated path and reset for the next one.
     pub fn take(&mut self) -> PathData {
         let verbs = std::mem::take(&mut self.verbs);
         let points = std::mem::take(&mut self.points);
-        self.has_current = false;
-        self.start = Point::default();
-        self.current = Point::default();
+        self.subpath = None;
         PathData {
             verbs: verbs.into(),
             points: points.into(),
@@ -203,8 +214,6 @@ impl PathBuilder {
     pub fn clear(&mut self) {
         self.verbs.clear();
         self.points.clear();
-        self.has_current = false;
-        self.start = Point::default();
-        self.current = Point::default();
+        self.subpath = None;
     }
 }

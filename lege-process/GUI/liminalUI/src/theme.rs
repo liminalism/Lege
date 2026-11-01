@@ -1,7 +1,7 @@
 use crate::appearance::{Palette, Rgb};
-use pixelkit_shell::Scale;
-use pixelkit_text::{Face, FaceId, FontSet, TextStyle};
-use pixelkit_ui::Theme;
+use liminalkit_shell::Scale;
+use liminalkit_text::{Face, FaceId, FontSet, TextStyle};
+use liminalkit_ui::Theme;
 use std::sync::OnceLock;
 
 pub const FACE: FaceId = FaceId(0);

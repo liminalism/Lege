@@ -116,7 +116,8 @@
       "completed": "Completed: {}\n{}",
       "completed_with_estimate": "Completed: {}\n{}\n :Compression is extrapolated."
     },
-    "pixelkit": {
+    "liminalui": {
+      "options": "Options",
       "pages_device": "Pages and device",
       "output": "Output",
       "page_mode": "Page mode",
@@ -137,6 +138,7 @@
       "queued": "Queued",
       "processing": "Processing",
       "completed": "Completed",
+      "cancelled": "Cancelled",
       "failed": "Failed",
       "more": "More",
       "progress": "Progress",

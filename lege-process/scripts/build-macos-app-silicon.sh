@@ -5,7 +5,7 @@
 # targets Apple Silicon by default; pass --intel to build the Intel version.
 #
 #   * Apple Silicon is the default; --intel selects x86_64-apple-darwin.
-#   * The GUI is `lege-process/GUI/PixelKit` (package `lege-gui-pixelkit`,
+#   * The GUI is `lege-process/GUI/liminalUI` (package `lege-gui-liminalui`,
 #     binary `lege-gui`).
 #   * The `lege` CLI is built with the full default feature set, including
 #     layout-detection. The current PP-DocLayout-M model is embedded in the
@@ -46,7 +46,7 @@
 #   MACOS_RUST_TOOLCHAIN Rust toolchain installed inside the cross container
 #
 # Notes:
-#   * The PixelKit GUI (binary lege-gui) drives the bundled `lege` CLI as
+#   * The liminalUI GUI (binary lege-gui) drives the bundled `lege` CLI as
 #     a subprocess; the CLI is where OCR, layout detection and binarization run.
 #     The CLI is built with the pure-Rust PP-OCR backend (paddle-ocr) so OCR
 #     works on macOS without any Tesseract native dependency. sauvola.onnx IS
@@ -318,7 +318,7 @@ else
 
   if [[ "$CLI_ONLY" != "1" ]]; then
     echo "== Building lege-gui (main GUI) for $TARGET"
-    cargo build --release --target "$TARGET" -p lege-gui-pixelkit --bin lege-gui \
+    cargo build --release --target "$TARGET" -p lege-gui-liminalui --bin lege-gui \
       --no-default-features
   else
     echo "== CLI-only build: skipping the lege-gui GUI binary"

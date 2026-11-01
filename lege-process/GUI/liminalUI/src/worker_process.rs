@@ -6,7 +6,7 @@ use std::collections::VecDeque;
 /// are deserialized into local protocol types, then forwarded to a merged
 /// flume channel that the GUI progress loop consumes exactly as before.
 use std::ffi::OsString;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::sync::{
     Arc, Mutex,
@@ -16,7 +16,8 @@ use std::sync::{
 use anyhow::Result;
 
 use crate::models::{
-    CompressionType, CoverImageType, ImageProcessingType, OcrMode, OutputFormat, ProcessingOptions,
+    BinarizationKind, CompressionType, CoverImageType, ImageProcessingType, OcrMode, OutputFormat,
+    PageTreatment, ProcessingOptions,
 };
 
 // ── Protocol types ────────────────────────────────────────────────────────────
@@ -479,24 +480,28 @@ pub fn gui_options_to_cli_args(
         args.push("--force-crop".into());
     }
 
-    // Text rendering mode: grayscale/MRC overrides bilevel binarization.
-    if options.preserve_mode {
-        args.push("--preserve".into());
-    } else if options.grayscale_mode {
-        args.push("--grayscale".into());
-    } else if options.use_fixed_threshold {
-        args.push("--binarization".into());
-        args.push("fixed".into());
-        args.push("--threshold".into());
-        args.push(options.threshold_value.to_string().into());
-    } else if options.use_heavy_binarization {
-        args.push("--binarization".into());
-        args.push("heavy".into());
-    } else {
-        args.push("--binarization".into());
-        args.push("adaptive".into());
-        args.push("--sauvola-k".into());
-        args.push(options.k_factor.to_string().into());
+    match options.page_treatment() {
+        PageTreatment::Preserved => args.push("--preserve".into()),
+        PageTreatment::Grayscale => args.push("--grayscale".into()),
+        PageTreatment::Binarized(BinarizationKind::Fixed) => {
+            args.extend([
+                "--binarization".into(),
+                "fixed".into(),
+                "--threshold".into(),
+                options.threshold_value.to_string().into(),
+            ]);
+        }
+        PageTreatment::Binarized(BinarizationKind::Heavy) => {
+            args.extend(["--binarization".into(), "heavy".into()]);
+        }
+        PageTreatment::Binarized(BinarizationKind::Adaptive) => {
+            args.extend([
+                "--binarization".into(),
+                "adaptive".into(),
+                "--sauvola-k".into(),
+                options.k_factor.to_string().into(),
+            ]);
+        }
     }
 
     // Target dimensions via explicit flags. The trailing-positional form is
@@ -524,42 +529,117 @@ pub fn gui_options_to_cli_args(
 
 // ── Worker handle and subprocess spawning ────────────────────────────────────
 
-/// A running `lege --gui-worker` child process.
-pub struct WorkerHandle {
-    /// Child handle.
-    pub child: Option<std::process::Child>,
-    /// PID, used as a kill fallback.
-    pub pid: u32,
-    active_pids: Option<Arc<Mutex<Vec<u32>>>>,
-    cancelled: Option<Arc<AtomicBool>>,
+/// A cancellation address for one child. Only its owner thread signals the
+/// OS process, so a delayed cancellation can never target a reused PID.
+#[derive(Clone)]
+pub struct WorkerStop {
+    pid: u32,
+    sender: flume::Sender<()>,
+}
+
+impl WorkerStop {
+    pub fn pid(&self) -> u32 {
+        self.pid
+    }
+    fn request(&self) {
+        let _ = self.sender.try_send(());
+    }
+}
+
+pub enum WorkerHandle {
+    Process(WorkerStop),
+    Supervisor {
+        active: Arc<Mutex<Vec<WorkerStop>>>,
+        cancelled: Arc<AtomicBool>,
+    },
+}
+
+impl Drop for WorkerHandle {
+    fn drop(&mut self) {
+        self.kill();
+    }
 }
 
 impl WorkerHandle {
-    pub fn supervisor(active_pids: Arc<Mutex<Vec<u32>>>, cancelled: Arc<AtomicBool>) -> Self {
-        Self {
-            child: None,
-            pid: 0,
-            active_pids: Some(active_pids),
-            cancelled: Some(cancelled),
+    pub fn supervisor(active: Arc<Mutex<Vec<WorkerStop>>>, cancelled: Arc<AtomicBool>) -> Self {
+        Self::Supervisor { active, cancelled }
+    }
+    pub fn pid(&self) -> u32 {
+        match self {
+            Self::Process(stop) => stop.pid,
+            Self::Supervisor { .. } => 0,
         }
     }
-
-    pub fn kill(&mut self) {
-        if let Some(cancelled) = &self.cancelled {
-            cancelled.store(true, Ordering::SeqCst);
+    pub fn stop_handle(&self) -> WorkerStop {
+        match self {
+            Self::Process(stop) => stop.clone(),
+            Self::Supervisor { .. } => unreachable!("only a process has a stop handle"),
         }
-        if let Some(active_pids) = &self.active_pids {
-            if let Ok(pids) = active_pids.lock() {
-                for pid in pids.iter().copied() {
-                    kill_pid(pid);
+    }
+    pub fn kill(&mut self) {
+        match self {
+            Self::Process(stop) => stop.request(),
+            Self::Supervisor { active, cancelled } => {
+                cancelled.store(true, Ordering::SeqCst);
+                for stop in active
+                    .lock()
+                    .unwrap_or_else(|error| error.into_inner())
+                    .iter()
+                {
+                    stop.request();
                 }
             }
-            return;
         }
-        if let Some(ref mut c) = self.child {
-            let _ = c.kill();
-        } else {
-            kill_pid(self.pid);
+    }
+}
+
+/// Child ownership persists through graceful termination and forced kill.
+fn wait_for_child(
+    child: &mut std::process::Child,
+    stop: flume::Receiver<()>,
+    deadline: Option<std::time::Instant>,
+) -> std::io::Result<std::process::ExitStatus> {
+    enum Phase {
+        Running,
+        Stopping(std::time::Instant),
+        Killed,
+    }
+    let mut phase = Phase::Running;
+    let mut timed_out = false;
+    loop {
+        if let Some(status) = child.try_wait()? {
+            return if timed_out {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "worker probe timed out",
+                ))
+            } else {
+                Ok(status)
+            };
+        }
+        timed_out |= deadline.is_some_and(|deadline| std::time::Instant::now() >= deadline);
+        let request = timed_out
+            || match stop.recv_timeout(std::time::Duration::from_millis(20)) {
+                Ok(()) => true,
+                Err(flume::RecvTimeoutError::Disconnected) => {
+                    std::thread::sleep(std::time::Duration::from_millis(20));
+                    true
+                }
+                Err(flume::RecvTimeoutError::Timeout) => false,
+            };
+        if timed_out {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        match phase {
+            Phase::Running if request => {
+                kill_pid(child.id());
+                phase = Phase::Stopping(std::time::Instant::now());
+            }
+            Phase::Stopping(start) if start.elapsed() >= std::time::Duration::from_secs(3) => {
+                let _ = child.kill();
+                phase = Phase::Killed;
+            }
+            _ => {}
         }
     }
 }
@@ -729,7 +809,7 @@ pub fn spawn_lege_worker(
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
 
-    let mut child = cmd.spawn().map_err(|e| {
+    let child = cmd.spawn().map_err(|e| {
         append_worker_log(&format!(
             "task {gui_task_id}: FAILED to launch lege worker ({}): {e}",
             cli_path.display()
@@ -737,105 +817,172 @@ pub fn spawn_lege_worker(
         anyhow::anyhow!("Failed to launch lege worker ({:?}): {}", cli_path, e)
     })?;
 
+    monitor_worker(child, gui_task_id, events_tx, log_tx, run_log_path)
+}
+
+/// stdout owns the protocol state; the process owner publishes its one final
+/// outcome only after process exit and complete stdout/stderr drainage.
+enum WorkerProtocolState {
+    Streaming,
+    Terminal(WorkerProgressUpdate),
+}
+
+fn monitor_worker(
+    mut child: std::process::Child,
+    task_id: u64,
+    events: flume::Sender<WorkerProgressUpdate>,
+    log_tx: Option<flume::Sender<String>>,
+    run_log: PathBuf,
+) -> Result<WorkerHandle> {
     let pid = child.id();
-    let terminal_seen = Arc::new(AtomicBool::new(false));
-    let stderr_lines = Arc::new(Mutex::new(VecDeque::<String>::with_capacity(50)));
-
-    // Dedicated thread: read stdout, parse JSON, forward events.
-    let stdout = child.stdout.take().expect("stdout piped");
-    let stdout_events_tx = events_tx.clone();
-    let stdout_terminal_seen = terminal_seen.clone();
-    let stdout_run_log_path = run_log_path.clone();
-    std::thread::spawn(move || {
+    let (stop_tx, stop_rx) = flume::bounded(1);
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| anyhow::anyhow!("worker stdout not piped"))?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| anyhow::anyhow!("worker stderr not piped"))?;
+    let progress = events.clone();
+    let stdout_thread = std::thread::spawn(move || -> std::io::Result<WorkerProtocolState> {
+        let mut state = WorkerProtocolState::Streaming;
         for line in BufReader::new(stdout).lines() {
-            match line {
-                Ok(line) => {
-                    if let Ok(update) = serde_json::from_str::<WorkerProgressUpdate>(&line) {
-                        if matches!(
-                            update,
-                            WorkerProgressUpdate::Completed { .. }
-                                | WorkerProgressUpdate::Error { .. }
-                        ) {
-                            stdout_terminal_seen.store(true, Ordering::SeqCst);
+            let line = line?;
+            if let Ok(update) = serde_json::from_str::<WorkerProgressUpdate>(&line) {
+                if matches!(state, WorkerProtocolState::Streaming) {
+                    match update {
+                        WorkerProgressUpdate::Completed { .. }
+                        | WorkerProgressUpdate::Error { .. } => {
+                            state = WorkerProtocolState::Terminal(update.with_task_id(task_id))
                         }
-                        if let WorkerProgressUpdate::Error { ref error, .. } = update {
-                            let line = format!("task {gui_task_id} reported error: {error}");
-                            append_worker_log(&line);
-                            append_run_log(&stdout_run_log_path, &line);
+                        update => {
+                            let _ = progress.send(update.with_task_id(task_id));
                         }
-                        let _ = stdout_events_tx.send(update.with_task_id(gui_task_id));
                     }
                 }
-                Err(_) => break,
             }
         }
+        Ok(state)
     });
-
-    // Dedicated thread: drain stderr (forward to log or discard).
-    let stderr = child.stderr.take().expect("stderr piped");
-    let stderr_lines_for_thread = stderr_lines.clone();
-    let stderr_run_log_path = run_log_path.clone();
+    let stderr_run_log = run_log.clone();
+    let stderr_thread = std::thread::spawn(move || {
+        let mut tail = VecDeque::with_capacity(50);
+        for line in BufReader::new(stderr)
+            .lines()
+            .map_while(std::result::Result::ok)
+        {
+            append_worker_log(&format!("task {task_id} stderr: {line}"));
+            append_run_log(&stderr_run_log, &format!("stderr: {line}"));
+            if tail.len() == 50 {
+                tail.pop_front();
+            }
+            tail.push_back(line.clone());
+            if let Some(tx) = &log_tx {
+                let _ = tx.send(line);
+            }
+        }
+        tail
+    });
     std::thread::spawn(move || {
-        for line in BufReader::new(stderr).lines() {
-            match line {
-                Ok(line) => {
-                    append_worker_log(&format!("task {gui_task_id} stderr: {line}"));
-                    append_run_log(&stderr_run_log_path, &format!("stderr: {line}"));
-                    if let Ok(mut lines) = stderr_lines_for_thread.lock() {
-                        if lines.len() >= 50 {
-                            lines.pop_front();
-                        }
-                        lines.push_back(line.clone());
+        let exit = wait_for_child(&mut child, stop_rx, None);
+        let protocol = stdout_thread
+            .join()
+            .map_err(|_| "worker stdout reader panicked".to_string())
+            .and_then(|result| {
+                result.map_err(|error| format!("worker stdout read failed: {error}"))
+            });
+        let tail = stderr_thread
+            .join()
+            .unwrap_or_default()
+            .into_iter()
+            .collect::<Vec<_>>()
+            .join("\n");
+        let outcome = match (exit, protocol) {
+            (_, Ok(WorkerProtocolState::Terminal(error @ WorkerProgressUpdate::Error { .. }))) => {
+                error
+            }
+            (Ok(status), Ok(WorkerProtocolState::Terminal(completed))) if status.success() => {
+                completed
+            }
+            (exit, protocol) => {
+                let mut error = match (exit, protocol) {
+                    (Err(error), _) => format!("Failed to wait for worker process: {error}"),
+                    (_, Err(error)) => error,
+                    (Ok(status), _) => {
+                        format!("Worker exited before successful completion with status: {status}")
                     }
-                    if let Some(ref tx) = log_tx {
-                        let _ = tx.send(line);
-                    }
+                };
+                if !tail.trim().is_empty() {
+                    error.push_str("\n\nLast worker stderr:\n");
+                    error.push_str(tail.trim());
                 }
-                Err(_) => break,
+                WorkerProgressUpdate::Error {
+                    task_id,
+                    error,
+                    metrics: None,
+                }
             }
-        }
-    });
-
-    let wait_events_tx = events_tx.clone();
-    let wait_terminal_seen = terminal_seen.clone();
-    let wait_stderr_lines = stderr_lines.clone();
-    let wait_run_log_path = run_log_path.clone();
-    std::thread::spawn(move || {
-        let wait_result = child.wait();
-        std::thread::sleep(std::time::Duration::from_millis(100));
-        if wait_terminal_seen.load(Ordering::SeqCst) {
-            return;
-        }
-
-        let stderr_tail = wait_stderr_lines
-            .lock()
-            .map(|lines| lines.iter().cloned().collect::<Vec<_>>().join("\n"))
-            .unwrap_or_default();
-
-        let mut error = match wait_result {
-            Ok(status) => format!("Worker exited before completion with status: {status}"),
-            Err(e) => format!("Failed to wait for worker process: {e}"),
         };
-        if !stderr_tail.trim().is_empty() {
-            error.push_str("\n\nLast worker stderr:\n");
-            error.push_str(stderr_tail.trim());
+        if let WorkerProgressUpdate::Error { error, .. } = &outcome {
+            append_worker_log(&format!("task {task_id}: {error}"));
+            append_run_log(&run_log, error);
         }
-        append_worker_log(&format!("task {gui_task_id}: {error}"));
-        append_run_log(&wait_run_log_path, &error);
-
-        let _ = wait_events_tx.send(WorkerProgressUpdate::Error {
-            task_id: gui_task_id,
-            error,
-            metrics: None,
-        });
+        let _ = events.send(outcome);
     });
-
-    Ok(WorkerHandle {
-        child: None,
+    Ok(WorkerHandle::Process(WorkerStop {
         pid,
-        active_pids: None,
-        cancelled: None,
+        sender: stop_tx,
+    }))
+}
+
+/// The async future owns the stop sender. Cancelling that future disconnects
+/// the process owner's receiver, including while the child is starting.
+async fn probe_output(
+    mut command: std::process::Command,
+    timeout: std::time::Duration,
+) -> std::io::Result<std::process::Output> {
+    command
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
+    let (owner, stop) = flume::bounded(1);
+    let result = tokio::task::spawn_blocking(move || {
+        let mut child = command.spawn()?;
+        let mut stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| std::io::Error::other("probe stdout not piped"))?;
+        let mut stderr = child
+            .stderr
+            .take()
+            .ok_or_else(|| std::io::Error::other("probe stderr not piped"))?;
+        let read_stdout = std::thread::spawn(move || {
+            let mut bytes = Vec::new();
+            stdout.read_to_end(&mut bytes).map(|_| bytes)
+        });
+        let read_stderr = std::thread::spawn(move || {
+            let mut bytes = Vec::new();
+            stderr.read_to_end(&mut bytes).map(|_| bytes)
+        });
+        let status = wait_for_child(&mut child, stop, Some(std::time::Instant::now() + timeout));
+        // Join both readers even on timeout or cancellation.
+        let stdout = read_stdout
+            .join()
+            .map_err(|_| std::io::Error::other("probe stdout reader panicked"));
+        let stderr = read_stderr
+            .join()
+            .map_err(|_| std::io::Error::other("probe stderr reader panicked"));
+        Ok(std::process::Output {
+            status: status?,
+            stdout: stdout??,
+            stderr: stderr??,
+        })
     })
+    .await
+    .map_err(|error| std::io::Error::other(format!("probe worker panicked: {error}")))?;
+    drop(owner);
+    result
 }
 
 /// Probe a file using `lege --probe-json` and return the parsed JSON value.
@@ -845,32 +992,20 @@ pub async fn probe_file_json(path: &PathBuf) -> Result<serde_json::Value> {
     let path = path.clone();
     let path_display = path.display().to_string();
 
-    let output = tokio::task::spawn_blocking(move || {
-        let mut cmd = std::process::Command::new(&cli_path);
-        configure_cli_command(&mut cmd, &cli_path);
-        cmd.arg("--probe-json");
-        cmd.arg(&path);
-        cmd.stdin(std::process::Stdio::null());
-        cmd.stdout(std::process::Stdio::piped());
-        cmd.stderr(std::process::Stdio::piped());
-
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-            cmd.creation_flags(CREATE_NO_WINDOW);
-        }
-
-        cmd.output().map_err(|e| {
-            append_worker_log(&format!(
-                "probe FAILED to launch worker ({}) for '{}': {e}",
-                cli_path.display(),
-                path.display()
-            ));
-            e
-        })
-    })
-    .await??;
+    let mut cmd = std::process::Command::new(&cli_path);
+    configure_cli_command(&mut cmd, &cli_path);
+    cmd.arg("--probe-json").arg(&path);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000);
+    }
+    let output = probe_output(cmd, std::time::Duration::from_secs(30))
+        .await
+        .map_err(|error| {
+            append_worker_log(&format!("probe failed for '{}': {error}", path.display()));
+            error
+        })?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -907,6 +1042,166 @@ pub async fn probe_file_json(path: &PathBuf) -> Result<serde_json::Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[tokio::test(flavor = "current_thread")]
+    async fn lifecycle_probe_timeout_reaps_the_child() {
+        let mut command = std::process::Command::new("sh");
+        command.args(["-c", "exec sleep 60"]);
+        let started = std::time::Instant::now();
+        let error = probe_output(command, std::time::Duration::from_millis(40))
+            .await
+            .unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::TimedOut);
+        assert!(started.elapsed() < std::time::Duration::from_secs(2));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test(flavor = "current_thread")]
+    async fn lifecycle_dropping_a_probe_future_stops_its_child() {
+        let directory = tempfile::tempdir().unwrap();
+        let ready = directory.path().join("ready");
+        let stopped = directory.path().join("stopped");
+        let mut command = std::process::Command::new("sh");
+        command.args(["-c", r#"trap 'printf stopped > "$2"; exit 0' TERM; printf ready > "$1"; while :; do sleep 0.01; done"#, "probe-fixture"]);
+        command.arg(&ready).arg(&stopped);
+        let waiter = tokio::spawn(probe_output(command, std::time::Duration::from_secs(30)));
+        tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            while !ready.exists() {
+                tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+            }
+        })
+        .await
+        .unwrap();
+        waiter.abort();
+        assert!(waiter.await.unwrap_err().is_cancelled());
+        tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            while !stopped.exists() {
+                tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+            }
+        })
+        .await
+        .expect("dropping probe ownership must terminate the child");
+    }
+
+    #[cfg(unix)]
+    fn monitor_fixture(
+        script: &str,
+        gate: Option<&Path>,
+    ) -> (
+        WorkerHandle,
+        flume::Receiver<WorkerProgressUpdate>,
+        tempfile::TempDir,
+    ) {
+        let directory = tempfile::tempdir().unwrap();
+        let mut command = std::process::Command::new("sh");
+        command.args(["-c", script, "worker-fixture"]);
+        if let Some(gate) = gate {
+            command.arg(gate);
+        }
+        let child = command
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        let (sender, events) = flume::unbounded();
+        let handle =
+            monitor_worker(child, 41, sender, None, directory.path().join("run.log")).unwrap();
+        (handle, events, directory)
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn lifecycle_completion_waits_for_process_exit_and_stream_drainage() {
+        let directory = tempfile::tempdir().unwrap();
+        let gate = directory.path().join("exit");
+        let (mut handle, events, _logs) = monitor_fixture(
+            r#"
+            printf '%s\n' '{"type":"status","task_id":0,"status":{"kind":"initializing"},"metrics":null}'
+            printf '%s\n' '{"type":"completed","task_id":0,"message":"done","metrics":null}'
+            while [ ! -f "$1" ]; do sleep 0.01; done
+        "#,
+            Some(&gate),
+        );
+        assert!(matches!(
+            events
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .unwrap(),
+            WorkerProgressUpdate::Status { task_id: 41, .. }
+        ));
+        assert!(matches!(
+            events.recv_timeout(std::time::Duration::from_millis(50)),
+            Err(flume::RecvTimeoutError::Timeout)
+        ));
+        std::fs::write(&gate, []).unwrap();
+        assert!(matches!(
+            events
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .unwrap(),
+            WorkerProgressUpdate::Completed { task_id: 41, .. }
+        ));
+        // Late cancellation has no OS target once the owner has reaped it.
+        handle.kill();
+        assert!(
+            events
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .is_err()
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn lifecycle_failed_exit_overrides_protocol_success_and_includes_final_stderr() {
+        let (_handle, events, _logs) = monitor_fixture(
+            r#"
+            printf '%s\n' '{"type":"completed","task_id":0,"message":"done","metrics":null}'
+            printf '%s\n' 'final diagnostic' >&2
+            exit 7
+        "#,
+            None,
+        );
+        match events
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .unwrap()
+        {
+            WorkerProgressUpdate::Error { error, .. } => {
+                assert!(error.contains('7'));
+                assert!(error.contains("final diagnostic"));
+            }
+            update => panic!("unexpected outcome: {update:?}"),
+        }
+        assert!(
+            events
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .is_err()
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn lifecycle_exit_without_completion_and_cancelled_process_each_report_one_error() {
+        let (_handle, events, _logs) = monitor_fixture("exit 0", None);
+        assert!(matches!(
+            events
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .unwrap(),
+            WorkerProgressUpdate::Error { .. }
+        ));
+        let (mut handle, events, _logs) = monitor_fixture("exec sleep 60", None);
+        handle.kill();
+        assert!(matches!(
+            events
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .unwrap(),
+            WorkerProgressUpdate::Error { .. }
+        ));
+        assert!(
+            events
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .is_err()
+        );
+    }
     use std::ffi::OsStr;
 
     #[test]

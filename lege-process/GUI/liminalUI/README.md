@@ -1,6 +1,6 @@
-# PixelKit processor GUI
+# liminalUI processor GUI
 
-This is the desktop frontend. The package is `lege-gui-pixelkit` and the binary
+This is the desktop frontend. The package is `lege-gui-liminalui` and the binary
 is `lege-gui`. Preserve mode is included. `cargo build` and `cargo gui` build
 this package together with the `lege` worker.
 
@@ -11,8 +11,8 @@ cargo gui
 cargo gui-run
 ```
 
-`cargo gui-pixelkit` is the same build. The GUI uses `lege --gui-worker` beside
-its executable. Its dependency graph contains PixelKit and `lege-ipc`, without
+`cargo gui-liminalui` is the same build. The GUI uses `lege --gui-worker` beside
+its executable. Its dependency graph contains liminalkit and `lege-ipc`, without
 the processor or a Freya/Skia crate.
 
 Settings, the worker supervisor, localization, and the Sanzo palettes live in
@@ -26,8 +26,8 @@ only when a clipboard shortcut is first used.
 English and German builds use the same locale files:
 
 ```sh
-cargo build -p lege-gui-pixelkit --features german,debug-logging
-cargo test -p lege-gui-pixelkit --all-features
+cargo build -p lege-gui-liminalui --features german,debug-logging
+cargo test -p lege-gui-liminalui --all-features
 ```
 
 Headless snapshots use the actual renderer. Dimensions are physical pixels and
@@ -47,7 +47,7 @@ PATH="$PWD/target/debug:$PATH" \
 XDG_DATA_HOME=/tmp/lege-gui-smoke-data \
 LEGE_GUI_SMOKE_INPUT=/absolute/path/to/test.pdf \
 LEGE_GUI_SMOKE_OUTPUT=/tmp/lege-gui-smoke-output \
-cargo test -p lege-gui-pixelkit real_worker_smoke -- --ignored --test-threads=1
+cargo test -p lege-gui-liminalui real_worker_smoke -- --ignored --test-threads=1
 ```
 
 See [the checkpoint report](../../../docs/PIXELKIT-GUI-PREVIEW.md) for measurements,

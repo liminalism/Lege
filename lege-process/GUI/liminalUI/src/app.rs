@@ -1,25 +1,25 @@
-use std::collections::{HashSet, VecDeque};
+use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, SyncSender};
 use std::time::{Duration, Instant};
 
-use pixelkit_raster::{Painter, RasterKernel, Rect, WindowBuffer};
-use pixelkit_shell::{Input, KeyInput, Modifiers, MouseButton, Scale};
-use pixelkit_text::{Align, TextCache};
-use pixelkit_ui::{Focus, ScrollState, TextFieldState, Ui};
-use pixelkit_windowing::{ImeCursorArea, ImeEvent, PixelApp, Waker};
+use liminalkit_raster::{Painter, RasterKernel, Rect, WindowBuffer};
+use liminalkit_shell::{Input, KeyInput, Modifiers, MouseButton, Scale};
+use liminalkit_text::{Align, TextCache};
+use liminalkit_ui::{Focus, ScrollState, TextFieldState, Ui};
+use liminalkit_windowing::{ImeCursorArea, ImeEvent, PixelApp, Waker};
 
 use crate::appearance::{self, ThemeChoice};
 use crate::backend;
 use crate::gui_text::{GUI_TEXT, tr};
 use crate::layout::{Actions, Bands, LeftCard, RightCard, cells};
 use crate::models::{
-    CompressionType, DocumentItem, ImageProcessingType, OcrMode, OutputFormat, ProcessingOptions,
-    ResolutionPreset,
+    BinarizationKind, CompressionType, DocumentItem, GeometryMode, ImageProcessingType, OcrMode,
+    OutputFormat, ProcessingOptions, ResolutionPreset,
 };
 use crate::worker_process::{
     WorkerHandle, WorkerProcessingStatus, WorkerProgressMetrics, WorkerProgressMode,
-    WorkerProgressUpdate,
+    WorkerProgressUpdate, WorkerReflowStage,
 };
 
 pub struct LegeApp {
@@ -42,14 +42,47 @@ enum Modal {
     Debug,
 }
 
+#[derive(Clone, Copy)]
+enum FileDialogKind {
+    Files,
+    Folder,
+    Output,
+}
+
+struct InputTask {
+    id: u64,
+    _owner: flume::Sender<()>,
+}
+
+enum InputFlow {
+    Idle,
+    Selecting(InputTask),
+    Probing(InputTask),
+}
+
+enum ResolutionEdit {
+    Displaying,
+    Editing { original: ResolutionPreset },
+}
+
+impl InputFlow {
+    fn id(&self) -> Option<u64> {
+        match self {
+            Self::Idle => None,
+            Self::Selecting(task) | Self::Probing(task) => Some(task.id),
+        }
+    }
+}
+
 enum Message {
-    Inputs(Vec<(PathBuf, Option<u32>, Option<bool>)>),
-    Output(PathBuf),
+    Inputs(u64, Vec<(PathBuf, Option<u32>, Option<bool>)>),
+    Output(u64, PathBuf),
+    ProbeStarted(u64),
     Notice(String),
-    DialogClosed,
-    Started(Vec<backend::TrackerInfo>, StartedWorkers),
-    Worker(WorkerProgressUpdate),
-    Finished,
+    DialogClosed(u64),
+    Started(u64, Vec<backend::TrackerInfo>, StartedWorkers),
+    Worker(u64, WorkerProgressUpdate),
+    Finished(u64),
 }
 
 /// A startup event may be queued when the window closes. Its worker ownership
@@ -72,10 +105,61 @@ struct Notice {
     text: String,
     until: Instant,
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BatchOutcome {
+    Completed,
+    Failed,
+    Cancelled,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BatchState {
+    Idle,
+    Starting,
+    Running,
+    Cancelling,
+    Finished(BatchOutcome),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum DocumentRunState {
+    Queued,
+    Processing {
+        fraction: f64,
+        reflow_phase: Option<WorkerReflowStage>,
+    },
+    Completed,
+    Failed,
+    Cancelled,
+}
+
+impl DocumentRunState {
+    fn terminal(self) -> bool {
+        matches!(self, Self::Completed | Self::Failed | Self::Cancelled)
+    }
+    fn label(self) -> &'static str {
+        tr(match self {
+            Self::Queued => "queued",
+            Self::Processing { .. } => "processing",
+            Self::Completed => "completed",
+            Self::Failed => "failed",
+            Self::Cancelled => "cancelled",
+        })
+    }
+    fn fraction(self) -> f64 {
+        match self {
+            Self::Queued | Self::Cancelled => 0.0,
+            Self::Processing { fraction, .. } => fraction,
+            Self::Completed | Self::Failed => 1.0,
+        }
+    }
+}
+
 struct QueueRow {
+    task_id: u64,
     path: PathBuf,
     output: Option<PathBuf>,
-    status: &'static str,
+    state: DocumentRunState,
 }
 
 pub struct Dashboard {
@@ -86,12 +170,12 @@ pub struct Dashboard {
     resolution: TextFieldState,
     k: TextFieldState,
     threshold: TextFieldState,
-    last_binarization_fixed: bool,
     status: (String, String, String),
     metrics: Option<WorkerProgressMetrics>,
-    running: bool,
-    cancelling: bool,
-    handled: HashSet<u64>,
+    resolution_edit: ResolutionEdit,
+    blink_start: Instant,
+    batch: BatchState,
+    generation: u64,
     handles: Vec<WorkerHandle>,
     notices: VecDeque<Notice>,
     modal: Option<Modal>,
@@ -99,7 +183,8 @@ pub struct Dashboard {
     log: Vec<crate::logging::LogEntry>,
     theme_index: usize,
     modal_error: Option<String>,
-    dialog_open: bool,
+    input_flow: InputFlow,
+    input_generation: u64,
     sender: SyncSender<Message>,
     receiver: Receiver<Message>,
     waker: Waker,
@@ -128,6 +213,18 @@ impl PixelApp for LegeApp {
         let palette = appearance::active_palette();
         let theme = crate::theme::theme(palette, scale);
         let bands = Bands::new(buffer.width as i32, buffer.height as i32, scale);
+        if self.dashboard.modal.is_none() {
+            let card = LeftCard::new(bands.right.inset(scale.px(8)), scale);
+            if let Some((x, y)) = self.input.press_position() {
+                let outside_range =
+                    self.dashboard.range.caret_area().is_some() && !card.range.contains(x, y);
+                let outside_resolution = self.dashboard.resolution.caret_area().is_some()
+                    && !card.resolution.contains(x, y);
+                if outside_range || outside_resolution {
+                    self.focus.clear();
+                }
+            }
+        }
         let mut background_input = Input::new();
         let modal = self.dashboard.modal.is_some();
         {
@@ -172,7 +269,7 @@ impl PixelApp for LegeApp {
     }
     fn on_native_window(&mut self, window: &winit::window::Window) {
         if let Ok(bitmap) =
-            pixelkit_raster::png::decode(include_bytes!("../../../../lege-misc/assets/icon.png"))
+            liminalkit_raster::png::decode(include_bytes!("../../../../lege-misc/assets/icon.png"))
         {
             let rgba = bitmap
                 .pixels
@@ -194,7 +291,10 @@ impl PixelApp for LegeApp {
     fn animation_interval(&self) -> Option<Duration> {
         // Worker/dialog threads wake the host when data arrives. Idle windows
         // have no polling timer; only timed notifications need a deadline.
-        (!self.dashboard.notices.is_empty()).then_some(Duration::from_millis(100))
+        (!self.dashboard.notices.is_empty()
+            || self.dashboard.range.caret_area().is_some()
+            || self.dashboard.resolution.caret_area().is_some())
+        .then_some(Duration::from_millis(100))
     }
     fn tick(&mut self) {
         self.dashboard.poll();
@@ -208,9 +308,9 @@ impl PixelApp for LegeApp {
             // connection. Start the owner on the first clipboard shortcut.
             let waker = self.dashboard.waker.clone();
             self.input
-                .attach_clipboard(pixelkit_shell::clipboard::ClipboardWorker::new(move || {
-                    waker.wake()
-                }));
+                .attach_clipboard(liminalkit_shell::clipboard::ClipboardWorker::new(
+                    move || waker.wake(),
+                ));
         }
         if *key == KeyInput::Escape && self.dashboard.modal.is_some() {
             self.dashboard.close_modal();
@@ -245,7 +345,7 @@ impl PixelApp for LegeApp {
         self.input.scrolled(dx, dy);
     }
     fn on_file_drop(&mut self, path: PathBuf) {
-        if !self.dashboard.running && !self.dashboard.dialog_open {
+        if !self.dashboard.running() && !self.dashboard.input_busy() {
             self.dashboard.probe_paths(vec![path]);
         }
     }
@@ -271,7 +371,7 @@ impl PixelApp for LegeApp {
         self.ime_cursor_area().is_some()
     }
     fn ime_cursor_area(&self) -> Option<ImeCursorArea> {
-        if self.dashboard.modal.is_some() || self.dashboard.running {
+        if self.dashboard.modal.is_some() || self.dashboard.running() {
             return None;
         }
         [
@@ -296,6 +396,26 @@ impl PixelApp for LegeApp {
 }
 
 impl Dashboard {
+    fn running(&self) -> bool {
+        matches!(
+            self.batch,
+            BatchState::Starting | BatchState::Running | BatchState::Cancelling
+        )
+    }
+    fn cancelling(&self) -> bool {
+        self.batch == BatchState::Cancelling
+    }
+    fn batch_progress(&self) -> f64 {
+        if self.rows.is_empty() {
+            return 0.0;
+        }
+        self.rows
+            .iter()
+            .map(|row| row.state.fraction())
+            .sum::<f64>()
+            / self.rows.len() as f64
+    }
+
     fn new() -> Self {
         let mut options = backend::load_saved_settings()
             .ok()
@@ -319,15 +439,15 @@ impl Dashboard {
             range: TextFieldState::with_text(options.page_range.clone().unwrap_or_default()),
             k: TextFieldState::with_text(options.k_factor.to_string()),
             threshold: TextFieldState::with_text(options.threshold_value.to_string()),
-            last_binarization_fixed: options.use_fixed_threshold,
             options,
             queue: VecDeque::new(),
             rows: Vec::new(),
             status: (String::new(), String::new(), String::new()),
             metrics: None,
-            running: false,
-            cancelling: false,
-            handled: HashSet::new(),
+            resolution_edit: ResolutionEdit::Displaying,
+            blink_start: Instant::now(),
+            batch: BatchState::Idle,
+            generation: 0,
             handles: Vec::new(),
             notices: VecDeque::new(),
             modal: None,
@@ -335,7 +455,8 @@ impl Dashboard {
             log: crate::logging::load_log_entries().unwrap_or_default(),
             theme_index: 0,
             modal_error: None,
-            dialog_open: false,
+            input_flow: InputFlow::Idle,
+            input_generation: 0,
             sender,
             receiver,
             waker: Waker::detached(),
@@ -353,8 +474,11 @@ impl Dashboard {
     fn poll(&mut self) {
         while let Ok(message) = self.receiver.try_recv() {
             match message {
-                Message::Inputs(paths) => {
-                    if !self.running {
+                Message::Inputs(id, paths) => {
+                    if self.input_flow.id() != Some(id) {
+                        continue;
+                    }
+                    if !self.running() {
                         self.rows.clear();
                     }
                     for (path, pages, has_ocr) in paths {
@@ -390,38 +514,86 @@ impl Dashboard {
                         }
                     }
                 }
-                Message::Output(path) => {
+                Message::Output(id, path) => {
+                    if self.input_flow.id() != Some(id) {
+                        continue;
+                    }
                     self.options.output_path = Some(path);
                     self.options.output_path_is_auto = false;
                 }
                 Message::Notice(text) => self.notice(text, 8),
-                Message::DialogClosed => self.dialog_open = false,
-                Message::Started(infos, handles) => {
+                Message::ProbeStarted(id) => {
+                    if self.input_flow.id() == Some(id) {
+                        self.input_flow =
+                            match std::mem::replace(&mut self.input_flow, InputFlow::Idle) {
+                                InputFlow::Selecting(task) => InputFlow::Probing(task),
+                                state => state,
+                            };
+                    }
+                }
+                Message::DialogClosed(id) => {
+                    if self.input_flow.id() == Some(id) {
+                        self.input_flow = InputFlow::Idle;
+                    }
+                }
+                Message::Started(generation, infos, handles) => {
+                    if generation != self.generation || !self.running() {
+                        continue;
+                    }
+                    if !self.cancelling() {
+                        self.batch = BatchState::Running;
+                    }
                     self.rows = infos
                         .into_iter()
                         .map(|info| QueueRow {
+                            task_id: info.id,
                             path: info.input_path,
                             output: Some(info.output_path),
-                            status: tr("queued"),
+                            state: DocumentRunState::Queued,
                         })
                         .collect();
                     self.handles = handles.take();
-                    if self.cancelling {
+                    if self.cancelling() {
                         for handle in &mut self.handles {
                             handle.kill();
                         }
                     }
                 }
-                Message::Worker(update) => self.worker_event(update),
-                Message::Finished => {
-                    self.running = false;
+                Message::Worker(generation, update) => {
+                    if generation == self.generation {
+                        self.worker_event(update);
+                    }
+                }
+                Message::Finished(generation) => {
+                    if generation != self.generation || !self.running() {
+                        continue;
+                    }
+                    let cancelled = self.cancelling();
+                    for row in &mut self.rows {
+                        if !row.state.terminal() {
+                            row.state = if cancelled {
+                                DocumentRunState::Cancelled
+                            } else {
+                                DocumentRunState::Failed
+                            };
+                        }
+                    }
+                    let outcome = if cancelled {
+                        BatchOutcome::Cancelled
+                    } else if !self.rows.is_empty()
+                        && self
+                            .rows
+                            .iter()
+                            .all(|row| row.state == DocumentRunState::Completed)
+                    {
+                        BatchOutcome::Completed
+                    } else {
+                        BatchOutcome::Failed
+                    };
+                    self.batch = BatchState::Finished(outcome);
                     self.handles.clear();
-                    if self.cancelling {
-                        self.status = (
-                            GUI_TEXT.interactive.status.cancelling.clone(),
-                            String::new(),
-                            String::new(),
-                        );
+                    if cancelled {
+                        self.status = (tr("cancelled").into(), String::new(), String::new());
                     }
                     self.log = crate::logging::load_log_entries().unwrap_or_default();
                 }
@@ -430,6 +602,9 @@ impl Dashboard {
         self.notices.retain(|notice| notice.until > Instant::now());
     }
     fn worker_event(&mut self, event: WorkerProgressUpdate) {
+        if !self.running() {
+            return;
+        }
         let (id, metrics) = match &event {
             WorkerProgressUpdate::Status {
                 task_id, metrics, ..
@@ -441,17 +616,53 @@ impl Dashboard {
                 task_id, metrics, ..
             } => (*task_id, *metrics),
         };
-        if self.handled.contains(&id) {
+        let Some(index) = self.rows.iter().position(|row| row.task_id == id) else {
+            return;
+        };
+        if self.rows[index].state.terminal() {
             return;
         }
-        self.metrics = metrics.or(self.metrics);
+        if self.rows[index].state == DocumentRunState::Queued {
+            self.metrics = None;
+        }
+        let phase = match &event {
+            WorkerProgressUpdate::Status {
+                status: WorkerProcessingStatus::ReflowProgress { stage, .. },
+                ..
+            } => Some(*stage),
+            _ => match self.rows[index].state {
+                DocumentRunState::Processing { reflow_phase, .. } => reflow_phase,
+                _ => None,
+            },
+        };
+        if let Some(metrics) = metrics {
+            let value = if metrics.mode == WorkerProgressMode::Reflow {
+                let fraction = progress_fraction(metrics);
+                match phase {
+                    Some(WorkerReflowStage::SourceAnalysis) => fraction * 0.45,
+                    Some(WorkerReflowStage::Compose) => 0.45,
+                    Some(WorkerReflowStage::OutputPages) => 0.5 + fraction * 0.45,
+                    None => fraction * 0.95,
+                }
+            } else {
+                progress_fraction(metrics) * 0.95
+            };
+            self.rows[index].state = DocumentRunState::Processing {
+                fraction: self.rows[index].state.fraction().max(value),
+                reflow_phase: phase,
+            };
+            self.metrics = Some(metrics);
+        }
         match event {
             WorkerProgressUpdate::Status { status, .. } => {
-                if !self.cancelling {
+                if !self.cancelling() {
                     self.status = status.to_gui_display_lines();
                 }
-                if let Some(row) = self.rows.get_mut(id as usize) {
-                    row.status = tr("processing");
+                if self.rows[index].state == DocumentRunState::Queued {
+                    self.rows[index].state = DocumentRunState::Processing {
+                        fraction: 0.0,
+                        reflow_phase: phase,
+                    };
                 }
                 if let WorkerProcessingStatus::FootnotesDetected { message }
                 | WorkerProcessingStatus::MarginAnalysisSummary { summary: message } = status
@@ -460,45 +671,56 @@ impl Dashboard {
                 }
             }
             WorkerProgressUpdate::Completed { message, .. } => {
-                self.handled.insert(id);
-                if self.cancelling {
-                    if let Some(row) = self.rows.get_mut(id as usize) {
-                        row.status = tr("failed");
-                    }
+                if self.cancelling() {
+                    self.rows[index].state = DocumentRunState::Cancelled;
                     return;
                 }
-                self.status = (
-                    GUI_TEXT.interactive.status.complete.clone(),
-                    message.clone(),
-                    String::new(),
-                );
+                self.rows[index].state = DocumentRunState::Completed;
+                self.status = (tr("processing").into(), message.clone(), String::new());
                 self.notice(message, 6);
-                if let Some(row) = self.rows.get_mut(id as usize) {
-                    row.status = tr("completed");
-                    let path = row.path.clone();
-                    self.queue.retain(|item| item.file_path != path);
-                }
+                let path = &self.rows[index].path;
+                self.queue.retain(|item| item.file_path != *path);
             }
             WorkerProgressUpdate::Error { error, .. } => {
-                self.handled.insert(id);
-                self.status = (tr("failed").into(), error.clone(), String::new());
-                self.notice(error, 8);
-                if let Some(row) = self.rows.get_mut(id as usize) {
-                    row.status = tr("failed");
+                self.rows[index].state = if self.cancelling() {
+                    DocumentRunState::Cancelled
+                } else {
+                    DocumentRunState::Failed
+                };
+                if !self.cancelling() {
+                    self.status = (tr("failed").into(), error.clone(), String::new());
+                    self.notice(error, 8);
                 }
             }
         }
     }
-    fn dialog(&mut self, kind: u8) {
-        if self.running || self.dialog_open {
+    fn input_busy(&self) -> bool {
+        !matches!(self.input_flow, InputFlow::Idle)
+    }
+
+    fn begin_input(&mut self, selecting: bool) -> (u64, flume::Receiver<()>) {
+        self.input_generation += 1;
+        let id = self.input_generation;
+        let (owner, stop) = flume::bounded(1);
+        let task = InputTask { id, _owner: owner };
+        self.input_flow = if selecting {
+            InputFlow::Selecting(task)
+        } else {
+            InputFlow::Probing(task)
+        };
+        (id, stop)
+    }
+
+    fn dialog(&mut self, kind: FileDialogKind) {
+        if self.running() || self.input_busy() {
             return;
         }
-        self.dialog_open = true;
+        let (id, stop) = self.begin_input(true);
         let tx = self.sender.clone();
         let wake = self.waker.clone();
         std::thread::spawn(move || {
             match kind {
-                0 => {
+                FileDialogKind::Files => {
                     if let Some(paths) = rfd::FileDialog::new()
                         .add_filter(
                             &GUI_TEXT.interactive.popups.supported_inputs_filter,
@@ -506,37 +728,45 @@ impl Dashboard {
                         )
                         .pick_files()
                     {
-                        probe(tx.clone(), wake.clone(), paths);
+                        let _ = tx.send(Message::ProbeStarted(id));
+                        wake.wake();
+                        probe(tx.clone(), wake.clone(), paths, id, stop);
                     }
                 }
-                1 => {
+                FileDialogKind::Folder => {
                     if let Some(path) = rfd::FileDialog::new().pick_folder() {
-                        probe(tx.clone(), wake.clone(), vec![path]);
+                        let _ = tx.send(Message::ProbeStarted(id));
+                        wake.wake();
+                        probe(tx.clone(), wake.clone(), vec![path], id, stop);
                     }
                 }
-                _ => {
+                FileDialogKind::Output => {
                     if let Some(path) = rfd::FileDialog::new().pick_folder() {
-                        let _ = tx.send(Message::Output(path));
+                        let _ = tx.send(Message::Output(id, path));
                     }
                 }
             }
-            let _ = tx.send(Message::DialogClosed);
+            let _ = tx.send(Message::DialogClosed(id));
             wake.wake();
         });
     }
     fn probe_paths(&mut self, paths: Vec<PathBuf>) {
-        self.dialog_open = true;
+        if self.running() || self.input_busy() {
+            return;
+        }
+        let (id, stop) = self.begin_input(false);
         let tx = self.sender.clone();
         let wake = self.waker.clone();
         std::thread::spawn(move || {
-            probe(tx.clone(), wake.clone(), paths);
-            let _ = tx.send(Message::DialogClosed);
+            probe(tx.clone(), wake.clone(), paths, id, stop);
+            let _ = tx.send(Message::DialogClosed(id));
             wake.wake();
         });
     }
     fn cancel(&mut self) {
-        if self.running {
-            self.cancelling = true;
+        self.input_flow = InputFlow::Idle;
+        if self.running() {
+            self.batch = BatchState::Cancelling;
             self.status.0 = GUI_TEXT.interactive.status.cancelling.clone();
             for handle in &mut self.handles {
                 handle.kill();
@@ -544,8 +774,11 @@ impl Dashboard {
         }
     }
     fn start(&mut self) {
-        if self.running {
+        if self.running() {
             self.cancel();
+            return;
+        }
+        if self.input_busy() {
             return;
         }
         if self.queue.is_empty() {
@@ -577,9 +810,9 @@ impl Dashboard {
             self.notice(tr("invalid_page_range"), 6);
             return;
         }
-        self.running = true;
-        self.cancelling = false;
-        self.handled.clear();
+        self.batch = BatchState::Starting;
+        self.generation += 1;
+        let generation = self.generation;
         self.metrics = None;
         self.rows.clear();
         self.status = (
@@ -602,14 +835,14 @@ impl Dashboard {
             match result {
                 Ok((infos, handles, events)) => {
                     if tx
-                        .send(Message::Started(infos, StartedWorkers(handles)))
+                        .send(Message::Started(generation, infos, StartedWorkers(handles)))
                         .is_err()
                     {
                         return;
                     }
                     wake.wake();
                     while let Ok(event) = events.recv() {
-                        if tx.send(Message::Worker(event)).is_err() {
+                        if tx.send(Message::Worker(generation, event)).is_err() {
                             break;
                         }
                         wake.wake();
@@ -619,10 +852,49 @@ impl Dashboard {
                     let _ = tx.send(Message::Notice(format!("{error:#}")));
                 }
             }
-            let _ = tx.send(Message::Finished);
+            let _ = tx.send(Message::Finished(generation));
             wake.wake();
         });
     }
+    fn resolution_focus(&mut self, focused: bool, snapshot: bool) {
+        if focused && matches!(self.resolution_edit, ResolutionEdit::Displaying) {
+            self.resolution_edit = ResolutionEdit::Editing {
+                original: ResolutionPreset {
+                    height: self.options.target_height.unwrap_or(1200),
+                    width: self.options.target_width,
+                },
+            };
+            self.resolution.clear();
+            self.blink_start = Instant::now();
+        } else if !focused {
+            if let ResolutionEdit::Editing { original } =
+                std::mem::replace(&mut self.resolution_edit, ResolutionEdit::Displaying)
+            {
+                let parsed = parse_resolution(self.resolution.text());
+                let (height, width) = parsed.unwrap_or((original.height, original.width));
+                self.options.target_height = Some(height);
+                self.options.target_width = width;
+                if parsed.is_some() && (height, width) != (original.height, original.width) {
+                    self.options.target_device = None;
+                    if !snapshot {
+                        if let Err(error) =
+                            backend::save_resolution_preset(&ResolutionPreset { height, width })
+                        {
+                            self.notice(error.to_string(), 8);
+                        }
+                    }
+                    if self.options.crop_free_aspect && width.is_some() {
+                        self.notice(tr("resolution_width_ignored"), 5);
+                    }
+                }
+                self.resolution.set_text(&match width {
+                    Some(width) => format!("{height}x{width}"),
+                    None => height.to_string(),
+                });
+            }
+        }
+    }
+
     fn validate_fields(&mut self) -> Result<(), &'static str> {
         let (height, width) = if self.resolution.text().trim().is_empty() {
             (
@@ -712,7 +984,13 @@ impl Drop for Dashboard {
     }
 }
 
-fn probe(tx: SyncSender<Message>, wake: Waker, paths: Vec<PathBuf>) {
+fn probe(
+    tx: SyncSender<Message>,
+    wake: Waker,
+    paths: Vec<PathBuf>,
+    id: u64,
+    stop: flume::Receiver<()>,
+) {
     let Ok(runtime) = tokio::runtime::Builder::new_current_thread()
         .max_blocking_threads(2)
         .build()
@@ -721,6 +999,9 @@ fn probe(tx: SyncSender<Message>, wake: Waker, paths: Vec<PathBuf>) {
     };
     let mut accepted = Vec::new();
     for path in paths {
+        if stop.is_disconnected() || stop.try_recv().is_ok() {
+            return;
+        }
         if path.is_dir() {
             match backend::get_image_files_in_directory(&path) {
                 Ok(images) if !images.is_empty() => {
@@ -738,9 +1019,15 @@ fn probe(tx: SyncSender<Message>, wake: Waker, paths: Vec<PathBuf>) {
                 }
             }
         } else if backend::is_pdf_file(&path) || backend::is_zip_file(&path) {
-            let data = runtime
-                .block_on(crate::worker_process::probe_file_json(&path))
-                .ok();
+            let data = runtime.block_on(async {
+                tokio::select! {
+                    result = crate::worker_process::probe_file_json(&path) => Some(result.ok()),
+                    _ = stop.recv_async() => None,
+                }
+            });
+            let Some(data) = data else {
+                return;
+            };
             let pages = data
                 .as_ref()
                 .and_then(|v| v.get("pages"))
@@ -758,7 +1045,7 @@ fn probe(tx: SyncSender<Message>, wake: Waker, paths: Vec<PathBuf>) {
             wake.wake();
         }
     }
-    let _ = tx.send(Message::Inputs(accepted));
+    let _ = tx.send(Message::Inputs(id, accepted));
     wake.wake();
 }
 
@@ -798,15 +1085,6 @@ fn choice(ui: &mut Ui<'_>, area: Rect, text: &str, selected: bool) -> bool {
     choice_label(ui, area, text);
     ui.theme.panel = old;
     clicked
-}
-fn tray(ui: &mut Ui<'_>, area: Rect) {
-    ui.painter.rounded_rect(
-        area,
-        ui.theme.corner_radius,
-        ui.theme.border_width,
-        ui.theme.background,
-        ui.theme.panel_edge,
-    );
 }
 fn choice_label(ui: &mut Ui<'_>, area: Rect, text: &str) {
     let available = (area.w - ui.px(8)).max(1);
@@ -878,7 +1156,7 @@ impl Dashboard {
         let mut note = None;
         // A running batch is a frozen options snapshot. Keep the UI visible
         // but route no editing input to file/settings controls until it ends.
-        let frozen = self.running || self.dialog_open;
+        let frozen = self.running() || self.input_busy();
         let saved_input = frozen.then(|| std::mem::take(ui.input));
         let files = ui.panel(bands.files);
         let gap = ui.px(6);
@@ -902,24 +1180,28 @@ impl Dashboard {
         ] {
             let rect = Rect::new(files.x + i * (w + gap), files.y, w, files.h);
             if ui.button(rect, text) && !snapshot {
-                self.dialog(i as u8);
+                self.dialog(match i {
+                    0 => FileDialogKind::Files,
+                    1 => FileDialogKind::Folder,
+                    _ => FileDialogKind::Output,
+                });
             }
             hover(ui, rect, tooltip, i == 2, &mut note);
         }
-        self.draw_left(ui, bands.left, &mut note, snapshot);
-        self.draw_right(ui, bands.right, &mut note);
+        self.draw_right(ui, bands.left, &mut note);
+        self.draw_left(ui, bands.right, &mut note, snapshot);
         if let Some(input) = saved_input {
             *ui.input = input;
         }
-        let process = ui.panel(bands.process);
-        let actions = Actions::new(process, ui.scale);
+        let status = ui.panel(bands.status);
+        let actions = Actions::new(bands.process, status, ui.scale);
         let original_theme = ui.theme;
         ui.theme.body.size = ui.scale.font(16.0);
         ui.theme.panel = ui.theme.selection;
         ui.theme.panel_edge = crate::theme::rgb(appearance::active_palette().border_focus);
         let start = ui.button(
             actions.primary,
-            if self.running {
+            if self.running() {
                 &t.buttons.cancel
             } else {
                 &t.buttons.start_processing
@@ -948,15 +1230,6 @@ impl Dashboard {
             }
         }
         ui.theme = original_theme;
-        ui.painter.fill_rect(
-            Rect::new(
-                process.x,
-                actions.queue.y - ui.px(8),
-                process.w,
-                ui.scale.hairline(),
-            ),
-            ui.theme.panel_edge,
-        );
         let count = if self.rows.is_empty() {
             self.queue.len()
         } else {
@@ -979,7 +1252,7 @@ impl Dashboard {
             self.rows
                 .iter()
                 .take(visible)
-                .map(|item| (item.status, item.path.as_path()))
+                .map(|item| (item.state.label(), item.path.as_path()))
                 .collect()
         };
         for (index, (status, path)) in queue_rows.iter().enumerate() {
@@ -1011,8 +1284,7 @@ impl Dashboard {
                 Align::Centre,
             );
         }
-        let status = ui.panel(bands.status);
-        if self.running {
+        if self.running() {
             label(ui, row(status, 0, ui.px(22)), &self.status.0);
             small(ui, row(status, 1, ui.px(20)), &self.status.1);
             let eta = self
@@ -1028,10 +1300,10 @@ impl Dashboard {
                 })
                 .unwrap_or_else(|| self.status.2.clone());
             small(ui, row(status, 2, ui.px(20)), &eta);
-            if let Some(metrics) = self.metrics {
+            {
                 ui.meter(
                     Rect::new(status.x, status.bottom() - ui.px(22), status.w, ui.px(18)),
-                    progress_fraction(metrics),
+                    self.batch_progress(),
                     tr("progress"),
                     ui.theme.selection,
                 );
@@ -1122,40 +1394,42 @@ impl Dashboard {
         let card = LeftCard::new(a, ui.scale);
         ui.label_styled(
             card.heading,
-            tr("pages_device"),
+            tr("options"),
             ui.theme.heading,
             ui.theme.text,
             Align::Left,
         );
         small(ui, card.range_label, &t.labels.page_range);
         small(ui, card.resolution_label, tr("resolution_short"));
-        ui.text_field(
+        let (_, range_focused) = ui.text_field_input(&mut self.range, card.range, false, false);
+        ui.paint_text_field(
             &mut self.range,
             card.range,
             &t.labels.page_range_placeholder,
-            false,
+            range_focused,
             false,
         );
         let body = ui.theme.body;
         ui.theme.body.size = ui.scale.font(12.0);
-        let changed = ui.text_field(&mut self.resolution, card.resolution, "1200", false, false);
+        let (_, focused) = ui.text_field_input(&mut self.resolution, card.resolution, false, false);
+        self.resolution_focus(focused, snapshot);
+        ui.paint_text_field(
+            &mut self.resolution,
+            card.resolution,
+            "1200",
+            focused,
+            false,
+        );
         ui.theme.body = body;
-        if changed && !snapshot {
-            if let Some((height, width)) = parse_resolution(self.resolution.text()) {
-                self.options.target_height = Some(height);
-                self.options.target_width = width;
-                self.options.target_device = None;
-                if let Err(error) =
-                    backend::save_resolution_preset(&ResolutionPreset { height, width })
-                {
-                    self.notice(error.to_string(), 8);
-                }
-                if self.options.crop_free_aspect && width.is_some() {
-                    self.notice(tr("resolution_width_ignored"), 5);
-                }
+        if self.blink_start.elapsed().as_millis() % 1200 >= 600 {
+            for caret in [self.range.caret_area(), self.resolution.caret_area()]
+                .into_iter()
+                .flatten()
+            {
+                ui.painter.fill_rect(caret, ui.theme.background);
             }
         }
-        hover(ui, card.resolution, &t.tooltips.target_height, false, note);
+        hover(ui, card.resolution, &t.tooltips.target_height, true, note);
 
         // Preserve the reading order, filling rows across two columns. The
         // geometry tray and OCR slot stay anchored when conditional controls hide.
@@ -1168,19 +1442,19 @@ impl Dashboard {
                 let columns = cells(
                     Rect::new(
                         card.checks.x,
-                        card.checks.y + (index / 2) * ui.px(25),
+                        card.checks.y + (index / 3) * ui.px(25),
                         card.checks.w,
                         ui.px(25),
                     ),
-                    2,
-                    ui.px(10),
+                    3,
+                    ui.px(2),
                 );
-                let rect = columns[(index % 2) as usize];
+                let rect = columns[(index % 3) as usize];
                 let mut value = $value;
                 if ui.checkbox(rect, &mut value, $label) {
                     $changed(value);
                 }
-                hover(ui, rect, $tip, false, note);
+                hover(ui, rect, $tip, true, note);
                 index += 1;
             }};
         }
@@ -1272,12 +1546,11 @@ impl Dashboard {
                 } else {
                     &t.tooltips.ocr_thorough
                 },
-                false,
+                true,
                 note,
             );
         }
-        tray(ui, card.geometry);
-        let buttons = cells(card.geometry.inset(ui.px(5)), 3, ui.px(4));
+        let buttons = cells(card.geometry, 3, ui.px(4));
         for (index, text, selected, tooltip) in [
             (
                 0,
@@ -1298,41 +1571,44 @@ impl Dashboard {
                 t.tooltips.reflow.as_str(),
             ),
         ] {
-            if choice(ui, buttons[index], text, selected) {
+            let base = buttons[index];
+            let rect = Rect::new(
+                base.x + ui.px(index as i32 * 5),
+                base.y,
+                base.w - ui.px(index as i32 * 5),
+                base.h,
+            );
+            let mut checked = selected;
+            if ui.checkbox(rect, &mut checked, text) {
                 self.select_geometry(index);
             }
-            hover(ui, buttons[index], tooltip, false, note);
+            hover(ui, rect, tooltip, true, note);
         }
     }
 
     fn select_geometry(&mut self, index: usize) {
-        match index {
-            0 => {
-                let enabled = !self.options.center_margins;
-                self.options.center_margins = enabled;
-                self.options.crop_margins = false;
-                self.options.crop_footnotes = false;
-                self.options.crop_free_aspect = false;
-                self.options.reflow = false;
-            }
-            1 => {
-                let enabled = !self.options.crop_margins;
-                self.options.crop_margins = enabled;
-                self.options.crop_free_aspect = enabled;
-                self.options.center_margins = false;
-                self.options.reflow = false;
-            }
-            _ => self.options.set_reflow(!self.options.reflow),
-        }
+        let current = self.options.geometry_mode();
+        let next = match index {
+            0 if current == GeometryMode::Centered => GeometryMode::Unchanged,
+            0 => GeometryMode::Centered,
+            1 if matches!(current, GeometryMode::Cropped { .. }) => GeometryMode::Unchanged,
+            1 => GeometryMode::Cropped {
+                footnotes: self.options.crop_footnotes,
+                free_aspect: true,
+            },
+            _ if current == GeometryMode::Reflow => GeometryMode::Unchanged,
+            _ => GeometryMode::Reflow,
+        };
+        self.options.set_geometry_mode(next);
     }
 
     pub(crate) fn select_binarization(&mut self, index: usize) {
-        self.options.use_custom_adaptive = index == 0;
-        self.options.use_fixed_threshold = index == 1;
-        self.options.use_heavy_binarization = index == 2;
-        if index != 2 {
-            self.last_binarization_fixed = index == 1;
-        }
+        let kind = match index {
+            0 => BinarizationKind::Adaptive,
+            1 => BinarizationKind::Fixed,
+            _ => BinarizationKind::Heavy,
+        };
+        self.options.set_binarization_kind(kind);
     }
 
     fn draw_right(&mut self, ui: &mut Ui<'_>, area: Rect, note: &mut Option<(bool, &'static str)>) {
@@ -1376,7 +1652,7 @@ impl Dashboard {
                         } else {
                             tr("preparation_note")
                         },
-                        true,
+                        false,
                         note,
                     );
                 }
@@ -1393,7 +1669,7 @@ impl Dashboard {
                             OutputFormat::Djvu
                         };
                     }
-                    hover(ui, control, &t.tooltips.base_format, true, note);
+                    hover(ui, control, &t.tooltips.base_format, false, note);
                 }
                 2 => {
                     if self.options.preserve_mode {
@@ -1419,7 +1695,7 @@ impl Dashboard {
                         } else {
                             tr("grayscale_pdf")
                         },
-                        true,
+                        false,
                         note,
                     );
                 }
@@ -1435,7 +1711,7 @@ impl Dashboard {
                             self.notice(t.popups.layout_disabled.clone(), 5);
                         }
                     }
-                    hover(ui, control, &t.tooltips.layout_detection, true, note);
+                    hover(ui, control, &t.tooltips.layout_detection, false, note);
                 }
                 _ => {
                     if self.options.preserve_mode {
@@ -1484,7 +1760,7 @@ impl Dashboard {
                                 1 => &t.tooltips.image_output_dithered,
                                 _ => &t.tooltips.jbig2_halftone,
                             },
-                            true,
+                            false,
                             note,
                         );
                     }
@@ -1492,11 +1768,10 @@ impl Dashboard {
             }
         }
         if !self.options.grayscale_mode && !self.options.preserve_mode {
-            tray(ui, card.binarization);
             let (modes, caption, value) = card.binarization_fields();
             small(
                 ui,
-                Rect::new(modes.x, caption.y, modes.w, caption.h),
+                Rect::new(card.binarization.x, modes.y, ui.px(64), modes.h),
                 &t.controls.binarization,
             );
             let selected = if self.options.use_fixed_threshold {
@@ -1519,38 +1794,15 @@ impl Dashboard {
                 self.select_binarization(index);
             }
             let heavy = self.options.use_heavy_binarization;
-            let fixed = if heavy {
-                self.last_binarization_fixed
-            } else {
-                self.options.use_fixed_threshold
-            };
-            small(ui, caption, if fixed { "0–255" } else { "K" });
-            let field = Rect::new(value.x, value.y + ui.px(1), value.w, value.h - ui.px(2));
-            if heavy {
-                ui.painter.rounded_rect(
-                    field,
-                    ui.theme.corner_radius,
-                    ui.theme.border_width,
-                    ui.theme.hover,
-                    ui.theme.panel_edge,
-                );
-                ui.label(
-                    field,
-                    if fixed {
-                        self.threshold.text()
-                    } else {
-                        self.k.text()
-                    },
-                    ui.theme.text_dim,
-                    Align::Centre,
-                );
-            } else {
+            let fixed = self.options.use_fixed_threshold;
+            if !heavy {
+                small(ui, caption, if fixed { "0–255" } else { "K" });
                 let body = ui.theme.body;
                 ui.theme.body.size = ui.scale.font(12.0);
                 if fixed {
-                    ui.text_field(&mut self.threshold, field, "180", false, false);
+                    ui.text_field(&mut self.threshold, value, "180", false, false);
                 } else {
-                    ui.text_field(&mut self.k, field, "0.05", false, false);
+                    ui.text_field(&mut self.k, value, "0.05", false, false);
                 }
                 ui.theme.body = body;
             }
@@ -1564,7 +1816,7 @@ impl Dashboard {
                         1 => &t.tooltips.threshold_value,
                         _ => &t.tooltips.heavy_model,
                     },
-                    true,
+                    false,
                     note,
                 );
             }
@@ -1578,7 +1830,7 @@ impl Dashboard {
                 } else {
                     &t.tooltips.sauvola_k_factor
                 },
-                true,
+                false,
                 note,
             );
         }
@@ -1731,7 +1983,7 @@ impl Dashboard {
                     }
                 });
                 let rect = Rect::new(body.x, body.bottom() - row_h, body.w, row_h);
-                if self.running {
+                if self.running() {
                     small(ui, rect, &t.buttons.clear_queue);
                 } else if ui.button(rect, &t.buttons.clear_queue) {
                     self.queue.clear();
@@ -1764,7 +2016,7 @@ impl Dashboard {
                         self.notice(error.to_string(), 8);
                     }
                 }
-                if !self.running
+                if !self.running()
                     && ui.button(
                         Rect::new(body.x, body.bottom() - row_h, body.w, row_h),
                         &t.popups.clear_log,
@@ -1833,26 +2085,183 @@ fn progress_fraction(m: WorkerProgressMetrics) -> f64 {
     if m.pages_total == 0 {
         return 0.0;
     }
-    let (value, total) = match m.mode {
-        WorkerProgressMode::Epub => (
+    let (value, stages) = match m.mode {
+        WorkerProgressMode::Epub | WorkerProgressMode::Layout | WorkerProgressMode::Margin => (
             u64::from(m.rendered) + u64::from(m.detected) + u64::from(m.encoded),
-            u64::from(m.pages_total) * 3,
+            3,
         ),
-        WorkerProgressMode::Layout | WorkerProgressMode::Margin => (
-            u64::from(m.rendered.max(m.detected).max(m.encoded)),
-            u64::from(m.pages_total),
-        ),
-        _ => (
-            u64::from(m.rendered.max(m.encoded)),
-            u64::from(m.pages_total),
-        ),
+        WorkerProgressMode::Reflow => (u64::from(m.encoded), 1),
+        _ => (u64::from(m.rendered) + u64::from(m.encoded), 2),
     };
-    (value as f64 / total as f64).clamp(0.0, 1.0)
+    (value as f64 / (u64::from(m.pages_total) * stages) as f64).clamp(0.0, 1.0)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn active_batch() -> Dashboard {
+        let mut dashboard = Dashboard::new();
+        dashboard.batch = BatchState::Running;
+        dashboard.generation = 2;
+        for id in 0..2 {
+            let path = PathBuf::from(format!("input-{id}.pdf"));
+            dashboard.queue.push_back(DocumentItem::new(path.clone()));
+            dashboard.rows.push(QueueRow {
+                task_id: id,
+                path,
+                output: None,
+                state: DocumentRunState::Queued,
+            });
+        }
+        dashboard
+    }
+
+    fn metrics(current: u32) -> WorkerProgressMetrics {
+        WorkerProgressMetrics {
+            pages_total: 10,
+            rendered: current,
+            detected: current,
+            encoded: current,
+            mode: WorkerProgressMode::NoLayout,
+            is_djvu: false,
+            enable_layout_detection: false,
+            eta_seconds: None,
+        }
+    }
+
+    #[test]
+    fn lifecycle_batch_progress_includes_every_file_and_reserves_completion_for_terminal_events() {
+        let mut dashboard = active_batch();
+        dashboard.worker_event(WorkerProgressUpdate::Completed {
+            task_id: 0,
+            message: "done".into(),
+            metrics: Some(metrics(10)),
+        });
+        assert_eq!(dashboard.batch_progress(), 0.5);
+        dashboard.worker_event(WorkerProgressUpdate::Status {
+            task_id: 1,
+            status: WorkerProcessingStatus::Initializing,
+            metrics: Some(metrics(1)),
+        });
+        assert!(dashboard.batch_progress() > 0.5 && dashboard.batch_progress() < 0.6);
+        dashboard.worker_event(WorkerProgressUpdate::Status {
+            task_id: 1,
+            status: WorkerProcessingStatus::AssemblingOutput,
+            metrics: Some(metrics(10)),
+        });
+        assert!(dashboard.batch_progress() < 1.0);
+        dashboard.worker_event(WorkerProgressUpdate::Completed {
+            task_id: 1,
+            message: "done".into(),
+            metrics: Some(metrics(10)),
+        });
+        assert_eq!(dashboard.batch_progress(), 1.0);
+        assert!(dashboard.queue.is_empty());
+    }
+
+    #[test]
+    fn lifecycle_progress_waits_for_downstream_stages() {
+        let mut no_layout = metrics(0);
+        no_layout.rendered = no_layout.pages_total;
+        assert_eq!(progress_fraction(no_layout), 0.5);
+        no_layout.mode = WorkerProgressMode::Layout;
+        assert_eq!(progress_fraction(no_layout), 1.0 / 3.0);
+    }
+
+    #[test]
+    fn lifecycle_cancel_settles_unstarted_rows_and_rejects_events_from_old_batches() {
+        let mut dashboard = active_batch();
+        dashboard
+            .sender
+            .send(Message::Worker(
+                1,
+                WorkerProgressUpdate::Completed {
+                    task_id: 0,
+                    message: "stale".into(),
+                    metrics: None,
+                },
+            ))
+            .unwrap();
+        dashboard.sender.send(Message::Finished(1)).unwrap();
+        dashboard.poll();
+        assert!(dashboard.running());
+        assert_eq!(dashboard.queue.len(), 2);
+        assert_eq!(dashboard.rows[0].state, DocumentRunState::Queued);
+        dashboard.cancel();
+        dashboard.sender.send(Message::Finished(2)).unwrap();
+        dashboard.poll();
+        assert_eq!(
+            dashboard.batch,
+            BatchState::Finished(BatchOutcome::Cancelled)
+        );
+        assert!(!dashboard.running());
+        assert!(!dashboard.cancelling());
+        assert!(
+            dashboard
+                .rows
+                .iter()
+                .all(|row| row.state == DocumentRunState::Cancelled)
+        );
+        assert_eq!(dashboard.queue.len(), 2);
+        assert_eq!(dashboard.status.0, tr("cancelled"));
+    }
+
+    #[test]
+    fn lifecycle_input_flow_ignores_late_results_and_cancels_on_owner_drop() {
+        let mut dashboard = Dashboard::new();
+        let (old, old_stop) = dashboard.begin_input(true);
+        dashboard.sender.send(Message::ProbeStarted(old)).unwrap();
+        dashboard.poll();
+        assert!(matches!(dashboard.input_flow, InputFlow::Probing(_)));
+        dashboard.input_flow = InputFlow::Idle;
+        assert!(old_stop.is_disconnected());
+        let (current, _stop) = dashboard.begin_input(false);
+        dashboard
+            .sender
+            .send(Message::Inputs(
+                old,
+                vec![(PathBuf::from("old.pdf"), Some(1), None)],
+            ))
+            .unwrap();
+        dashboard.sender.send(Message::DialogClosed(old)).unwrap();
+        dashboard.poll();
+        assert!(dashboard.queue.is_empty());
+        assert_eq!(dashboard.input_flow.id(), Some(current));
+        dashboard
+            .sender
+            .send(Message::Inputs(
+                current,
+                vec![(PathBuf::from("current.pdf"), Some(1), None)],
+            ))
+            .unwrap();
+        dashboard
+            .sender
+            .send(Message::DialogClosed(current))
+            .unwrap();
+        dashboard.poll();
+        assert_eq!(dashboard.queue.len(), 1);
+        assert!(!dashboard.input_busy());
+    }
+
+    #[test]
+    fn lifecycle_resolution_draft_does_not_change_the_committed_value() {
+        let mut dashboard = Dashboard::new();
+        dashboard.options.target_height = Some(1200);
+        dashboard.options.target_width = Some(800);
+        dashboard.resolution_focus(true, true);
+        dashboard.resolution.set_text("1600x1000");
+        assert_eq!(dashboard.options.target_height, Some(1200));
+        assert_eq!(dashboard.options.target_width, Some(800));
+        dashboard.resolution_focus(false, true);
+        assert_eq!(dashboard.options.target_height, Some(1600));
+        assert_eq!(dashboard.options.target_width, Some(1000));
+        dashboard.resolution_focus(true, true);
+        dashboard.resolution.set_text("invalid");
+        dashboard.resolution_focus(false, true);
+        assert_eq!(dashboard.resolution.text(), "1600x1000");
+        assert_eq!(dashboard.options.target_height, Some(1600));
+    }
     #[test]
     fn resolution_forms_and_rejected_values() {
         for value in ["1200x800", "1200 800", "1200×800"] {
@@ -1882,11 +2291,14 @@ mod tests {
         let wake = Waker::from_fn(move || {
             let _ = wake_tx.send(());
         });
+        let (_owner, stop) = flume::bounded(1);
         let thread = std::thread::spawn(move || {
             probe(
                 sender,
                 wake,
                 vec![PathBuf::from("bad-one.txt"), PathBuf::from("bad-two.txt")],
+                1,
+                stop,
             )
         });
         let mut done = false;
@@ -1895,7 +2307,7 @@ mod tests {
                 .recv_timeout(Duration::from_secs(2))
                 .expect("probe must wake before it fills its bounded channel");
             for message in receiver.try_iter() {
-                if matches!(message, Message::Inputs(_)) {
+                if matches!(message, Message::Inputs(_, _)) {
                     done = true;
                 }
             }
@@ -1917,7 +2329,11 @@ mod tests {
         let (sender, receiver) = mpsc::sync_channel(1);
         assert!(
             sender
-                .send(Message::Started(Vec::new(), StartedWorkers(vec![handle])))
+                .send(Message::Started(
+                    0,
+                    Vec::new(),
+                    StartedWorkers(vec![handle])
+                ))
                 .is_ok()
         );
         drop(receiver);
@@ -1960,7 +2376,7 @@ mod tests {
         let mut buffer = WindowBuffer::new(940, 700);
         app.render(&mut buffer, Scale::ONE);
         let bands = Bands::new(940, 700, Scale::ONE);
-        let (_, mode) = RightCard::new(bands.right.inset(8), Scale::ONE).setting(0);
+        let (_, mode) = RightCard::new(bands.left.inset(8), Scale::ONE).setting(0);
         let mode_cells = cells(mode, 2, 4);
         let preserve = mode_cells[1];
         click(
@@ -2001,11 +2417,15 @@ mod tests {
         let path = PathBuf::from("input.pdf");
         dashboard.queue.push_back(DocumentItem::new(path.clone()));
         dashboard.rows.push(QueueRow {
+            task_id: 0,
             path,
             output: None,
-            status: tr("processing"),
+            state: DocumentRunState::Processing {
+                fraction: 0.0,
+                reflow_phase: None,
+            },
         });
-        dashboard.running = true;
+        dashboard.batch = BatchState::Running;
         dashboard.cancel();
         dashboard.worker_event(WorkerProgressUpdate::Completed {
             task_id: 0,
@@ -2013,7 +2433,7 @@ mod tests {
             metrics: None,
         });
         assert_eq!(dashboard.queue.len(), 1);
-        assert_eq!(dashboard.rows[0].status, tr("failed"));
+        assert_eq!(dashboard.rows[0].state, DocumentRunState::Cancelled);
         assert!(dashboard.notices.is_empty());
     }
     #[test]
@@ -2022,7 +2442,7 @@ mod tests {
         app.dashboard.options = ProcessingOptions::new();
         let mut buffer = WindowBuffer::new(940, 700);
         let bands = Bands::new(940, 700, Scale::ONE);
-        let area = LeftCard::new(bands.left.inset(8), Scale::ONE)
+        let area = LeftCard::new(bands.right.inset(8), Scale::ONE)
             .geometry
             .inset(5);
         let buttons = cells(area, 3, 4);
@@ -2046,13 +2466,13 @@ mod tests {
         );
     }
     #[test]
-    fn threshold_parameter_stays_visible_but_does_not_edit_under_heavy() {
+    fn threshold_parameter_is_inactive_under_heavy() {
         let mut app = LegeApp::new();
         app.dashboard.options = ProcessingOptions::new();
         app.dashboard.threshold.set_text("180");
         let mut buffer = WindowBuffer::new(940, 700);
         let bands = Bands::new(940, 700, Scale::ONE);
-        let card = RightCard::new(bands.right.inset(8), Scale::ONE);
+        let card = RightCard::new(bands.left.inset(8), Scale::ONE);
         let (modes, _, value) = card.binarization_fields();
         let buttons = cells(modes, 3, 4);
         let threshold = buttons[1];
@@ -2072,7 +2492,6 @@ mod tests {
             (heavy.y + heavy.h / 2) as f32,
         );
         assert!(app.dashboard.options.use_heavy_binarization);
-        assert!(app.dashboard.last_binarization_fixed);
         click(
             &mut app,
             &mut buffer,
@@ -2086,12 +2505,35 @@ mod tests {
         assert_eq!(card.binarization_fields().2, value);
     }
     #[test]
+    fn resolution_focus_clears_and_clicking_blank_restores_the_saved_value() {
+        let mut app = LegeApp::new();
+        app.dashboard.options.target_height = Some(1200);
+        app.dashboard.options.target_width = Some(800);
+        app.dashboard.resolution.set_text("1200x800");
+        let mut buffer = WindowBuffer::new(940, 700);
+        let bands = Bands::new(940, 700, Scale::ONE);
+        let field = LeftCard::new(bands.right.inset(8), Scale::ONE).resolution;
+        click(
+            &mut app,
+            &mut buffer,
+            (field.x + 10) as f32,
+            (field.y + 10) as f32,
+        );
+        assert_eq!(app.dashboard.resolution.text(), "");
+        click(&mut app, &mut buffer, 20.0, 650.0);
+        assert_eq!(app.dashboard.resolution.text(), "1200x800");
+        assert!(matches!(
+            app.dashboard.resolution_edit,
+            ResolutionEdit::Displaying
+        ));
+    }
+    #[test]
     fn compact_resolution_field_fits_height_and_width() {
         let mut text = TextCache::new(crate::theme::fonts());
-        let style = pixelkit_text::TextStyle::new(crate::theme::FACE, 12.0);
+        let style = liminalkit_text::TextStyle::new(crate::theme::FACE, 12.0);
         assert!(text.measure("1200x800", style) <= 64 - 8);
     }
-    fn real_worker(cancel: bool) {
+    fn real_worker(cancel: bool, batch: bool) {
         let input =
             PathBuf::from(std::env::var_os("LEGE_GUI_SMOKE_INPUT").expect("explicit test input"));
         let output = PathBuf::from(
@@ -2109,14 +2551,20 @@ mod tests {
         app.dashboard
             .queue
             .push_back(DocumentItem::new(input.clone()));
+        let second_input = tempfile::tempdir().unwrap();
+        if batch {
+            let second = second_input.path().join("second-input.pdf");
+            std::fs::copy(&input, &second).unwrap();
+            app.dashboard.queue.push_back(DocumentItem::new(second));
+        }
         app.dashboard.start();
-        assert!(app.dashboard.running);
+        assert!(app.dashboard.running());
         if cancel {
             app.dashboard.cancel();
         }
         let mut buffer = WindowBuffer::new(940, 700);
         let deadline = Instant::now() + Duration::from_secs(60);
-        while app.dashboard.running {
+        while app.dashboard.running() {
             app.render(&mut buffer, Scale::ONE);
             if Instant::now() > deadline {
                 app.dashboard.cancel();
@@ -2125,20 +2573,21 @@ mod tests {
             std::thread::sleep(Duration::from_millis(30));
         }
         assert!(!app.dashboard.rows.is_empty());
+        assert_eq!(app.dashboard.rows.len(), if batch { 2 } else { 1 });
         if cancel {
             assert_eq!(app.dashboard.queue.len(), 1);
             assert!(
                 app.dashboard
                     .rows
                     .iter()
-                    .all(|row| row.status != tr("completed"))
+                    .all(|row| row.state != DocumentRunState::Completed)
             );
         } else {
             assert!(
                 app.dashboard
                     .rows
                     .iter()
-                    .all(|row| row.status == tr("completed")),
+                    .all(|row| row.state == DocumentRunState::Completed),
                 "{:?}",
                 app.dashboard.status
             );
@@ -2162,11 +2611,16 @@ mod tests {
     #[test]
     #[ignore = "requires built lege on PATH and LEGE_GUI_SMOKE_INPUT/OUTPUT"]
     fn preserve_real_worker_smoke() {
-        real_worker(false);
+        real_worker(false, false);
+    }
+    #[test]
+    #[ignore = "requires built lege on PATH and LEGE_GUI_SMOKE_INPUT/OUTPUT"]
+    fn batch_real_worker_smoke() {
+        real_worker(false, true);
     }
     #[test]
     #[ignore = "requires built lege on PATH and LEGE_GUI_SMOKE_INPUT/OUTPUT"]
     fn cancel_real_worker_smoke() {
-        real_worker(true);
+        real_worker(true, false);
     }
 }

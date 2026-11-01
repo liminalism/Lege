@@ -8,7 +8,7 @@ The same processing core ships as the `lege` command-line tool and the `lege-gui
 
 ### lege-process
 
-The e-ink processor: library, `lege` CLI, and the PixelKit desktop GUI (`lege-gui`). This is the application the two paragraphs above describe. [lege-process/README.md](lege-process/README.md).
+The e-ink processor: library, `lege` CLI, and the liminalUI desktop GUI (`lege-gui`). This is the application the two paragraphs above describe. [lege-process/README.md](lege-process/README.md).
 
 ### lege-pdf
 
@@ -40,7 +40,7 @@ Icons, the HTML pages the desktop app opens from About, Linux and macOS packagin
 
 ### freya-main
 
-Vendored fork of the Freya UI toolkit. The desktop app no longer links it. `cargo build` does not build this tree; the workspace excludes it. The PixelKit GUI still embeds Noto Sans from `freya-main/crates/freya-edit/tests/NotoSans-Regular.ttf`. [freya-main/README.md](freya-main/README.md).
+Vendored fork of the Freya UI toolkit. The desktop app no longer links it. `cargo build` does not build this tree; the workspace excludes it. The liminalUI GUI still embeds Noto Sans from `freya-main/crates/freya-edit/tests/NotoSans-Regular.ttf`. [freya-main/README.md](freya-main/README.md).
 
 The native reader and writer build from the sibling `../liminaldoc` checkout. They use these PDF crates through path dependencies.
 
@@ -51,7 +51,7 @@ From this directory:
 ```sh
 cargo build          # lege CLI + lege-gui
 cargo cli            # CLI only
-cargo gui            # CLI + PixelKit GUI
+cargo gui            # CLI + liminalUI GUI
 cargo document-ocr   # batch OCR CLI
 cargo gpu
 cargo ocr

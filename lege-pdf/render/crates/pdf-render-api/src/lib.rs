@@ -106,6 +106,7 @@ impl Default for RenderLimits {
 #[derive(Debug, Clone, Default)]
 pub struct CancellationToken {
     cancelled: Arc<std::sync::atomic::AtomicBool>,
+    linked: Arc<[Arc<std::sync::atomic::AtomicBool>]>,
 }
 
 impl CancellationToken {
@@ -117,12 +118,36 @@ impl CancellationToken {
     /// zero-adapter cancellation seam used by tightly integrated schedulers:
     /// the viewer conductor and renderer observe the same atomic state.
     pub fn from_shared(cancelled: Arc<std::sync::atomic::AtomicBool>) -> Self {
-        Self { cancelled }
+        Self {
+            cancelled,
+            linked: Arc::default(),
+        }
     }
 
-    /// Share the underlying flag with an outer scheduler or composite job.
+    /// Share this token's own flag. For a linked token, observe
+    /// [`Self::is_cancelled`] to include cancellation from its parents.
     pub fn shared_flag(&self) -> Arc<std::sync::atomic::AtomicBool> {
         self.cancelled.clone()
+    }
+
+    /// A token cancelled when either input is cancelled. Cancelling the
+    /// returned token does not cancel either input. Links are flattened and
+    /// deduplicated so composing scheduler/request tokens stays cheap to poll.
+    pub fn linked_with(&self, other: &Self) -> Self {
+        let mut linked = Vec::new();
+        for flag in std::iter::once(&self.cancelled)
+            .chain(self.linked.iter())
+            .chain(std::iter::once(&other.cancelled))
+            .chain(other.linked.iter())
+        {
+            if !linked.iter().any(|seen| Arc::ptr_eq(seen, flag)) {
+                linked.push(Arc::clone(flag));
+            }
+        }
+        Self {
+            cancelled: Arc::default(),
+            linked: linked.into(),
+        }
     }
 
     pub fn cancel(&self) {
@@ -131,6 +156,10 @@ impl CancellationToken {
     }
     pub fn is_cancelled(&self) -> bool {
         self.cancelled.load(std::sync::atomic::Ordering::Acquire)
+            || self
+                .linked
+                .iter()
+                .any(|flag| flag.load(std::sync::atomic::Ordering::Acquire))
     }
 }
 
@@ -365,7 +394,13 @@ pub enum RenderError {
 #[derive(Debug)]
 pub struct RenderTicket {
     pub job_id: u64,
-    receiver: mpsc::Receiver<Result<RenderedPage, RenderError>>,
+    state: std::cell::RefCell<TicketState>,
+}
+
+#[derive(Debug)]
+enum TicketState {
+    Pending(mpsc::Receiver<Result<RenderedPage, RenderError>>),
+    Ready(Result<RenderedPage, RenderError>),
 }
 
 impl RenderTicket {
@@ -374,7 +409,7 @@ impl RenderTicket {
         (
             Self {
                 job_id,
-                receiver: rx,
+                state: std::cell::RefCell::new(TicketState::Pending(rx)),
             },
             tx,
         )
@@ -382,17 +417,30 @@ impl RenderTicket {
 
     /// Block until the job completes.
     pub fn wait(self) -> Result<RenderedPage, RenderError> {
-        self.receiver
-            .recv()
-            .unwrap_or(Err(RenderError::Disconnected))
+        match self.state.into_inner() {
+            TicketState::Pending(receiver) => {
+                receiver.recv().unwrap_or(Err(RenderError::Disconnected))
+            }
+            TicketState::Ready(result) => result,
+        }
     }
 
-    /// Non-blocking poll; `None` while still in flight.
+    /// Non-blocking poll; `None` while still in flight. Once ready, the same
+    /// result remains observable on later polls and through [`Self::wait`].
+    /// Host pixel buffers are shared by Arc, not copied when polling.
     pub fn try_wait(&self) -> Option<Result<RenderedPage, RenderError>> {
-        match self.receiver.try_recv() {
-            Ok(r) => Some(r),
-            Err(mpsc::TryRecvError::Empty) => None,
-            Err(mpsc::TryRecvError::Disconnected) => Some(Err(RenderError::Disconnected)),
+        let mut state = self.state.borrow_mut();
+        match &*state {
+            TicketState::Ready(result) => return Some(result.clone()),
+            TicketState::Pending(receiver) => {
+                let result = match receiver.try_recv() {
+                    Ok(result) => result,
+                    Err(mpsc::TryRecvError::Empty) => return None,
+                    Err(mpsc::TryRecvError::Disconnected) => Err(RenderError::Disconnected),
+                };
+                *state = TicketState::Ready(result.clone());
+                Some(result)
+            }
         }
     }
 }
@@ -504,6 +552,46 @@ mod tests {
         };
         tx.send(Ok(RenderedPage::Host(page))).unwrap();
         assert!(matches!(ticket.wait(), Ok(RenderedPage::Host(_))));
+    }
+
+    #[test]
+    fn polling_completion_keeps_the_result_ready_until_wait() {
+        let (ticket, tx) = RenderTicket::new(9);
+        assert!(ticket.try_wait().is_none());
+        tx.send(Err(RenderError::Cancelled)).unwrap();
+        drop(tx);
+        for _ in 0..3 {
+            assert!(matches!(
+                ticket.try_wait(),
+                Some(Err(RenderError::Cancelled))
+            ));
+        }
+        assert!(matches!(ticket.wait(), Err(RenderError::Cancelled)));
+    }
+
+    #[test]
+    fn linked_cancellation_observes_both_sources_without_cancelling_parents() {
+        for cancel_first in [false, true] {
+            let first = CancellationToken::new();
+            let second = CancellationToken::new();
+            let linked = first.linked_with(&second);
+            assert!(!linked.is_cancelled());
+            if cancel_first {
+                first.cancel();
+            } else {
+                second.cancel();
+            }
+            assert!(linked.is_cancelled());
+        }
+        let first = CancellationToken::new();
+        let second = CancellationToken::new();
+        first.linked_with(&second).cancel();
+        assert!(!first.is_cancelled());
+        assert!(!second.is_cancelled());
+        let third = CancellationToken::new();
+        let linked = first.linked_with(&second).linked_with(&third);
+        second.cancel();
+        assert!(linked.is_cancelled());
     }
 
     #[test]

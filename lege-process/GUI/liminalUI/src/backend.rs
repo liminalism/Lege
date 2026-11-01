@@ -11,7 +11,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::models::{OutputFormat, ProcessingOptions};
 use crate::worker_process::{
-    WorkerHandle, WorkerProgressUpdate, probe_file_json, spawn_lege_worker,
+    WorkerHandle, WorkerProgressUpdate, WorkerStop, probe_file_json, spawn_lege_worker,
 };
 
 use crate::models::DocumentItem;
@@ -317,9 +317,9 @@ pub async fn start_async_processing(
     }
 
     let (events_tx, events_rx) = flume::unbounded::<WorkerProgressUpdate>();
-    let active_pids = Arc::new(Mutex::new(Vec::<u32>::new()));
+    let active_workers = Arc::new(Mutex::new(Vec::<WorkerStop>::new()));
     let cancelled = Arc::new(AtomicBool::new(false));
-    let scheduler_active_pids = active_pids.clone();
+    let scheduler_active_workers = active_workers.clone();
     let scheduler_cancelled = cancelled.clone();
     let scheduler_options = options.clone();
     let scheduler_tracker_infos = tracker_infos.clone();
@@ -357,17 +357,25 @@ pub async fn start_async_processing(
                 }
             };
 
-            if let Ok(mut pids) = scheduler_active_pids.lock() {
+            if let Ok(mut pids) = scheduler_active_workers.lock() {
                 pids.clear();
-                pids.push(handle.pid);
+                pids.push(handle.stop_handle());
             }
             // Cancellation can race the narrow interval between the scheduler's
-            // loop check and publishing the new PID. Re-check after publication
+            // loop check and publishing the new worker control. Re-check after publication
             // so the just-spawned worker cannot escape the supervisor.
             if scheduler_cancelled.load(Ordering::SeqCst) {
                 handle.kill();
-                if let Ok(mut pids) = scheduler_active_pids.lock() {
-                    pids.retain(|pid| *pid != handle.pid);
+                while let Ok(update) = worker_events_rx.recv() {
+                    if matches!(
+                        update,
+                        WorkerProgressUpdate::Completed { .. } | WorkerProgressUpdate::Error { .. }
+                    ) {
+                        break;
+                    }
+                }
+                if let Ok(mut pids) = scheduler_active_workers.lock() {
+                    pids.retain(|pid| pid.pid() != handle.pid());
                 }
                 let _ = events_tx.send(WorkerProgressUpdate::Error {
                     task_id: info.id,
@@ -390,14 +398,23 @@ pub async fn start_async_processing(
                     );
                     let _ = events_tx.send(update);
                     if terminal {
-                        if let Ok(mut pids) = scheduler_active_pids.lock() {
-                            pids.retain(|pid| *pid != handle.pid);
+                        if let Ok(mut pids) = scheduler_active_workers.lock() {
+                            pids.retain(|pid| pid.pid() != handle.pid());
                         }
                         continue;
                     }
                 }
                 Err(flume::RecvTimeoutError::Timeout) => {
                     handle.kill();
+                    while let Ok(update) = worker_events_rx.recv() {
+                        if matches!(
+                            update,
+                            WorkerProgressUpdate::Completed { .. }
+                                | WorkerProgressUpdate::Error { .. }
+                        ) {
+                            break;
+                        }
+                    }
                     let _ = events_tx.send(WorkerProgressUpdate::Error {
                         task_id: info.id,
                         error: "The bundled Lege worker started but emitted no startup event \
@@ -406,8 +423,8 @@ pub async fn start_async_processing(
                             .to_string(),
                         metrics: None,
                     });
-                    if let Ok(mut pids) = scheduler_active_pids.lock() {
-                        pids.retain(|pid| *pid != handle.pid);
+                    if let Ok(mut pids) = scheduler_active_workers.lock() {
+                        pids.retain(|pid| pid.pid() != handle.pid());
                     }
                     continue;
                 }
@@ -417,8 +434,8 @@ pub async fn start_async_processing(
                         error: "The bundled Lege worker disconnected during startup.".to_string(),
                         metrics: None,
                     });
-                    if let Ok(mut pids) = scheduler_active_pids.lock() {
-                        pids.retain(|pid| *pid != handle.pid);
+                    if let Ok(mut pids) = scheduler_active_workers.lock() {
+                        pids.retain(|pid| pid.pid() != handle.pid());
                     }
                     continue;
                 }
@@ -435,22 +452,17 @@ pub async fn start_async_processing(
                 }
             }
 
-            if let Ok(mut pids) = scheduler_active_pids.lock() {
-                pids.retain(|pid| *pid != handle.pid);
+            if let Ok(mut pids) = scheduler_active_workers.lock() {
+                pids.retain(|pid| pid.pid() != handle.pid());
             }
 
             if scheduler_cancelled.load(Ordering::SeqCst) {
-                let _ = events_tx.send(WorkerProgressUpdate::Error {
-                    task_id: info.id,
-                    error: "Processing cancelled".to_string(),
-                    metrics: None,
-                });
                 break;
             }
         }
     });
 
-    let worker_handles = vec![WorkerHandle::supervisor(active_pids, cancelled)];
+    let worker_handles = vec![WorkerHandle::supervisor(active_workers, cancelled)];
 
     Ok((tracker_infos, worker_handles, events_rx))
 }

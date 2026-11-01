@@ -9,13 +9,13 @@ fmt-all-check = "fmt --all -- --check"
 # workspace with its own target directory:
 #
 #   lege          package `lege`              — the CLI
-#   lege-gui      package `lege-gui-pixelkit` — PixelKit processor GUI
+#   lege-gui      package `lege-gui-liminalui` — liminalUI processor GUI
 #   liminaldoc-reader / liminaldoc-writer    — native reader and writer
 #
 # The supported build configurations:
 #
 #   cargo cli      CLI only
-#   cargo gui      CLI + PixelKit GUI  (same as a bare `cargo build`)
+#   cargo gui      CLI + liminalUI GUI  (same as a bare `cargo build`)
 #   cargo viewer   Liminaldoc reader backend
 
 # CLI only.
@@ -27,13 +27,13 @@ process = "build --package lege --bin lege"
 process-check = "check --package lege --bin lege"
 process-run = "run --package lege --bin lege --"
 
-# CLI + PixelKit processor GUI. This is what the workspace default-members build.
-gui = "build --package lege --package lege-gui-pixelkit"
-gui-check = "check --package lege --package lege-gui-pixelkit"
-gui-run = "run --package lege-gui-pixelkit --bin lege-gui --"
-gui-pixelkit = "build --package lege --package lege-gui-pixelkit"
-gui-pixelkit-check = "check --package lege --package lege-gui-pixelkit"
-gui-pixelkit-run = "run --package lege-gui-pixelkit --bin lege-gui --"
+# CLI + liminalUI processor GUI. This is what the workspace default-members build.
+gui = "build --package lege"
+gui-check = "check --package lege"
+gui-run = "run --package lege-gui-liminalui --bin lege-gui --"
+gui-liminalui = "build --package lege"
+gui-liminalui-check = "check --package lege"
+gui-liminalui-run = "run --package lege-gui-liminalui --bin lege-gui --"
 
 # Native document reader in the sibling Liminaldoc workspace.
 viewer = "build --manifest-path ../liminaldoc/Cargo.toml -p liminaldoc-reader"

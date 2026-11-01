@@ -241,6 +241,7 @@ pub(crate) struct Interpreter<'a> {
     /// by a `/OC` `BDC` whose optional-content group is OFF (ISO 32000-1
     /// §8.11.3.2; cpdf_occontext.cpp default-visibility semantics).
     mc_stack: Vec<MarkedContentFrame>,
+    mc_stack_floor: usize,
     next_actual_text_span: u32,
     /// How many enclosing marked-content levels are OC-hidden. While > 0,
     /// painting is suppressed (state, clipping, and text advances still
@@ -299,10 +300,7 @@ pub(crate) struct Interpreter<'a> {
     gs_stack_floor: usize,
     path: PathBuilder,
     pending_clip: Option<FillRule>,
-    /// Glyph runs shown with a clip render mode (Tr 4–7) since the current text
-    /// object's `BT`; their outlines' union becomes the text-clipping path at
-    /// `ET` (ISO 32000-1 §9.4.3). Empty between text objects.
-    text_clip_runs: Vec<TextRunId>,
+    text: TextObjectState,
     operands: Vec<Operand>,
     ops_executed: u64,
     invoke_depth: u32,
@@ -336,10 +334,6 @@ pub(crate) struct Interpreter<'a> {
     /// The `wx` from the CharProc's leading `d0`/`d1`, captured as an advance
     /// fallback for a Type 3 font that supplies no `/Widths`.
     type3_d_width: Option<f64>,
-
-    // text object matrices (reset by BT; not part of graphics state)
-    text_matrix: Matrix,
-    text_line_matrix: Matrix,
 
     /// The page referenced an `/ICCBased` colour space anywhere (fill,
     /// stroke, or image). Feeds `PageFeatures::ICC_COLOR` — a *flag*, not a
@@ -377,7 +371,150 @@ struct ResourceCaches {
     cie: HashMap<NameId, Option<CieSpace>>,
 }
 
+/// Text matrices and clipping accumulation belong to BT..ET, not q..Q.
+#[derive(Default)]
+enum TextObjectState {
+    #[default]
+    Outside,
+    Active(TextObject),
+}
+
+struct TextObject {
+    matrix: Matrix,
+    line_matrix: Matrix,
+    clip_runs: Vec<TextRunId>,
+}
+
+impl Default for TextObject {
+    fn default() -> Self {
+        Self {
+            matrix: Matrix::IDENTITY,
+            line_matrix: Matrix::IDENTITY,
+            clip_runs: Vec::new(),
+        }
+    }
+}
+
+/// Caller-owned stream state parked during a form, soft mask, or CharProc.
+/// Stack floors keep malformed nested closers from consuming caller scopes.
+struct NestedStreamFrame {
+    graphics_floor: usize,
+    marked_floor: usize,
+    marked_depth: usize,
+    hidden_count: u32,
+    resources: Option<Arc<PdfObject>>,
+    caches: ResourceCaches,
+    pattern_base: Matrix,
+    path: PathBuilder,
+    pending_clip: Option<FillRule>,
+    text: TextObjectState,
+    operands: Vec<Operand>,
+    type3_shape_only: bool,
+    type3_d_width: Option<f64>,
+}
+
 impl<'a> Interpreter<'a> {
+    fn enter_nested_stream(
+        &mut self,
+        resources: Option<Arc<PdfObject>>,
+        concat: Matrix,
+    ) -> NestedStreamFrame {
+        let frame = NestedStreamFrame {
+            graphics_floor: self.gs_stack_floor,
+            marked_floor: self.mc_stack_floor,
+            marked_depth: self.mc_stack.len(),
+            hidden_count: self.oc_hidden_count,
+            resources: std::mem::replace(&mut self.resources, resources),
+            caches: self.take_resource_caches(),
+            pattern_base: self.pattern_base,
+            path: std::mem::take(&mut self.path),
+            pending_clip: self.pending_clip.take(),
+            text: std::mem::take(&mut self.text),
+            operands: std::mem::take(&mut self.operands),
+            type3_shape_only: self.type3_shape_only,
+            type3_d_width: self.type3_d_width.take(),
+        };
+        self.gs_stack.push(self.gs.clone());
+        self.emit(SemanticOp::Save);
+        self.gs_stack_floor = self.gs_stack.len();
+        self.mc_stack_floor = self.mc_stack.len();
+        if concat != Matrix::IDENTITY {
+            self.gs.ctm = concat.then(self.gs.ctm);
+            self.emit(SemanticOp::Concat(concat));
+        }
+        self.pattern_base = self.gs.ctm;
+        self.invoke_depth += 1;
+        frame
+    }
+
+    fn leave_nested_stream(&mut self, frame: NestedStreamFrame, end_group: bool) {
+        // Close unbalanced saves while still inside the group's op scope.
+        while self.gs_stack.len() > self.gs_stack_floor {
+            if let Some(gs) = self.gs_stack.pop() {
+                self.gs = gs;
+                self.emit(SemanticOp::Restore);
+            }
+        }
+        if end_group {
+            self.emit(SemanticOp::EndGroup);
+        }
+        self.gs_stack_floor = frame.graphics_floor;
+        if let Some(gs) = self.gs_stack.pop() {
+            self.gs = gs;
+            self.emit(SemanticOp::Restore);
+        }
+        self.mc_stack.truncate(frame.marked_depth);
+        self.mc_stack_floor = frame.marked_floor;
+        self.oc_hidden_count = frame.hidden_count;
+        self.resources = frame.resources;
+        self.restore_resource_caches(frame.caches);
+        self.pattern_base = frame.pattern_base;
+        self.path = frame.path;
+        self.pending_clip = frame.pending_clip;
+        self.text = frame.text;
+        self.operands = frame.operands;
+        self.type3_shape_only = frame.type3_shape_only;
+        self.type3_d_width = frame.type3_d_width;
+        self.invoke_depth -= 1;
+    }
+
+    fn text_object(&mut self) -> &mut TextObject {
+        // Retain tolerant placement of text outside BT..ET, but make its
+        // recovery an explicit transition with fresh matrices.
+        if matches!(self.text, TextObjectState::Outside) {
+            self.ctx
+                .note_recovery("text operator outside BT..ET; starting text object".to_string());
+            self.text = TextObjectState::Active(TextObject::default());
+        }
+        match &mut self.text {
+            TextObjectState::Active(text) => text,
+            TextObjectState::Outside => unreachable!(),
+        }
+    }
+
+    fn text_matrix(&self) -> Matrix {
+        match &self.text {
+            TextObjectState::Outside => Matrix::IDENTITY,
+            TextObjectState::Active(text) => text.matrix,
+        }
+    }
+
+    fn advance_text(&mut self, tx: f64, ty: f64) {
+        let text = self.text_object();
+        text.matrix = Matrix::translate(tx, ty).then(text.matrix);
+    }
+
+    fn end_text_object(&mut self) {
+        if let TextObjectState::Active(text) = std::mem::take(&mut self.text)
+            && !text.clip_runs.is_empty()
+        {
+            self.emit(SemanticOp::ClipText {
+                runs: text.clip_runs,
+            });
+            self.gs.clip_depth += 1;
+        }
+    }
+
     pub(crate) fn new(
         snapshot: &'a DocumentSnapshot,
         ctx: &'a mut ParseContext,
@@ -407,6 +544,7 @@ impl<'a> Interpreter<'a> {
             type3_cache: HashMap::new(),
             cie_cache: HashMap::new(),
             mc_stack: Vec::new(),
+            mc_stack_floor: 0,
             next_actual_text_span: 0,
             oc_hidden_count: 0,
             record_marked: false,
@@ -426,7 +564,7 @@ impl<'a> Interpreter<'a> {
             gs_stack_floor: 0,
             path: PathBuilder::default(),
             pending_clip: None,
-            text_clip_runs: Vec::new(),
+            text: TextObjectState::Outside,
             operands: Vec::new(),
             ops_executed: 0,
             invoke_depth: 0,
@@ -436,8 +574,6 @@ impl<'a> Interpreter<'a> {
             type3_nesting: 0,
             type3_shape_only: false,
             type3_d_width: None,
-            text_matrix: Matrix::IDENTITY,
-            text_line_matrix: Matrix::IDENTITY,
             uses_icc_color: false,
             icc_cache: HashMap::new(),
             icc_cmyk_cache: HashMap::new(),
@@ -720,25 +856,12 @@ impl<'a> Interpreter<'a> {
 
             // --- text ---
             b"BT" => {
-                self.text_matrix = Matrix::IDENTITY;
-                self.text_line_matrix = Matrix::IDENTITY;
-                // A text object's clip accumulation is bounded by BT..ET; a
-                // prior ET always flushes, so this is defensive.
-                self.text_clip_runs.clear();
+                // Recover a repeated BT by committing the previous object's
+                // clipping before starting a new object.
+                self.end_text_object();
+                self.text = TextObjectState::Active(TextObject::default());
             }
-            b"ET" => {
-                // ISO 32000-1 §9.4.3: at the end of a text object, the outlines
-                // of any glyphs shown with a clip render mode (Tr 4–7) are
-                // intersected into the clip, constraining subsequent painting
-                // until the enclosing `Q`. A clip-mode text object that placed
-                // no outlines still emits the clip (an empty clip = clip all
-                // out), matching PDFium (cpdf_renderstatus.cpp ProcessClipPath).
-                if !self.text_clip_runs.is_empty() {
-                    let runs = std::mem::take(&mut self.text_clip_runs);
-                    self.emit(SemanticOp::ClipText { runs });
-                    self.gs.clip_depth += 1;
-                }
-            }
+            b"ET" => self.end_text_object(),
             b"Tc" => {
                 if let Some(v) = self.last_num() {
                     self.gs.char_spacing = v;
@@ -783,8 +906,9 @@ impl<'a> Interpreter<'a> {
             }
             b"Tm" => {
                 if let Some([a, b, c, d, e, f]) = self.nums() {
-                    self.text_line_matrix = Matrix { a, b, c, d, e, f };
-                    self.text_matrix = self.text_line_matrix;
+                    let text = self.text_object();
+                    text.line_matrix = Matrix { a, b, c, d, e, f };
+                    text.matrix = text.line_matrix;
                 }
             }
             b"T*" => {
@@ -871,12 +995,14 @@ impl<'a> Interpreter<'a> {
             }
             b"EMC" => {
                 // Unbalanced EMC is tolerated (ignored), like unbalanced Q.
-                if let Some(frame) = self.mc_stack.pop()
-                    && frame.hidden
-                {
-                    self.oc_hidden_count -= 1;
+                if self.mc_stack.len() > self.mc_stack_floor {
+                    if let Some(frame) = self.mc_stack.pop()
+                        && frame.hidden
+                    {
+                        self.oc_hidden_count -= 1;
+                    }
+                    self.marked_close(offset);
                 }
-                self.marked_close(offset);
             }
 
             // Any unknown operator: ignore, having consumed the pending
@@ -1857,7 +1983,7 @@ impl<'a> Interpreter<'a> {
         if !(tx.is_finite() && ty.is_finite() && size.is_finite() && rise.is_finite()) {
             return None;
         }
-        if !self.text_matrix.is_finite() || !self.gs.ctm.is_finite() {
+        if !self.text_matrix().is_finite() || !self.gs.ctm.is_finite() {
             return None;
         }
         let x0 = 0.0f64.min(tx);
@@ -1869,7 +1995,7 @@ impl<'a> Interpreter<'a> {
             // still occupy roughly an em in width.
             x1 = x0 + size;
         }
-        let matrix = self.text_matrix.then(self.gs.ctm);
+        let matrix = self.text_matrix().then(self.gs.ctm);
         let mut bounds: Option<Rect> = None;
         for (x, y) in [(x0, y0), (x1, y0), (x0, y1), (x1, y1)] {
             let corner = matrix.apply(Point { x, y });
@@ -1947,8 +2073,9 @@ impl<'a> Interpreter<'a> {
 
     fn text_move(&mut self, tx: f64, ty: f64) {
         let t = Matrix::translate(tx, ty);
-        self.text_line_matrix = t.then(self.text_line_matrix);
-        self.text_matrix = self.text_line_matrix;
+        let text = self.text_object();
+        text.line_matrix = t.then(text.line_matrix);
+        text.matrix = text.line_matrix;
     }
 
     fn op_set_font(&mut self) {
@@ -1990,6 +2117,7 @@ impl<'a> Interpreter<'a> {
             // Showing text with no selected font: nothing placeable.
             return;
         };
+        self.text_object();
         // One `Vec` -> `Arc` move; the run and the Type 3 path below then
         // share the elements instead of each holding a full copy.
         let elements: std::sync::Arc<[TextElement]> = elements.into();
@@ -2003,7 +2131,7 @@ impl<'a> Interpreter<'a> {
             word_spacing: self.gs.word_spacing,
             horizontal_scale: self.gs.horizontal_scale,
             rise: self.gs.rise,
-            text_matrix: self.text_matrix,
+            text_matrix: self.text_matrix(),
             elements: std::sync::Arc::clone(&elements),
             visible: visible && !type3,
             actual_text: self.active_actual_text(),
@@ -2029,7 +2157,7 @@ impl<'a> Interpreter<'a> {
             // `ShowText` above still carries the paint for modes 4–6; mode 7 paints
             // nothing (skipped by the backend) but still contributes to the clip.
             if matches!(self.gs.render_mode, 4 | 5 | 6 | 7) {
-                self.text_clip_runs.push(id);
+                self.text_object().clip_runs.push(id);
             }
         }
 
@@ -2040,7 +2168,7 @@ impl<'a> Interpreter<'a> {
         // pile every run onto the same origin.
         let (tx, ty) = self.text_displacement(font, &elements);
         if tx != 0.0 || ty != 0.0 {
-            self.text_matrix = Matrix::translate(tx, ty).then(self.text_matrix);
+            self.advance_text(tx, ty);
         }
     }
 
@@ -2128,14 +2256,14 @@ impl<'a> Interpreter<'a> {
                     // A TJ adjustment moves the next glyph; thousandths of a
                     // text-space unit, negative moves forward.
                     let adj = -n / 1000.0 * tfs * th;
-                    self.text_matrix = Matrix::translate(adj, 0.0).then(self.text_matrix);
+                    self.advance_text(adj, 0.0);
                 }
                 TextElement::Show(bytes) => {
                     for &code in bytes.iter() {
                         // Glyph space → current user space (CTM applied by the
                         // enclosing scope): FontMatrix, then the text params,
                         // then the current text matrix.
-                        let concat = fm.then(param).then(self.text_matrix);
+                        let concat = fm.then(param).then(self.text_matrix());
                         let mut d_width = None;
                         if !invisible {
                             if let Some(char_proc) = t3.char_procs[code as usize].clone() {
@@ -2167,7 +2295,7 @@ impl<'a> Interpreter<'a> {
                             adv += tw;
                         }
                         adv *= th;
-                        self.text_matrix = Matrix::translate(adv, 0.0).then(self.text_matrix);
+                        self.advance_text(adv, 0.0);
                     }
                 }
             }
@@ -2199,37 +2327,8 @@ impl<'a> Interpreter<'a> {
             }
         };
 
-        // 1. Save + Concat the glyph-space transform. The wrapper save is a
-        // hard floor for the nested stream: a malformed leading `Q` cannot
-        // consume it, and any trailing unmatched `q` is unwound below.
-        let saved_floor = self.gs_stack_floor;
-        self.gs_stack.push(self.gs.clone());
-        self.emit(SemanticOp::Save);
-        self.gs_stack_floor = self.gs_stack.len();
-        if concat != Matrix::IDENTITY {
-            self.gs.ctm = concat.then(self.gs.ctm);
-            self.emit(SemanticOp::Concat(concat));
-        }
-
-        // 2. Scope the Type 3 flags to this CharProc: each glyph decides its
-        // own coloured/shape-only status via its own d0/d1, and each captures
-        // its own advance width.
-        let saved_shape = self.type3_shape_only;
-        let saved_d_width = self.type3_d_width.take();
-        let saved_res = self.resources.clone();
-        let saved_operands = std::mem::take(&mut self.operands);
-        // A CharProc may open its own BT/ET text object; isolate the outer
-        // run's text matrices so a nested glyph cannot move the caller's pen.
-        let saved_tm = self.text_matrix;
-        let saved_tlm = self.text_line_matrix;
-        let saved_caches = self.take_resource_caches();
-        // Patterns referenced by the CharProc anchor to the glyph's default
-        // space (the CTM here includes the font matrix and text placement).
-        let saved_pattern_base = self.pattern_base;
-        self.pattern_base = self.gs.ctm;
+        let frame = self.enter_nested_stream(resources, concat);
         self.type3_shape_only = false;
-        self.resources = resources;
-        self.invoke_depth += 1;
         self.type3_nesting += 1;
 
         // 3. Execute (a malformed CharProc is a skipped glyph, never fatal).
@@ -2243,32 +2342,8 @@ impl<'a> Interpreter<'a> {
         self.trace_exit(trace_saved);
 
         self.type3_nesting -= 1;
-        self.invoke_depth -= 1;
-        self.resources = saved_res;
-        self.pattern_base = saved_pattern_base;
-        self.restore_resource_caches(saved_caches);
-        self.operands = saved_operands;
-        self.text_matrix = saved_tm;
-        self.text_line_matrix = saved_tlm;
         let captured = self.type3_d_width;
-        self.type3_shape_only = saved_shape;
-        self.type3_d_width = saved_d_width;
-
-        // 4. Close any `q` scopes the malformed CharProc left open, then
-        // restore the wrapper. This keeps both the interpreter state and the
-        // emitted Save/Restore stream balanced; otherwise the glyph transform
-        // leaks into every following text run.
-        while self.gs_stack.len() > self.gs_stack_floor {
-            if let Some(prev) = self.gs_stack.pop() {
-                self.gs = prev;
-                self.emit(SemanticOp::Restore);
-            }
-        }
-        self.gs_stack_floor = saved_floor;
-        if let Some(prev) = self.gs_stack.pop() {
-            self.gs = prev;
-            self.emit(SemanticOp::Restore);
-        }
+        self.leave_nested_stream(frame, false);
         captured
     }
 
@@ -4204,14 +4279,7 @@ impl<'a> Interpreter<'a> {
         // not see them.
         self.operands.clear();
 
-        // 1. Save.
-        self.gs_stack.push(self.gs.clone());
-        self.emit(SemanticOp::Save);
-        // 2. Concat /Matrix.
-        if matrix != Matrix::IDENTITY {
-            self.gs.ctm = matrix.then(self.gs.ctm);
-            self.emit(SemanticOp::Concat(matrix));
-        }
+        let frame = self.enter_nested_stream(form_res, matrix);
         // 3. Clip to /BBox (in form space, i.e. after the Matrix concat).
         if let Some([x0, y0, x1, y1]) = bbox {
             let path = rect_path(x0, y0, x1 - x0, y1 - y0);
@@ -4240,29 +4308,6 @@ impl<'a> Interpreter<'a> {
             self.gs.blend = BlendMode::Normal;
         }
 
-        // 4. Execute with the form's resources. Marked-content state is
-        // scoped to the stream (§14.6): an unbalanced BMC/EMC inside the
-        // form must not leak OC suppression into the caller.
-        let saved_res = self.resources.clone();
-        let saved_mc_depth = self.mc_stack.len();
-        let saved_oc_hidden = self.oc_hidden_count;
-        // Path construction is per content stream. PDFium gives each form its
-        // own `CPDF_StreamContentParser`, so a path the caller left pending
-        // cannot reach the form's operators and the form cannot hand one back.
-        // We share one builder across the whole interpretation, so scope it by
-        // hand — pdfbox/5302 invokes a form while a page-sized `re` is still
-        // pending (`0 0 1155 1563 re / q ... Do Q / W`, never painted), and the
-        // first `B` inside the form then filled that rectangle black along with
-        // its own, flooding the page.
-        let saved_path = std::mem::take(&mut self.path);
-        let saved_pending_clip = self.pending_clip.take();
-        let saved_caches = self.take_resource_caches();
-        // Patterns referenced by this stream anchor to the form's default
-        // space — the CTM here, after the /Matrix concat (§8.7.3.1).
-        let saved_pattern_base = self.pattern_base;
-        self.pattern_base = self.gs.ctm;
-        self.resources = form_res;
-        self.invoke_depth += 1;
         if let Some(id) = obj_id {
             self.form_stack.push(id);
         }
@@ -4280,24 +4325,7 @@ impl<'a> Interpreter<'a> {
         if obj_id.is_some() {
             self.form_stack.pop();
         }
-        self.invoke_depth -= 1;
-        self.resources = saved_res;
-        self.pattern_base = saved_pattern_base;
-        self.restore_resource_caches(saved_caches);
-        self.path = saved_path;
-        self.pending_clip = saved_pending_clip;
-        self.mc_stack.truncate(saved_mc_depth);
-        self.oc_hidden_count = saved_oc_hidden;
-
-        if group.is_some() {
-            self.emit(SemanticOp::EndGroup);
-        }
-
-        // 5. Restore.
-        if let Some(prev) = self.gs_stack.pop() {
-            self.gs = prev;
-            self.emit(SemanticOp::Restore);
-        }
+        self.leave_nested_stream(frame, group.is_some());
         result
     }
 
@@ -4371,11 +4399,9 @@ impl<'a> Interpreter<'a> {
         // Fresh per-annotation state (PDFium renders each annotation through
         // its own CPDF_RenderContext layer, not the page's ending state).
         self.gs = GraphicsState::default();
-        self.text_matrix = Matrix::IDENTITY;
-        self.text_line_matrix = Matrix::IDENTITY;
+        self.text = TextObjectState::Outside;
         self.path = PathBuilder::default();
         self.pending_clip = None;
-        self.text_clip_runs.clear();
         self.operands.clear();
 
         self.gs_stack.push(self.gs.clone());
@@ -4906,14 +4932,7 @@ impl<'a> Interpreter<'a> {
         };
 
         self.emit(SemanticOp::BeginSoftMask { kind, transfer });
-        // Isolate the mask content's graphics state (Save/Restore) so its
-        // transform and paint changes do not leak into the masked painting.
-        self.gs_stack.push(self.gs.clone());
-        self.emit(SemanticOp::Save);
-        if matrix != Matrix::IDENTITY {
-            self.gs.ctm = matrix.then(self.gs.ctm);
-            self.emit(SemanticOp::Concat(matrix));
-        }
+        let frame = self.enter_nested_stream(form_res, matrix);
         if let Some([x0, y0, x1, y1]) = bbox {
             let path = rect_path(x0, y0, x1 - x0, y1 - y0);
             let pid = self.intern_path(path);
@@ -4928,36 +4947,18 @@ impl<'a> Interpreter<'a> {
         self.gs.stroke_alpha = 1.0;
         self.gs.blend = BlendMode::Normal;
 
-        let saved_res = self.resources.clone();
-        let saved_caches = self.take_resource_caches();
-        // Patterns referenced by the mask group anchor to the group's default
-        // space — the CTM here, after the group /Matrix concat (§8.7.3.1).
-        let saved_pattern_base = self.pattern_base;
-        self.pattern_base = self.gs.ctm;
-        self.resources = form_res;
-        self.invoke_depth += 1;
         if let Some(id) = group_id {
             self.soft_mask_stack.push(id);
         }
-        let operands = std::mem::take(&mut self.operands);
         let trace_saved = self.trace_enter(TraceFrameKind::SoftMask, group_id);
         self.emit(SemanticOp::BeginPaintOrigin(PaintOrigin::SoftMaskContent));
         let result = self.run(&content);
         self.emit(SemanticOp::EndPaintOrigin);
         self.trace_exit(trace_saved);
-        self.operands = operands;
         if group_id.is_some() {
             self.soft_mask_stack.pop();
         }
-        self.invoke_depth -= 1;
-        self.resources = saved_res;
-        self.pattern_base = saved_pattern_base;
-        self.restore_resource_caches(saved_caches);
-
-        if let Some(prev) = self.gs_stack.pop() {
-            self.gs = prev;
-            self.emit(SemanticOp::Restore);
-        }
+        self.leave_nested_stream(frame, false);
         self.emit(SemanticOp::EndSoftMask);
         result
     }

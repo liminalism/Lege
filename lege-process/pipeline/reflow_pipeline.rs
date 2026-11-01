@@ -12,7 +12,7 @@
 use crate::pipeline::config::PipelineConfig;
 use crate::pipeline::helper_functions::{
     await_stage_or_cancel_with_token, bookmarks_to_outline, init_encode_semaphore, merge_outline,
-    spawn_pdf_writer_actor,
+    spawn_pdf_writer_actor_cancellable,
 };
 use crate::pipeline::pdf_tokio_pipeline::encode_base_layer_for_jpeg_mode;
 use crate::pipeline::policies::build_inference_image;
@@ -276,14 +276,12 @@ async fn await_reflow_step<T>(
 ) -> Result<T> {
     tokio::select! {
         result = future => result,
-        signal = shutdown_rx.recv() => {
+        signal = crate::pipeline::helper_functions::shutdown_signal(shutdown_rx) => {
             cancellation.cancel();
             // Dropping the step future cannot stop a started blocking
             // worker; wait for it to release its buffers first.
             crate::runtime_stats::drain_blocking_workers_on_cancel(stage).await;
-            let message = signal
-                .ok()
-                .and_then(|signal| signal.message)
+            let message = signal.message
                 .unwrap_or_else(|| "User requested cancellation".to_string());
             Err(anyhow!("Processing cancelled during {stage}: {message}"))
         }
@@ -702,6 +700,7 @@ pub(crate) async fn run_raster_reflow_pipeline(
     let runtime_limits = PipelineRuntimeLimits::from_config(&config);
     init_encode_semaphore(runtime_limits.page_workers);
     let cancellation = lege_pdf_read::CancellationToken::new();
+    let _lifetime = crate::pipeline::helper_functions::PipelineLifetime(cancellation.clone());
 
     let ReflowPlan {
         cfg: reflow_cfg,
@@ -723,17 +722,19 @@ pub(crate) async fn run_raster_reflow_pipeline(
     let total_out_pages = doc.pages.len();
     progress_tracker.publish_reflow_progress(ReflowStage::OutputPages, 0, total_out_pages);
 
-    let (pdf_writer_handle, mut pdf_writer_task) = spawn_pdf_writer_actor(
+    let (pdf_writer_handle, mut pdf_writer_task) = spawn_pdf_writer_actor_cancellable(
         output_path.to_path_buf(),
         total_out_pages,
         progress_tracker.clone(),
         false,
         runtime_limits.channel_capacity,
+        cancellation.clone(),
     );
     let mut toc_pages = Vec::new();
 
     for reflow_page in &doc.pages {
         if let Ok(signal) = shutdown_rx.try_recv() {
+            pdf_writer_handle.abort();
             pdf_writer_task.abort();
             return Err(anyhow!(
                 "Processing cancelled: {}",
@@ -874,15 +875,14 @@ pub(crate) async fn run_raster_reflow_pipeline(
         });
         let (bookmarks, metadata) = tokio::select! {
             result = &mut outline_task => result?,
-            signal = shutdown_rx.recv() => {
+            signal = crate::pipeline::helper_functions::shutdown_signal(&mut shutdown_rx) => {
                 cancellation.cancel();
                 outline_task.abort();
+                pdf_writer_handle.abort();
                 pdf_writer_task.abort();
                 crate::runtime_stats::drain_blocking_workers_on_cancel("reflow outline extraction")
                     .await;
-                let message = signal
-                    .ok()
-                    .and_then(|signal| signal.message)
+                let message = signal.message
                     .unwrap_or_else(|| "User requested cancellation".to_string());
                 return Err(anyhow!("Processing cancelled during reflow outline extraction: {message}"));
             }
@@ -923,15 +923,11 @@ pub(crate) async fn run_raster_reflow_pipeline(
             .await?;
     }
 
-    pdf_writer_handle.finalize().await?;
-    await_stage_or_cancel_with_token(
-        &mut pdf_writer_task,
-        &mut shutdown_rx,
-        "PDF writer",
-        &[],
-        Some(&cancellation),
-    )
-    .await?;
+    pdf_writer_handle
+        .finalize()
+        .await?
+        .wait(&mut pdf_writer_task, &mut shutdown_rx)
+        .await?;
 
     success_log!("Raster reflow pipeline complete: {}", output_path.display());
     Ok(())
@@ -960,6 +956,7 @@ pub(crate) async fn run_raster_reflow_djvu_pipeline(
 
     let runtime_limits = PipelineRuntimeLimits::djvu_from_config(&config);
     let cancellation = lege_pdf_read::CancellationToken::new();
+    let _lifetime = crate::pipeline::helper_functions::PipelineLifetime(cancellation.clone());
 
     let ReflowPlan {
         cfg: reflow_cfg,

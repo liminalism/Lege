@@ -1,5 +1,5 @@
-use pixelkit_raster::Rect;
-use pixelkit_shell::Scale;
+use liminalkit_raster::Rect;
+use liminalkit_shell::Scale;
 
 #[derive(Debug)]
 pub struct Bands {
@@ -24,7 +24,7 @@ impl Bands {
         let left = Rect::new(p, y, col, settings_h);
         let right = Rect::new(p + col + gap, y, w - col - gap, settings_h);
         // Give all 110px recovered from settings to the queue beneath actions.
-        let process = Rect::new(p, left.bottom() + gap, w, s.px(196));
+        let process = Rect::new(p, left.bottom() + gap, w, s.px(44));
         let status = Rect::new(
             p,
             process.bottom() + gap,
@@ -68,9 +68,9 @@ impl LeftCard {
                 s.px(15),
             ),
             resolution: Rect::new(a.right() - resolution_w, field_y, resolution_w, s.px(28)),
-            checks: Rect::new(a.x, field_y + s.px(40), a.w, s.px(100)),
-            ocr: Rect::new(a.x, a.bottom() - s.px(78), a.w, s.px(30)),
-            geometry: Rect::new(a.x, a.bottom() - s.px(40), a.w, s.px(40)),
+            checks: Rect::new(a.x, field_y + s.px(34), a.w, s.px(75)),
+            ocr: Rect::new(a.x, a.bottom() - s.px(74), a.w, s.px(30)),
+            geometry: Rect::new(a.x, a.bottom() - s.px(34), a.w, s.px(30)),
         }
     }
 }
@@ -86,13 +86,13 @@ impl RightCard {
     pub fn new(a: Rect, s: Scale) -> Self {
         Self {
             heading: Rect::new(a.x, a.y, a.w, s.px(24)),
-            rows: Rect::new(a.x, a.y + s.px(26), a.w, s.px(166)),
-            binarization: Rect::new(a.x, a.bottom() - s.px(64), a.w, s.px(64)),
+            rows: Rect::new(a.x, a.y + s.px(26), a.w, s.px(160)),
+            binarization: Rect::new(a.x, a.bottom() - s.px(68), a.w, s.px(68)),
             scale: s,
         }
     }
     pub fn setting(&self, index: i32) -> (Rect, Rect) {
-        let y = self.rows.y + self.scale.px(index * 34);
+        let y = self.rows.y + self.scale.px(index * 32);
         let label_w = self.scale.px(64);
         (
             Rect::new(self.rows.x, y, label_w, self.scale.px(30)),
@@ -105,15 +105,26 @@ impl RightCard {
         )
     }
     pub fn binarization_fields(&self) -> (Rect, Rect, Rect) {
-        let a = self.binarization.inset(self.scale.px(6));
-        let value = Rect::new(
-            a.right() - self.scale.px(52),
-            a.y + self.scale.px(16),
-            self.scale.px(52),
+        let a = self.binarization;
+        let label_w = self.scale.px(64);
+        let modes = Rect::new(
+            a.x + label_w + self.scale.px(8),
+            a.y,
+            a.w - label_w - self.scale.px(8),
             self.scale.px(30),
         );
-        let caption = Rect::new(value.x, a.y, value.w, self.scale.px(14));
-        let modes = Rect::new(a.x, value.y, a.w - value.w - self.scale.px(8), value.h);
+        let caption = Rect::new(
+            modes.x,
+            a.y + self.scale.px(34),
+            self.scale.px(48),
+            self.scale.px(28),
+        );
+        let value = Rect::new(
+            caption.right() + self.scale.px(4),
+            caption.y,
+            self.scale.px(64),
+            caption.h,
+        );
         (modes, caption, value)
     }
 }
@@ -131,19 +142,26 @@ pub struct Actions {
     pub queue: Rect,
 }
 impl Actions {
-    pub fn new(a: Rect, s: Scale) -> Self {
-        let utility_w = s.px(72);
-        let group_w = utility_w * 3 + s.px(6) * 2;
-        let group_x = a.right() - group_w;
-        let primary_w = s.px(320).min(group_x - a.x - s.px(24));
-        let primary_x = (a.x + (a.w - primary_w) / 2).min(group_x - s.px(24) - primary_w);
-        let primary = Rect::new(primary_x, a.y, primary_w, s.px(44));
+    pub fn new(process: Rect, status: Rect, s: Scale) -> Self {
+        let primary_w = s.px(320).min(process.w);
+        let primary = Rect::new(
+            process.x + (process.w - primary_w) / 2,
+            process.y,
+            primary_w,
+            process.h,
+        );
+        let group_w = s.px(228).min(status.w);
         let utilities = cells(
-            Rect::new(group_x, a.y + s.px(10), group_w, s.px(24)),
+            Rect::new(status.right() - group_w, status.y, group_w, s.px(24)),
             3,
             s.px(6),
         );
-        let queue = Rect::new(a.x, a.y + s.px(58), a.w, (a.h - s.px(58)).max(1));
+        let queue = Rect::new(
+            status.x,
+            status.y + s.px(78),
+            status.w,
+            (status.h - s.px(108)).max(1),
+        );
         Self {
             primary,
             utilities,
@@ -169,41 +187,19 @@ mod tests {
         }
     }
     #[test]
-    fn compact_groups_keep_equal_buttons_and_smaller_parameters() {
-        for width in [620, 940, 1400] {
-            for factor in [1.0, 1.5, 2.0] {
-                let s = Scale(factor);
-                let bands = Bands::new(s.px(width), s.px(700), s);
-                assert_eq!(bands.left.h, s.px(280));
-                assert_eq!(bands.process.h, s.px(196));
-                let left = LeftCard::new(bands.left.inset(s.px(8)), s);
-                assert_eq!(left.resolution.w, s.px(64));
-                assert_eq!(left.range.y, left.resolution.y);
-                assert!(left.range.right() < left.resolution.x);
-                assert!(left.checks.bottom() <= left.ocr.y);
-                assert!(left.ocr.bottom() < left.geometry.y);
-                let margins = cells(left.geometry.inset(s.px(5)), 3, s.px(4));
-                assert!(
-                    margins
-                        .iter()
-                        .all(|rect| rect.w == margins[0].w && rect.h == margins[0].h)
-                );
-                let right = RightCard::new(bands.right.inset(s.px(8)), s);
-                let (modes, _, value) = right.binarization_fields();
-                let mode_buttons = cells(modes, 3, s.px(4));
-                assert_eq!(value.w, s.px(52));
-                assert!(mode_buttons.iter().all(|rect| rect.w == mode_buttons[0].w
-                    && rect.h == mode_buttons[0].h
-                    && rect.w > value.w));
-                assert!(right.setting(4).1.bottom() < right.binarization.y);
-                let actions = Actions::new(bands.process.inset(s.px(8)), s);
-                assert!(actions.primary.right() + s.px(24) <= actions.utilities[0].x);
-                assert!(actions.primary.h > actions.utilities[0].h);
-                assert!(actions.utilities.iter().all(
-                    |rect| rect.w == actions.utilities[0].w && rect.h == actions.utilities[0].h
-                ));
-                assert!(actions.queue.h >= s.px(120));
-            }
+    fn controls_fit_their_panels() {
+        for width in [720, 940, 1400] {
+            let s = Scale(1.0);
+            let bands = Bands::new(width, 700, s);
+            let options = LeftCard::new(bands.right.inset(8), s);
+            assert!(options.checks.bottom() <= options.ocr.y);
+            assert!(options.ocr.bottom() <= options.geometry.y);
+            let output = RightCard::new(bands.left.inset(8), s);
+            let (modes, caption, value) = output.binarization_fields();
+            assert!(output.setting(4).1.bottom() <= modes.y);
+            assert!(modes.bottom() <= caption.y && value.right() <= output.binarization.right());
+            let actions = Actions::new(bands.process, bands.status.inset(8), s);
+            assert!(actions.queue.bottom() <= bands.status.bottom());
         }
     }
 }

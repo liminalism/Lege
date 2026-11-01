@@ -213,6 +213,7 @@ pub async fn create_and_run_epub_pipeline(
     let detect_count = Arc::new(AtomicUsize::new(0));
     let encode_count = Arc::new(AtomicUsize::new(0));
     let cancellation = lege_pdf_read::CancellationToken::new();
+    let _lifetime = crate::pipeline::helper_functions::PipelineLifetime(cancellation.clone());
 
     let (render_tx, render_rx) = mpsc::channel(limits.render_buffer);
     let (infer_tx, infer_rx) = mpsc::channel(limits.inference_buffer);
@@ -308,13 +309,11 @@ pub async fn create_and_run_epub_pipeline(
         joined = &mut ocr_task => {
             joined.map_err(|e| anyhow!("[EPUB] OCR stage panicked: {e}"))??
         }
-        signal = shutdown_rx.recv() => {
+        signal = crate::pipeline::helper_functions::shutdown_signal(&mut shutdown_rx) => {
             cancellation.cancel();
             ocr_task.abort();
             crate::runtime_stats::drain_blocking_workers_on_cancel("EPUB OCR").await;
-            let msg = signal
-                .ok()
-                .and_then(|s| s.message)
+            let msg = signal.message
                 .unwrap_or_else(|| "User requested cancellation".to_string());
             return Err(anyhow!("Processing cancelled during ocr: {}", msg));
         }
@@ -374,13 +373,11 @@ pub async fn create_and_run_epub_pipeline(
         result = &mut packaging_task => {
             result.map_err(|e| anyhow!("[EPUB] packaging task panicked: {e}"))??;
         }
-        signal = shutdown_rx.recv() => {
+        signal = crate::pipeline::helper_functions::shutdown_signal(&mut shutdown_rx) => {
             cancellation.cancel();
             packaging_task.abort();
             crate::runtime_stats::drain_blocking_workers_on_cancel("EPUB packaging").await;
-            let message = signal
-                .ok()
-                .and_then(|signal| signal.message)
+            let message = signal.message
                 .unwrap_or_else(|| "User requested cancellation".to_string());
             return Err(anyhow!("Processing cancelled during EPUB packaging: {message}"));
         }

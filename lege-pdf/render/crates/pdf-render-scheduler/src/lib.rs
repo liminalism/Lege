@@ -115,8 +115,10 @@ impl RenderScheduler {
     /// Guarantees: deterministic output for any worker counts (each page is
     /// independent — its own parse/render context, the snapshot is immutable,
     /// no document-wide lock); `cancel` stops queued and active jobs (it is
-    /// checked before each stage *and* injected into each request's
-    /// `limits.cancellation` so backends can stop mid-render); a panic or
+    /// checked before each stage *and* linked with each request's
+    /// `limits.cancellation` so either token can stop mid-render). Cancellation
+    /// drains the requested range, emitting one result per page in order;
+    /// a panic or
     /// error on one page becomes that page's `Err` and never corrupts
     /// another page's job.
     pub fn render_range(
@@ -227,12 +229,14 @@ impl RenderScheduler {
                                 Err(RenderError::Cancelled)
                             }
                             Ok(mut request) => {
-                                // Propagate the pipeline token into the request so the
-                                // backend can observe cancellation *mid-render* (backends
-                                // check `limits.cancellation` at operation boundaries).
-                                // A token the caller already set wins.
-                                if request.limits.cancellation.is_none() {
-                                    request.limits.cancellation = cancel.cloned();
+                                // Preserve both cancellation sources through budget
+                                // admission and active backend execution.
+                                if let Some(pipeline) = cancel {
+                                    request.limits.cancellation =
+                                        Some(match &request.limits.cancellation {
+                                            Some(local) => local.linked_with(pipeline),
+                                            None => pipeline.clone(),
+                                        });
                                 }
                                 render_job(backend.as_ref(), &budget, request)
                             }

@@ -58,7 +58,7 @@ def sample(label, binary, iteration, width, height, settle):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--freya-bin", type=Path, required=True)
-    parser.add_argument("--pixelkit-bin", type=Path, required=True)
+    parser.add_argument("--liminalui-bin", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--width", type=int, default=1980)
     parser.add_argument("--height", type=int, default=1452)
@@ -70,12 +70,12 @@ def main():
         parser.error("dimensions/runs must be positive; settle must be in (0,30]")
     records = []
     for iteration in range(args.runs):
-        for label, binary in [("freya", args.freya_bin), ("pixelkit", args.pixelkit_bin)]:
+        for label, binary in [("freya", args.freya_bin), ("liminalui", args.liminalui_bin)]:
             records.append(sample(label, binary, iteration, args.width, args.height, args.settle))
     medians = {
         label: {key: statistics.median(row["metrics"][key] for row in records if row["frontend"] == label)
                 for key in ["Rss_KiB", "Pss_KiB", "threads"]}
-        for label in ["freya", "pixelkit"]
+        for label in ["freya", "liminalui"]
     }
     result = {"workload": "empty queue, idle, matched physical window size", "platform": "Linux/X11",
               "profile": args.profile,

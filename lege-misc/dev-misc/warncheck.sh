@@ -115,7 +115,7 @@ ws "debug-bin"                    -p lege-ocr --features debug-bin
 ws "all-features"                 -p lege-ocr --all-features
 
 echo "== frontends =="
-ws "lege-gui-pixelkit"            -p lege-gui-pixelkit
+ws "lege-gui-liminalui"            -p lege-gui-liminalui
 mp ../liminaldoc/Cargo.toml       "liminaldoc-reader" -p liminaldoc-reader
 mp ../liminaldoc/Cargo.toml       "liminaldoc-writer" -p docwrite-app
 ws "rfd (vendored, in-workspace)" -p rfd

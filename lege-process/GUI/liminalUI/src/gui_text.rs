@@ -12,7 +12,7 @@ pub struct GuiText {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct GuiInteractiveText {
-    pub pixelkit: BTreeMap<String, String>,
+    pub liminalui: BTreeMap<String, String>,
     pub buttons: GuiButtonsText,
     pub labels: GuiLabelsText,
     pub controls: GuiControlsText,
@@ -165,11 +165,11 @@ pub static GUI_TEXT: LazyLock<GuiText> = LazyLock::new(|| {
     serde_json::from_str(json).expect("gui_text.json failed to parse")
 });
 
-/// Look up a PixelKit string in the selected bundled locale.
+/// Look up a liminalUI string in the selected bundled locale.
 pub fn tr(key: &'static str) -> &'static str {
     GUI_TEXT
         .interactive
-        .pixelkit
+        .liminalui
         .get(key)
         .map(String::as_str)
         .unwrap_or(key)
@@ -208,6 +208,7 @@ mod tests {
                 "queued",
                 "processing",
                 "completed",
+                "cancelled",
                 "failed",
                 "more",
                 "progress",
@@ -225,10 +226,10 @@ mod tests {
             ] {
                 assert!(
                     text.interactive
-                        .pixelkit
+                        .liminalui
                         .get(key)
                         .is_some_and(|value| !value.trim().is_empty()),
-                    "missing PixelKit translation: {key}"
+                    "missing liminalUI translation: {key}"
                 );
             }
         }

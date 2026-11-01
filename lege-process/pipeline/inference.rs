@@ -132,6 +132,47 @@ pub struct InferenceHandle {
     pool: Arc<SessionPool>,
 }
 
+/// Admission follows the blocking worker even if its async waiter is dropped.
+struct InferenceAdmission {
+    _vram: tokio::sync::OwnedSemaphorePermit,
+    _session: tokio::sync::OwnedSemaphorePermit,
+}
+
+impl InferenceAdmission {
+    async fn acquire(
+        vram: Arc<Semaphore>,
+        sessions: Arc<Semaphore>,
+        requested_mb: u32,
+    ) -> Result<Self> {
+        let vram = vram
+            .acquire_many_owned(requested_mb.max(1))
+            .await
+            .map_err(|_| anyhow!("layout VRAM admission semaphore closed"))?;
+        let session = sessions
+            .acquire_owned()
+            .await
+            .map_err(|_| anyhow!("layout inference session pool closed"))?;
+        Ok(Self {
+            _vram: vram,
+            _session: session,
+        })
+    }
+
+    fn spawn<F, R>(self, work: F) -> tokio::task::JoinHandle<R>
+    where
+        F: FnOnce() -> R + Send + 'static,
+        R: Send + 'static,
+    {
+        crate::runtime_stats::spawn_blocking_stage(
+            crate::runtime_stats::Stage::Inference,
+            move || {
+                let _admission = self;
+                work()
+            },
+        )
+    }
+}
+
 impl InferenceHandle {
     pub fn new(config: &PipelineConfig) -> Result<Self> {
         Ok(Self {
@@ -144,25 +185,21 @@ impl InferenceHandle {
     pub async fn detect(&self, page_index: usize, image: Arc<RgbImage>) -> Result<Vec<Detection>> {
         let requested_mb =
             SessionPool::transient_mb_for(&image).min(self.pool.vram_budget_mb) as u32;
-        let _vram = Arc::clone(&self.pool.vram)
-            .acquire_many_owned(requested_mb.max(1))
-            .await
-            .map_err(|_| anyhow!("layout VRAM admission semaphore closed"))?;
-        let _session = Arc::clone(&self.pool.available)
-            .acquire_owned()
-            .await
-            .map_err(|_| anyhow!("layout inference session pool closed"))?;
+        let admission = InferenceAdmission::acquire(
+            Arc::clone(&self.pool.vram),
+            Arc::clone(&self.pool.available),
+            requested_mb,
+        )
+        .await?;
 
         let pool = Arc::clone(&self.pool);
-        crate::runtime_stats::spawn_blocking_stage(
-            crate::runtime_stats::Stage::Inference,
-            move || {
+        admission
+            .spawn(move || {
                 pool.run(&image)
                     .with_context(|| format!("layout inference failed on page {page_index}"))
-            },
-        )
-        .await
-        .map_err(|error| anyhow!("layout inference worker panicked: {error}"))?
+            })
+            .await
+            .map_err(|error| anyhow!("layout inference worker panicked: {error}"))?
     }
 
     pub fn has_capacity(&self) -> bool {
@@ -206,6 +243,39 @@ pub fn is_gpu_device_error(error: &(dyn std::error::Error + 'static)) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn lifecycle_aborted_waiter_keeps_inference_admission_until_worker_exits() {
+        let vram = Arc::new(Semaphore::new(2));
+        let sessions = Arc::new(Semaphore::new(1));
+        let admission = InferenceAdmission::acquire(vram.clone(), sessions.clone(), 2)
+            .await
+            .unwrap();
+        let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let waiter = tokio::spawn(async move {
+            admission
+                .spawn(move || {
+                    started_tx.send(()).unwrap();
+                    release_rx.recv().unwrap();
+                })
+                .await
+                .unwrap();
+        });
+        started_rx.await.unwrap();
+        waiter.abort();
+        assert!(waiter.await.unwrap_err().is_cancelled());
+        assert_eq!(vram.available_permits(), 0);
+        assert_eq!(sessions.available_permits(), 0);
+        release_tx.send(()).unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            while sessions.available_permits() != 1 || vram.available_permits() != 2 {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("worker must release both leases on exit");
+    }
 
     #[test]
     fn single_session_request_selects_one_session() {

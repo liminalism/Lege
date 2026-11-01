@@ -116,7 +116,8 @@
       "completed": "Abgeschlossen: {}\n{}",
       "completed_with_estimate": "Abgeschlossen: {}\n{}\nKompressionsprozentsatz aus ausgewähltem Seitenbereich extrapoliert."
     },
-    "pixelkit": {
+    "liminalui": {
+      "options": "Optionen",
       "pages_device": "Seiten und Gerät",
       "output": "Ausgabe",
       "page_mode": "Seitenmodus",
@@ -137,6 +138,7 @@
       "queued": "In Warteschlange",
       "processing": "Wird verarbeitet",
       "completed": "Abgeschlossen",
+      "cancelled": "Abgebrochen",
       "failed": "Fehlgeschlagen",
       "more": "Mehr",
       "progress": "Fortschritt",

@@ -71,16 +71,6 @@ fn main() {
     println!("cargo:rerun-if-changed=../lege-misc/assets/icon.png");
     println!("cargo:rerun-if-changed=../lege-misc/assets/icon.ico");
 
-    // Build Linux GUI on release builds (Linux only) - DISABLED FOR FASTER BUILDS
-    // Uncomment this block if you want to auto-build GUI during cargo build
-    // #[cfg(target_os = "linux")]
-    // {
-    //     let profile = env::var("PROFILE").unwrap_or_default();
-    //     if profile == "release" {
-    //         build_linux_gui();
-    //     }
-    // }
-
     // Re-run this build script if environment variables change
     println!("cargo:rerun-if-changed=build.rs");
 }

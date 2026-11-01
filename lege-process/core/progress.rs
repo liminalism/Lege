@@ -683,8 +683,17 @@ pub enum ProgressMode {
 /// Unified numeric snapshot so GUI and CLI can render without parsing strings.
 pub type ProcessingMetrics = ProgressMetrics;
 
-/// Consolidated state for the progress tracker
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TrackerLifecycle {
+    Running,
+    Completed,
+    Failed,
+}
+
+/// Metrics, phase transitions and event publication share one ordering lock.
 struct TrackerState {
+    lifecycle: TrackerLifecycle,
+    reflow_stage: Option<ReflowStage>,
     metrics: ProgressMetrics,
     start_time: Option<Instant>,
     // Throttle for smoother updates - track last update time
@@ -697,7 +706,6 @@ struct TrackerState {
 pub struct ProgressTracker {
     task_id: u64,
     sender: Sender<ProgressUpdate>,
-    is_done: Arc<AtomicBool>,
     // State is now consolidated into a single struct under a Mutex.
     // This ensures that every update sent is from a consistent snapshot.
     state: Arc<Mutex<TrackerState>>,
@@ -706,12 +714,18 @@ pub struct ProgressTracker {
 }
 
 impl ProgressTracker {
+    fn running_state(&self) -> Option<std::sync::MutexGuard<'_, TrackerState>> {
+        let state = self.state.lock().unwrap();
+        (state.lifecycle == TrackerLifecycle::Running).then_some(state)
+    }
+
     pub fn new(task_id: u64, sender: Sender<ProgressUpdate>) -> Self {
         Self {
             task_id,
             sender,
-            is_done: Arc::new(AtomicBool::new(false)),
             state: Arc::new(Mutex::new(TrackerState {
+                lifecycle: TrackerLifecycle::Running,
+                reflow_stage: None,
                 metrics: ProgressMetrics::default(),
                 start_time: None,
                 last_update: None,
@@ -725,7 +739,9 @@ impl ProgressTracker {
     }
 
     pub fn set_total_pages(&self, total: usize) {
-        let mut state = self.state.lock().unwrap();
+        let Some(mut state) = self.running_state() else {
+            return;
+        };
         state.metrics.pages_total = total as u32;
     }
 
@@ -735,22 +751,30 @@ impl ProgressTracker {
     }
 
     pub fn set_mode_enum(&self, mode: ProgressMode) {
-        let mut state = self.state.lock().unwrap();
+        let Some(mut state) = self.running_state() else {
+            return;
+        };
         state.metrics.mode = mode;
     }
 
     pub fn set_output_is_djvu(&self, is_djvu: bool) {
-        let mut state = self.state.lock().unwrap();
+        let Some(mut state) = self.running_state() else {
+            return;
+        };
         state.metrics.is_djvu = is_djvu;
     }
 
     pub fn set_feature_flags(&self, enable_layout_detection: bool) {
-        let mut state = self.state.lock().unwrap();
+        let Some(mut state) = self.running_state() else {
+            return;
+        };
         state.metrics.enable_layout_detection = enable_layout_detection;
     }
 
     pub fn set_heavy_sequential_mode(&self) {
-        let mut state = self.state.lock().unwrap();
+        let Some(mut state) = self.running_state() else {
+            return;
+        };
         state.metrics.mode = ProgressMode::HeavySequential;
     }
 
@@ -868,6 +892,7 @@ impl ProgressTracker {
         }
     }
 
+    #[cfg(test)]
     fn current_metrics(&self) -> ProgressMetrics {
         let state = self.state.lock().unwrap();
         state.metrics
@@ -880,7 +905,9 @@ impl ProgressTracker {
         encoded: usize,
         total: usize,
     ) {
-        let mut state = self.state.lock().unwrap();
+        let Some(mut state) = self.running_state() else {
+            return;
+        };
 
         // Only update if values are actually different or if it's a significant change
         let old_rendered = state.metrics.rendered;
@@ -922,8 +949,7 @@ impl ProgressTracker {
 
         let status = self.get_current_progress_status_nolock(&state);
         let metrics = state.metrics;
-        drop(state); // Release lock before sending
-        self.send_update(status, metrics);
+        self.send_update_nolock(status, metrics);
     }
 
     pub fn publish_epub_progress(
@@ -937,7 +963,9 @@ impl ProgressTracker {
     }
 
     pub fn publish_no_layout_progress(&self, processed: usize, total: usize) {
-        let mut state = self.state.lock().unwrap();
+        let Some(mut state) = self.running_state() else {
+            return;
+        };
 
         // Only update if values are actually different
         let old_encoded = state.metrics.encoded;
@@ -971,12 +999,13 @@ impl ProgressTracker {
 
         let status = self.get_current_progress_status_nolock(&state);
         let metrics = state.metrics;
-        drop(state); // Release lock before sending
-        self.send_update(status, metrics);
+        self.send_update_nolock(status, metrics);
     }
 
     pub fn publish_no_layout_render_progress(&self, rendered: usize, total: usize) {
-        let mut state = self.state.lock().unwrap();
+        let Some(mut state) = self.running_state() else {
+            return;
+        };
 
         let old_rendered = state.metrics.rendered;
 
@@ -1001,8 +1030,7 @@ impl ProgressTracker {
 
         let status = self.get_current_progress_status_nolock(&state);
         let metrics = state.metrics;
-        drop(state);
-        self.send_update(status, metrics);
+        self.send_update_nolock(status, metrics);
     }
 
     pub fn publish_margin_progress(
@@ -1012,7 +1040,9 @@ impl ProgressTracker {
         pass2_processed: usize,
         total: usize,
     ) {
-        let mut state = self.state.lock().unwrap();
+        let Some(mut state) = self.running_state() else {
+            return;
+        };
 
         // Only update if values are actually different
         let old_rendered = state.metrics.rendered;
@@ -1053,8 +1083,7 @@ impl ProgressTracker {
 
         let status = self.get_current_progress_status_nolock(&state);
         let metrics = state.metrics;
-        drop(state); // Release lock before sending
-        self.send_update(status, metrics);
+        self.send_update_nolock(status, metrics);
     }
 
     /// Updates progress specifically for sequential or heavy processing modes like heavy sauvola
@@ -1065,7 +1094,9 @@ impl ProgressTracker {
         total: usize,
         processed_pages: Option<usize>,
     ) {
-        let mut state = self.state.lock().unwrap();
+        let Some(mut state) = self.running_state() else {
+            return;
+        };
 
         let old_encoded = state.metrics.encoded;
 
@@ -1113,16 +1144,23 @@ impl ProgressTracker {
 
         let status = self.get_current_progress_status_nolock(&state);
         let metrics = state.metrics;
-        drop(state); // Release lock before sending
-        self.send_update(status, metrics);
+        self.send_update_nolock(status, metrics);
     }
 
     pub fn publish_reflow_progress(&self, stage: ReflowStage, current: usize, total: usize) {
-        let mut state = self.state.lock().unwrap();
+        let Some(mut state) = self.running_state() else {
+            return;
+        };
 
         let old_encoded = state.metrics.encoded;
         let old_total = state.metrics.pages_total;
         let old_mode = state.metrics.mode;
+        let phase_changed = state.reflow_stage != Some(stage);
+        state.reflow_stage = Some(stage);
+        if phase_changed {
+            state.start_time = None;
+            state.metrics.eta_seconds = None;
+        }
 
         state.metrics.mode = ProgressMode::Reflow;
         state.metrics.pages_total = total as u32;
@@ -1151,13 +1189,14 @@ impl ProgressTracker {
         let is_meaningful_change = state.metrics.encoded != old_encoded
             || state.metrics.pages_total != old_total
             || state.metrics.mode != old_mode
+            || phase_changed
             || state.last_update.is_none();
 
         if !is_meaningful_change {
             return;
         }
 
-        if !self.should_send_update(&state) {
+        if !phase_changed && !self.should_send_update(&state) {
             return;
         }
 
@@ -1173,70 +1212,57 @@ impl ProgressTracker {
             eta,
         };
         let metrics = state.metrics;
-        drop(state);
-        self.send_update(status, metrics);
+        self.send_update_nolock(status, metrics);
     }
 
     // --- Communication methods ---
 
     pub fn update(&self, status: ProcessingStatus) {
-        let metrics = self.current_metrics();
-        self.send_update(status, metrics);
+        let Some(state) = self.running_state() else {
+            return;
+        };
+        self.send_update_nolock(status, state.metrics);
     }
 
-    fn send_update(&self, status: ProcessingStatus, metrics: ProgressMetrics) {
-        if self.is_done.load(Ordering::Relaxed) {
-            return;
-        }
-        if let Err(e) = self.sender.send(ProgressUpdate::Status {
+    /// Called with the tracker lock held, ordering snapshots with terminal
+    /// events so no status can overtake completion or appear afterward.
+    fn send_update_nolock(&self, status: ProcessingStatus, metrics: ProgressMetrics) {
+        if let Err(error) = self.sender.send(ProgressUpdate::Status {
             task_id: self.task_id,
             status,
             metrics: Some(metrics),
         }) {
-            eprintln!("warning: failed to send progress update: {e}");
+            eprintln!("warning: failed to send progress update: {error}");
         }
     }
 
     pub fn finish(&self, message: &str) {
-        if self.is_done.swap(true, Ordering::Relaxed) {
+        let Some(mut state) = self.running_state() else {
             return;
-        }
-
-        let metrics = {
-            let mut state = self.state.lock().unwrap();
-            let total = state.metrics.pages_total;
-            state.metrics.rendered = total;
-            state.metrics.detected = total;
-            state.metrics.encoded = total;
-            state.metrics.eta_seconds = None;
-            state.metrics
         };
-
-        let message = message.to_string();
-        self.update(ProcessingStatus::Complete {
-            message: message.clone(),
-        });
+        state.lifecycle = TrackerLifecycle::Completed;
+        let total = state.metrics.pages_total;
+        state.metrics.rendered = total;
+        state.metrics.detected = total;
+        state.metrics.encoded = total;
+        state.metrics.eta_seconds = None;
         let _ = self.sender.send(ProgressUpdate::Completed {
             task_id: self.task_id,
-            message,
-            metrics: Some(metrics),
+            message: message.to_owned(),
+            metrics: Some(state.metrics),
         });
     }
 
     pub fn finish_with_error(&self, error: anyhow::Error) {
-        if self.is_done.swap(true, Ordering::Relaxed) {
+        let Some(mut state) = self.running_state() else {
             return;
-        }
-
-        let metrics = self.state.lock().unwrap().metrics;
-        let error_text = error.to_string();
-        self.update(ProcessingStatus::Error {
-            error: error_text.clone(),
-        });
+        };
+        state.lifecycle = TrackerLifecycle::Failed;
+        state.metrics.eta_seconds = None;
         let _ = self.sender.send(ProgressUpdate::Error {
             task_id: self.task_id,
-            error: error_text,
-            metrics: Some(metrics),
+            error: error.to_string(),
+            metrics: Some(state.metrics),
         });
     }
 }
@@ -1689,6 +1715,81 @@ fn human_duration(d: Duration) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn lifecycle_progress_has_exactly_one_terminal_event_and_no_later_status() {
+        for fail in [false, true] {
+            let (sender, receiver) = flume::unbounded();
+            let tracker = ProgressTracker::new(1, sender);
+            tracker.set_total_pages(50);
+            tracker.set_update_throttle(0);
+            let barrier = Arc::new(std::sync::Barrier::new(5));
+            std::thread::scope(|scope| {
+                for _ in 0..4 {
+                    let tracker = tracker.clone();
+                    let barrier = barrier.clone();
+                    scope.spawn(move || {
+                        barrier.wait();
+                        for current in 1..=50 {
+                            tracker.publish_no_layout_progress(current, 50);
+                        }
+                    });
+                }
+                barrier.wait();
+                if fail {
+                    tracker.finish_with_error(anyhow::anyhow!("failed"));
+                } else {
+                    tracker.finish("done");
+                }
+            });
+            let terminal_metrics = tracker.current_metrics();
+            tracker.publish_no_layout_progress(999, 999);
+            tracker.set_total_pages(999);
+            tracker.update(ProcessingStatus::Initializing);
+            tracker.finish("duplicate");
+            tracker.finish_with_error(anyhow::anyhow!("duplicate"));
+            assert_eq!(tracker.current_metrics(), terminal_metrics);
+            let events: Vec<_> = receiver.try_iter().collect();
+            assert!(matches!(
+                events.last(),
+                Some(ProgressUpdate::Completed { .. } | ProgressUpdate::Error { .. })
+            ));
+            assert_eq!(
+                events
+                    .iter()
+                    .filter(|event| !matches!(event, ProgressUpdate::Status { .. }))
+                    .count(),
+                1
+            );
+        }
+    }
+
+    #[test]
+    fn lifecycle_reflow_phase_changes_bypass_throttling_even_with_equal_counts() {
+        let (sender, receiver) = flume::unbounded();
+        let tracker = ProgressTracker::new(1, sender);
+        tracker.set_update_throttle(60_000);
+        let phases = [
+            ReflowStage::SourceAnalysis,
+            ReflowStage::Compose,
+            ReflowStage::OutputPages,
+        ];
+        for phase in phases {
+            tracker.publish_reflow_progress(phase, 0, 10);
+        }
+        tracker.publish_reflow_progress(ReflowStage::OutputPages, 0, 10);
+        let observed: Vec<_> = receiver
+            .try_iter()
+            .map(|event| match event {
+                ProgressUpdate::Status {
+                    status: ProcessingStatus::ReflowProgress { stage, .. },
+                    ..
+                } => stage,
+                event => panic!("unexpected event: {event:?}"),
+            })
+            .collect();
+        assert_eq!(observed, phases);
+    }
 
     fn tracker() -> ProgressTracker {
         let (sender, _receiver) = flume::unbounded();
