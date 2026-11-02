@@ -1,0 +1,136 @@
+{
+ "note": "pprof (profiling feature) inclusive sample shares, scan corpus, per-page scope, RAYON_NUM_THREADS=1, taskset -c 2,3. Sampling delivered about 250 samples/s; base runs are one round (137-3939 samples), final runs three rounds. Inlined frames are attributed to their callers, so shares are indicative to a few points.",
+ "profiles": {
+  "base/text": {
+   "samples": 501,
+   "inclusive_percent": {
+    "count_enclosed_white_components": 47.5,
+    "compute_symbol_signature": 36.9,
+    "cluster_symbols": 30.7,
+    "add_page_bitimage": 19.0,
+    "analyze": 4.6,
+    "best_alignment_result_with_limits": 14.0,
+    "encode_text_region_with_refinement": 11.6,
+    "encode_symbol_dict_subset_with_order": 4.6,
+    "encode_generic_region": 4.4,
+    "encode_bit_with_state_idx": 4.0,
+    "get_xy": 15.4
+   }
+  },
+  "base/text_lossless": {
+   "samples": 137,
+   "inclusive_percent": {
+    "analyze": 19.7,
+    "encode_text_region_mapped": 7.3,
+    "encode_symbol_dict_subset_with_order": 29.2,
+    "encode_generic_region": 27.0,
+    "encode_bit_with_state_idx": 17.5,
+    "add_page_exact_symbols": 29.2,
+    "get_xy": 2.2
+   }
+  },
+  "base/text_lossless_max": {
+   "samples": 3939,
+   "inclusive_percent": {
+    "count_enclosed_white_components": 2.4,
+    "compute_symbol_signature": 0.2,
+    "analyze": 0.6,
+    "best_alignment_result_with_limits": 1.8,
+    "encode_text_region_with_refinement": 4.0,
+    "encode_text_region_mapped": 6.4,
+    "encode_symbol_dict_subset_with_order": 41.3,
+    "encode_generic_region": 39.5,
+    "encode_bit_with_state_idx": 31.9,
+    "plan_optimized_exact_document": 98.7,
+    "encode_exact_trial": 92.6,
+    "add_page_exact_symbols": 0.8,
+    "first_black_pixel": 9.2,
+    "get_xy": 9.4
+   }
+  },
+  "base/text_symbol_unify": {
+   "samples": 704,
+   "inclusive_percent": {
+    "count_enclosed_white_components": 45.7,
+    "compute_symbol_signature": 27.0,
+    "cluster_symbols": 21.9,
+    "add_page_bitimage": 14.9,
+    "analyze": 3.4,
+    "best_alignment_result_with_limits": 8.7,
+    "encode_text_region_with_refinement": 4.8,
+    "encode_symbol_dict_subset_with_order": 3.6,
+    "encode_generic_region": 3.3,
+    "encode_bit_with_state_idx": 4.3,
+    "build_symbol_unify_classes": 19.3,
+    "prescreen_pair": 8.7,
+    "merge_decision": 7.4,
+    "apply_symbol_unify": 12.5,
+    "get_xy": 2.0
+   }
+  },
+  "final/text": {
+   "samples": 442,
+   "inclusive_percent": {
+    "count_enclosed_white_components": 7.2,
+    "cluster_symbols": 14.9,
+    "add_page_bitimage": 6.3,
+    "analyze": 9.3,
+    "best_alignment_result_with_limits": 6.6,
+    "encode_text_region_with_refinement": 25.3,
+    "encode_symbol_dict_subset_with_order": 16.3,
+    "encode_generic_region": 16.3,
+    "encode_bit_with_state_idx": 10.9
+   }
+  },
+  "final/text_lossless": {
+   "samples": 216,
+   "inclusive_percent": {
+    "analyze": 19.4,
+    "encode_text_region_mapped": 12.5,
+    "encode_symbol_dict_subset_with_order": 52.8,
+    "encode_generic_region": 51.4,
+    "encode_bit_with_state_idx": 60.6,
+    "add_page_exact_symbols": 27.8,
+    "first_black_pixel": 0.9
+   }
+  },
+  "final/text_lossless_max": {
+   "samples": 4366,
+   "inclusive_percent": {
+    "count_enclosed_white_components": 0.8,
+    "compute_symbol_signature": 0.4,
+    "analyze": 0.9,
+    "best_alignment_result_with_limits": 4.1,
+    "encode_text_region_with_refinement": 10.4,
+    "encode_text_region_mapped": 16.2,
+    "encode_symbol_dict_subset_with_order": 50.2,
+    "encode_generic_region": 48.1,
+    "encode_bit_with_state_idx": 66.1,
+    "plan_optimized_exact_document": 98.4,
+    "encode_exact_trial": 87.7,
+    "add_page_exact_symbols": 1.4,
+    "first_black_pixel": 1.4,
+    "get_xy": 0.9
+   }
+  },
+  "final/text_symbol_unify": {
+   "samples": 801,
+   "inclusive_percent": {
+    "count_enclosed_white_components": 10.0,
+    "compute_symbol_signature": 2.4,
+    "cluster_symbols": 9.1,
+    "add_page_bitimage": 1.6,
+    "analyze": 5.5,
+    "best_alignment_result_with_limits": 4.6,
+    "encode_text_region_with_refinement": 9.1,
+    "encode_symbol_dict_subset_with_order": 10.4,
+    "encode_generic_region": 9.9,
+    "encode_bit_with_state_idx": 6.4,
+    "build_symbol_unify_classes": 37.0,
+    "prescreen_pair": 7.7,
+    "merge_decision": 18.7,
+    "apply_symbol_unify": 6.6
+   }
+  }
+ }
+}
