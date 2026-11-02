@@ -1820,27 +1820,44 @@ impl<'a> Jbig2Encoder<'a> {
                         && (self.config.text_refine
                             || self.config.refine
                             || needs_family_refinement));
-                let region_payload = if use_refinement_text_region {
-                    encode_text_region_with_refinement(
-                        &planned_instances,
-                        self.config,
-                        &self.global_symbols,
-                        global_sym_to_dict_pos,
-                        num_global_dict_symbols,
-                        &local_sym_to_dict_pos,
-                        num_local_dict_symbols,
-                    )?
+                // Within one measured planning call the same page is coded
+                // with the same positions by several trials; the memo returns
+                // the earlier payload for an identical input.
+                let memo_key = super::memo::TextRegionKey::new(
+                    layout.page_index,
+                    use_refinement_text_region,
+                    num_global_dict_symbols + num_local_dict_symbols,
+                    &planned_instances,
+                    global_sym_to_dict_pos,
+                    &local_sym_to_dict_pos,
+                );
+                let region_payload = if let Some(payload) = self.cached_text_region(&memo_key) {
+                    payload
                 } else {
-                    encode_text_region_mapped(
-                        &planned_instances,
-                        self.config,
-                        &self.global_symbols,
-                        global_sym_to_dict_pos,
-                        num_global_dict_symbols,
-                        &local_sym_to_dict_pos,
-                        layout.page_index,
-                        num_local_dict_symbols,
-                    )?
+                    let payload = if use_refinement_text_region {
+                        encode_text_region_with_refinement(
+                            &planned_instances,
+                            self.config,
+                            &self.global_symbols,
+                            global_sym_to_dict_pos,
+                            num_global_dict_symbols,
+                            &local_sym_to_dict_pos,
+                            num_local_dict_symbols,
+                        )?
+                    } else {
+                        encode_text_region_mapped(
+                            &planned_instances,
+                            self.config,
+                            &self.global_symbols,
+                            global_sym_to_dict_pos,
+                            num_global_dict_symbols,
+                            &local_sym_to_dict_pos,
+                            layout.page_index,
+                            num_local_dict_symbols,
+                        )?
+                    };
+                    self.remember_text_region(memo_key, &payload);
+                    payload
                 };
                 text_region_time += text_start.elapsed();
 

@@ -231,6 +231,8 @@ pairs, medians; raw lines in `followup-*.log` beside the other data):
 | Context similarity after the bitmap screens | `text_symbol_unify()`, document | 0.598 (0.547–0.839, 3) |
 | Context similarity after the bitmap screens | `text_symbol_unify()`, page | 0.807 (0.774–0.828, 3) |
 | Windowed refinement contexts | `encode_refinement_region`, per pixel | 0.59 (0.56–0.68, 10 rounds) |
+| Text-region payload memo in the measured planner | `text_lossless_max_compression()`, page | 0.890 (0.841–0.935, 4), on top of the checkpoints |
+| Text-region payload memo in the measured planner | `text_lossless_max_compression()`, document | 0.897 (0.873–0.922, 2), on top of the checkpoints |
 
 Every preset's output hash and byte total is unchanged on both corpora.
 
@@ -272,6 +274,23 @@ move the `text()` row: that preset never refines, and the 25% share labelled
 integer coding, not refinement bitmaps. It helps the presets that refine
 instances (`text_symbol_unify_safe()`, the lossy and measured planners when
 they choose refinement).
+
+**Text-region payload memo** (`memo.rs`, `planning.rs`). The all-global and
+globals-plus-locals controls of a one-page document assign every symbol the
+same dictionary position, and most proposals leave most pages' instances
+untouched, so trials keep coding identical text regions. The trial memo now
+keys each region payload by everything its coder reads: page, coder
+variant, the symbol-code length input and, per instance, its dictionary
+position, symbol, placement and refinement plan; a hit is compared on the
+full key, not only its hash. The two measured planner changes together
+bring the preset to about 0.74 of the earlier build.
+
+**Component extraction, not changed.** A pprof profile of `text_lossless()`
+(`followup-text-lossless-profile.txt`) puts extraction at 26% of the
+preset, split across span labelling (11%), descriptor grouping (8%), run
+extraction (7%) and bitmap extraction (3%), with dictionary coding at 50%.
+No single stage offers a byte-identical change large enough to show
+through the measurement noise, so nothing was done there.
 
 Noise note: a 3–6% wall-clock drift on `text_lossless()` appeared between
 workers that do not touch its code path; cachegrind counts 523.6, 523.6 and

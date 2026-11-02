@@ -32,6 +32,71 @@ pub(crate) struct TrialMemo {
     /// Checkpointed prefixes of recent dictionary streams: a trial that drops
     /// one symbol from a dictionary re-codes only the symbols after it.
     prefixes: super::dictionary::DictionaryPrefixCache,
+    /// Text-region payloads by their complete input: the all-global and
+    /// globals-plus-locals controls of a one-page document assign the same
+    /// dictionary positions, so they code the same region.
+    text_regions: FxHashMap<u64, Vec<(TextRegionKey, Vec<u8>)>>,
+}
+
+/// Everything a text-region encode reads, in order: the page, which coder
+/// (plain or refinement), the symbol-code length input, and per instance its
+/// dictionary position, symbol, placement and refinement plan.
+#[derive(PartialEq, Eq, Hash)]
+pub(crate) struct TextRegionKey {
+    page_index: usize,
+    refinement_coder: bool,
+    total_dictionary_symbols: u32,
+    instances: Vec<(u32, usize, u32, u32, bool, i32, i32)>,
+}
+
+impl TextRegionKey {
+    pub(crate) fn new(
+        page_index: usize,
+        refinement_coder: bool,
+        total_dictionary_symbols: u32,
+        instances: &[super::types::SymbolInstance],
+        global_sym_to_dict_pos: &[u32],
+        local_sym_to_dict_pos: &[u32],
+    ) -> Self {
+        let instances = instances
+            .iter()
+            .map(|instance| {
+                let global = global_sym_to_dict_pos
+                    .get(instance.symbol_index)
+                    .copied()
+                    .unwrap_or(u32::MAX);
+                let local = local_sym_to_dict_pos
+                    .get(instance.symbol_index)
+                    .copied()
+                    .unwrap_or(u32::MAX);
+                // The coder reads the global position when it exists and the
+                // local one otherwise; both are recorded so neither mapping
+                // can alias the other.
+                let position = if global != u32::MAX { global } else { local };
+                (
+                    position,
+                    instance.symbol_index,
+                    instance.position.x,
+                    instance.position.y,
+                    instance.needs_refinement,
+                    instance.refinement_dx,
+                    instance.refinement_dy,
+                )
+            })
+            .collect();
+        Self {
+            page_index,
+            refinement_coder,
+            total_dictionary_symbols,
+            instances,
+        }
+    }
+
+    fn digest(&self) -> u64 {
+        let mut hasher = FxHasher::default();
+        self.hash(&mut hasher);
+        hasher.finish()
+    }
 }
 
 struct RegionEntry {
@@ -68,6 +133,28 @@ impl<'a> Jbig2Encoder<'a> {
     #[cfg(feature = "symboldict")]
     pub(crate) fn end_trial_memo(&mut self) {
         self.trial_memo = None;
+    }
+
+    /// A text-region payload already coded for exactly `key`, if any.
+    pub(crate) fn cached_text_region(&self, key: &TextRegionKey) -> Option<Vec<u8>> {
+        self.with_trial_memo(|memo| {
+            memo.text_regions.get(&key.digest()).and_then(|entries| {
+                entries
+                    .iter()
+                    .find(|(stored, _)| stored == key)
+                    .map(|(_, payload)| payload.clone())
+            })
+        })
+        .flatten()
+    }
+
+    pub(crate) fn remember_text_region(&self, key: TextRegionKey, payload: &[u8]) {
+        self.with_trial_memo(|memo| {
+            memo.text_regions
+                .entry(key.digest())
+                .or_default()
+                .push((key, payload.to_vec()));
+        });
     }
 
     /// Whole-page generic payload of `self.pages[page_index]` at the origin.

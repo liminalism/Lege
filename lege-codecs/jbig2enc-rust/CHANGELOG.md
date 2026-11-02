@@ -21,10 +21,11 @@ no 0.6.0 publication is implied.
   text pages: run-based hole counting, word-level bitmap helpers, ink-count
   bounds that settle most clustering and unify comparisons without a search,
   a single-sweep component labelling, and a trial memo in the measured
-  planner. A follow-up adds dictionary prefix checkpoints to that planner
-  (about 17% faster), runs unify's context similarity only after the bitmap
-  screens (about 40% faster in document scope) and forms refinement contexts
-  from sliding windows. Every stream stays byte-identical; an ignored
+  planner. A follow-up adds dictionary prefix checkpoints and a text-region
+  payload memo to that planner (about a quarter faster together), runs
+  unify's context similarity only after the bitmap screens (about 40%
+  faster in document scope) and forms refinement contexts from sliding
+  windows. Every stream stays byte-identical; an ignored
   `symbol_speed` timing worker reproduces the measurement. See
   [symbol-mode speed](docs/SYMBOL-SPEED.md).
 - Optional residual packing, selective global/local PDF dictionaries and bounded
