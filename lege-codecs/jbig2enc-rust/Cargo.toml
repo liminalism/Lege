@@ -17,7 +17,7 @@ categories = ["multimedia::encoding", "multimedia::images"]
 # `python/` holds the wheel metadata, stubs and tests for the PyO3 binding
 # (`src/python.rs`, feature `python`), built with maturin; it ships in the
 # crate package so the published source carries both APIs.
-include = ["Cargo.toml", "Cargo.lock", "README.md", "CHANGELOG.md", "PROVENANCE.md", "NOTICE", "LICENSE-MIT", "LICENSE-APACHE", "build.rs", "src/**", "tests/**/*.rs", "tests/fixtures/*.txt", "tests/fixtures/README.md", "tests/fixtures/original/**", "benches/**", "tools/*.py", "tools/*.cc", "tools/corpus_specs/*.json", "docs/**", "python/pyproject.toml", "python/README.md", "python/jbig2enc.pyi", "python/py.typed", "python/tests/*.py"]
+include = ["Cargo.toml", "Cargo.lock", "/README.md", "NOTICE", "LICENSE-MIT", "LICENSE-APACHE", "build.rs", "src/**", "tests/**/*.rs", "tests/fixtures/*.txt", "tests/fixtures/original/**", "benches/**", "python/pyproject.toml", "python/README.md", "python/jbig2enc.pyi", "python/py.typed", "python/tests/*.py"]
 
 [lib]
 name = "jbig2enc_rust"
