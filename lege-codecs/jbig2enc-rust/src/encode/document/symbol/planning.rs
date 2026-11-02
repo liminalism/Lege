@@ -424,19 +424,20 @@ impl<'a> Jbig2Encoder<'a> {
             }
 
             let local_symbols = &page_local_symbols[page_num];
-            let page_local_gain: i64 = local_symbols
-                .iter()
-                .map(|&symbol_index| self.estimate_local_symbol_gain(page, symbol_index))
-                .sum();
-            let uses_only_locals = page.symbol_instances.iter().all(|inst| {
-                !global_set.contains(&inst.symbol_index)
-                    && !page_residual_anchor_remaps[page_num].contains_key(&inst.symbol_index)
-                    && !page_residual_symbols[page_num].contains(&inst.symbol_index)
-            });
-            if uses_only_locals
-                && local_symbols.len() <= 2
+            // Only a page with at most two instances can fall back here, so
+            // test that before the per-symbol gain scan over all instances.
+            if local_symbols.len() <= 2
                 && page.symbol_instances.len() <= 2
-                && page_local_gain <= 0
+                && page.symbol_instances.iter().all(|inst| {
+                    !global_set.contains(&inst.symbol_index)
+                        && !page_residual_anchor_remaps[page_num].contains_key(&inst.symbol_index)
+                        && !page_residual_symbols[page_num].contains(&inst.symbol_index)
+                })
+                && local_symbols
+                    .iter()
+                    .map(|&symbol_index| self.estimate_local_symbol_gain(page, symbol_index))
+                    .sum::<i64>()
+                    <= 0
             {
                 page_local_symbols[page_num].clear();
                 page_uses_generic_region[page_num] = true;
