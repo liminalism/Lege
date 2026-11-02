@@ -134,57 +134,113 @@ pub(crate) fn count_enclosed_white_components_4(img: &BitImage) -> usize {
     count_white_components(img, false)
 }
 
+/// Counts white components that do not touch the bitmap border.
+///
+/// `diagonals` selects 8-connectivity for the background; otherwise it is
+/// 4-connected. The bitmap is processed as horizontal white runs taken from
+/// the packed words, joined between adjacent rows with a union-find, so the
+/// cost follows the number of runs rather than the number of pixels. The
+/// count is identical to a per-pixel flood fill with the same connectivity.
 fn count_white_components(img: &BitImage, diagonals: bool) -> usize {
     if img.width < 3 || img.height < 3 {
         return 0;
     }
+    let width = img.width;
+    let height = img.height;
+    let stride = width.div_ceil(32);
+    let words = img.packed_words();
+    // Adjacent-row runs [a, b) and [c, d) touch when they overlap; with
+    // diagonal connectivity a one-pixel corner contact also joins them.
+    let slack = usize::from(diagonals);
 
-    let mut visited = vec![false; img.width * img.height];
-    let mut stack = Vec::new();
-    let mut holes = 0usize;
-
-    for y in 0..img.height {
-        for x in 0..img.width {
-            let idx = y * img.width + x;
-            if visited[idx] || img.get_usize(x, y) {
-                continue;
+    let mut runs: Vec<(u32, u32)> = Vec::new();
+    let mut parent: Vec<u32> = Vec::new();
+    let mut border: Vec<bool> = Vec::new();
+    let mut previous = 0..0;
+    for y in 0..height {
+        let row = &words[y * stride..(y + 1) * stride];
+        let first = runs.len();
+        let mut x = 0usize;
+        while x < width {
+            let start = next_pixel_of_color(row, x, width, false);
+            if start >= width {
+                break;
             }
+            let end = next_pixel_of_color(row, start, width, true);
+            let index = runs.len() as u32;
+            runs.push((start as u32, end as u32));
+            parent.push(index);
+            border.push(y == 0 || y + 1 == height || start == 0 || end == width);
+            x = end;
+        }
+        let current = first..runs.len();
 
-            visited[idx] = true;
-            stack.push((x, y));
-            let mut touches_border = x == 0 || y == 0 || x + 1 == img.width || y + 1 == img.height;
-
-            while let Some((cx, cy)) = stack.pop() {
-                let x0 = cx.saturating_sub(1);
-                let x1 = (cx + 1).min(img.width - 1);
-                let y0 = cy.saturating_sub(1);
-                let y1 = (cy + 1).min(img.height - 1);
-
-                for ny in y0..=y1 {
-                    for nx in x0..=x1 {
-                        if !diagonals && nx != cx && ny != cy {
-                            continue;
-                        }
-                        let nidx = ny * img.width + nx;
-                        if visited[nidx] || img.get_usize(nx, ny) {
-                            continue;
-                        }
-                        visited[nidx] = true;
-                        if nx == 0 || ny == 0 || nx + 1 == img.width || ny + 1 == img.height {
-                            touches_border = true;
-                        }
-                        stack.push((nx, ny));
-                    }
+        let (mut i, mut j) = (previous.start, current.start);
+        while i < previous.end && j < current.end {
+            let (a_start, a_end) = runs[i];
+            let (b_start, b_end) = runs[j];
+            if (a_start as usize) < b_end as usize + slack
+                && (b_start as usize) < a_end as usize + slack
+            {
+                let a = find_root(&mut parent, i as u32);
+                let b = find_root(&mut parent, j as u32);
+                if a != b {
+                    let (keep, drop) = if a < b { (a, b) } else { (b, a) };
+                    parent[drop as usize] = keep;
+                    border[keep as usize] |= border[drop as usize];
                 }
             }
-
-            if !touches_border {
-                holes += 1;
+            if a_end <= b_end {
+                i += 1;
+            } else {
+                j += 1;
             }
         }
+        previous = current;
     }
 
+    let mut holes = 0usize;
+    for index in 0..parent.len() {
+        if parent[index] as usize == index && !border[index] {
+            holes += 1;
+        }
+    }
     holes
+}
+
+/// First pixel at or after `x` whose value is `black`, or `width` if none.
+#[inline]
+fn next_pixel_of_color(row: &[u32], x: usize, width: usize, black: bool) -> usize {
+    let mut word_index = x >> 5;
+    let mut word = if black {
+        row[word_index]
+    } else {
+        !row[word_index]
+    } & (u32::MAX >> (x & 31));
+    loop {
+        if word != 0 {
+            return (word_index * 32 + word.leading_zeros() as usize).min(width);
+        }
+        word_index += 1;
+        if word_index >= row.len() {
+            return width;
+        }
+        word = if black {
+            row[word_index]
+        } else {
+            !row[word_index]
+        };
+    }
+}
+
+#[inline]
+fn find_root(parent: &mut [u32], mut node: u32) -> u32 {
+    while parent[node as usize] != node {
+        let grandparent = parent[parent[node as usize] as usize];
+        parent[node as usize] = grandparent;
+        node = grandparent;
+    }
+    node
 }
 
 #[inline]
@@ -367,4 +423,107 @@ pub fn family_match_details(
     let max_err = ((area as f32 * 0.05).ceil() as u32).clamp(2, 16);
     let result = comparator.compare_for_refine_family(target, reference, max_err, 2, 1)?;
     Some((result.total_err, result.dx, result.dy))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The per-pixel flood fill this module used before run-based counting.
+    fn flood_fill_white_components(img: &BitImage, diagonals: bool) -> usize {
+        if img.width < 3 || img.height < 3 {
+            return 0;
+        }
+        let mut visited = vec![false; img.width * img.height];
+        let mut stack = Vec::new();
+        let mut holes = 0usize;
+        for y in 0..img.height {
+            for x in 0..img.width {
+                let idx = y * img.width + x;
+                if visited[idx] || img.get_usize(x, y) {
+                    continue;
+                }
+                visited[idx] = true;
+                stack.push((x, y));
+                let mut touches_border =
+                    x == 0 || y == 0 || x + 1 == img.width || y + 1 == img.height;
+                while let Some((cx, cy)) = stack.pop() {
+                    for ny in cy.saturating_sub(1)..=(cy + 1).min(img.height - 1) {
+                        for nx in cx.saturating_sub(1)..=(cx + 1).min(img.width - 1) {
+                            if !diagonals && nx != cx && ny != cy {
+                                continue;
+                            }
+                            let nidx = ny * img.width + nx;
+                            if visited[nidx] || img.get_usize(nx, ny) {
+                                continue;
+                            }
+                            visited[nidx] = true;
+                            if nx == 0 || ny == 0 || nx + 1 == img.width || ny + 1 == img.height {
+                                touches_border = true;
+                            }
+                            stack.push((nx, ny));
+                        }
+                    }
+                }
+                if !touches_border {
+                    holes += 1;
+                }
+            }
+        }
+        holes
+    }
+
+    #[test]
+    fn run_based_hole_count_matches_flood_fill() {
+        let mut state = 0x9e37_79b9_7f4a_7c15u64;
+        let mut next = || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        for case in 0..3000 {
+            let width = 1 + (next() % 70) as usize;
+            let height = 1 + (next() % 40) as usize;
+            let density = 20 + (next() % 60);
+            let mut img = BitImage::new(width as u32, height as u32).unwrap();
+            for y in 0..height {
+                for x in 0..width {
+                    if next() % 100 < density {
+                        img.set_usize(x, y, true);
+                    }
+                }
+            }
+            for diagonals in [true, false] {
+                assert_eq!(
+                    count_white_components(&img, diagonals),
+                    flood_fill_white_components(&img, diagonals),
+                    "case {case} {width}x{height} diagonals={diagonals}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn run_based_hole_count_handles_rings_and_corners() {
+        // A ring with a hole, and a diagonal gap that only 8-connectivity crosses.
+        let rows = ["#####", "#...#", "#.#.#", "#...#", "#####"];
+        let mut ring = BitImage::new(5, 5).unwrap();
+        for (y, row) in rows.iter().enumerate() {
+            for (x, c) in row.bytes().enumerate() {
+                ring.set_usize(x, y, c == b'#');
+            }
+        }
+        assert_eq!(count_white_components(&ring, true), 1);
+        assert_eq!(count_white_components(&ring, false), 1);
+        let rows = ["####", "#.##", "##.#", "####"];
+        let mut diagonal = BitImage::new(4, 4).unwrap();
+        for (y, row) in rows.iter().enumerate() {
+            for (x, c) in row.bytes().enumerate() {
+                diagonal.set_usize(x, y, c == b'#');
+            }
+        }
+        assert_eq!(count_white_components(&diagonal, true), 1);
+        assert_eq!(count_white_components(&diagonal, false), 2);
+    }
 }
