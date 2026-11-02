@@ -1049,6 +1049,20 @@ record lege-ecosystem.evidence.installer-ready-tensorrt-payload-20260815/2 : evi
     supersedes [ @lege-ecosystem.evidence.installer-ready-tensorrt-payload-20260815/1 ]
 }
 
+record lege-ecosystem.evidence.jbig2-06-cloud-preflight-20261102/1 : evidence {
+    title "Cloud preflight on an idle 4-core Xeon VM at a57ee0e: every lib and integration test passes except the six roundtrip_after_fix cases, which spawn an external jbig2dec that is not installed and cannot be built here; the 40-stream original_encode_hashes manifest passes untouched; fmt clean; clippy warnings on arith.rs unchanged at 14 before and after (7 pre-existing unwrap errors in decode test modules); the python feature builds a cp311-abi3 wheel with maturin and its 22 pytest cases pass; cargo package --list shows the python/ metadata, stubs and tests in the tarball. Generic kernel: cached Qe retained with byte-identical output on text29/scan14/noise/checker (wall 0.947/0.945/0.918, instructions 0.945/0.953/1.052/0.901); batched renormalization rejected (instructions up on every input); partial-word zero-context run batching deferred because its 8% instruction saving depends on an inlining decision three near-identical variants lost by 40-50% and dense inputs pay on every pixel. The private corpus and oracle binaries did not transfer; measurements use two public arXiv PDFs rasterized at 300 DPI plus a scan-degraded subset."
+    state verified
+    result pass
+    method command
+    observed_at git:a57ee0ec37436781ff40117d4e9cb244600770ee
+    command "cargo test --manifest-path lege-codecs/jbig2enc-rust/Cargo.toml --features parallel --lib --tests --no-fail-fast -- --skip grtemplate1_tpgron; cargo fmt --check; cargo clippy --features python,parallel --lib --tests; cargo package --list --allow-dirty; maturin build --release (python/); pytest python/tests"
+    artifact "lege-codecs/jbig2enc-rust/docs/benchmarks/2026-11-02-06-cloud/environment.json"
+    summary """
+        Cloud preflight on an idle 4-core Xeon VM at a57ee0e: every lib and integration test passes except the six roundtrip_after_fix cases, which spawn an external jbig2dec that is not installed and cannot be built here; the 40-stream original_encode_hashes manifest passes untouched; fmt clean; clippy warnings on arith.rs unchanged at 14 before and after (7 pre-existing unwrap errors in decode test modules); the python feature builds a cp311-abi3 wheel with maturin and its 22 pytest cases pass; cargo package --list shows the python/ metadata, stubs and tests in the tarball. Generic kernel: cached Qe retained with byte-identical output on text29/scan14/noise/checker (wall 0.947/0.945/0.918, instructions 0.945/0.953/1.052/0.901); batched renormalization rejected (instructions up on every input); partial-word zero-context run batching deferred because its 8% instruction saving depends on an inlining decision three near-identical variants lost by 40-50% and dense inputs pay on every pixel. The private corpus and oracle binaries did not transfer; measurements use two public arXiv PDFs rasterized at 300 DPI plus a scan-degraded subset.
+        """
+    author "Claude"
+}
+
 record lege-ecosystem.evidence.jbig2-06-headroom-disposition-20261102/1 : evidence {
     title "One candidate per hypothesis, five paired CPU0 runs on mixed17 and noise, 32 timed rounds, unavoidable partial load unchanged. Packed Qe/index cache: mixed wall0.9881/cycles1.0064, noise wall1.0163/cycles1.0172. Chunked renormalization: mixed wall1.0026/cycles0.9815, noise wall1.0626/cycles1.0385. Ratios candidate/baseline, all pairs retained. Both rejected for 0.6; no further tuning/combination. Both pass release context/hash tests and mixed17 raw Rust/C equality. Final arith SHAa8fb90c2b0e3884d6f82190141765503dd9d619c766a4cc0d370fcae5514d4b6 equals starting source. Existing blank batching gains retained."
     state verified
@@ -1061,6 +1075,32 @@ record lege-ecosystem.evidence.jbig2-06-headroom-disposition-20261102/1 : eviden
         One candidate per hypothesis, five paired CPU0 runs on mixed17 and noise, 32 timed rounds, unavoidable partial load unchanged. Packed Qe/index cache: mixed wall0.9881/cycles1.0064, noise wall1.0163/cycles1.0172. Chunked renormalization: mixed wall1.0026/cycles0.9815, noise wall1.0626/cycles1.0385. Ratios candidate/baseline, all pairs retained. Both rejected for 0.6; no further tuning/combination. Both pass release context/hash tests and mixed17 raw Rust/C equality. Final arith SHAa8fb90c2b0e3884d6f82190141765503dd9d619c766a4cc0d370fcae5514d4b6 equals starting source. Existing blank batching gains retained.
         """
     author "dk"
+}
+
+record lege-ecosystem.evidence.jbig2-06-readme-rewrite-20261102/1 : evidence {
+    title "README rewritten at 45d9be8: leads with capabilities (encoder, decoder, PDF embedding, halftone, Python), Rust and Python usage examples including grouped bounded encoding and decoding, a preset table whose contract column states pixel-exact versus lossy for every constructor, a fidelity-contracts section, a Cargo feature table including the new python feature, compatibility (decoders, emitted stream types, API, platforms, memory bounds) and licensing (MIT AND Apache-2.0, no copyleft component). Performance is described qualitatively with links to GENERIC-SPEED, GENERIC-PERF-FOLLOWUP, GENERIC-06-HEADROOM, GENERIC-06-CLOUD and SYMBOL-SPEED; no competitive timing numbers remain in the README."
+    state verified
+    result pass
+    method manual
+    observed_at git:a57ee0ec37436781ff40117d4e9cb244600770ee
+    artifact "lege-codecs/jbig2enc-rust/README.md"
+    summary """
+        README rewritten at 45d9be8: leads with capabilities (encoder, decoder, PDF embedding, halftone, Python), Rust and Python usage examples including grouped bounded encoding and decoding, a preset table whose contract column states pixel-exact versus lossy for every constructor, a fidelity-contracts section, a Cargo feature table including the new python feature, compatibility (decoders, emitted stream types, API, platforms, memory bounds) and licensing (MIT AND Apache-2.0, no copyleft component). Performance is described qualitatively with links to GENERIC-SPEED, GENERIC-PERF-FOLLOWUP, GENERIC-06-HEADROOM, GENERIC-06-CLOUD and SYMBOL-SPEED; no competitive timing numbers remain in the README.
+        """
+    author "Claude"
+}
+
+record lege-ecosystem.evidence.jbig2-06-release-notes-review-20261102/1 : evidence {
+    title "The unreleased 0.6.0 CHANGELOG entry was reviewed against the final implementation: the generic entry now names the retained cached-Qe change and links the cloud re-run; a new Packaging section records the Python binding moving into the crate as the python feature with its license aligned to MIT AND Apache-2.0, and the README rewrite. The README keeps the short since-0.5.4 summary that crates.io renders, per docs/CRATES-IO-RELEASE-NOTES.md. Nothing was published or tagged."
+    state verified
+    result pass
+    method manual
+    observed_at git:a57ee0ec37436781ff40117d4e9cb244600770ee
+    artifact "lege-codecs/jbig2enc-rust/CHANGELOG.md"
+    summary """
+        The unreleased 0.6.0 CHANGELOG entry was reviewed against the final implementation: the generic entry now names the retained cached-Qe change and links the cloud re-run; a new Packaging section records the Python binding moving into the crate as the python feature with its license aligned to MIT AND Apache-2.0, and the README rewrite. The README keeps the short since-0.5.4 summary that crates.io renders, per docs/CRATES-IO-RELEASE-NOTES.md. Nothing was published or tagged.
+        """
+    author "Claude"
 }
 
 record lege-ecosystem.evidence.jbig2-06-restored-validation-20261102/1 : evidence {

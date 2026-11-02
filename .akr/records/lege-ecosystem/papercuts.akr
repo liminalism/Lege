@@ -1681,6 +1681,17 @@ record lege-ecosystem.papercut.in-lege-process-akr-uses-the-parent-workspace/1 :
     created_at 2026-10-31
 }
 
+record lege-ecosystem.papercut.including-the-jbig2enc-python-binding-in-the/1 : papercut {
+    title "Including the jbig2enc Python binding in the crates.io package: cargo…"
+    state verified
+    statement """
+        Including the jbig2enc Python binding in the crates.io package: cargo package silently drops any subdirectory that contains its own Cargo.toml even when the include list names its files, so a nested maturin crate cannot ship inside the parent tarball; the binding had to become a python feature of the crate (src/python.rs) with python/pyproject.toml pointing manifest-path at ../Cargo.toml.
+        """
+    observed_at git:b81b1731b39b407a2688be52501d5348dd1fad30
+    author "claude"
+    created_at 2026-11-02
+}
+
 record lege-ecosystem.papercut.initial-read-only-shell-calls-with-the-default/1 : papercut {
     title "Initial read-only shell calls with the default login shell printed…"
     state verified
@@ -1823,6 +1834,17 @@ record lege-ecosystem.papercut.lege-ecosystem-confirms-the-stale-by-tool/1 : pap
     about "akr"
     author "opus"
     created_at 2026-09-08
+}
+
+record lege-ecosystem.papercut.maturin-build-from-python-pyproject-toml-with/1 : papercut {
+    title "maturin build from python/pyproject.toml with manifest-path =…"
+    state verified
+    statement """
+        maturin build from python/pyproject.toml with manifest-path = ../Cargo.toml autodetected 'bin bindings' (the crate has cli binaries and no cdylib) and failed with 'No Cargo targets to build'; bindings = "pyo3" has to be set explicitly, after which maturin adds the cdylib crate type itself.
+        """
+    observed_at git:b81b1731b39b407a2688be52501d5348dd1fad30
+    author "claude"
+    created_at 2026-11-02
 }
 
 record lege-ecosystem.papercut.mcp-knowledge-get-body-truncated-the-active/1 : papercut {
