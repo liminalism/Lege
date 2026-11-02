@@ -305,87 +305,12 @@ impl Comparator {
         max_dx: i32,
         max_dy: i32,
     ) -> Option<(u32, i32, i32)> {
-        let awpr = (a.width + 31) >> 5;
-        let bwpr = (b.width + 31) >> 5;
-        let a_words = a.packed_words();
-        let b_words = b.packed_words();
-
-        let mut best_err = max_err + 1;
-        let mut best_dx = 0;
-        let mut best_dy = 0;
-
-        for &dy in &SEARCH_OFFSETS {
-            if dy.abs() > max_dy {
-                continue;
-            }
-            let top_i = dy.max(0);
-            let bottom_i = (dy + b.height as i32).min(a.height as i32);
-            if top_i >= bottom_i {
-                continue;
-            }
-            let top = top_i as usize;
-            let bottom = bottom_i as usize;
-            let overlap_height = bottom - top;
-            let b_row_start = (top as i32 - dy) as usize;
-
-            for &dx in &SEARCH_OFFSETS {
-                if dx.abs() > max_dx {
-                    continue;
-                }
-                let left_i = dx.max(0);
-                let right_i = (dx + b.width as i32).min(a.width as i32);
-                if left_i >= right_i {
-                    continue;
-                }
-
-                let overlap_width = (right_i - left_i) as usize;
-                let cols_words = (overlap_width + 31) >> 5;
-                let bit_shift = (dx & 31) as u32;
-                let word_shift = (dx >> 5) as isize;
-                let mut err = 0u32;
-                let mut early_break = false;
-
-                for row in 0..overlap_height {
-                    let a_start = (top + row) * awpr;
-                    let b_start = (b_row_start + row) * bwpr;
-                    let a_row = &a_words[a_start..a_start + awpr];
-                    let b_row = &b_words[b_start..b_start + bwpr];
-
-                    let result = if bit_shift == 0 {
-                        row_kernel_noshift(
-                            a_row, b_row, cols_words, word_shift, err, best_err, max_err,
-                        )
-                    } else {
-                        row_kernel_shift(
-                            a_row, b_row, cols_words, word_shift, bit_shift, err, best_err, max_err,
-                        )
-                    };
-                    err = result.0;
-                    if result.1 {
-                        early_break = true;
-                        break;
-                    }
-                }
-
-                if err < best_err {
-                    best_err = err;
-                    best_dx = dx;
-                    best_dy = dy;
-                } else if err == best_err && !early_break {
-                    let curr_dist = dx.abs() + dy.abs();
-                    let best_dist = best_dx.abs() + best_dy.abs();
-                    if curr_dist < best_dist {
-                        best_dx = dx;
-                        best_dy = dy;
-                    }
-                }
-            }
-        }
-
-        if best_err <= max_err {
-            Some((best_err, best_dx, best_dy))
-        } else {
-            None
+        match (a.width.div_ceil(32), b.width.div_ceil(32)) {
+            (1, 1) => best_alignment_narrow::<1, 1>(a, b, max_err, max_dx, max_dy),
+            (1, 2) => best_alignment_narrow::<1, 2>(a, b, max_err, max_dx, max_dy),
+            (2, 1) => best_alignment_narrow::<2, 1>(a, b, max_err, max_dx, max_dy),
+            (2, 2) => best_alignment_narrow::<2, 2>(a, b, max_err, max_dx, max_dy),
+            _ => best_alignment_words(a, b, max_err, max_dx, max_dy),
         }
     }
 
@@ -477,6 +402,191 @@ impl Comparator {
     }
 }
 
+/// General word-wise shifted XOR search behind
+/// `Comparator::best_alignment_by_xor_limited`.
+fn best_alignment_words(
+    a: &BitImage,
+    b: &BitImage,
+    max_err: u32,
+    max_dx: i32,
+    max_dy: i32,
+) -> Option<(u32, i32, i32)> {
+    let awpr = (a.width + 31) >> 5;
+    let bwpr = (b.width + 31) >> 5;
+    let a_words = a.packed_words();
+    let b_words = b.packed_words();
+
+    let mut best_err = max_err + 1;
+    let mut best_dx = 0;
+    let mut best_dy = 0;
+
+    for &dy in &SEARCH_OFFSETS {
+        if dy.abs() > max_dy {
+            continue;
+        }
+        let top_i = dy.max(0);
+        let bottom_i = (dy + b.height as i32).min(a.height as i32);
+        if top_i >= bottom_i {
+            continue;
+        }
+        let top = top_i as usize;
+        let bottom = bottom_i as usize;
+        let overlap_height = bottom - top;
+        let b_row_start = (top as i32 - dy) as usize;
+
+        for &dx in &SEARCH_OFFSETS {
+            if dx.abs() > max_dx {
+                continue;
+            }
+            let left_i = dx.max(0);
+            let right_i = (dx + b.width as i32).min(a.width as i32);
+            if left_i >= right_i {
+                continue;
+            }
+
+            let overlap_width = (right_i - left_i) as usize;
+            let cols_words = (overlap_width + 31) >> 5;
+            let bit_shift = (dx & 31) as u32;
+            let word_shift = (dx >> 5) as isize;
+            let mut err = 0u32;
+            let mut early_break = false;
+
+            for row in 0..overlap_height {
+                let a_start = (top + row) * awpr;
+                let b_start = (b_row_start + row) * bwpr;
+                let a_row = &a_words[a_start..a_start + awpr];
+                let b_row = &b_words[b_start..b_start + bwpr];
+
+                let result = if bit_shift == 0 {
+                    row_kernel_noshift(a_row, b_row, cols_words, word_shift, err, best_err, max_err)
+                } else {
+                    row_kernel_shift(
+                        a_row, b_row, cols_words, word_shift, bit_shift, err, best_err, max_err,
+                    )
+                };
+                err = result.0;
+                if result.1 {
+                    early_break = true;
+                    break;
+                }
+            }
+
+            if err < best_err {
+                best_err = err;
+                best_dx = dx;
+                best_dy = dy;
+            } else if err == best_err && !early_break {
+                let curr_dist = dx.abs() + dy.abs();
+                let best_dist = best_dx.abs() + best_dy.abs();
+                if curr_dist < best_dist {
+                    best_dx = dx;
+                    best_dy = dy;
+                }
+            }
+        }
+    }
+
+    if best_err <= max_err {
+        Some((best_err, best_dx, best_dy))
+    } else {
+        None
+    }
+}
+
+/// `best_alignment_by_xor_limited` for bitmaps at most 64 pixels wide, with
+/// each row held in one `u64` (`AW`/`BW` packed words per row of `a`/`b`).
+///
+/// It visits the same offsets in the same order with the same tie rule and
+/// returns the same alignment as [`best_alignment_words`]. Per row that
+/// kernel XORs the first `ceil(overlap / 32)` words of `b` against `a`
+/// shifted by `dx` with zero fill, which is `a << dx` (or `a >> -dx`) of the
+/// row as one `u64`, masked to those words. It may stop a row after its first
+/// word; that only happens once the error already reaches the best error,
+/// and then the row total does too, so the candidate is rejected either way.
+fn best_alignment_narrow<const AW: usize, const BW: usize>(
+    a: &BitImage,
+    b: &BitImage,
+    max_err: u32,
+    max_dx: i32,
+    max_dy: i32,
+) -> Option<(u32, i32, i32)> {
+    #[inline(always)]
+    fn row<const W: usize>(words: &[u32], index: usize) -> u64 {
+        if W == 1 {
+            u64::from(words[index]) << 32
+        } else {
+            (u64::from(words[2 * index]) << 32) | u64::from(words[2 * index + 1])
+        }
+    }
+    let a_words = a.packed_words();
+    let b_words = b.packed_words();
+    debug_assert!(a_words.len() == a.height * AW && b_words.len() == b.height * BW);
+    let mut best_err = max_err + 1;
+    let mut best_dx = 0;
+    let mut best_dy = 0;
+
+    for &dy in &SEARCH_OFFSETS {
+        if dy.abs() > max_dy {
+            continue;
+        }
+        let top_i = dy.max(0);
+        let bottom_i = (dy + b.height as i32).min(a.height as i32);
+        if top_i >= bottom_i {
+            continue;
+        }
+        let top = top_i as usize;
+        let overlap_height = bottom_i as usize - top;
+        let b_row_start = (top_i - dy) as usize;
+
+        for &dx in &SEARCH_OFFSETS {
+            if dx.abs() > max_dx {
+                continue;
+            }
+            let left_i = dx.max(0);
+            let right_i = (dx + b.width as i32).min(a.width as i32);
+            if left_i >= right_i {
+                continue;
+            }
+            let mask = if right_i - left_i <= 32 {
+                0xffff_ffff_0000_0000u64
+            } else {
+                u64::MAX
+            };
+            let mut err = 0u32;
+            let mut early_break = false;
+            for offset in 0..overlap_height {
+                let a_row = row::<AW>(a_words, top + offset);
+                let b_row = row::<BW>(b_words, b_row_start + offset);
+                let aligned = if dx >= 0 { a_row << dx } else { a_row >> -dx };
+                err = err.saturating_add(((aligned ^ b_row) & mask).count_ones());
+                if err >= best_err || err > max_err {
+                    early_break = true;
+                    break;
+                }
+            }
+
+            if err < best_err {
+                best_err = err;
+                best_dx = dx;
+                best_dy = dy;
+            } else if err == best_err && !early_break {
+                let curr_dist = dx.abs() + dy.abs();
+                let best_dist = best_dx.abs() + best_dy.abs();
+                if curr_dist < best_dist {
+                    best_dx = dx;
+                    best_dy = dy;
+                }
+            }
+        }
+    }
+
+    if best_err <= max_err {
+        Some((best_err, best_dx, best_dy))
+    } else {
+        None
+    }
+}
+
 #[inline(always)]
 fn row_kernel_noshift(
     a_row: &[u32],
@@ -543,5 +653,71 @@ fn load_word_or_zero(row: &[u32], idx: isize) -> u32 {
         0
     } else {
         row.get(idx as usize).copied().unwrap_or(0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn narrow_search_matches_general_search() {
+        let mut state = 0x9e37_79b9_7f4a_7c15u64;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        let mut random = |width: usize, height: usize, density: u64| {
+            let mut image = BitImage::new(width as u32, height as u32).unwrap();
+            for y in 0..height {
+                for x in 0..width {
+                    if next() % 100 < density {
+                        image.set_usize(x, y, true);
+                    }
+                }
+            }
+            image
+        };
+        let mut checked = 0usize;
+        for case in 0..1500u64 {
+            let wa = 1 + (case * 7 % 64) as usize;
+            let ha = 1 + (case * 13 % 40) as usize;
+            let wb = (wa as i64 + (case % 11) as i64 - 5).clamp(1, 64) as usize;
+            let hb = (ha as i64 + (case % 7) as i64 - 3).max(1) as usize;
+            let a = random(wa, ha, 15 + case % 60);
+            // Half the pairs are a noisy copy, so that matches are frequent.
+            let b = if case % 2 == 0 {
+                let mut b = BitImage::new(wb as u32, hb as u32).unwrap();
+                for y in 0..hb.min(ha) {
+                    for x in 0..wb.min(wa) {
+                        b.set_usize(
+                            x,
+                            y,
+                            a.get_usize(x, y)
+                                ^ (case.wrapping_mul(x as u64 + 3 * y as u64) % 23 == 0),
+                        );
+                    }
+                }
+                b
+            } else {
+                random(wb, hb, 15 + case % 60)
+            };
+            for max_err in [0, 1, 3, 8, 20, 200] {
+                for max_dx in 0..=5 {
+                    for max_dy in [0, 1, 2, 5] {
+                        assert_eq!(
+                            Comparator::default()
+                                .best_alignment_by_xor_limited(&a, &b, max_err, max_dx, max_dy),
+                            best_alignment_words(&a, &b, max_err, max_dx, max_dy),
+                            "case {case} {wa}x{ha} vs {wb}x{hb} err={max_err} dx={max_dx} dy={max_dy}"
+                        );
+                        checked += 1;
+                    }
+                }
+            }
+        }
+        assert!(checked > 0);
     }
 }
