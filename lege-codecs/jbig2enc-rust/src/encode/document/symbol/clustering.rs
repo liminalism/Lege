@@ -177,14 +177,23 @@ impl<'a> Jbig2Encoder<'a> {
             }
         }
 
-        // Replace internal state
+        // Replace internal state. Prototypes keep their bitmaps, so their
+        // signatures carry over instead of being recomputed.
+        let mut new_signatures = vec![Default::default(); new_symbols.len()];
+        for (old_idx, &new_idx) in old_to_new.iter().enumerate() {
+            if old_to_prototype[old_idx] == old_idx {
+                new_signatures[new_idx] = self.symbol_signatures[old_idx];
+            }
+        }
+        debug_assert!(
+            new_symbols
+                .iter()
+                .zip(&new_signatures)
+                .all(|(symbol, signature)| Self::compute_symbol_signature(symbol) == *signature)
+        );
         self.global_symbols = new_symbols;
-        self.symbol_pixel_counts = self
-            .global_symbols
-            .iter()
-            .map(BitImage::count_ones)
-            .collect();
-        self.rebuild_symbol_metadata();
+        self.symbol_signatures = new_signatures;
+        self.rebuild_symbol_metadata_keeping_signatures();
         self.rebuild_hash_map();
 
         debug!(

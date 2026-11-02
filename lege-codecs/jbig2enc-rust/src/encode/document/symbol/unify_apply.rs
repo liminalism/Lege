@@ -1,5 +1,6 @@
 use super::super::{HashKey, Jbig2Encoder, PageData, hash_key};
 use super::types::{RefinementPlan, encoder_diagnostics_enabled};
+use crate::jbig2classify::SymbolSignature;
 use crate::jbig2comparator::Comparator;
 use crate::jbig2context::build_symbol_context_model;
 use crate::jbig2cost::symbol_dictionary_entries_bytes;
@@ -128,15 +129,31 @@ impl<'a> Jbig2Encoder<'a> {
         pixel_count: usize,
         page_num: usize,
     ) -> usize {
-        let idx = self.global_symbols.len();
         // The exact hash/equality path does not consult fuzzy signatures. Avoid
         // their hole scan for large retained marks and preserve this separation
         // from future lossy matching/tolerance changes.
+        let signature = if self.config.is_lossless || self.config.optimize_lossy_symbols {
+            Default::default()
+        } else {
+            Self::compute_symbol_signature(&symbol)
+        };
+        self.push_symbol_with_signature(symbol, pixel_count, page_num, signature)
+    }
+
+    /// `push_symbol` with the complete signature of `symbol` already computed.
+    pub(crate) fn push_symbol_with_signature(
+        &mut self,
+        symbol: BitImage,
+        pixel_count: usize,
+        page_num: usize,
+        signature: SymbolSignature,
+    ) -> usize {
+        let idx = self.global_symbols.len();
         self.symbol_signatures.push(
             if self.config.is_lossless || self.config.optimize_lossy_symbols {
                 Default::default()
             } else {
-                Self::compute_symbol_signature(&symbol)
+                signature
             },
         );
         self.symbol_pixel_counts.push(pixel_count);
@@ -149,6 +166,18 @@ impl<'a> Jbig2Encoder<'a> {
     }
 
     pub(crate) fn rebuild_symbol_metadata(&mut self) {
+        self.symbol_signatures = self
+            .global_symbols
+            .iter()
+            .map(Self::compute_symbol_signature)
+            .collect();
+        self.rebuild_symbol_metadata_keeping_signatures();
+    }
+
+    /// `rebuild_symbol_metadata` when `symbol_signatures` already holds the
+    /// signature of every current symbol.
+    pub(crate) fn rebuild_symbol_metadata_keeping_signatures(&mut self) {
+        debug_assert_eq!(self.symbol_signatures.len(), self.global_symbols.len());
         self.symbol_usage = vec![0; self.global_symbols.len()];
         self.symbol_page_count = vec![0; self.global_symbols.len()];
         self.symbol_last_page_seen = vec![None; self.global_symbols.len()];
@@ -157,11 +186,6 @@ impl<'a> Jbig2Encoder<'a> {
             .global_symbols
             .iter()
             .map(BitImage::count_ones)
-            .collect();
-        self.symbol_signatures = self
-            .global_symbols
-            .iter()
-            .map(Self::compute_symbol_signature)
             .collect();
 
         for page_num in 0..self.pages.len() {

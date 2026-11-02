@@ -1,7 +1,7 @@
 use crate::jbig2comparator::Comparator;
 use crate::jbig2sym::BitImage;
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct SymbolSignature {
     pub black: u32,
     pub area: u32,
@@ -36,6 +36,28 @@ pub struct SymbolScaleProfile {
 }
 
 pub fn compute_symbol_signature(img: &BitImage) -> SymbolSignature {
+    with_hole_count(compute_symbol_signature_without_holes(img), img)
+}
+
+/// Completes a signature from [`compute_symbol_signature_without_holes`] for
+/// the same bitmap with its enclosed-background count.
+pub(crate) fn with_hole_count(mut signature: SymbolSignature, img: &BitImage) -> SymbolSignature {
+    // Hole counting is one of the most expensive signature features. Skip it for
+    // symbols that are too small or too sparse to plausibly contain a useful
+    // enclosed counter, and keep the full scan for the larger text glyphs where
+    // it helps separate classes like a/e/o/b.
+    signature.hole_count = if img.width < 6 || img.height < 6 || signature.black < 12 {
+        0
+    } else {
+        count_enclosed_white_components(img).min(u8::MAX as usize) as u8
+    };
+    signature
+}
+
+/// Every signature field except `hole_count`, which is left zero. Only
+/// [`family_signatures_are_compatible`] reads the hole count, so matching that
+/// does not use it can skip the background scan.
+pub(crate) fn compute_symbol_signature_without_holes(img: &BitImage) -> SymbolSignature {
     let mut black = 0u32;
     let mut left_col = img.width;
     let mut right_col = 0usize;
@@ -90,15 +112,6 @@ pub fn compute_symbol_signature(img: &BitImage) -> SymbolSignature {
         }
     }
 
-    // Hole counting is one of the most expensive signature features. Skip it for
-    // symbols that are too small or too sparse to plausibly contain a useful
-    // enclosed counter, and keep the full scan for the larger text glyphs where
-    // it helps separate classes like a/e/o/b.
-    let hole_count = if img.width < 6 || img.height < 6 || black < 12 {
-        0
-    } else {
-        count_enclosed_white_components(img).min(u8::MAX as usize) as u8
-    };
     let (cx, cy) = if black == 0 {
         (0, 0)
     } else {
@@ -121,7 +134,7 @@ pub fn compute_symbol_signature(img: &BitImage) -> SymbolSignature {
         right_mass: right_mass.min(u16::MAX as u32) as u16,
         top_mass: top_mass.min(u16::MAX as u32) as u16,
         bottom_mass: bottom_mass.min(u16::MAX as u32) as u16,
-        hole_count,
+        hole_count: 0,
     }
 }
 

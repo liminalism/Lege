@@ -496,7 +496,15 @@ impl<'a> Jbig2Encoder<'a> {
                         }
                         last_y = rect.y;
 
-                        let trimmed_sig = Self::compute_symbol_signature(&trimmed);
+                        // Only unification's family test reads the hole count;
+                        // a new symbol gets its complete signature below.
+                        let trimmed_sig = if self.config.lossy_symbol_mode
+                            == LossySymbolMode::SymbolUnify
+                        {
+                            Self::compute_symbol_signature(&trimmed)
+                        } else {
+                            crate::jbig2classify::compute_symbol_signature_without_holes(&trimmed)
+                        };
                         let mut matched = false;
                         let mut instance_bitmap = Some(symbol);
 
@@ -845,7 +853,18 @@ impl<'a> Jbig2Encoder<'a> {
                         }
 
                         if !matched {
-                            let idx = self.push_symbol(trimmed, pixel_count, page_num);
+                            let signature =
+                                if self.config.lossy_symbol_mode == LossySymbolMode::SymbolUnify {
+                                    trimmed_sig
+                                } else {
+                                    crate::jbig2classify::with_hole_count(trimmed_sig, &trimmed)
+                                };
+                            let idx = self.push_symbol_with_signature(
+                                trimmed,
+                                pixel_count,
+                                page_num,
+                                signature,
+                            );
                             self.metrics.symbol_stats.symbols_discovered += 1;
                             if debug_matching {
                                 debug_lines.push(format!(
