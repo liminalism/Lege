@@ -1,4 +1,8 @@
-//! Python bindings for `jbig2enc-rust`.
+//! Python bindings for `jbig2enc-rust` (Cargo feature `python`).
+//!
+//! The wheel is built with maturin from the `python/` directory next to this
+//! crate's manifest; that directory holds the `pyproject.toml`, the type
+//! stubs and the Python test suite. This module is the whole extension.
 //!
 //! The Rust API is already FFI-shaped — bytes in, bytes out — so this module
 //! is mostly about meeting Python where it is:
@@ -43,9 +47,9 @@
 //! Exposing a knob that silently does nothing is worse than omitting it, so
 //! these stay out until the encoder honours them.
 
-use jbig2enc_rust::decode::{DecodeOptions, decode_embedded, decode_file};
-use jbig2enc_rust::shared::bitmap::MonoBitmap;
-use jbig2enc_rust::{Jbig2Config, Jbig2Context, Jbig2Error};
+use crate::decode::{DecodeOptions, decode_embedded, decode_file};
+use crate::shared::bitmap::MonoBitmap;
+use crate::{Jbig2Config, Jbig2Context, Jbig2Error};
 use ndarray::Array2;
 use pyo3::exceptions::{PyBufferError, PyValueError};
 use pyo3::prelude::*;
@@ -178,7 +182,7 @@ fn encode(
     let config = config_from_kwargs(options)?;
     let result = py
         .detach(|| {
-            jbig2enc_rust::encode_single_image_with_config(
+            crate::encode_single_image_with_config(
                 &normalized,
                 width,
                 height,
@@ -211,7 +215,7 @@ fn encode_for_pdf(
     let config = config_from_kwargs(options)?;
     let result = py
         .detach(|| {
-            jbig2enc_rust::encode_single_image_with_config(
+            crate::encode_single_image_with_config(
                 &normalized,
                 width,
                 height,
@@ -261,7 +265,7 @@ fn encode_document(
     }
 
     let output = py
-        .detach(|| jbig2enc_rust::encode_document_pdf_split(&images, &config))
+        .detach(|| crate::encode_document_pdf_split(&images, &config))
         .map_err(to_py_error)?;
 
     let globals = output
@@ -375,17 +379,19 @@ fn decode_pdf_stream(
 /// Encoder version string.
 #[pyfunction]
 fn version() -> String {
-    jbig2enc_rust::get_version()
+    crate::get_version()
 }
 
 /// Build configuration of the linked encoder.
 #[pyfunction]
 fn build_info() -> String {
-    jbig2enc_rust::get_build_info()
+    crate::get_build_info()
 }
 
+/// The `jbig2enc` extension module.
 #[pymodule]
-fn jbig2enc(module: &Bound<'_, PyModule>) -> PyResult<()> {
+#[pyo3(name = "jbig2enc")]
+pub fn jbig2enc(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add("__version__", env!("CARGO_PKG_VERSION"))?;
     module.add_function(wrap_pyfunction!(encode, module)?)?;
     module.add_function(wrap_pyfunction!(encode_for_pdf, module)?)?;

@@ -1,7 +1,7 @@
 # jbig2enc
 
 Python bindings for [`jbig2enc-rust`](https://github.com/liminalism/lege/tree/main/lege-codecs/jbig2enc-rust),
-a pure-Rust JBIG2 encoder. JBIG2 is the bilevel image codec used by scanned
+a pure-Rust JBIG2 encoder and decoder. JBIG2 is the bilevel image codec used by scanned
 PDFs; on clean text it typically beats CCITT Group 4 by 2-4x.
 
 Requires CPython 3.11 or newer.
@@ -12,12 +12,19 @@ Requires CPython 3.11 or newer.
 pip install jbig2enc
 ```
 
-Building from a checkout needs a Rust toolchain and `maturin`:
+The binding is the `python` Cargo feature of the `jbig2enc-rust` crate
+(`src/python.rs`, one directory up); this directory holds the wheel
+metadata, the type stubs and the tests. Building from a checkout needs a
+Rust toolchain and `maturin`, run from this directory:
 
 ```sh
 pip install maturin
 maturin develop --release
+pytest tests
 ```
+
+The crate's own manifest keeps pyo3's `extension-module` off so that Rust
+programs can link the library; `pyproject.toml` turns it on for the wheel.
 
 ## Use
 
@@ -134,4 +141,6 @@ in parallel.
 
 ## Licence
 
-MIT OR Apache-2.0.
+`MIT AND Apache-2.0`, the same declaration as the crate: the binding and the
+encoder are MIT, and the wheel statically links the retained Apache-2.0
+arithmetic-coder files with their notices. See the crate's `PROVENANCE.md`.

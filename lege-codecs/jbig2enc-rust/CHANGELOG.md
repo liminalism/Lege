@@ -9,7 +9,12 @@ no 0.6.0 publication is implied.
 
 - Faster generic encoding through packed-word context windows, native-width
   arithmetic-register storage, blank-span batching and deferred transition-table
-  loads. These optimizations preserve the existing generic stream bytes.
+  loads. A cloud re-run then retained two further byte-identical changes:
+  zero-context runs are batched inside partially blank words, not only in
+  blank words, and each bitmap context caches its probability estimate next
+  to its state index. Together they remove about 13% of the kernel's
+  instructions on text and scan-like pages. All of these optimizations
+  preserve the existing generic stream bytes.
 - Explicit pixel-exact symbol presets retain isolated marks; legacy text and
   unify presets remain lossy and retain their settings.
 - Optional residual packing, selective global/local PDF dictionaries and bounded
@@ -29,6 +34,19 @@ no 0.6.0 publication is implied.
   require changes to exhaustive downstream struct literals; prefer constructors
   or struct-update syntax. See [API compatibility](docs/API-COMPATIBILITY.md).
 
+### Packaging
+
+- The Python binding (`jbig2enc` on PyPI) moves into the crate as the
+  `python` Cargo feature (`src/python.rs`), with its wheel metadata, stubs
+  and tests under `python/`. Both ship in the crates.io package, so the
+  published source carries the Rust and Python APIs. pyo3 is an optional
+  dependency; `extension-module` is enabled only by maturin for the wheel.
+  The wheel's license declaration now matches the crate (`MIT AND
+  Apache-2.0`).
+- The README is rewritten around capabilities, usage, fidelity contracts,
+  features, compatibility and licensing; timing numbers live in the linked
+  reports.
+
 ### Licensing and testing
 
 - Replace the DjVu-derived component extractor and inherited tests. Project
@@ -43,5 +61,6 @@ no 0.6.0 publication is implied.
 
 Performance numbers in the linked reports are corpus/compiler-specific generic
 kernel measurements, not a universal whole-application speed promise. See
-[hardware-profiled results](docs/GENERIC-PERF-FOLLOWUP.md) and the bounded 0.6
-headroom assessment under docs for this final pass.
+[hardware-profiled results](docs/GENERIC-PERF-FOLLOWUP.md), the bounded 0.6
+[headroom assessment](docs/GENERIC-06-HEADROOM.md) and its
+[cloud re-run](docs/GENERIC-06-CLOUD.md).

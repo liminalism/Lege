@@ -122,6 +122,8 @@ impl From<ndarray::ShapeError> for Jbig2Error {
 pub mod decode;
 #[cfg(feature = "encode")]
 pub mod encode;
+#[cfg(feature = "python")]
+pub mod python;
 pub mod shared;
 
 // Compatibility re-exports of the historical top-level module paths, so
