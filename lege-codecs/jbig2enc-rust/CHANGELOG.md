@@ -16,6 +16,14 @@ no 0.6.0 publication is implied.
   stream bytes.
 - Explicit pixel-exact symbol presets retain isolated marks; legacy text and
   unify presets remain lossy and retain their settings.
+- Symbol-mode encoding is about three times faster for `text()`, unify and the
+  measured exact preset, and about 1.7 times faster for `text_lossless()`, on
+  text pages: run-based hole counting, word-level bitmap helpers, ink-count
+  bounds that settle most clustering and unify comparisons without a search,
+  a single-sweep component labelling, and a trial memo in the measured
+  planner. Every stream stays byte-identical; an ignored `symbol_speed`
+  timing worker reproduces the measurement. See
+  [symbol-mode speed](docs/SYMBOL-SPEED.md).
 - Optional residual packing, selective global/local PDF dictionaries and bounded
   measured planning compare actual encoded sizes. Safe lossy substitution uses
   topology safeguards; exact presets preserve the supplied bilevel pixels.

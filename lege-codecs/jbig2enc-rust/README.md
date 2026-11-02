@@ -275,10 +275,14 @@ See [python/README.md](python/README.md).
 The generic kernel codes packed 32-pixel words with a single rolling context,
 batches runs of zero-context pixels, and keeps state transitions out of the
 common path, so most of the time goes to the pixels that carry information.
-Symbol mode extracts components as a span graph, matches with portable SIMD
-XOR/popcount kernels, and bounds every search it runs. Numbers depend on the
-corpus and the machine, so this README does not quote them; each report below
-states its inputs, method and variation:
+Symbol mode labels components in one sweep over span rows, counts signature
+holes from packed runs, rejects most candidate pairs from ink-count bounds
+before any alignment search, matches the rest with portable SIMD XOR/popcount
+kernels, and memoizes the measured planner's repeated trial encodes; the 0.6
+pass cut symbol-mode time to roughly a third of 0.5.4's on text pages with
+every output byte unchanged. Numbers depend on the corpus and the machine,
+so this README does not quote them; each report below states its inputs,
+method and variation:
 
 - [Generic kernel, hardware-profiled](docs/GENERIC-PERF-FOLLOWUP.md) and the
   [earlier C-parity measurement](docs/GENERIC-SPEED.md).
@@ -298,6 +302,8 @@ cargo test                                             # full suite
 cargo test --features parallel --lib --tests -- --skip grtemplate1_tpgron   # the release gate
 cargo test --no-default-features --features decode     # decoder half alone
 cargo test --test encode_byte_identical                # 40-stream byte manifest
+SYMBOL_SPEED_DIR=/path/to/pbms cargo test --release --features parallel \
+  --test symbol_speed -- --ignored --exact symbol_speed_worker --nocapture   # timing worker
 ```
 
 The byte-identical guard encodes three original generated PBMs in every
