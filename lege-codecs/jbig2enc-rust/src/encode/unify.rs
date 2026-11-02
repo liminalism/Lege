@@ -2,7 +2,9 @@ use crate::jbig2classify::{
     FamilyBucketKey, SymbolSignature, family_bucket_key_for_symbol, family_match_details,
     family_signatures_are_compatible, for_each_family_bucket_neighbor, refine_compare_score,
 };
-use crate::jbig2comparator::{Comparator, CompareResult};
+use crate::jbig2comparator::{
+    Comparator, CompareResult, NarrowProfile, narrow_alignment_impossible,
+};
 use crate::jbig2context::{ContextDecision, SymbolContextModel};
 use crate::jbig2cost::symbol_dictionary_entry_bytes;
 use crate::jbig2structs::Jbig2Config;
@@ -158,7 +160,7 @@ fn prescreen_pair(
         return false;
     }
 
-    let overlap_limit = max_err.saturating_add(2).min(14);
+    let overlap_limit = prescreen_overlap_limit(max_err);
     let Some(result) = comparator.compare_overlap_only(lhs, rhs, overlap_limit) else {
         return false;
     };
@@ -192,8 +194,62 @@ fn union(parent: &mut [usize], rank: &mut [u8], lhs: usize, rhs: usize) {
     }
 }
 
+/// Pair observations by unordered pair, plus the ink-count profiles that let
+/// `prescreen_pair` outcomes be settled without an alignment search.
+struct PairCache {
+    observations: FxHashMap<u64, Option<PairObservation>>,
+    profiles: Vec<Option<NarrowProfile>>,
+}
+
+impl PairCache {
+    fn new(symbols: &[BitImage]) -> Self {
+        Self {
+            observations: FxHashMap::with_capacity_and_hasher(
+                symbols.len().saturating_mul(16),
+                Default::default(),
+            ),
+            profiles: symbols.iter().map(NarrowProfile::new).collect(),
+        }
+    }
+
+    /// False only when `prescreen_pair` must also be false: every offset
+    /// within its accepted `max_dx`/`max_dy` window errs by more than its
+    /// overlap limit, so its search either fails or finds an offset outside
+    /// that window.
+    fn prescreen_possible(
+        &self,
+        symbols: &[BitImage],
+        lhs: usize,
+        rhs: usize,
+        max_err: u32,
+        max_dx: i32,
+        max_dy: i32,
+    ) -> bool {
+        let (Some(lhs_profile), Some(rhs_profile)) = (&self.profiles[lhs], &self.profiles[rhs])
+        else {
+            return true;
+        };
+        if !(0..=1).contains(&max_dx) || !(0..=1).contains(&max_dy) {
+            return true;
+        }
+        !narrow_alignment_impossible(
+            &symbols[lhs],
+            lhs_profile,
+            &symbols[rhs],
+            rhs_profile,
+            prescreen_overlap_limit(max_err),
+            max_dx,
+            max_dy,
+        )
+    }
+}
+
+fn prescreen_overlap_limit(max_err: u32) -> u32 {
+    max_err.saturating_add(2).min(14)
+}
+
 fn get_or_compute_pair(
-    pair_cache: &mut FxHashMap<u64, Option<PairObservation>>,
+    pair_cache: &mut PairCache,
     comparator: &mut Comparator,
     symbols: &[BitImage],
     signatures: &[SymbolSignature],
@@ -207,9 +263,10 @@ fn get_or_compute_pair(
     let reverse = lhs > rhs;
     let (lo, hi) = if reverse { (rhs, lhs) } else { (lhs, rhs) };
     let key = pair_key(lo, hi);
-    let cached = pair_cache.get(&key).copied().flatten();
-    let pair = if let Some(obs) = cached {
-        obs
+    let pair = if let Some(&cached) = pair_cache.observations.get(&key) {
+        // A cached rejection is as final as a cached observation: every
+        // input of the comparison is fixed while the cache exists.
+        cached?
     } else {
         if !family_signatures_are_compatible(
             signatures[lo],
@@ -217,36 +274,41 @@ fn get_or_compute_pair(
             black_counts[lo],
             black_counts[hi],
         ) {
-            pair_cache.insert(key, None);
+            pair_cache.observations.insert(key, None);
             return None;
         }
-        if !prescreen_pair(
-            comparator,
-            &symbols[lo],
-            &symbols[hi],
-            black_counts[lo],
-            black_counts[hi],
-            max_err,
-            max_dx,
-            max_dy,
-        ) {
-            pair_cache.insert(key, None);
+        if !pair_cache.prescreen_possible(symbols, lo, hi, max_err, max_dx, max_dy)
+            || !prescreen_pair(
+                comparator,
+                &symbols[lo],
+                &symbols[hi],
+                black_counts[lo],
+                black_counts[hi],
+                max_err,
+                max_dx,
+                max_dy,
+            )
+        {
+            pair_cache.observations.insert(key, None);
             return None;
         }
 
-        let result = comparator.compare_for_symbol_unify(
+        let Some(result) = comparator.compare_for_symbol_unify(
             &symbols[lo],
             &symbols[hi],
             max_err,
             max_dx,
             max_dy,
-        )?;
+        ) else {
+            pair_cache.observations.insert(key, None);
+            return None;
+        };
         let obs = PairObservation {
             class_score: class_pair_score(&result),
             assignment_score: assignment_pair_score(&result),
             result,
         };
-        pair_cache.insert(key, Some(obs));
+        pair_cache.observations.insert(key, Some(obs));
         obs
     };
 
@@ -325,7 +387,7 @@ fn triage_non_core_members(
     representative_index: usize,
     representative_usage: usize,
     representative_page_span: usize,
-    pair_cache: &mut FxHashMap<u64, Option<PairObservation>>,
+    pair_cache: &mut PairCache,
     comparator: &mut Comparator,
     symbols: &[BitImage],
     signatures: &[SymbolSignature],
@@ -678,7 +740,7 @@ fn estimate_class_gain(
 
 fn select_dense_representative(
     core: &[usize],
-    pair_cache: &mut FxHashMap<u64, Option<PairObservation>>,
+    pair_cache: &mut PairCache,
     comparator: &mut Comparator,
     symbols: &[BitImage],
     signatures: &[SymbolSignature],
@@ -788,11 +850,7 @@ pub fn build_symbol_unify_classes(
     }
 
     let mut comparator = Comparator::default();
-    let mut pair_cache: FxHashMap<u64, Option<PairObservation>> =
-        FxHashMap::with_capacity_and_hasher(
-            inputs.global_symbols.len().saturating_mul(16),
-            Default::default(),
-        );
+    let mut pair_cache = PairCache::new(inputs.global_symbols);
     let mut parent: Vec<usize> = (0..inputs.global_symbols.len()).collect();
     let mut rank = vec![0u8; inputs.global_symbols.len()];
     let mut accepted_edges: FxHashMap<usize, Vec<usize>> = FxHashMap::default();
@@ -1212,4 +1270,75 @@ pub fn build_symbol_unify_classes(
     }
 
     (classes, diagnostics)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ink_count_prescreen_never_rejects_an_accepted_pair() {
+        let mut state = 0x6a09_e667_f3bc_c908u64;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        let mut symbols = Vec::new();
+        for _ in 0..600 {
+            let width = 4 + (next() % 29) as usize;
+            let height = 4 + (next() % 30) as usize;
+            let density = 20 + next() % 50;
+            let mut symbol = BitImage::new(width as u32, height as u32).unwrap();
+            for y in 0..height {
+                for x in 0..width {
+                    symbol.set_usize(x, y, next() % 100 < density);
+                }
+            }
+            symbols.push(symbol);
+            // A near copy with a few flipped pixels and a possible extra row.
+            let source = symbols.last().unwrap().clone();
+            let copy_height = height + (next() % 2) as usize;
+            let mut copy = BitImage::new(width as u32, copy_height as u32).unwrap();
+            for y in 0..copy_height {
+                for x in 0..width {
+                    let ink = y < height && source.get_usize(x, y);
+                    copy.set_usize(x, y, ink ^ (next() % 61 == 0));
+                }
+            }
+            symbols.push(copy);
+        }
+        let black: Vec<usize> = symbols.iter().map(BitImage::count_ones).collect();
+        let cache = PairCache::new(&symbols);
+        let mut comparator = Comparator::default();
+        let (mut skipped, mut accepted) = (0usize, 0usize);
+        for lhs in 0..symbols.len() {
+            for rhs in [lhs + 1, lhs + 2, lhs + 7] {
+                if rhs >= symbols.len() {
+                    continue;
+                }
+                for max_err in [4, 8, 12] {
+                    for (max_dx, max_dy) in [(0, 0), (1, 1), (1, 0)] {
+                        let possible =
+                            cache.prescreen_possible(&symbols, lhs, rhs, max_err, max_dx, max_dy);
+                        let prescreen = prescreen_pair(
+                            &mut comparator,
+                            &symbols[lhs],
+                            &symbols[rhs],
+                            black[lhs],
+                            black[rhs],
+                            max_err,
+                            max_dx,
+                            max_dy,
+                        );
+                        assert!(possible || !prescreen, "pair {lhs}/{rhs} err={max_err}");
+                        skipped += usize::from(!possible);
+                        accepted += usize::from(prescreen);
+                    }
+                }
+            }
+        }
+        assert!(skipped > 0 && accepted > 0);
+    }
 }

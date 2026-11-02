@@ -237,6 +237,9 @@ pub struct Jbig2Encoder<'a> {
 
     /// Encoder metrics used by the benchmark harness
     metrics: EncoderMetrics,
+
+    /// Sub-encodes shared between measured-planner trials; `None` otherwise.
+    trial_memo: Option<std::sync::Mutex<symbol::memo::TrialMemo>>,
 }
 
 impl<'a> Jbig2Encoder<'a> {
@@ -267,6 +270,7 @@ impl<'a> Jbig2Encoder<'a> {
             next_segment_number: 1,
             global_dict_segment_numbers: Vec::new(),
             metrics: EncoderMetrics::default(),
+            trial_memo: None,
         }
     }
 
@@ -492,7 +496,15 @@ impl<'a> Jbig2Encoder<'a> {
                         }
                         last_y = rect.y;
 
-                        let trimmed_sig = Self::compute_symbol_signature(&trimmed);
+                        // Only unification's family test reads the hole count;
+                        // a new symbol gets its complete signature below.
+                        let trimmed_sig = if self.config.lossy_symbol_mode
+                            == LossySymbolMode::SymbolUnify
+                        {
+                            Self::compute_symbol_signature(&trimmed)
+                        } else {
+                            crate::jbig2classify::compute_symbol_signature_without_holes(&trimmed)
+                        };
                         let mut matched = false;
                         let mut instance_bitmap = Some(symbol);
 
@@ -841,7 +853,18 @@ impl<'a> Jbig2Encoder<'a> {
                         }
 
                         if !matched {
-                            let idx = self.push_symbol(trimmed, pixel_count, page_num);
+                            let signature =
+                                if self.config.lossy_symbol_mode == LossySymbolMode::SymbolUnify {
+                                    trimmed_sig
+                                } else {
+                                    crate::jbig2classify::with_hole_count(trimmed_sig, &trimmed)
+                                };
+                            let idx = self.push_symbol_with_signature(
+                                trimmed,
+                                pixel_count,
+                                page_num,
+                                signature,
+                            );
                             self.metrics.symbol_stats.symbols_discovered += 1;
                             if debug_matching {
                                 debug_lines.push(format!(
@@ -1145,9 +1168,12 @@ pub fn hash_key(img: &BitImage) -> HashKey {
 /// Returns (x, y) coordinates of the first black pixel, or None if no black pixels
 pub fn first_black_pixel(image: &BitImage) -> Option<(usize, usize)> {
     for y in 0..image.height {
-        for x in 0..image.width {
-            if image.get_usize(x, y) {
-                return Some((x, y));
+        for (word_index, &word) in image.row_words(y).iter().enumerate() {
+            if word != 0 {
+                let x = word_index * 32 + word.leading_zeros() as usize;
+                if x < image.width {
+                    return Some((x, y));
+                }
             }
         }
     }

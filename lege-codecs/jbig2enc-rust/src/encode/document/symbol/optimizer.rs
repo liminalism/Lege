@@ -2,7 +2,7 @@
 //! exact preset. Discovery is heuristic; acceptance uses serialized bytes of
 //! complete candidate streams, never a differing-pixel count as the final cost.
 use super::super::{Jbig2Encoder, SymbolCostTrial, SymbolOptimizationMetrics};
-use super::dictionary::{encode_symbol_dictionary_segments, plan_symbol_dictionary_layout};
+use super::dictionary::plan_symbol_dictionary_layout;
 use super::residual::MAX_RESIDUAL_REGIONS;
 use super::types::{PlannedDocument, PlannedPageLayout, RefinementPlan};
 use crate::jbig2classify::{
@@ -188,7 +188,7 @@ impl<'a> Jbig2Encoder<'a> {
                 .map(|&index| &self.global_symbols[index])
                 .collect();
             let layout = plan_symbol_dictionary_layout(&symbols, self.config, None)?;
-            let encoded = encode_symbol_dictionary_segments(&symbols, self.config, &layout)?;
+            let encoded = self.symbol_dictionary_for(&globals, &layout)?;
             for (input, &position) in encoded.input_to_exported_pos.iter().enumerate() {
                 global_positions[globals[input]] = position;
             }
@@ -403,6 +403,13 @@ impl<'a> Jbig2Encoder<'a> {
         &mut self,
         include_header: bool,
     ) -> Result<PlannedDocument> {
+        self.begin_trial_memo();
+        let planned = self.plan_measured_trials(include_header);
+        self.end_trial_memo();
+        planned
+    }
+
+    fn plan_measured_trials(&mut self, include_header: bool) -> Result<PlannedDocument> {
         self.config
             .validate_exact_symbol_mode()
             .map_err(anyhow::Error::msg)?;

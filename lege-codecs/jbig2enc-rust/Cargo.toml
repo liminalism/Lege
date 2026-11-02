@@ -248,6 +248,11 @@ required-features = ["encode"]
 name = "generic_contexts"
 required-features = ["encode"]
 
+# Ignored symbol-mode timing worker over an external PBM directory.
+[[test]]
+name = "symbol_speed"
+required-features = ["symboldict", "decode"]
+
 # Calls `encode_symbol_dict` / `encode_text_region_mapped` directly.
 [[test]]
 name = "perf_smoke"

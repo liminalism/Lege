@@ -1,7 +1,7 @@
 use super::super::Jbig2Encoder;
 use super::text_region::{uf_find, uf_union};
 use crate::debug;
-use crate::jbig2comparator::Comparator;
+use crate::jbig2comparator::{Comparator, NarrowProfile, narrow_alignment_impossible};
 use crate::jbig2sym::BitImage;
 use anyhow::Result;
 use rustc_hash::FxHashMap;
@@ -39,6 +39,28 @@ impl<'a> Jbig2Encoder<'a> {
         let mut bucket_keys: Vec<(usize, usize)> = buckets.keys().copied().collect();
         bucket_keys.sort_unstable();
 
+        // The clusters are the connected components of the pairs accepted
+        // below, whatever order they are visited in. Pairs whose ink counts
+        // differ by more than any `max_err` the comparison can use are always
+        // rejected by it, so only a window of each bucket sorted by ink count
+        // is visited. Each pair keeps its original orientation: lower symbol
+        // index first within a bucket, smaller (height, width) bucket first
+        // across buckets.
+        let pixel_window = if self.config.text_refine { 20 } else { 12 };
+        let sorted_buckets: HashMap<(usize, usize), Vec<(usize, usize)>> = buckets
+            .iter()
+            .map(|(&key, members)| {
+                let mut sorted: Vec<(usize, usize)> = members
+                    .iter()
+                    .map(|&index| (self.symbol_pixel_counts[index], index))
+                    .collect();
+                sorted.sort_unstable();
+                (key, sorted)
+            })
+            .collect();
+        let profiles: Vec<Option<NarrowProfile>> =
+            self.global_symbols.iter().map(NarrowProfile::new).collect();
+
         let mut compare_pair = |a_idx: usize, b_idx: usize| {
             if uf_find(&mut parent, a_idx) == uf_find(&mut parent, b_idx) {
                 return;
@@ -69,6 +91,16 @@ impl<'a> Jbig2Encoder<'a> {
             }
 
             let dy_limit = if self.config.text_refine { 1 } else { 0 };
+            // Cheap ink-count bounds settle most rejections without a search.
+            if dy_limit == 0
+                && dim_limit <= 1
+                && let (Some(a_profile), Some(b_profile)) = (&profiles[a_idx], &profiles[b_idx])
+                && narrow_alignment_impossible(
+                    a_sym, a_profile, b_sym, b_profile, max_err, dim_limit, 0,
+                )
+            {
+                return;
+            }
             if let Some(result) =
                 comparator.compare_for_refine_family(a_sym, b_sym, max_err, dim_limit, dy_limit)
             {
@@ -81,10 +113,13 @@ impl<'a> Jbig2Encoder<'a> {
         };
 
         for &(bh, bw) in &bucket_keys {
-            let current_bucket = &buckets[&(bh, bw)];
-            for ci in 0..current_bucket.len() {
-                for cj in (ci + 1)..current_bucket.len() {
-                    compare_pair(current_bucket[ci], current_bucket[cj]);
+            let current_bucket = &sorted_buckets[&(bh, bw)];
+            for (ci, &(a_pixels, a_idx)) in current_bucket.iter().enumerate() {
+                for &(b_pixels, b_idx) in &current_bucket[ci + 1..] {
+                    if b_pixels - a_pixels > pixel_window {
+                        break;
+                    }
+                    compare_pair(a_idx.min(b_idx), a_idx.max(b_idx));
                 }
             }
 
@@ -99,9 +134,15 @@ impl<'a> Jbig2Encoder<'a> {
                     if neighbor_key <= (bh, bw) {
                         continue;
                     }
-                    if let Some(neighbor_bucket) = buckets.get(&neighbor_key) {
-                        for &a_idx in current_bucket {
-                            for &b_idx in neighbor_bucket {
+                    if let Some(neighbor_bucket) = sorted_buckets.get(&neighbor_key) {
+                        for &(a_pixels, a_idx) in current_bucket {
+                            let start = neighbor_bucket.partition_point(|&(b_pixels, _)| {
+                                b_pixels + pixel_window < a_pixels
+                            });
+                            for &(b_pixels, b_idx) in &neighbor_bucket[start..] {
+                                if b_pixels > a_pixels + pixel_window {
+                                    break;
+                                }
                                 compare_pair(a_idx, b_idx);
                             }
                         }
@@ -177,14 +218,23 @@ impl<'a> Jbig2Encoder<'a> {
             }
         }
 
-        // Replace internal state
+        // Replace internal state. Prototypes keep their bitmaps, so their
+        // signatures carry over instead of being recomputed.
+        let mut new_signatures = vec![Default::default(); new_symbols.len()];
+        for (old_idx, &new_idx) in old_to_new.iter().enumerate() {
+            if old_to_prototype[old_idx] == old_idx {
+                new_signatures[new_idx] = self.symbol_signatures[old_idx];
+            }
+        }
+        debug_assert!(
+            new_symbols
+                .iter()
+                .zip(&new_signatures)
+                .all(|(symbol, signature)| Self::compute_symbol_signature(symbol) == *signature)
+        );
         self.global_symbols = new_symbols;
-        self.symbol_pixel_counts = self
-            .global_symbols
-            .iter()
-            .map(BitImage::count_ones)
-            .collect();
-        self.rebuild_symbol_metadata();
+        self.symbol_signatures = new_signatures;
+        self.rebuild_symbol_metadata_keeping_signatures();
         self.rebuild_hash_map();
 
         debug!(

@@ -1,0 +1,502 @@
+[
+ {
+  "corpus": "original",
+  "scope": "page",
+  "preset": "text",
+  "pages": 3,
+  "runs": 5,
+  "base_median_s_per_page": 0.000925,
+  "final_median_s_per_page": 0.00049,
+  "median_paired_ratio": 0.5385,
+  "ratio_min": 0.2626,
+  "ratio_max": 0.6142,
+  "base_bytes": [
+   498
+  ],
+  "final_bytes": [
+   498
+  ],
+  "base_hash": [
+   "ab0ba43242334b8a"
+  ],
+  "final_hash": [
+   "ab0ba43242334b8a"
+  ],
+  "byte_identical": true
+ },
+ {
+  "corpus": "original",
+  "scope": "page",
+  "preset": "text_lossless",
+  "pages": 3,
+  "runs": 5,
+  "base_median_s_per_page": 0.000168,
+  "final_median_s_per_page": 0.000159,
+  "median_paired_ratio": 0.7644,
+  "ratio_min": 0.6077,
+  "ratio_max": 1.0714,
+  "base_bytes": [
+   463
+  ],
+  "final_bytes": [
+   463
+  ],
+  "base_hash": [
+   "89df64968acaf8a9"
+  ],
+  "final_hash": [
+   "89df64968acaf8a9"
+  ],
+  "byte_identical": true
+ },
+ {
+  "corpus": "original",
+  "scope": "page",
+  "preset": "text_lossless_max",
+  "pages": 3,
+  "runs": 5,
+  "base_median_s_per_page": 0.007149,
+  "final_median_s_per_page": 0.00482,
+  "median_paired_ratio": 0.6593,
+  "ratio_min": 0.3345,
+  "ratio_max": 0.7548,
+  "base_bytes": [
+   430
+  ],
+  "final_bytes": [
+   430
+  ],
+  "base_hash": [
+   "99a716c8838d1baf"
+  ],
+  "final_hash": [
+   "99a716c8838d1baf"
+  ],
+  "byte_identical": true
+ },
+ {
+  "corpus": "original",
+  "scope": "page",
+  "preset": "text_symbol_unify",
+  "pages": 3,
+  "runs": 5,
+  "base_median_s_per_page": 0.000658,
+  "final_median_s_per_page": 0.000314,
+  "median_paired_ratio": 0.4772,
+  "ratio_min": 0.2043,
+  "ratio_max": 0.5776,
+  "base_bytes": [
+   424
+  ],
+  "final_bytes": [
+   424
+  ],
+  "base_hash": [
+   "13ca9922df8aa173"
+  ],
+  "final_hash": [
+   "13ca9922df8aa173"
+  ],
+  "byte_identical": true
+ },
+ {
+  "corpus": "original",
+  "scope": "page",
+  "preset": "lossless",
+  "pages": 3,
+  "runs": 5,
+  "base_median_s_per_page": 9.9e-05,
+  "final_median_s_per_page": 0.000122,
+  "median_paired_ratio": 1.3053,
+  "ratio_min": 0.6027,
+  "ratio_max": 1.3636,
+  "base_bytes": [
+   847
+  ],
+  "final_bytes": [
+   847
+  ],
+  "base_hash": [
+   "b95408640b72ae03"
+  ],
+  "final_hash": [
+   "b95408640b72ae03"
+  ],
+  "byte_identical": true
+ },
+ {
+  "corpus": "pbm",
+  "scope": "page",
+  "preset": "text",
+  "pages": 29,
+  "runs": 5,
+  "base_median_s_per_page": 0.075077,
+  "final_median_s_per_page": 0.028048,
+  "median_paired_ratio": 0.3788,
+  "ratio_min": 0.3273,
+  "ratio_max": 0.403,
+  "base_bytes": [
+   616554
+  ],
+  "final_bytes": [
+   616554
+  ],
+  "base_hash": [
+   "9a2897c452dd70e6"
+  ],
+  "final_hash": [
+   "9a2897c452dd70e6"
+  ],
+  "byte_identical": true
+ },
+ {
+  "corpus": "pbm",
+  "scope": "page",
+  "preset": "text_lossless",
+  "pages": 29,
+  "runs": 5,
+  "base_median_s_per_page": 0.022728,
+  "final_median_s_per_page": 0.012166,
+  "median_paired_ratio": 0.5333,
+  "ratio_min": 0.5029,
+  "ratio_max": 0.5598,
+  "base_bytes": [
+   622223
+  ],
+  "final_bytes": [
+   622223
+  ],
+  "base_hash": [
+   "e93d41064d0a8893"
+  ],
+  "final_hash": [
+   "e93d41064d0a8893"
+  ],
+  "byte_identical": true
+ },
+ {
+  "corpus": "pbm",
+  "scope": "page",
+  "preset": "text_lossless_max",
+  "pages": 29,
+  "runs": 5,
+  "base_median_s_per_page": 0.662925,
+  "final_median_s_per_page": 0.224321,
+  "median_paired_ratio": 0.3384,
+  "ratio_min": 0.3306,
+  "ratio_max": 0.3538,
+  "base_bytes": [
+   621128
+  ],
+  "final_bytes": [
+   621128
+  ],
+  "base_hash": [
+   "ea5a3d4e62422f87"
+  ],
+  "final_hash": [
+   "ea5a3d4e62422f87"
+  ],
+  "byte_identical": true
+ },
+ {
+  "corpus": "pbm",
+  "scope": "page",
+  "preset": "text_symbol_unify",
+  "pages": 29,
+  "runs": 5,
+  "base_median_s_per_page": 0.073799,
+  "final_median_s_per_page": 0.028722,
+  "median_paired_ratio": 0.3704,
+  "ratio_min": 0.3635,
+  "ratio_max": 0.4534,
+  "base_bytes": [
+   514755
+  ],
+  "final_bytes": [
+   514755
+  ],
+  "base_hash": [
+   "ee5a8a50adb2c65c"
+  ],
+  "final_hash": [
+   "ee5a8a50adb2c65c"
+  ],
+  "byte_identical": true
+ },
+ {
+  "corpus": "pbm",
+  "scope": "page",
+  "preset": "lossless",
+  "pages": 29,
+  "runs": 5,
+  "base_median_s_per_page": 0.016949,
+  "final_median_s_per_page": 0.012155,
+  "median_paired_ratio": 0.719,
+  "ratio_min": 0.6697,
+  "ratio_max": 0.7555,
+  "base_bytes": [
+   1224460
+  ],
+  "final_bytes": [
+   1224460
+  ],
+  "base_hash": [
+   "4935f51c9ed12f3a"
+  ],
+  "final_hash": [
+   "4935f51c9ed12f3a"
+  ],
+  "byte_identical": true
+ },
+ {
+  "corpus": "scan",
+  "scope": "document",
+  "preset": "text",
+  "pages": 14,
+  "runs": 5,
+  "base_median_s_per_page": 0.25168,
+  "final_median_s_per_page": 0.093462,
+  "median_paired_ratio": 0.3714,
+  "ratio_min": 0.3389,
+  "ratio_max": 0.4199,
+  "base_bytes": [
+   753980
+  ],
+  "final_bytes": [
+   753980
+  ],
+  "base_hash": [
+   "a087e27dc37620e2"
+  ],
+  "final_hash": [
+   "a087e27dc37620e2"
+  ],
+  "byte_identical": true
+ },
+ {
+  "corpus": "scan",
+  "scope": "document",
+  "preset": "text_lossless",
+  "pages": 14,
+  "runs": 5,
+  "base_median_s_per_page": 0.034876,
+  "final_median_s_per_page": 0.018057,
+  "median_paired_ratio": 0.5062,
+  "ratio_min": 0.4872,
+  "ratio_max": 0.5265,
+  "base_bytes": [
+   858835
+  ],
+  "final_bytes": [
+   858835
+  ],
+  "base_hash": [
+   "7ab0fb9bb6cdf419"
+  ],
+  "final_hash": [
+   "7ab0fb9bb6cdf419"
+  ],
+  "byte_identical": true
+ },
+ {
+  "corpus": "scan",
+  "scope": "document",
+  "preset": "text_lossless_max",
+  "pages": 14,
+  "runs": 5,
+  "base_median_s_per_page": 1.81989,
+  "final_median_s_per_page": 0.884039,
+  "median_paired_ratio": 0.4902,
+  "ratio_min": 0.4798,
+  "ratio_max": 0.491,
+  "base_bytes": [
+   811696
+  ],
+  "final_bytes": [
+   811696
+  ],
+  "base_hash": [
+   "0398dd3f027f16b4"
+  ],
+  "final_hash": [
+   "0398dd3f027f16b4"
+  ],
+  "byte_identical": true
+ },
+ {
+  "corpus": "scan",
+  "scope": "document",
+  "preset": "text_symbol_unify",
+  "pages": 14,
+  "runs": 5,
+  "base_median_s_per_page": 0.58228,
+  "final_median_s_per_page": 0.352053,
+  "median_paired_ratio": 0.6023,
+  "ratio_min": 0.5856,
+  "ratio_max": 0.6223,
+  "base_bytes": [
+   654191
+  ],
+  "final_bytes": [
+   654191
+  ],
+  "base_hash": [
+   "d948e9edbd40adc9"
+  ],
+  "final_hash": [
+   "d948e9edbd40adc9"
+  ],
+  "byte_identical": true
+ },
+ {
+  "corpus": "scan",
+  "scope": "document",
+  "preset": "lossless",
+  "pages": 14,
+  "runs": 5,
+  "base_median_s_per_page": 0.010146,
+  "final_median_s_per_page": 0.007838,
+  "median_paired_ratio": 0.7725,
+  "ratio_min": 0.6859,
+  "ratio_max": 0.859,
+  "base_bytes": [
+   813209
+  ],
+  "final_bytes": [
+   813209
+  ],
+  "base_hash": [
+   "c1290a1526f280c1"
+  ],
+  "final_hash": [
+   "c1290a1526f280c1"
+  ],
+  "byte_identical": true
+ },
+ {
+  "corpus": "scan",
+  "scope": "page",
+  "preset": "text",
+  "pages": 14,
+  "runs": 7,
+  "base_median_s_per_page": 0.154745,
+  "final_median_s_per_page": 0.051911,
+  "median_paired_ratio": 0.337,
+  "ratio_min": 0.3196,
+  "ratio_max": 0.4366,
+  "base_bytes": [
+   800632
+  ],
+  "final_bytes": [
+   800632
+  ],
+  "base_hash": [
+   "8ad38b8abbbbd293"
+  ],
+  "final_hash": [
+   "8ad38b8abbbbd293"
+  ],
+  "byte_identical": true
+ },
+ {
+  "corpus": "scan",
+  "scope": "page",
+  "preset": "text_lossless",
+  "pages": 14,
+  "runs": 7,
+  "base_median_s_per_page": 0.037587,
+  "final_median_s_per_page": 0.021952,
+  "median_paired_ratio": 0.5841,
+  "ratio_min": 0.5306,
+  "ratio_max": 0.6536,
+  "base_bytes": [
+   863447
+  ],
+  "final_bytes": [
+   863447
+  ],
+  "base_hash": [
+   "9fe970755d193071"
+  ],
+  "final_hash": [
+   "9fe970755d193071"
+  ],
+  "byte_identical": true
+ },
+ {
+  "corpus": "scan",
+  "scope": "page",
+  "preset": "text_lossless_max",
+  "pages": 14,
+  "runs": 7,
+  "base_median_s_per_page": 1.117854,
+  "final_median_s_per_page": 0.445006,
+  "median_paired_ratio": 0.3989,
+  "ratio_min": 0.3864,
+  "ratio_max": 0.423,
+  "base_bytes": [
+   813198
+  ],
+  "final_bytes": [
+   813198
+  ],
+  "base_hash": [
+   "a79762ba8ef38382"
+  ],
+  "final_hash": [
+   "a79762ba8ef38382"
+  ],
+  "byte_identical": true
+ },
+ {
+  "corpus": "scan",
+  "scope": "page",
+  "preset": "text_symbol_unify",
+  "pages": 14,
+  "runs": 7,
+  "base_median_s_per_page": 0.216419,
+  "final_median_s_per_page": 0.083748,
+  "median_paired_ratio": 0.3871,
+  "ratio_min": 0.3674,
+  "ratio_max": 0.4418,
+  "base_bytes": [
+   742715
+  ],
+  "final_bytes": [
+   742715
+  ],
+  "base_hash": [
+   "29275dd33fa297c7"
+  ],
+  "final_hash": [
+   "29275dd33fa297c7"
+  ],
+  "byte_identical": true
+ },
+ {
+  "corpus": "scan",
+  "scope": "page",
+  "preset": "lossless",
+  "pages": 14,
+  "runs": 7,
+  "base_median_s_per_page": 0.018859,
+  "final_median_s_per_page": 0.014164,
+  "median_paired_ratio": 0.7628,
+  "ratio_min": 0.7163,
+  "ratio_max": 0.8054,
+  "base_bytes": [
+   813209
+  ],
+  "final_bytes": [
+   813209
+  ],
+  "base_hash": [
+   "84f2361733c87041"
+  ],
+  "final_hash": [
+   "84f2361733c87041"
+  ],
+  "byte_identical": true
+ }
+]
