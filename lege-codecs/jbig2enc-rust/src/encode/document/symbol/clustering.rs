@@ -96,7 +96,7 @@ impl<'a> Jbig2Encoder<'a> {
                 && dim_limit <= 1
                 && let (Some(a_profile), Some(b_profile)) = (&profiles[a_idx], &profiles[b_idx])
                 && narrow_alignment_impossible(
-                    a_sym, a_profile, b_sym, b_profile, max_err, dim_limit,
+                    a_sym, a_profile, b_sym, b_profile, max_err, dim_limit, 0,
                 )
             {
                 return;

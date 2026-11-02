@@ -622,20 +622,29 @@ fn add_columns(columns: &mut [u16; 34], word: u32, sign: i16) {
     }
 }
 
-/// Whether `Comparator::compare_for_refine_family(a, b, max_err, max_dx, 0)`
-/// must return `None` for `max_dx <= 1`, judged from ink counts alone. Both
-/// bitmaps must be at most 32 pixels wide, with profiles built from them.
+/// Column counts of `profile`'s bitmap over rows `start..end`.
+fn columns_over(profile: &NarrowProfile, image: &BitImage, start: usize, end: usize) -> [u16; 34] {
+    let words = image.packed_words();
+    let mut columns = profile.columns;
+    for &word in words[..start].iter().chain(&words[end..]) {
+        add_columns(&mut columns, word, -1);
+    }
+    columns
+}
+
+/// Whether every alignment with `|dx| <= max_dx` and `|dy| <= max_dy` (both
+/// at most 1) has an XOR error above `max_err`, judged from ink counts alone.
+/// Then `Comparator::compare_for_refine_family(a, b, max_err, max_dx, max_dy)`
+/// returns `None`. Both bitmaps must be at most 32 pixels wide, with profiles
+/// built from them.
 ///
-/// With `dy = 0` the search pairs row `r` of `a`, shifted by `dx` with zero
-/// fill inside one word, with row `r` of `b` for `r < min(height)`. Its error
-/// is the XOR popcount of those words, which is at least
-/// - the sum over rows of the ink-count difference, where `a` loses at most
-///   `|dx|` pixels per row to the shift, and
+/// For each offset the search pairs row `r` of `a`, shifted by `dx` with zero
+/// fill inside one word, with row `r - dy` of `b` over the rows both have.
+/// Its error is the XOR popcount of those words, which is at least
+/// - the sum over row pairs of the ink-count difference, where `a` loses at
+///   most `|dx|` pixels per row to the shift, and
 /// - the sum over the 32 word columns of the difference between the column
-///   counts of `a` (moved by `dx`) and of `b` over the compared rows.
-///
-/// If, for every `|dx| <= max_dx`, one of the bounds exceeds `max_err`, no
-/// alignment is within `max_err` and the search would find none.
+///   counts of `a` (moved by `dx`) and of `b` over the paired rows.
 pub(crate) fn narrow_alignment_impossible(
     a: &BitImage,
     a_profile: &NarrowProfile,
@@ -643,40 +652,46 @@ pub(crate) fn narrow_alignment_impossible(
     b_profile: &NarrowProfile,
     max_err: u32,
     max_dx: i32,
+    max_dy: i32,
 ) -> bool {
-    debug_assert!(a.width <= 32 && b.width <= 32 && (0..=1).contains(&max_dx));
-    let height = a.height.min(b.height);
-    let (mut b_gain, mut a_gain, mut a_gain_after_loss) = (0u32, 0u32, 0u32);
-    for (&a_ink, &b_ink) in a_profile.rows[..height]
-        .iter()
-        .zip(&b_profile.rows[..height])
-    {
-        b_gain += u32::from(b_ink.saturating_sub(a_ink));
-        a_gain += u32::from(a_ink.saturating_sub(b_ink));
-        a_gain_after_loss += u32::from(a_ink.saturating_sub(b_ink).saturating_sub(1));
-    }
-    let row_bound = [b_gain + a_gain, b_gain + a_gain_after_loss];
-
-    let mut a_columns = a_profile.columns;
-    for &word in &a.packed_words()[height..] {
-        add_columns(&mut a_columns, word, -1);
-    }
-    let mut b_columns = b_profile.columns;
-    for &word in &b.packed_words()[height..] {
-        add_columns(&mut b_columns, word, -1);
-    }
-    for dx in -max_dx..=max_dx {
-        if row_bound[dx.unsigned_abs() as usize] > max_err {
+    debug_assert!(a.width <= 32 && b.width <= 32);
+    debug_assert!((0..=1).contains(&max_dx) && (0..=1).contains(&max_dy));
+    for dy in -max_dy..=max_dy {
+        let top = dy.max(0);
+        let bottom = (dy + b.height as i32).min(a.height as i32);
+        if top >= bottom {
             continue;
         }
-        let start = (1 + dx) as usize;
-        let column_bound: u32 = a_columns[start..start + 32]
+        let (a_start, a_end) = (top as usize, bottom as usize);
+        let (b_start, b_end) = ((top - dy) as usize, (bottom - dy) as usize);
+        let (mut b_gain, mut a_gain, mut a_gain_after_loss) = (0u32, 0u32, 0u32);
+        for (&a_ink, &b_ink) in a_profile.rows[a_start..a_end]
             .iter()
-            .zip(&b_columns[1..33])
-            .map(|(&a_ink, &b_ink)| u32::from(a_ink.abs_diff(b_ink)))
-            .sum();
-        if column_bound <= max_err {
-            return false;
+            .zip(&b_profile.rows[b_start..b_end])
+        {
+            b_gain += u32::from(b_ink.saturating_sub(a_ink));
+            a_gain += u32::from(a_ink.saturating_sub(b_ink));
+            a_gain_after_loss += u32::from(a_ink.saturating_sub(b_ink).saturating_sub(1));
+        }
+        let row_bound = [b_gain + a_gain, b_gain + a_gain_after_loss];
+        if row_bound[max_dx as usize] > max_err {
+            continue;
+        }
+        let a_columns = columns_over(a_profile, a, a_start, a_end);
+        let b_columns = columns_over(b_profile, b, b_start, b_end);
+        for dx in -max_dx..=max_dx {
+            if row_bound[dx.unsigned_abs() as usize] > max_err {
+                continue;
+            }
+            let start = (1 + dx) as usize;
+            let column_bound: u32 = a_columns[start..start + 32]
+                .iter()
+                .zip(&b_columns[1..33])
+                .map(|(&a_ink, &b_ink)| u32::from(a_ink.abs_diff(b_ink)))
+                .sum();
+            if column_bound <= max_err {
+                return false;
+            }
         }
     }
     true
@@ -787,12 +802,12 @@ mod tests {
                 NarrowProfile::new(&b).unwrap(),
             );
             for max_err in [0, 1, 2, 4, 8, 12, 20] {
-                for max_dx in 0..=1 {
+                for (max_dx, max_dy) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
                     let impossible = narrow_alignment_impossible(
-                        &a, &a_profile, &b, &b_profile, max_err, max_dx,
+                        &a, &a_profile, &b, &b_profile, max_err, max_dx, max_dy,
                     );
-                    let result =
-                        Comparator::default().compare_for_refine_family(&a, &b, max_err, max_dx, 0);
+                    let result = Comparator::default()
+                        .compare_for_refine_family(&a, &b, max_err, max_dx, max_dy);
                     assert!(
                         !(impossible && result.is_some()),
                         "case {case}: bound rejected an alignment {result:?}"
