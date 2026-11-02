@@ -1117,6 +1117,20 @@ record lege-ecosystem.evidence.jbig2-06-restored-validation-20261102/1 : evidenc
     author "dk"
 }
 
+record lege-ecosystem.evidence.jbig2-06-symbol-speed-followups-20261102/1 : evidence {
+    title "Three byte-identical follow-ups at 4cae516 on the scan corpus: dictionary prefix checkpoints in the measured planner give text_lossless_max_compression() 0.828 per page (3 pairs, 0.789-0.843); running unify context similarity after the bitmap screens gives text_symbol_unify() 0.598 in document scope and 0.807 per page; windowed refinement contexts run at 0.59 of the per-pixel coder on near-identical glyph pairs (10 rounds, 0.56-0.68), with no effect on text() which never refines. Every preset output hash and byte total unchanged on both corpora; full gate passes except the six jbig2dec-dependent round trips; fmt clean; clippy warnings 124 to 123. A 3-6% wall drift on text_lossless between workers is noise: cachegrind counts 523.6/523.6/524.0 million instructions."
+    state verified
+    result pass
+    method command
+    observed_at git:4cae516a6551bbd262a9c11277e2b2907325ee73
+    command "SYMBOL_SPEED_DIR=<scan pbms> taskset -c 2,3 cargo test --release --features parallel --test symbol_speed -- --ignored --exact symbol_speed_worker --nocapture (interleaved pairs, baseline f508012 vs 4cae516)"
+    artifact "lege-codecs/jbig2enc-rust/docs/SYMBOL-SPEED.md"
+    summary """
+        Three byte-identical follow-ups at 4cae516 on the scan corpus: dictionary prefix checkpoints in the measured planner give text_lossless_max_compression() 0.828 per page (3 pairs, 0.789-0.843); running unify context similarity after the bitmap screens gives text_symbol_unify() 0.598 in document scope and 0.807 per page; windowed refinement contexts run at 0.59 of the per-pixel coder on near-identical glyph pairs (10 rounds, 0.56-0.68), with no effect on text() which never refines. Every preset output hash and byte total unchanged on both corpora; full gate passes except the six jbig2dec-dependent round trips; fmt clean; clippy warnings 124 to 123. A 3-6% wall drift on text_lossless between workers is noise: cachegrind counts 523.6/523.6/524.0 million instructions.
+        """
+    author "Claude"
+}
+
 record lege-ecosystem.evidence.jbig2-070-archive-source-review-20261101/1 : evidence {
     title "Recovered all58 archived production/build path histories through52 rename edges (110 distinct paths), classified exact normalized Rust overlaps against64 local DjVu files, and pinned pre-upload Apache arithmetic headers/COPYING/PATENTS. Source hashes, history and exposure boundaries are concrete; exact earlier translation origins and appropriate licensing clearance remain unestablished."
     state verified
