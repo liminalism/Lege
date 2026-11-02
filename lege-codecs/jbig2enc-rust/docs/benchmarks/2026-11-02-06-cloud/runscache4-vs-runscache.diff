@@ -1,0 +1,35 @@
+--- arith-runscache.rs	2026-11-02 05:42:40.268655802 +0000
++++ arith-runscache4.rs	2026-11-02 05:53:37.437120961 +0000
+@@ -195,7 +195,7 @@
+     registers: ArithRegisters,
+     context: Vec<u32>, // Packed bitmap state: table index in high16, cached Qe in low16.
+     int_ctx: [[usize; 512]; 13], // Contexts for integer encoding, storing CTBL indices
+-    iaid_ctx: Vec<usize>,        // Dynamically sized context tree for IAID symbols
++    iaid_ctx: Vec<usize>, // Dynamically sized context tree for IAID symbols
+     refinement_contexts: Vec<usize>, // Contexts for refinement region (GRTEMPLATE=0: 8192 states)
+ }
+ 
+@@ -745,11 +745,8 @@
+                     // required probability-state transition. A fully blank word
+                     // is the run that covers the whole word.
+                     if context == 0 {
+-                        let run = pixels
+-                            .leading_zeros()
+-                            .min(above1.leading_zeros())
+-                            .min(above2.leading_zeros())
+-                            .min(remaining as u32) as usize;
++                        let incoming = pixels | (above1 >> 32) as u32 | (above2 >> 32) as u32;
++                        let run = incoming.leading_zeros().min(remaining as u32) as usize;
+                         if run != 0 {
+                             registers.encode_zero_run(&mut contexts[0], run);
+                             #[cfg(debug_assertions)]
+@@ -1086,8 +1083,7 @@
+             return;
+         }
+         let next = self.encode_bit_renormalized(state_idx, d);
+-        *cached = ((next as u32) << 16)
+-            | crate::shared::mq_table::MQ_STATES[next].qe as u32;
++        *cached = ((next as u32) << 16) | crate::shared::mq_table::MQ_STATES[next].qe as u32;
+     }
+ 
+     /// Encode a known run in context zero without changing its per-bit model.

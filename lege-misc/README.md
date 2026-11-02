@@ -12,7 +12,6 @@ Shared assets and tools that are not a processing crate.
 | `xtask/` | `cargo appimage`. |
 | `packaging/macos/` | macOS icon and bundled libraries used by the Mac packaging scripts. |
 | `bindings/lege-render-ffi/` | C ABI over `lege-pdf-read`. AGPL-3.0-only, same as the renderer it links. [bindings/lege-render-ffi/README.md](bindings/lege-render-ffi/README.md). |
-| `bindings/jbig2enc-py/` | PyO3 module, built with maturin. Excluded from the Cargo workspace. [bindings/jbig2enc-py/README.md](bindings/jbig2enc-py/README.md). |
 | `dev-misc/` | Local build and release scripts. |
 | `bin/`, `examples/` | One-off binarization and encoding experiments. |
 

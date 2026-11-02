@@ -1927,7 +1927,7 @@ record lege-ecosystem.work.jbig2-06-bounded-headroom-pass/2 : work {
 
 record lege-ecosystem.work.jbig2-06-cloud-readme-and-preflight/1 : work {
     title "Prepare the JBIG2 0.6 README and conservative cloud preflight"
-    state proposed
+    state completed
     scope [ path "lege-codecs/jbig2enc-rust/**" ]
     intent """
         Continue in the user's unloaded cloud environment. Rewrite the 0.6 README around use cases, APIs, explicit fidelity/lossy behavior, feature flags, compatibility and licensing; de-emphasize competitive timing and link detailed measurements instead. Optionally recheck the two rejected headroom hypotheses under controlled cloud conditions, retaining only unambiguous byte-identical improvements without pushing optimization hard for 0.6.
@@ -1941,18 +1941,21 @@ record lege-ecosystem.work.jbig2-06-cloud-readme-and-preflight/1 : work {
                 Run cloud-appropriate correctness/package checks; treat known oracle exception and absent private corpus accurately. If any optimization is retained, require clear repeated evidence and unchanged bytes; leaving the current coder unchanged is acceptable.
                 """
             method command
+            verified_by [ @lege-ecosystem.evidence.jbig2-06-cloud-preflight-20261102/1 ]
         }
         check readme {
             statement """
                 README describes 0.6 capabilities, examples, fidelity contracts, features, compatibility and licensing clearly, with competitive timings relegated to linked detailed reports.
                 """
             method manual
+            verified_by [ @lege-ecosystem.evidence.jbig2-06-readme-rewrite-20261102/1 ]
         }
         check release-notes {
             statement """
                 Review unreleased 0.6 notes against final implementation and retain README/CHANGELOG-based release notes; do not publish without a separate request.
                 """
             method manual
+            verified_by [ @lege-ecosystem.evidence.jbig2-06-release-notes-review-20261102/1 ]
         }
     }
     after [ @lege-ecosystem.work.jbig2-06-bounded-headroom-pass/2 ]

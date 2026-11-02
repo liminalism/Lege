@@ -1,0 +1,109 @@
+{
+ "machine": {
+  "cpu": "Intel Xeon Processor @ 2.10GHz (cloud VM, 4 cores, no SMT, 8 MiB L2 x4, 260 MiB L3)",
+  "os": "Linux-6.18.44-fc-v185-x86_64-with-glibc2.39",
+  "rustc": "rustc 1.97.0 (2d8144b78 2026-07-07)",
+  "load_note": "shared VM; a second agent compiled and ran symbol-mode measurements on CPUs 2-3 during these runs; kernel timings pinned to CPU 0, cachegrind to CPU 1"
+ },
+ "inputs": {
+  "attention.pdf": {
+   "source": "https://arxiv.org/pdf/1706.03762",
+   "sha256": "bdfaa68d8984f0dc02beaca527b76f207d99b666d31d1da728ee0728182df697",
+   "pages": 15
+  },
+  "knuth.pdf": {
+   "source": "https://arxiv.org/pdf/2305.10601",
+   "sha256": "79c5237e3f63953a73f2b0d6894327702ee1f7e981450c251bb1b5cb4f8d7b8f",
+   "pages": 14
+  },
+  "raster": "pdftoppm -mono -r 300 (pdftoppm version 24.02.0)",
+  "scan_variant": "ImageMagick convert -rotate 0.4 -blur 0x0.7 +noise Gaussian -attenuate 0.6 -threshold 55% on the first 8 attention + first 6 knuth pages, re-packed to P4",
+  "text29.bin": {
+   "sha256": "d1d24a5947d20b7be0357e5f14e8a322552d50ef4d0cb15860a7591d563e8ba2",
+   "pages": 29,
+   "page_sha256": {
+    "att-01.pbm": "319f20fc5c548056fa3e802e0cc99f6c7aebb150c9d6a5ca49295a867dc2ed3e",
+    "att-02.pbm": "cb348c8ffbf880dad5863ff6d5f757c349cd81375d9934153b6e4bff9bbb3f61",
+    "att-03.pbm": "5dc24ad5c661159127ac1a4da0e66b8c642929717a68dc03fac1e3393499a492",
+    "att-04.pbm": "e87b63fc63f5decde0c34c65ef3b5f53e10710cbd9569eee6ce8312c763f9906",
+    "att-05.pbm": "0ab04f54a232291c8b1e8bd4e0a62ee7921fe6f5d2410326247091840609c673",
+    "att-06.pbm": "f414461caca68f2e180f50cd717a11a81743d72497bf940efc5f0cf01e6d88da",
+    "att-07.pbm": "5ab62d5700d6bcc7452ebdcae767d98637d04ad4f1d8519f50d5b0169fb9c9f6",
+    "att-08.pbm": "2555b799cfd07edc8853178b28c080632cea80354dc1e2f98691e852568850b0",
+    "att-09.pbm": "3be624c5c22a02f6a22179d578ff7dfb93cb5586c3707db33e37ac95bcfdff54",
+    "att-10.pbm": "cb704d5c37a52a57085b9353d4717150fc26d57f76654bd117b5d9bd9fb5acde",
+    "att-11.pbm": "f33acd721278581c93123b46ee41a36cc3427d1e075463fc339e616cdf6936c8",
+    "att-12.pbm": "455de867a9e8dfa39726182e1ee0586561db0720013be976a3428511648001ee",
+    "att-13.pbm": "626b315953a58bfa9932aebb70250cb75ddd0f50df3e7c9cea42f8cafde32dfd",
+    "att-14.pbm": "10bdb52a4697326a493cf2dfc47ab0438ae7d6189d6774e149cbb686393172a2",
+    "att-15.pbm": "98e6a8680f538ab5d99e941a4820bdbeb7a85ec3ee3571d74397c5f139d119b5",
+    "knu-01.pbm": "1c7ca9649dbcfda4dfb291178fa565333844433f2bae9d8b42676834d9ea7c66",
+    "knu-02.pbm": "48ec85735cfc9085cb47b53d5a00d4d6a3e7fc97f8c36e4e3c1c39b4a2d1123f",
+    "knu-03.pbm": "a0e7ffa0de8c513fdb8216db9f6bca83fae9914c5b2cefb30fe6925c58891147",
+    "knu-04.pbm": "70b9999473e5d5fa923a3543e2e87e38004b5e7df53a825834b366ae27cfebcf",
+    "knu-05.pbm": "c3a6fad34cc31b124015b2878814f1363c43a2670c06af8e39fdfc30a785b579",
+    "knu-06.pbm": "3e55d39ebcadeee175eff1614270160d0fcdb354f67a3414a672f84bd6795ef5",
+    "knu-07.pbm": "d7971759c803660bf2d6e3de2745cf016ddac8fe61376b5122aff71225469d8c",
+    "knu-08.pbm": "1fb2b83d9c38488944077ef955b534a0813cdc61edfe9e567bc249df63e14759",
+    "knu-09.pbm": "86f79764ca891477595556d9d1dc768677cd2ac5fd042fbd849ff7a650e7b2b6",
+    "knu-10.pbm": "5f08149048e2e3c240e0c79ac3edd41353af5656917069785b0da99e5f56a5ce",
+    "knu-11.pbm": "e4fa9fcb2cf012755b10efdde336357941d4cecfec782670f9dcb5eb3aee80f6",
+    "knu-12.pbm": "737df379f5aeec3a1d83cee1da57ec36e792fabb5752d3057fd863b824889b54",
+    "knu-13.pbm": "81c21842716056654e1ba95b530b2e8ba76fee53c3d3bd250c5b947bc9b0c43e",
+    "knu-14.pbm": "21c4f00f9a8716419fa68ef6fa483b83fb4f3ca921b66ab03fa96afa13fd9750"
+   }
+  },
+  "scan14.bin": {
+   "sha256": "28e3fffea193b26107465c26ded8895d8b8cf9c2bd373b976443aeb043fde7de",
+   "pages": 14,
+   "page_sha256": {
+    "att-01.pbm": "e69b8c665651fb864c13b4229590f9aec98d5859fa1fd6ddc24ef2c8804e5432",
+    "att-02.pbm": "a48b8b09d737f5ea247515b98d7e22dbd4932d30eaf4752451c52b9b459d496f",
+    "att-03.pbm": "5b058f1682a80b8f73b6dfe476525a91460e9dfb273efada89ee074132f56bbf",
+    "att-04.pbm": "2ee1679c44b46a9d968ebfbc2b2df24c56be2130f09a25939fa520a57dbbe27a",
+    "att-05.pbm": "2fb8f561e8441fb98c6f39c3500ef06e30f5fc6333731e29feafb26d0f8f1bee",
+    "att-06.pbm": "2be4ef2e900c5ee136de7b5b380789b42a7d4afad76b7b927d573cbb82c2a048",
+    "att-07.pbm": "65e3ae999d89c11bc3244788e8b7b57e21832df4992e353b6a11a4e4dacf3eee",
+    "att-08.pbm": "f05ce9d4dbc10b1a254d17c723d7ff0731cea9babd538476dc807008b649b0e4",
+    "knu-01.pbm": "7ecff9cd870784373057e39c2ad94f4625829b46cac464a6a5a7595d3052850a",
+    "knu-02.pbm": "7b3570e0e163c47fe37c4523edcfc5aefcb4e43fc96afbddef8d4dc159b747e7",
+    "knu-03.pbm": "444871bb2262666b4f10df4eb5103828989d0df36e31bef6b38d87c118e51177",
+    "knu-04.pbm": "1f0d134c37d603f4b74cbb8313feba118df1052ff42c22065260b343b57733f5",
+    "knu-05.pbm": "6ce1df03a6eb90a3a3031f1e23414ce15056e4ebe8e5725f7dfd6611c1616fc3",
+    "knu-06.pbm": "32a5683615d3ad6f3e4650aa980244f9c51b139bb2f4c1c48c7cb4953ce37bbf"
+   }
+  },
+  "noise1.bin": {
+   "sha256": "d1c9f541c1439b829163e00cdabc9e689a5c39c1fb62f492037d1b03bb77d9fb",
+   "note": "2550x3300 50% random bits, seed 20261102, procedural"
+  },
+  "checker1.bin": {
+   "sha256": "ea83928e075f3eb8ea27412629b56b3256d9c8fd45ca673345fdebf611eae80c",
+   "note": "2550x3300 one-pixel checkerboard, procedural"
+  }
+ },
+ "packed_format": "GREGION1 as read by tests/generic_speed.rs generic_kernel_worker; packing by tools/compare_generic_kernels.py pbm()",
+ "workers": {
+  "baseline": "c3e10f0e29015480dfed9f7cddb70336fb241b5fdf6a7dcb5bd3ff20033bc5bd",
+  "cache": "292ed196f73945dd19561cea18e11276b53b5f0bd77d08c0876fbb3a9754dea9",
+  "renorm": "4a78e1ae2991f0ff8bf8968767f5e70fb0b09c7676e1c84a14c411877248b00f",
+  "runs": "1311d356fbc26a7b30134974b5692e3906b5060b3c42636d8f5cd2d2aa1dc9ab",
+  "runscache": "1679514e19d4a79d5f07aed5932d4d126ddc62c85694da1771702108d4e6187e",
+  "runscache2": "486277c0948c77da9438036517ef84b6211c32d6b3918fb285f9154a9f0a8a7f",
+  "runscache3": "4315294e2f6dabe2eaf369abd412f796486b3bd7304d6123aab30d00d03f3a1e",
+  "runscache4": "ec153960b258e5026bb469a2555bd3727afcfb3a652df8b20507ef1a701eee59"
+ },
+ "arith_rs_sha256": {
+  "baseline": "a8fb90c2b0e3884d6f82190141765503dd9d619c766a4cc0d370fcae5514d4b6",
+  "runs": "452fb76b8cba08743ef1edb93c31be16b991defccb69f9e56cdda0ef333e0133",
+  "runscache": "5c2184615516e936be2e024314db27f753637ba80f73ea610c7dc90abe628ccb",
+  "runscache2": "09790ca8e219f4ac6925c1b315a4b1bf6a25676c09927e08a20d25b3f289eada",
+  "runscache3": "db6eafbac57c466ab2950a44bc37d6b070982705e382107467e088a31f946364",
+  "runscache4": "d63e4f53fc49ac5f10961523b0658843bce25aad28fbb285eb8fde2da2731e75",
+  "final_retained": "1a2f71ee4b6f66375b0d720622f70e371c2bb860263eec2c09c8381ca4a0bdff"
+ },
+ "baseline_output_sha256": {
+  "text29": "d0f2e74d3836ae929503f5f52dcbffe89d412c0bad45f346cde5858ac3831cc9",
+  "scan14": "ae3d1e072b2c76f3f3375594f2a9d805e9b91784bd4813d2ab9d62ee137c858f"
+ }
+}

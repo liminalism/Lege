@@ -1,8 +1,10 @@
 //! Component extraction using a graph of horizontal foreground spans.
 //!
 //! Each maximal row span is a vertex. Adjacent-row spans are connected when
-//! their inclusive intervals overlap or touch diagonally. Stack traversal
-//! labels reachable sets without union-find or DjVu-specific segmentation.
+//! their inclusive intervals overlap or touch diagonally. One sweep over
+//! consecutive rows joins touching spans in a union-find; components are
+//! then numbered in order of their first span, as a traversal seeded in span
+//! order would number them. No DjVu-specific segmentation is involved.
 //!
 //! The public staged API and historical threshold/order behavior are retained.
 //! This is a new implementation, not a clean-room claim: the author had access
@@ -11,41 +13,6 @@
 
 use crate::jbig2sym::BitImage;
 use std::collections::BTreeMap;
-
-enum RowDirectory {
-    Dense(Vec<std::ops::Range<usize>>),
-    Sparse(BTreeMap<i32, std::ops::Range<usize>>),
-}
-
-impl RowDirectory {
-    fn new(height: i32, spans: usize) -> Self {
-        let height = height.max(0) as usize;
-        // Bound the direct row table for tall, sparse images and staged callers.
-        if height <= 65_536 && height <= spans.saturating_mul(8).max(1024) {
-            Self::Dense(vec![0..0; height])
-        } else {
-            Self::Sparse(BTreeMap::new())
-        }
-    }
-
-    fn add(&mut self, y: i32, index: usize) {
-        let range = match self {
-            Self::Dense(rows) => &mut rows[y as usize],
-            Self::Sparse(rows) => rows.entry(y).or_insert(index..index),
-        };
-        if range.start == range.end {
-            range.start = index;
-        }
-        range.end = index + 1;
-    }
-
-    fn get(&self, y: i32) -> Option<&std::ops::Range<usize>> {
-        match self {
-            Self::Dense(rows) => usize::try_from(y).ok().and_then(|y| rows.get(y)),
-            Self::Sparse(rows) => rows.get(&y),
-        }
-    }
-}
 
 #[derive(Clone, Debug)]
 pub struct Run {
@@ -178,42 +145,54 @@ impl CCImage {
         self.runs.truncate(used);
     }
 
-    /// Walk the 8-connected span graph. Binary searches skip unrelated spans;
-    /// graph edges are discovered on demand rather than retained in memory.
+    /// Label the 8-connected span graph. Spans are canonical (sorted by row,
+    /// then column, and separated within a row), so touching spans of two
+    /// consecutive rows are found by one merge-like pass over both rows.
     pub fn make_ccids_by_analysis(&mut self) {
         self.normalize_runs();
-        let mut rows = RowDirectory::new(self.height, self.runs.len());
-        for (index, run) in self.runs.iter().enumerate() {
-            rows.add(run.y, index);
-        }
-        let mut pending = Vec::new();
-        let mut label = 0;
-        for seed in 0..self.runs.len() {
-            if self.runs[seed].ccid >= 0 {
-                continue;
+        let count = self.runs.len();
+        let mut parent: Vec<u32> = (0..count as u32).collect();
+        let mut previous = 0..0;
+        let mut start = 0;
+        while start < count {
+            let y = self.runs[start].y;
+            let mut end = start + 1;
+            while end < count && self.runs[end].y == y {
+                end += 1;
             }
-            self.runs[seed].ccid = label;
-            pending.push(seed);
-            while let Some(index) = pending.pop() {
-                let run = &self.runs[index];
-                let (y, left, right) = (run.y, run.x1.saturating_sub(1), run.x2.saturating_add(1));
-                for neighbor_y in [y - 1, y + 1] {
-                    let Some(range) = rows.get(neighbor_y) else {
-                        continue;
-                    };
-                    let first = self.runs[range.clone()].partition_point(|r| r.x2 < left);
-                    for neighbor in range.start + first..range.end {
-                        if self.runs[neighbor].x1 > right {
-                            break;
-                        }
-                        if self.runs[neighbor].ccid < 0 {
-                            self.runs[neighbor].ccid = label;
-                            pending.push(neighbor);
-                        }
+            if previous.start < previous.end && self.runs[previous.start].y == y - 1 {
+                let (mut above, mut below) = (previous.start, start);
+                while above < previous.end && below < end {
+                    let (upper, lower) = (&self.runs[above], &self.runs[below]);
+                    if upper.x2 >= lower.x1 - 1 && upper.x1 <= lower.x2 + 1 {
+                        let upper_root = span_root(&mut parent, above as u32);
+                        let lower_root = span_root(&mut parent, below as u32);
+                        let (keep, merge) = if upper_root < lower_root {
+                            (upper_root, lower_root)
+                        } else {
+                            (lower_root, upper_root)
+                        };
+                        parent[merge as usize] = keep;
+                    }
+                    if self.runs[above].x2 < self.runs[below].x2 {
+                        above += 1;
+                    } else {
+                        below += 1;
                     }
                 }
             }
-            label += 1;
+            previous = start..end;
+            start = end;
+        }
+        let mut labels = vec![-1i32; count];
+        let mut next_label = 0;
+        for index in 0..count {
+            let root = span_root(&mut parent, index as u32) as usize;
+            if labels[root] < 0 {
+                labels[root] = next_label;
+                next_label += 1;
+            }
+            self.runs[index].ccid = labels[root];
         }
         self.ccs.clear();
         self.nregularccs = 0;
@@ -417,13 +396,18 @@ impl CCImage {
             if run.ccid != ccid as i32 {
                 continue;
             }
-            for x in run.x1..=run.x2 {
-                bitmap.set_usize(
-                    (x - component.bb.xmin) as usize,
-                    (run.y - component.bb.ymin) as usize,
-                    true,
-                );
+            // Pixels outside the component box are ignored, as per-pixel
+            // writes would ignore them.
+            let x_start = run.x1.max(component.bb.xmin);
+            let x_end = run.x2.min(component.bb.xmax - 1);
+            if run.y < component.bb.ymin || run.y >= component.bb.ymax || x_start > x_end {
+                continue;
             }
+            bitmap.set_span(
+                (run.y - component.bb.ymin) as usize,
+                (x_start - component.bb.xmin) as usize,
+                (x_end - component.bb.xmin) as usize,
+            );
         }
         Some(bitmap)
     }
@@ -483,4 +467,78 @@ pub fn extract_symbols_for_jbig2(components: &CCImage) -> Vec<(BitImage, i32, i3
             )
         })
         .collect()
+}
+
+fn span_root(parent: &mut [u32], mut node: u32) -> u32 {
+    while parent[node as usize] != node {
+        let grandparent = parent[parent[node as usize] as usize];
+        parent[node as usize] = grandparent;
+        node = grandparent;
+    }
+    node
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Labels from a depth-first traversal seeded in span order, over an
+    /// explicit quadratic adjacency test: the numbering the sweep must match.
+    fn traversal_labels(runs: &[Run]) -> Vec<i32> {
+        let touches =
+            |a: &Run, b: &Run| (a.y - b.y).abs() == 1 && a.x2 >= b.x1 - 1 && a.x1 <= b.x2 + 1;
+        let mut labels = vec![-1; runs.len()];
+        let mut next = 0;
+        for seed in 0..runs.len() {
+            if labels[seed] >= 0 {
+                continue;
+            }
+            labels[seed] = next;
+            let mut pending = vec![seed];
+            while let Some(index) = pending.pop() {
+                for other in 0..runs.len() {
+                    if labels[other] < 0 && touches(&runs[index], &runs[other]) {
+                        labels[other] = next;
+                        pending.push(other);
+                    }
+                }
+            }
+            next += 1;
+        }
+        labels
+    }
+
+    #[test]
+    fn row_sweep_labels_match_span_traversal() {
+        let mut state = 0x1234_5678_9abc_def1u64;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        for case in 0..400 {
+            let width = 1 + (next() % 90) as usize;
+            let height = 1 + (next() % 40) as usize;
+            let density = next() % 100;
+            let mut bitmap = BitImage::new(width as u32, height as u32).unwrap();
+            for y in 0..height {
+                // Skip some rows entirely so non-adjacent rows are exercised.
+                if next() % 7 == 0 {
+                    continue;
+                }
+                for x in 0..width {
+                    if next() % 100 < density {
+                        bitmap.set_usize(x, y, true);
+                    }
+                }
+            }
+            let mut image = CCImage::new(width as i32, height as i32, 300);
+            image.add_bitmap_runs(&bitmap);
+            image.make_ccids_by_analysis();
+            let expected = traversal_labels(&image.runs);
+            let actual: Vec<i32> = image.runs.iter().map(|run| run.ccid).collect();
+            assert_eq!(actual, expected, "case {case} {width}x{height}");
+        }
+    }
 }

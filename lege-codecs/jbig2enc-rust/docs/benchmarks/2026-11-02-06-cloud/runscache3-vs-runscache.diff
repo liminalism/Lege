@@ -1,0 +1,58 @@
+--- arith-runscache.rs	2026-11-02 05:42:40.268655802 +0000
++++ arith-runscache3.rs	2026-11-02 05:51:24.807872376 +0000
+@@ -195,7 +195,7 @@
+     registers: ArithRegisters,
+     context: Vec<u32>, // Packed bitmap state: table index in high16, cached Qe in low16.
+     int_ctx: [[usize; 512]; 13], // Contexts for integer encoding, storing CTBL indices
+-    iaid_ctx: Vec<usize>,        // Dynamically sized context tree for IAID symbols
++    iaid_ctx: Vec<usize>, // Dynamically sized context tree for IAID symbols
+     refinement_contexts: Vec<usize>, // Contexts for refinement region (GRTEMPLATE=0: 8192 states)
+ }
+ 
+@@ -1086,23 +1086,38 @@
+             return;
+         }
+         let next = self.encode_bit_renormalized(state_idx, d);
+-        *cached = ((next as u32) << 16)
+-            | crate::shared::mq_table::MQ_STATES[next].qe as u32;
++        *cached = ((next as u32) << 16) | crate::shared::mq_table::MQ_STATES[next].qe as u32;
+     }
+ 
+     /// Encode a known run in context zero without changing its per-bit model.
+-    #[inline]
+-    fn encode_zero_run(&mut self, state_idx: &mut u32, mut count: usize) {
+-        // Only the caller's single packed word is accepted: count * Qe and
+-        // 0x8000 + count * Qe fit u32 even for the largest probability estimate.
++    ///
++    /// Only the caller's single packed word is accepted: count * Qe and
++    /// 0x8000 + count * Qe fit u32 even for the largest probability estimate.
++    /// The inlined part is the common case, a whole run of MPS-zero steps that
++    /// leaves A normalized; everything else goes out of line so the pixel loop
++    /// this is inlined into stays small.
++    #[inline(always)]
++    fn encode_zero_run(&mut self, state_idx: &mut u32, count: usize) {
+         debug_assert!(count <= 32);
+         debug_assert!(self.a >= 0x8000);
++        let decrement = (*state_idx & 0xffff) * count as u32;
++        if (*state_idx >> 16) < 47 && self.a >= 0x8000 + decrement {
++            // No context state changes on this path; C advances by the same
++            // total interval as count individual MPS steps.
++            self.a -= decrement;
++            self.c = self.c.wrapping_add(decrement);
++            return;
++        }
++        self.encode_zero_run_slow(state_idx, count);
++    }
++
++    #[inline(never)]
++    fn encode_zero_run_slow(&mut self, state_idx: &mut u32, mut count: usize) {
+         while count != 0 {
+             let qe = *state_idx & 0xffff;
+             if (*state_idx >> 16) < 47 {
+                 let decrement = qe * count as u32;
+-                // Every skipped MPS must leave A normalized. No context state
+-                // changes on this path; C advances by the same total interval.
++                // Every skipped MPS must leave A normalized.
+                 if self.a >= 0x8000 + decrement {
+                     self.a -= decrement;
+                     self.c = self.c.wrapping_add(decrement);

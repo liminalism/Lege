@@ -1,0 +1,9 @@
+test result: ok. 2 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.12s
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.29s
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+test result: ok. 3 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.03s
+  Executable tests/symbol_speed.rs (target/release/deps/symbol_speed-4013397b5cc5d476)
+pair 2 {'text_lossless_max': 0.828, 'text_lossless': 1.059}
+{"preset": "text_lossless_max", "scope": "page", "base_median_s_per_page": 0.440921, "cand_median_s_per_page": 0.361141, "median_ratio": 0.8284760615723429, "min": 0.7888964082739389, "max": 0.8428743471052638, "bytes_and_hash_identical": true}
+{"preset": "text_lossless", "scope": "page", "base_median_s_per_page": 0.021494, "cand_median_s_per_page": 0.023168, "median_ratio": 1.0590057671226347, "min": 1.0270591341077084, "max": 1.0778821996836327, "bytes_and_hash_identical": true}

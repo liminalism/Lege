@@ -1,0 +1,10 @@
+pprof inclusive sample shares, text_lossless(), scan corpus, per page, 3 rounds, taskset -c 2,
+committed tree 47c4d7c with the profiling feature (247 samples; indicative only)
+ 66.8% flush_pdf_split
+ 50.6% encode_symbol_dict_with_order (generic coding of symbol bitmaps: 50.2%)
+ 26.3% analyze_page
+ 11.3%   make_ccids_by_analysis
+  7.7%   make_ccs_from_ccids
+  7.3%   add_bitmap_runs
+  3.2%   get_bitmap_for_cc
+ 11.3% encode_text_region_mapped

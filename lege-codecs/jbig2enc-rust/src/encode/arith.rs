@@ -191,16 +191,18 @@ const fn build_base() -> [State; 47] {
 const NUM_REFINEMENT_CONTEXTS: usize = 1 << 13; // 8192 for GRTEMPLATE=0 (13-bit context)
 /// Initial index into CTBL for new contexts, typically 0 (MPS=0, Qe=0x5601).
 
+#[derive(Clone)]
 pub struct Jbig2ArithCoder {
     registers: ArithRegisters,
-    context: Vec<usize>,
+    context: Vec<u32>, // Packed bitmap state: table index in high16, cached Qe in low16.
     int_ctx: [[usize; 512]; 13], // Contexts for integer encoding, storing CTBL indices
-    iaid_ctx: Vec<usize>,        // Dynamically sized context tree for IAID symbols
+    iaid_ctx: Vec<usize>, // Dynamically sized context tree for IAID symbols
     refinement_contexts: Vec<usize>, // Contexts for refinement region (GRTEMPLATE=0: 8192 states)
 }
 
 // Separate arithmetic state and bitmap statistics so the generic loop can borrow
 // them independently; neither can alias the other through the coder handle.
+#[derive(Clone)]
 struct ArithRegisters {
     // Native-width storage avoids overlapping narrow stores and widened loads.
     // Every update preserves the original 16-bit arithmetic semantics.
@@ -275,7 +277,7 @@ impl Jbig2ArithCoder {
     pub fn as_bytes(&self) -> &[u8] {
         &self.registers.data
     }
-    const INITIAL_STATE: usize = 0;
+    const INITIAL_STATE: u32 = crate::shared::mq_table::MQ_STATES[0].qe as u32;
 
     /// Creates a new arithmetic encoder with initial state.
     pub fn new() -> Self {
@@ -362,8 +364,7 @@ impl Jbig2ArithCoder {
     /// Encodes a single bit `d` in the given context `ctx`.
     #[inline(always)]
     pub fn encode_bit(&mut self, ctx: usize, d: bool) {
-        let next_state = self.encode_bit_with_state_idx(self.context[ctx], d);
-        self.context[ctx] = next_state;
+        self.registers.encode_bitmap_bit(&mut self.context[ctx], d);
     }
 
     /// Encodes an integer `v` of `bits` width using a specific context `ctx`.
@@ -673,7 +674,7 @@ impl Jbig2ArithCoder {
         #[cfg(debug_assertions)]
         let mut last_reported_progress = -1;
 
-        let contexts: &mut [usize; JBIG2_MAX_CTX] = self.context.as_mut_slice().try_into().unwrap();
+        let contexts: &mut [u32; JBIG2_MAX_CTX] = self.context.as_mut_slice().try_into().unwrap();
         let registers = &mut self.registers;
         for y in 0..height {
             #[cfg(debug_assertions)]
@@ -751,7 +752,7 @@ impl Jbig2ArithCoder {
                 for _ in 0..count {
                     let pixel = (pixels >> 31) as u16;
                     let state = &mut contexts[context as usize];
-                    *state = registers.encode_bit_with_state_idx(*state, pixel != 0);
+                    registers.encode_bitmap_bit(state, pixel != 0);
                     #[cfg(debug_assertions)]
                     {
                         *context_distribution.entry(context as usize).or_insert(0) += 1;
@@ -888,53 +889,139 @@ impl Jbig2ArithCoder {
         // reference pixel and omits the target AT pixel, which mismatches jbig2dec's
         // context (blank decode + arithmetic desync).
 
-        let grat_x = grat.first().map_or(-1i8, |g| g.0);
-        let grat_y = grat.first().map_or(-1i8, |g| g.1);
-
-        for y in 0..target.height as i32 {
-            for x in 0..target.width as i32 {
-                // Reference center for this target pixel
-                let rx = x - grdx;
-                let ry = y - grdy;
-
-                let mut cx: usize = 0;
-
-                // Reference pixels (bits 0-5, 7-9)
-                cx |= reference.get_pixel_safely(rx - 1, ry - 1) as usize;
-                cx |= (reference.get_pixel_safely(rx, ry - 1) as usize) << 1;
-                cx |= (reference.get_pixel_safely(rx + 1, ry - 1) as usize) << 2;
-                cx |= (reference.get_pixel_safely(rx - 1, ry) as usize) << 3;
-                cx |= (reference.get_pixel_safely(rx, ry) as usize) << 4;
-                cx |= (reference.get_pixel_safely(rx + 1, ry) as usize) << 5;
-
-                // Target pixel (bit 6) — left neighbor, already coded
-                cx |= (target.get_pixel_safely(x - 1, y) as usize) << 6;
-
-                // Reference lower row (bits 7-9)
-                cx |= (reference.get_pixel_safely(rx - 1, ry + 1) as usize) << 7;
-                cx |= (reference.get_pixel_safely(rx, ry + 1) as usize) << 8;
-                cx |= (reference.get_pixel_safely(rx + 1, ry + 1) as usize) << 9;
-
-                // Target pixels (bits 10-11) — above, already coded
-                cx |= (target.get_pixel_safely(x + 1, y - 1) as usize) << 10;
-                cx |= (target.get_pixel_safely(x, y - 1) as usize) << 11;
-
-                // Adaptive template pixel GRAT1 from the target/GRREG bitmap (bit 12).
-                if template == 0 {
-                    cx |= (target.get_pixel_safely(x + grat_x as i32, y + grat_y as i32) as usize)
-                        << 12;
+        let grat_x = grat.first().map_or(-1i32, |g| i32::from(g.0));
+        let grat_y = grat.first().map_or(-1i32, |g| i32::from(g.1));
+        // With the nominal AT the 13th pixel is target(x-1, y-1), which is the
+        // bit 11 value of the previous column; any other AT is read per pixel.
+        let nominal_at = template == 0 && grat_x == -1 && grat_y == -1;
+        let (target_width, target_height) = (target.width, target.height);
+        let reference_width = reference.width;
+        let target_row = |y: i32| -> Option<&[u32]> {
+            ((y as u32) < target_height as u32).then(|| target.row_words(y as usize))
+        };
+        let reference_row = |y: i32| -> Option<&[u32]> {
+            ((y as u32) < reference.height as u32).then(|| reference.row_words(y as usize))
+        };
+        // Zero outside the bitmap, exactly like `get_pixel_safely`.
+        #[inline(always)]
+        fn bit(row: Option<&[u32]>, width: usize, x: i32) -> usize {
+            match row {
+                Some(words) if (x as u32) < width as u32 => {
+                    ((words[(x >> 5) as usize] >> (31 - (x & 31))) & 1) as usize
                 }
+                _ => 0,
+            }
+        }
 
-                let pixel = target.get_pixel_safely(x, y) != 0;
+        for y in 0..target_height as i32 {
+            let ry = y.wrapping_sub(grdy);
+            let above = reference_row(ry.wrapping_sub(1));
+            let middle = reference_row(ry);
+            let below = reference_row(ry.wrapping_add(1));
+            let target_above = target_row(y.wrapping_sub(1));
+            let target_at = target_row(y.wrapping_add(grat_y));
+            let row = target_row(y);
+
+            // Three-pixel reference windows: bit 0 is rx-1, bit 2 is rx+1.
+            // They slide right by one pixel per column, like the generic
+            // kernel's context, so each column reads only the incoming bits.
+            let rx = 0i32.wrapping_sub(grdx);
+            let window = |line: Option<&[u32]>| -> usize {
+                bit(line, reference_width, rx.wrapping_sub(1))
+                    | (bit(line, reference_width, rx) << 1)
+                    | (bit(line, reference_width, rx.wrapping_add(1)) << 2)
+            };
+            let mut window_above = window(above);
+            let mut window_middle = window(middle);
+            let mut window_below = window(below);
+            // Target row above: bit 1 is target(x, y-1), bit 0 is target(x+1, y-1).
+            let mut coded_above =
+                (bit(target_above, target_width, 0) << 1) | bit(target_above, target_width, 1);
+            let mut left = 0usize; // target(x-1, y), already coded
+            let mut at_previous = 0usize; // target(x-1, y-1) for the nominal AT
+
+            for x in 0..target_width as i32 {
+                let at = if nominal_at {
+                    at_previous
+                } else if template == 0 {
+                    bit(target_at, target_width, x.wrapping_add(grat_x))
+                } else {
+                    0
+                };
+                let cx = window_above
+                    | (window_middle << 3)
+                    | (left << 6)
+                    | (window_below << 7)
+                    | (coded_above << 10)
+                    | (at << 12);
+                let pixel = bit(row, target_width, x) != 0;
 
                 // Encode using the dedicated refinement context array
                 let next_state =
                     self.encode_bit_with_state_idx(self.refinement_contexts[cx], pixel);
                 self.refinement_contexts[cx] = next_state;
+
+                let rx = x.wrapping_sub(grdx).wrapping_add(2);
+                at_previous = coded_above >> 1;
+                left = pixel as usize;
+                window_above = (window_above >> 1) | (bit(above, reference_width, rx) << 2);
+                window_middle = (window_middle >> 1) | (bit(middle, reference_width, rx) << 2);
+                window_below = (window_below >> 1) | (bit(below, reference_width, rx) << 2);
+                coded_above = ((coded_above << 1) & 0b11)
+                    | bit(target_above, target_width, x.wrapping_add(2));
             }
         }
 
         Ok(())
+    }
+
+    /// The per-pixel context formation the windowed coder replaced. Test
+    /// oracle only: thirteen bounded reads per pixel.
+    #[cfg(test)]
+    pub(crate) fn encode_refinement_region_reference(
+        &mut self,
+        target: &crate::jbig2sym::BitImage,
+        reference: &crate::jbig2sym::BitImage,
+        grdx: i32,
+        grdy: i32,
+        template: u8,
+        grat: &[(i8, i8)],
+    ) {
+        let grat_x = grat.first().map_or(-1i8, |g| g.0);
+        let grat_y = grat.first().map_or(-1i8, |g| g.1);
+        for y in 0..target.height as i32 {
+            for x in 0..target.width as i32 {
+                let rx = x.wrapping_sub(grdx);
+                let ry = y.wrapping_sub(grdy);
+                let mut cx: usize = 0;
+                cx |= reference.get_pixel_safely(rx.wrapping_sub(1), ry.wrapping_sub(1)) as usize;
+                cx |= (reference.get_pixel_safely(rx, ry.wrapping_sub(1)) as usize) << 1;
+                cx |= (reference.get_pixel_safely(rx.wrapping_add(1), ry.wrapping_sub(1)) as usize)
+                    << 2;
+                cx |= (reference.get_pixel_safely(rx.wrapping_sub(1), ry) as usize) << 3;
+                cx |= (reference.get_pixel_safely(rx, ry) as usize) << 4;
+                cx |= (reference.get_pixel_safely(rx.wrapping_add(1), ry) as usize) << 5;
+                cx |= (target.get_pixel_safely(x.wrapping_sub(1), y) as usize) << 6;
+                cx |= (reference.get_pixel_safely(rx.wrapping_sub(1), ry.wrapping_add(1)) as usize)
+                    << 7;
+                cx |= (reference.get_pixel_safely(rx, ry.wrapping_add(1)) as usize) << 8;
+                cx |= (reference.get_pixel_safely(rx.wrapping_add(1), ry.wrapping_add(1)) as usize)
+                    << 9;
+                cx |= (target.get_pixel_safely(x + 1, y - 1) as usize) << 10;
+                cx |= (target.get_pixel_safely(x, y - 1) as usize) << 11;
+                if template == 0 {
+                    cx |= (target.get_pixel_safely(
+                        x.wrapping_add(grat_x as i32),
+                        y.wrapping_add(grat_y as i32),
+                    ) as usize)
+                        << 12;
+                }
+                let pixel = target.get_pixel_safely(x, y) != 0;
+                let next_state =
+                    self.encode_bit_with_state_idx(self.refinement_contexts[cx], pixel);
+                self.refinement_contexts[cx] = next_state;
+            }
+        }
     }
 
     /// Resets only the refinement contexts, keeping other state intact.
@@ -1053,16 +1140,29 @@ impl ArithRegisters {
         self.encode_bit_renormalized(state_idx, d)
     }
 
+    #[inline(always)]
+    fn encode_bitmap_bit(&mut self, cached: &mut u32, d: bool) {
+        let state_idx = (*cached >> 16) as usize;
+        let qe = *cached & 0xffff;
+        self.a = self.a.wrapping_sub(qe) & 0xffff;
+        if d == (state_idx >= 47) && self.a >= 0x8000 {
+            self.c = self.c.wrapping_add(qe);
+            return;
+        }
+        let next = self.encode_bit_renormalized(state_idx, d);
+        *cached = ((next as u32) << 16) | crate::shared::mq_table::MQ_STATES[next].qe as u32;
+    }
+
     /// Encode a known run in context zero without changing its per-bit model.
     #[inline]
-    fn encode_zero_run(&mut self, state_idx: &mut usize, mut count: usize) {
+    fn encode_zero_run(&mut self, state_idx: &mut u32, mut count: usize) {
         // Only the caller's single packed word is accepted: count * Qe and
         // 0x8000 + count * Qe fit u32 even for the largest probability estimate.
         debug_assert!(count <= 32);
         debug_assert!(self.a >= 0x8000);
         while count != 0 {
-            let qe = crate::shared::mq_table::MQ_STATES[*state_idx].qe as u32;
-            if *state_idx < 47 {
+            let qe = *state_idx & 0xffff;
+            if (*state_idx >> 16) < 47 {
                 let decrement = qe * count as u32;
                 // Every skipped MPS must leave A normalized. No context state
                 // changes on this path; C advances by the same total interval.
@@ -1076,7 +1176,7 @@ impl ArithRegisters {
                 self.c = self.c.wrapping_add(qe * normalized as u32);
                 count -= normalized;
             }
-            *state_idx = self.encode_bit_with_state_idx(*state_idx, false);
+            self.encode_bitmap_bit(state_idx, false);
             count -= 1;
         }
     }
@@ -1113,5 +1213,141 @@ impl ArithRegisters {
             }
         }
         next_state
+    }
+}
+
+#[cfg(test)]
+mod refinement_window_tests {
+    use super::Jbig2ArithCoder;
+    use crate::jbig2sym::BitImage;
+
+    fn random_image(seed: &mut u64, width: u32, height: u32, density: u64) -> BitImage {
+        let mut image = BitImage::new(width, height).unwrap();
+        for y in 0..height as usize {
+            for x in 0..width as usize {
+                *seed = seed
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
+                if (*seed >> 33) % 8 < density {
+                    image.set_usize(x, y, true);
+                }
+            }
+        }
+        image
+    }
+
+    #[test]
+    fn windowed_refinement_contexts_match_per_pixel_reference() {
+        let mut seed = 0x5eed_c0de_u64;
+        let ats: [&[(i8, i8)]; 5] = [&[(-1, -1)], &[(2, -2)], &[(-3, 1)], &[(0, -1)], &[]];
+        for case in 0..400u32 {
+            seed = seed.wrapping_add(u64::from(case));
+            let width = 1 + (seed >> 20) as u32 % 70;
+            let height = 1 + (seed >> 27) as u32 % 24;
+            let ref_width = 1 + (seed >> 34) as u32 % 70;
+            let ref_height = 1 + (seed >> 41) as u32 % 24;
+            let target = random_image(&mut seed, width, height, 1 + case as u64 % 7);
+            let reference =
+                random_image(&mut seed, ref_width, ref_height, 1 + (case / 7) as u64 % 7);
+            let (grdx, grdy) = match case % 5 {
+                0 => (0, 0),
+                1 => ((seed >> 5) as i32 % 9 - 4, (seed >> 9) as i32 % 9 - 4),
+                2 => (-(ref_width as i32) - 3, ref_height as i32 + 2),
+                3 => (i32::MAX - 1, i32::MIN + 1),
+                _ => (
+                    (seed >> 13) as i32 % 150 - 75,
+                    (seed >> 21) as i32 % 60 - 30,
+                ),
+            };
+            let template = (case % 3 == 2) as u8;
+            let grat = ats[case as usize % ats.len()];
+            let mut expected = Jbig2ArithCoder::new();
+            expected.encode_refinement_region_reference(
+                &target, &reference, grdx, grdy, template, grat,
+            );
+            expected.flush(true);
+            let mut actual = Jbig2ArithCoder::new();
+            actual
+                .encode_refinement_region(&target, &reference, grdx, grdy, template, grat)
+                .unwrap();
+            actual.flush(true);
+            assert_eq!(
+                actual.as_bytes(),
+                expected.as_bytes(),
+                "case {case}: {width}x{height} vs {ref_width}x{ref_height}, grd=({grdx},{grdy}), template {template}, grat {grat:?}"
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod refinement_window_timing {
+    use super::Jbig2ArithCoder;
+    use crate::jbig2sym::BitImage;
+
+    fn glyph(seed: &mut u64, width: u32, height: u32) -> BitImage {
+        let mut image = BitImage::new(width, height).unwrap();
+        for y in 0..height as usize {
+            for x in 0..width as usize {
+                *seed = seed
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
+                if (*seed >> 33).is_multiple_of(3) {
+                    image.set_usize(x, y, true);
+                }
+            }
+        }
+        image
+    }
+
+    /// `cargo test --release --lib refinement_window_timing -- --ignored --nocapture`
+    #[test]
+    #[ignore = "timing comparison of the windowed and per-pixel refinement coders"]
+    fn windowed_versus_per_pixel_refinement_time() {
+        let mut seed = 7u64;
+        // Realistic pairs: the target is the reference with about 2% of its
+        // pixels flipped, which is what a refined instance looks like.
+        let pairs: Vec<(BitImage, BitImage)> = (0..2000)
+            .map(|_| {
+                let reference = glyph(&mut seed, 31, 37);
+                let mut target = reference.clone();
+                for y in 0..37 {
+                    for x in 0..31 {
+                        seed = seed
+                            .wrapping_mul(6364136223846793005)
+                            .wrapping_add(1442695040888963407);
+                        if (seed >> 33).is_multiple_of(50) {
+                            target.set_usize(x, y, !target.get_usize(x, y));
+                        }
+                    }
+                }
+                (target, reference)
+            })
+            .collect();
+        let pixels = pairs.len() * 31 * 37;
+        for round in 0..10 {
+            let start = std::time::Instant::now();
+            let mut coder = Jbig2ArithCoder::new();
+            for (target, reference) in &pairs {
+                coder
+                    .encode_refinement_region(target, reference, 0, 0, 0, &[(-1, -1)])
+                    .unwrap();
+            }
+            let windowed = start.elapsed();
+            let bytes = coder.as_bytes().len();
+            let start = std::time::Instant::now();
+            let mut coder = Jbig2ArithCoder::new();
+            for (target, reference) in &pairs {
+                coder.encode_refinement_region_reference(target, reference, 0, 0, 0, &[(-1, -1)]);
+            }
+            let reference = start.elapsed();
+            assert_eq!(bytes, coder.as_bytes().len());
+            eprintln!(
+                "round {round}: windowed {:.2} ns/px, per-pixel {:.2} ns/px, ratio {:.3}",
+                windowed.as_nanos() as f64 / pixels as f64,
+                reference.as_nanos() as f64 / pixels as f64,
+                windowed.as_secs_f64() / reference.as_secs_f64()
+            );
+        }
     }
 }

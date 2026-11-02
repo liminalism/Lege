@@ -1,0 +1,10 @@
+baseline noise1 I refs: 1,959,884,695|D1 misses: 23,314,597 ( 23,175,644 rd + 138,953 wr)|Mispredicts: 30,126,098 ( 30,125,193 cond + 905 ind) out=8252c690333f
+cache noise1 I refs: 2,060,942,201|D1 misses: 21,018,832 ( 20,865,544 rd + 153,288 wr)|Mispredicts: 29,949,874 ( 29,948,970 cond + 904 ind) out=8252c690333f
+runs noise1 I refs: 2,109,239,193|D1 misses: 23,313,597 ( 23,174,638 rd + 138,959 wr)|Mispredicts: 30,506,061 ( 30,505,161 cond + 900 ind) out=8252c690333f
+runscache noise1 I refs: 2,180,563,203|D1 misses: 21,018,844 ( 20,865,548 rd + 153,296 wr)|Mispredicts: 30,294,450 ( 30,293,544 cond + 906 ind) out=8252c690333f
+renorm noise1 I refs: 2,313,728,730|D1 misses: 23,314,541 ( 23,175,573 rd + 138,968 wr)|Mispredicts: 25,878,231 ( 25,877,332 cond + 899 ind) out=8252c690333f
+baseline checker1 I refs: 1,014,069,080|D1 misses: 103,187 ( 70,833 rd + 32,354 wr)|Mispredicts: 827,737 ( 826,831 cond + 906 ind) out=cab4c6ae7eb4
+cache checker1 I refs: 914,226,746|D1 misses: 118,546 ( 70,826 rd + 47,720 wr)|Mispredicts: 827,828 ( 826,922 cond + 906 ind) out=cab4c6ae7eb4
+runs checker1 I refs: 1,208,076,461|D1 misses: 103,177 ( 70,818 rd + 32,359 wr)|Mispredicts: 827,908 ( 827,016 cond + 892 ind) out=cab4c6ae7eb4
+runscache checker1 I refs: 1,056,171,488|D1 misses: 118,543 ( 70,826 rd + 47,717 wr)|Mispredicts: 827,792 ( 826,886 cond + 906 ind) out=cab4c6ae7eb4
+renorm checker1 I refs: 1,014,094,951|D1 misses: 103,192 ( 70,835 rd + 32,357 wr)|Mispredicts: 827,803 ( 826,903 cond + 900 ind) out=cab4c6ae7eb4

@@ -9,9 +9,25 @@ no 0.6.0 publication is implied.
 
 - Faster generic encoding through packed-word context windows, native-width
   arithmetic-register storage, blank-span batching and deferred transition-table
-  loads. These optimizations preserve the existing generic stream bytes.
+  loads. A re-run on an unloaded machine then retained one further change:
+  each bitmap context caches its probability estimate next to its state
+  index, which halves the context bank and removes the table read from the
+  common path. All of these optimizations preserve the existing generic
+  stream bytes.
 - Explicit pixel-exact symbol presets retain isolated marks; legacy text and
   unify presets remain lossy and retain their settings.
+- Symbol-mode encoding is about three times faster for `text()`, unify and the
+  measured exact preset, and about 1.7 times faster for `text_lossless()`, on
+  text pages: run-based hole counting, word-level bitmap helpers, ink-count
+  bounds that settle most clustering and unify comparisons without a search,
+  a single-sweep component labelling, and a trial memo in the measured
+  planner. A follow-up adds dictionary prefix checkpoints and a text-region
+  payload memo to that planner (about a quarter faster together), runs
+  unify's context similarity only after the bitmap screens (about 40%
+  faster in document scope) and forms refinement contexts from sliding
+  windows. Every stream stays byte-identical; an ignored
+  `symbol_speed` timing worker reproduces the measurement. See
+  [symbol-mode speed](docs/SYMBOL-SPEED.md).
 - Optional residual packing, selective global/local PDF dictionaries and bounded
   measured planning compare actual encoded sizes. Safe lossy substitution uses
   topology safeguards; exact presets preserve the supplied bilevel pixels.
@@ -29,6 +45,19 @@ no 0.6.0 publication is implied.
   require changes to exhaustive downstream struct literals; prefer constructors
   or struct-update syntax. See [API compatibility](docs/API-COMPATIBILITY.md).
 
+### Packaging
+
+- The Python binding (`jbig2enc` on PyPI) moves into the crate as the
+  `python` Cargo feature (`src/python.rs`), with its wheel metadata, stubs
+  and tests under `python/`. Both ship in the crates.io package, so the
+  published source carries the Rust and Python APIs. pyo3 is an optional
+  dependency; `extension-module` is enabled only by maturin for the wheel.
+  The wheel's license declaration now matches the crate (`MIT AND
+  Apache-2.0`).
+- The README is rewritten around capabilities, usage, fidelity contracts,
+  features, compatibility and licensing; timing numbers live in the linked
+  reports.
+
 ### Licensing and testing
 
 - Replace the DjVu-derived component extractor and inherited tests. Project
@@ -43,5 +72,6 @@ no 0.6.0 publication is implied.
 
 Performance numbers in the linked reports are corpus/compiler-specific generic
 kernel measurements, not a universal whole-application speed promise. See
-[hardware-profiled results](docs/GENERIC-PERF-FOLLOWUP.md) and the bounded 0.6
-headroom assessment under docs for this final pass.
+[hardware-profiled results](docs/GENERIC-PERF-FOLLOWUP.md), the bounded 0.6
+[headroom assessment](docs/GENERIC-06-HEADROOM.md) and its
+[cloud re-run](docs/GENERIC-06-CLOUD.md).

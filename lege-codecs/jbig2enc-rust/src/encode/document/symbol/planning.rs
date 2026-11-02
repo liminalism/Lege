@@ -424,19 +424,20 @@ impl<'a> Jbig2Encoder<'a> {
             }
 
             let local_symbols = &page_local_symbols[page_num];
-            let page_local_gain: i64 = local_symbols
-                .iter()
-                .map(|&symbol_index| self.estimate_local_symbol_gain(page, symbol_index))
-                .sum();
-            let uses_only_locals = page.symbol_instances.iter().all(|inst| {
-                !global_set.contains(&inst.symbol_index)
-                    && !page_residual_anchor_remaps[page_num].contains_key(&inst.symbol_index)
-                    && !page_residual_symbols[page_num].contains(&inst.symbol_index)
-            });
-            if uses_only_locals
-                && local_symbols.len() <= 2
+            // Only a page with at most two instances can fall back here, so
+            // test that before the per-symbol gain scan over all instances.
+            if local_symbols.len() <= 2
                 && page.symbol_instances.len() <= 2
-                && page_local_gain <= 0
+                && page.symbol_instances.iter().all(|inst| {
+                    !global_set.contains(&inst.symbol_index)
+                        && !page_residual_anchor_remaps[page_num].contains_key(&inst.symbol_index)
+                        && !page_residual_symbols[page_num].contains(&inst.symbol_index)
+                })
+                && local_symbols
+                    .iter()
+                    .map(|&symbol_index| self.estimate_local_symbol_gain(page, symbol_index))
+                    .sum::<i64>()
+                    <= 0
             {
                 page_local_symbols[page_num].clear();
                 page_uses_generic_region[page_num] = true;
@@ -1680,14 +1681,9 @@ impl<'a> Jbig2Encoder<'a> {
             let mut local_refinement_map = vec![None; self.global_symbols.len()];
             let num_local_dict_symbols = if let Some(local_dict_layout) = &layout.local_dict_layout
             {
-                let refs: Vec<&BitImage> = layout
-                    .local_symbols
-                    .iter()
-                    .map(|&i| &self.global_symbols[i])
-                    .collect();
                 let dict_start = Instant::now();
                 let encoded_local_dict =
-                    encode_symbol_dictionary_segments(&refs, self.config, local_dict_layout)?;
+                    self.symbol_dictionary_for(&layout.local_symbols, local_dict_layout)?;
                 symbol_dict_time += dict_start.elapsed();
 
                 for (refs_idx, &dict_pos) in
@@ -1824,27 +1820,44 @@ impl<'a> Jbig2Encoder<'a> {
                         && (self.config.text_refine
                             || self.config.refine
                             || needs_family_refinement));
-                let region_payload = if use_refinement_text_region {
-                    encode_text_region_with_refinement(
-                        &planned_instances,
-                        self.config,
-                        &self.global_symbols,
-                        global_sym_to_dict_pos,
-                        num_global_dict_symbols,
-                        &local_sym_to_dict_pos,
-                        num_local_dict_symbols,
-                    )?
+                // Within one measured planning call the same page is coded
+                // with the same positions by several trials; the memo returns
+                // the earlier payload for an identical input.
+                let memo_key = super::memo::TextRegionKey::new(
+                    layout.page_index,
+                    use_refinement_text_region,
+                    num_global_dict_symbols + num_local_dict_symbols,
+                    &planned_instances,
+                    global_sym_to_dict_pos,
+                    &local_sym_to_dict_pos,
+                );
+                let region_payload = if let Some(payload) = self.cached_text_region(&memo_key) {
+                    payload
                 } else {
-                    encode_text_region_mapped(
-                        &planned_instances,
-                        self.config,
-                        &self.global_symbols,
-                        global_sym_to_dict_pos,
-                        num_global_dict_symbols,
-                        &local_sym_to_dict_pos,
-                        layout.page_index,
-                        num_local_dict_symbols,
-                    )?
+                    let payload = if use_refinement_text_region {
+                        encode_text_region_with_refinement(
+                            &planned_instances,
+                            self.config,
+                            &self.global_symbols,
+                            global_sym_to_dict_pos,
+                            num_global_dict_symbols,
+                            &local_sym_to_dict_pos,
+                            num_local_dict_symbols,
+                        )?
+                    } else {
+                        encode_text_region_mapped(
+                            &planned_instances,
+                            self.config,
+                            &self.global_symbols,
+                            global_sym_to_dict_pos,
+                            num_global_dict_symbols,
+                            &local_sym_to_dict_pos,
+                            layout.page_index,
+                            num_local_dict_symbols,
+                        )?
+                    };
+                    self.remember_text_region(memo_key, &payload);
+                    payload
                 };
                 text_region_time += text_start.elapsed();
 
@@ -1884,8 +1897,7 @@ impl<'a> Jbig2Encoder<'a> {
             resources.generic_instances = page.symbol_instances.len();
             resources.generic_source_ink_pixels = page.image.count_ones() as u64;
             let generic_start = Instant::now();
-            let generic_region_payload =
-                self.encode_generic_region_payload_at(&page.image, 0, 0)?;
+            let generic_region_payload = self.page_generic_payload(layout.page_index)?;
             generic_region_time += generic_start.elapsed();
 
             page_segments.push(Segment {

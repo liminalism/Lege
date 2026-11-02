@@ -7,7 +7,7 @@ name = "jbig2enc"
 requires-python = ">=3.11"
 description = "JBIG2 encoder for bilevel images, with PDF-embeddable output"
 readme = "README.md"
-license = { text = "MIT OR Apache-2.0" }
+license = { text = "MIT AND Apache-2.0" }
 keywords = ["jbig2", "compression", "pdf", "bilevel", "scan"]
 classifiers = [
     "Programming Language :: Rust",
@@ -22,8 +22,16 @@ Repository = "https://github.com/liminalism/lege"
 Source = "https://github.com/liminalism/lege/tree/main/lege-codecs/jbig2enc-rust"
 
 [tool.maturin]
-# One wheel per platform, importable by CPython 3.9 and up.
-features = ["pyo3/extension-module"]
+# The extension is the `python` feature of the crate one directory up; its
+# manifest keeps `extension-module` off so Rust consumers can link
+# executables, and maturin turns it on here for the wheel only.
+bindings = "pyo3"
+manifest-path = "../Cargo.toml"
+module-name = "jbig2enc"
+features = ["python", "pyo3/extension-module"]
+# The encoder is the whole point of the wheel; LTO is worth the build time
+# because it is paid once per release, not per iteration.
+profile = "release"
 strip = true
 # `jbig2enc.pyi` and `py.typed` are picked up automatically and placed inside
 # the package; listing them under `include` as well only duplicates them at

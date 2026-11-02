@@ -1,0 +1,29 @@
+--- arith-runscache.rs	2026-11-02 05:42:40.268655802 +0000
++++ arith-runscache2.rs	2026-11-02 05:49:05.969138710 +0000
+@@ -195,7 +195,7 @@
+     registers: ArithRegisters,
+     context: Vec<u32>, // Packed bitmap state: table index in high16, cached Qe in low16.
+     int_ctx: [[usize; 512]; 13], // Contexts for integer encoding, storing CTBL indices
+-    iaid_ctx: Vec<usize>,        // Dynamically sized context tree for IAID symbols
++    iaid_ctx: Vec<usize>, // Dynamically sized context tree for IAID symbols
+     refinement_contexts: Vec<usize>, // Contexts for refinement region (GRTEMPLATE=0: 8192 states)
+ }
+ 
+@@ -1086,12 +1086,14 @@
+             return;
+         }
+         let next = self.encode_bit_renormalized(state_idx, d);
+-        *cached = ((next as u32) << 16)
+-            | crate::shared::mq_table::MQ_STATES[next].qe as u32;
++        *cached = ((next as u32) << 16) | crate::shared::mq_table::MQ_STATES[next].qe as u32;
+     }
+ 
+     /// Encode a known run in context zero without changing its per-bit model.
+-    #[inline]
++    // Out of line: inlined into the middle of the pixel loop it raises register
++    // pressure on the per-pixel path, which costs more on dense pages than the
++    // call costs on runs (one call per run, amortized over its pixels).
++    #[inline(never)]
+     fn encode_zero_run(&mut self, state_idx: &mut u32, mut count: usize) {
+         // Only the caller's single packed word is accepted: count * Qe and
+         // 0x8000 + count * Qe fit u32 even for the largest probability estimate.

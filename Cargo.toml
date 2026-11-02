@@ -40,16 +40,12 @@ members = [
 #   lege-pdf/pdf-integrity   — nested forensic-triage workspace (own lockfile)
 #   lege-docwrite            — retained migration copy; active reader and
 #                              writer live in the sibling ../liminaldoc workspace
-#   lege-misc/bindings/jbig2enc-py — pyo3 extension module; `extension-module`
-#                              leaves Python symbols unresolved until import,
-#                              which breaks any plain `cargo build` that links
-#                              an executable. Built with maturin, not cargo.
-#                              The C ABI binding next to it has no such
-#                              constraint and is a normal member below.
+#   (The jbig2enc Python wheel is the `python` feature of lege-codecs/
+#   jbig2enc-rust, built with maturin from its python/ directory; the C ABI
+#   binding under lege-misc/bindings is a normal member below.)
 exclude = [
     "freya-main",
     "lege-codecs",
-    "lege-misc/bindings/jbig2enc-py",
     "lege-pdf/pdf-integrity",
     "lege-docwrite",
 ]

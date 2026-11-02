@@ -43,7 +43,7 @@ impl<'a> Jbig2Encoder<'a> {
                     page_association_type: 0,
                     referred_to: Vec::new(),
                     page: Some(page_number),
-                    payload: self.encode_generic_region_payload_at(&bitmap, x, y)?,
+                    payload: self.region_generic_payload(&bitmap, x, y)?,
                 });
             }
         }

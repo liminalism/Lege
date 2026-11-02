@@ -3,13 +3,13 @@ name: jbig2enc-py
 on:
   pull_request:
     paths:
-      - "lege-misc/bindings/jbig2enc-py/**"
+      - "lege-codecs/jbig2enc-rust/python/**"
       - "lege-codecs/jbig2enc-rust/**"
       - ".github/workflows/jbig2enc-py.yml"
   push:
     branches: [main]
     paths:
-      - "lege-misc/bindings/jbig2enc-py/**"
+      - "lege-codecs/jbig2enc-rust/python/**"
       - "lege-codecs/jbig2enc-rust/**"
       - ".github/workflows/jbig2enc-py.yml"
   # Publishing is manual and deliberate: a wheel on PyPI is not retractable.
@@ -25,7 +25,7 @@ permissions:
 
 defaults:
   run:
-    working-directory: lege-misc/bindings/jbig2enc-py
+    working-directory: lege-codecs/jbig2enc-rust/python
 
 jobs:
   test:
@@ -48,7 +48,7 @@ jobs:
       - name: Run the test suite
         run: pytest tests -v
       - name: Lint
-        run: cargo clippy --release -- -D warnings
+        run: cargo clippy --manifest-path ../Cargo.toml --release --features python -- -D warnings
 
   abi3-compatibility:
     # The wheel claims cp311-abi3, so it must import on newer interpreters
@@ -103,11 +103,11 @@ jobs:
           # manylinux only applies to the Linux runners; it is ignored
           # elsewhere.
           manylinux: auto
-          working-directory: lege-misc/bindings/jbig2enc-py
+          working-directory: lege-codecs/jbig2enc-rust/python
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-${{ matrix.platform.runner }}-${{ matrix.platform.target }}
-          path: lege-misc/bindings/jbig2enc-py/dist
+          path: lege-codecs/jbig2enc-rust/python/dist
 
   sdist:
     name: sdist
@@ -119,11 +119,11 @@ jobs:
         with:
           command: sdist
           args: --out dist
-          working-directory: lege-misc/bindings/jbig2enc-py
+          working-directory: lege-codecs/jbig2enc-rust/python
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-sdist
-          path: lege-misc/bindings/jbig2enc-py/dist
+          path: lege-codecs/jbig2enc-rust/python/dist
 
   publish:
     name: publish to PyPI

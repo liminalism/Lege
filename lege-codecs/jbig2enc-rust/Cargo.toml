@@ -14,7 +14,10 @@ keywords = ["jbig2", "encoder", "compression", "image", "pdf"]
 categories = ["multimedia::encoding", "multimedia::images"]
 # Old external scan inputs stay in the checkout for the explicit legacy hash
 # gate, but are not distributed. Default tests use generated original fixtures.
-include = ["Cargo.toml", "Cargo.lock", "README.md", "CHANGELOG.md", "PROVENANCE.md", "NOTICE", "LICENSE-MIT", "LICENSE-APACHE", "build.rs", "src/**", "tests/**/*.rs", "tests/fixtures/*.txt", "tests/fixtures/README.md", "tests/fixtures/original/**", "benches/**", "tools/*.py", "tools/*.cc", "tools/corpus_specs/*.json", "docs/**"]
+# `python/` holds the wheel metadata, stubs and tests for the PyO3 binding
+# (`src/python.rs`, feature `python`), built with maturin; it ships in the
+# crate package so the published source carries both APIs.
+include = ["Cargo.toml", "Cargo.lock", "README.md", "CHANGELOG.md", "PROVENANCE.md", "NOTICE", "LICENSE-MIT", "LICENSE-APACHE", "build.rs", "src/**", "tests/**/*.rs", "tests/fixtures/*.txt", "tests/fixtures/README.md", "tests/fixtures/original/**", "benches/**", "tools/*.py", "tools/*.cc", "tools/corpus_specs/*.json", "docs/**", "python/pyproject.toml", "python/README.md", "python/jbig2enc.pyi", "python/py.typed", "python/tests/*.py"]
 
 [lib]
 name = "jbig2enc_rust"
@@ -40,6 +43,15 @@ rayon = { version = "1.10", optional = true }
 # `djvulibrust`. Bumping it must move all three crates together, or the tree
 # compiles and links two copies of `wide`.
 wide = "=0.7.33"
+# The `python` feature builds the PyO3 extension module in `src/python.rs`.
+# `abi3-py311` yields one wheel per platform for every CPython from 3.11 up;
+# 3.11 is the floor because pyo3 gates the buffer protocol behind `Py_3_11`
+# under the limited API, and accepting NumPy/PIL buffers directly is most of
+# the binding's value. `extension-module` is NOT set here: it leaves the
+# Python symbols unresolved until import, which would break every Rust
+# consumer that links an executable. maturin enables it for wheel builds
+# (see `python/pyproject.toml`).
+pyo3 = { version = "0.29", features = ["abi3-py311"], optional = true }
 
 [target.'cfg(not(windows))'.dependencies]
 pprof = { version = "0.15", features = ["flamegraph"], optional = true }
@@ -72,6 +84,9 @@ symboldict = ["encode"]
 refine = []
 halftone_bin = ["dep:image"]
 parallel = ["dep:rayon"]
+# Python bindings (`src/python.rs`), built into a wheel with maturin from the
+# `python/` directory. Needs the encoder, the decoder and symbol mode.
+python = ["dep:pyo3", "encode", "decode", "symboldict"]
 profiling = ["dep:pprof"]
 # Opt-in benchmark that links the C jbig2enc bridge (tests/headsup_c_vs_rust.rs).
 # Empty because the bridge is provided via build-script/linker flags at bench
@@ -232,6 +247,11 @@ required-features = ["encode"]
 [[test]]
 name = "generic_contexts"
 required-features = ["encode"]
+
+# Ignored symbol-mode timing worker over an external PBM directory.
+[[test]]
+name = "symbol_speed"
+required-features = ["symboldict", "decode"]
 
 # Calls `encode_symbol_dict` / `encode_text_region_mapped` directly.
 [[test]]
