@@ -113,6 +113,21 @@ pub struct BitImage {
     words: Vec<u32>,
 }
 
+/// The 32 pixels of a packed row starting at `x`, MSB first; pixels past
+/// the end of the row read as zero.
+#[inline(always)]
+fn window_bits(row: &[u32], x: usize) -> u32 {
+    let index = x >> 5;
+    let offset = x & 31;
+    let first = row.get(index).copied().unwrap_or(0);
+    if offset == 0 {
+        first
+    } else {
+        let second = row.get(index + 1).copied().unwrap_or(0);
+        (first << offset) | (second >> (32 - offset))
+    }
+}
+
 fn checked_dimensions(width: usize, height: usize) -> Result<usize, String> {
     if !(BitImage::MIN_DIMENSION..=BitImage::MAX_DIMENSION).contains(&width)
         || !(BitImage::MIN_DIMENSION..=BitImage::MAX_DIMENSION).contains(&height)
@@ -187,6 +202,57 @@ impl BitImage {
             *word |= bit;
         } else {
             *word &= !bit;
+        }
+    }
+
+    /// Sets pixels `x_start..=x_end` of row `y`; the span must lie inside the
+    /// bitmap.
+    pub(crate) fn set_span(&mut self, y: usize, x_start: usize, x_end: usize) {
+        debug_assert!(x_start <= x_end && x_end < self.width && y < self.height);
+        let row = y * self.stride_words;
+        let (first, last) = (x_start >> 5, x_end >> 5);
+        let head = u32::MAX >> (x_start & 31);
+        let tail = u32::MAX << (31 - (x_end & 31));
+        if first == last {
+            self.words[row + first] |= head & tail;
+        } else {
+            self.words[row + first] |= head;
+            for word in &mut self.words[row + first + 1..row + last] {
+                *word = u32::MAX;
+            }
+            self.words[row + last] |= tail;
+        }
+    }
+
+    /// ORs the `block` rectangle of `source` into this bitmap with its
+    /// top-left corner at (`x`, `y`), a word at a time. The caller guarantees both rectangles lie inside their bitmaps,
+    /// so row padding stays zero.
+    pub(crate) fn or_block_from(&mut self, source: &BitImage, block: &Rect, x: usize, y: usize) {
+        let source_x = u32_to_usize(block.x);
+        let source_y = u32_to_usize(block.y);
+        let width = u32_to_usize(block.width);
+        let height = u32_to_usize(block.height);
+        debug_assert!(source_x + width <= source.width && source_y + height <= source.height);
+        debug_assert!(x + width <= self.width && y + height <= self.height);
+        if width == 0 {
+            return;
+        }
+        let shift = x & 31;
+        for row in 0..height {
+            let source_row = source.row_words(source_y + row);
+            let start = (y + row) * self.stride_words + (x >> 5);
+            let mut done = 0usize;
+            while done < width {
+                let count = (width - done).min(32);
+                let bits = window_bits(source_row, source_x + done) & (u32::MAX << (32 - count));
+                let index = start + ((shift + done) >> 5);
+                let offset = (shift + done) & 31;
+                self.words[index] |= bits >> offset;
+                if offset != 0 && offset + count > 32 {
+                    self.words[index + 1] |= bits << (32 - offset);
+                }
+                done += count;
+            }
         }
     }
 
@@ -372,18 +438,8 @@ impl BitImage {
         if right > usize_to_u32(source.width) || bottom > usize_to_u32(source.height) {
             return Err("sub-image rectangle out of bounds".to_string());
         }
-        let width = u32_to_usize(rect.width);
-        let height = u32_to_usize(rect.height);
         let mut result = Self::new(rect.width, rect.height)?;
-        for y in 0..height {
-            for x in 0..width {
-                let src_x = rect.x + usize_to_u32(x);
-                let src_y = rect.y + usize_to_u32(y);
-                if source.get(src_x, src_y) {
-                    result.set_xy(x, y, true);
-                }
-            }
-        }
+        result.or_block_from(source, rect, 0, 0);
         Ok(result)
     }
 
@@ -418,13 +474,7 @@ impl BitImage {
         }
         let mut cropped =
             Self::new(rect.width, rect.height).map_err(|e| format!("invalid crop: {e}"))?;
-        for dy in 0..u32_to_usize(rect.height) {
-            for dx in 0..u32_to_usize(rect.width) {
-                if self.get_xy(u32_to_usize(rect.x) + dx, u32_to_usize(rect.y) + dy) {
-                    cropped.set_xy(dx, dy, true);
-                }
-            }
-        }
+        cropped.or_block_from(self, rect, 0, 0);
         Ok(cropped)
     }
 
@@ -486,14 +536,19 @@ impl BitImage {
             );
         }
 
-        // Second pass: find min_x and max_x within the vertical bounds
+        // Second pass: find min_x and max_x within the vertical bounds from
+        // the OR of those rows. Padding bits are zero.
+        let mut columns = vec![0u32; self.stride_words];
         for y in min_y..=max_y {
-            for x in 0..self.width {
-                if self.get_xy(x, y) {
-                    min_x = min_x.min(x);
-                    max_x = max_x.max(x);
-                }
+            for (column, word) in columns.iter_mut().zip(self.row_words(y)) {
+                *column |= *word;
             }
+        }
+        if let Some(first) = columns.iter().position(|word| *word != 0) {
+            min_x = first * 32 + columns[first].leading_zeros() as usize;
+        }
+        if let Some(last) = columns.iter().rposition(|word| *word != 0) {
+            max_x = last * 32 + 31 - columns[last].trailing_zeros() as usize;
         }
 
         if min_x > max_x {
@@ -877,6 +932,112 @@ mod tests {
             .is_err()
         );
         assert!(array_to_bitimage(&ndarray::Array2::<u8>::zeros((0, 0))).is_err());
+    }
+
+    fn random_bitmap(next: &mut impl FnMut() -> u64, width: usize, height: usize) -> BitImage {
+        let mut image = BitImage::new(width as u32, height as u32).unwrap();
+        let density = next() % 100;
+        for y in 0..height {
+            for x in 0..width {
+                if next() % 100 < density {
+                    image.set_usize(x, y, true);
+                }
+            }
+        }
+        image
+    }
+
+    #[test]
+    fn word_level_block_operations_match_per_pixel_reference() {
+        let mut state = 0x2545_f491_4f6c_dd1du64;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        for _ in 0..2000 {
+            let width = 1 + (next() % 100) as usize;
+            let height = 1 + (next() % 12) as usize;
+            let source = random_bitmap(&mut next, width, height);
+            let rect_x = (next() as usize) % width;
+            let rect_y = (next() as usize) % height;
+            let rect_w = 1 + (next() as usize) % (width - rect_x);
+            let rect_h = 1 + (next() as usize) % (height - rect_y);
+            let rect = Rect {
+                x: rect_x as u32,
+                y: rect_y as u32,
+                width: rect_w as u32,
+                height: rect_h as u32,
+            };
+            let cropped = source.crop(&rect).unwrap();
+            assert_eq!(cropped, BitImage::from_sub_image(&source, &rect).unwrap());
+            for y in 0..rect_h {
+                for x in 0..rect_w {
+                    assert_eq!(
+                        cropped.get_usize(x, y),
+                        source.get_usize(rect_x + x, rect_y + y)
+                    );
+                }
+            }
+
+            let target_w = rect_w + (next() as usize) % 70;
+            let target_h = rect_h + (next() as usize) % 5;
+            let mut target = random_bitmap(&mut next, target_w, target_h);
+            let mut expected = target.clone();
+            let at_x = (next() as usize) % (target_w - rect_w + 1);
+            let at_y = (next() as usize) % (target_h - rect_h + 1);
+            target.or_block_from(&source, &rect, at_x, at_y);
+            for y in 0..rect_h {
+                for x in 0..rect_w {
+                    if source.get_usize(rect_x + x, rect_y + y) {
+                        expected.set_usize(at_x + x, at_y + y, true);
+                    }
+                }
+            }
+            assert_eq!(target, expected);
+
+            let mut spans = BitImage::new(width as u32, height as u32).unwrap();
+            let mut expected = spans.clone();
+            let start = (next() as usize) % width;
+            let end = start + (next() as usize) % (width - start);
+            spans.set_span(rect_y, start, end);
+            for x in start..=end {
+                expected.set_usize(x, rect_y, true);
+            }
+            assert_eq!(spans, expected);
+
+            let (trim_rect, trimmed) = source.trim();
+            let mut black = Vec::new();
+            for y in 0..height {
+                for x in 0..width {
+                    if source.get_usize(x, y) {
+                        black.push((x, y));
+                    }
+                }
+            }
+            if black.is_empty() {
+                assert_eq!((trimmed.width, trimmed.height), (1, 1));
+            } else {
+                let min_x = black.iter().map(|p| p.0).min().unwrap();
+                let max_x = black.iter().map(|p| p.0).max().unwrap();
+                let min_y = black.iter().map(|p| p.1).min().unwrap();
+                let max_y = black.iter().map(|p| p.1).max().unwrap();
+                assert_eq!(
+                    (trim_rect.x, trim_rect.y, trim_rect.width, trim_rect.height),
+                    (
+                        min_x as u32,
+                        min_y as u32,
+                        (max_x - min_x + 1) as u32,
+                        (max_y - min_y + 1) as u32
+                    )
+                );
+                assert_eq!(
+                    crate::jbig2enc::first_black_pixel(&source),
+                    black.first().copied()
+                );
+            }
+        }
     }
 
     #[test]

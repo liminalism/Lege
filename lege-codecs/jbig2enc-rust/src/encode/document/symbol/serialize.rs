@@ -2,7 +2,7 @@ use super::super::Jbig2Encoder;
 use super::types::{PlannedDocument, SymbolInstance};
 use crate::jbig2arith::Jbig2ArithCoder;
 use crate::jbig2structs::{GenericRegionConfig, GenericRegionParams, SegmentType};
-use crate::jbig2sym::BitImage;
+use crate::jbig2sym::{BitImage, Rect};
 use anyhow::{Result, anyhow};
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
@@ -178,13 +178,13 @@ impl<'a> Jbig2Encoder<'a> {
             }
             let offset_x = (instance.position.x - min_x) as usize;
             let offset_y = (instance.position.y - min_y) as usize;
-            for y in 0..instance.instance_bitmap.height {
-                for x in 0..instance.instance_bitmap.width {
-                    if instance.instance_bitmap.get_usize(x, y) {
-                        residual.set_usize(offset_x + x, offset_y + y, true);
-                    }
-                }
-            }
+            let block = Rect {
+                x: 0,
+                y: 0,
+                width: instance.instance_bitmap.width as u32,
+                height: instance.instance_bitmap.height as u32,
+            };
+            residual.or_block_from(&instance.instance_bitmap, &block, offset_x, offset_y);
         }
 
         if residual.count_ones() == 0 {

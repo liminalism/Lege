@@ -417,13 +417,18 @@ impl CCImage {
             if run.ccid != ccid as i32 {
                 continue;
             }
-            for x in run.x1..=run.x2 {
-                bitmap.set_usize(
-                    (x - component.bb.xmin) as usize,
-                    (run.y - component.bb.ymin) as usize,
-                    true,
-                );
+            // Pixels outside the component box are ignored, as per-pixel
+            // writes would ignore them.
+            let x_start = run.x1.max(component.bb.xmin);
+            let x_end = run.x2.min(component.bb.xmax - 1);
+            if run.y < component.bb.ymin || run.y >= component.bb.ymax || x_start > x_end {
+                continue;
             }
+            bitmap.set_span(
+                (run.y - component.bb.ymin) as usize,
+                (x_start - component.bb.xmin) as usize,
+                (x_end - component.bb.xmin) as usize,
+            );
         }
         Some(bitmap)
     }

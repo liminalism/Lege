@@ -1145,9 +1145,12 @@ pub fn hash_key(img: &BitImage) -> HashKey {
 /// Returns (x, y) coordinates of the first black pixel, or None if no black pixels
 pub fn first_black_pixel(image: &BitImage) -> Option<(usize, usize)> {
     for y in 0..image.height {
-        for x in 0..image.width {
-            if image.get_usize(x, y) {
-                return Some((x, y));
+        for (word_index, &word) in image.row_words(y).iter().enumerate() {
+            if word != 0 {
+                let x = word_index * 32 + word.leading_zeros() as usize;
+                if x < image.width {
+                    return Some((x, y));
+                }
             }
         }
     }
