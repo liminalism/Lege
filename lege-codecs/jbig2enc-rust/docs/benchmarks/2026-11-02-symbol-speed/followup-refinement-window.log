@@ -1,0 +1,3 @@
+{"preset": "text", "scope": "page", "base_median_s_per_page": 0.050178, "cand_median_s_per_page": 0.050565, "median_ratio": 1.0033932611025123, "min": 0.9446370919526486, "max": 1.0840394224881988, "bytes_and_hash_identical": true}
+{"preset": "text_lossless", "scope": "page", "base_median_s_per_page": 0.021302, "cand_median_s_per_page": 0.022453, "median_ratio": 1.0367571120082621, "min": 1.0019187862561356, "max": 1.1619894137621092, "bytes_and_hash_identical": true}
+{"preset": "text_symbol_unify", "scope": "page", "base_median_s_per_page": 0.08339, "cand_median_s_per_page": 0.085064, "median_ratio": 1.0143858088862716, "min": 0.9548209955783769, "max": 1.0637265167847243, "bytes_and_hash_identical": true}

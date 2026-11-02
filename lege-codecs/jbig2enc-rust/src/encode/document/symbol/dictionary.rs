@@ -369,14 +369,39 @@ pub(crate) fn encode_symbol_dictionary_segments(
     config: &Jbig2Config,
     layout: &SymbolDictLayout,
 ) -> Result<EncodedSymbolDictionary> {
+    encode_symbol_dictionary_segments_resumed(symbols, None, config, layout)
+}
+
+/// `encode_symbol_dictionary_segments`, resuming the plain base dictionary
+/// from a prefix cache when one is supplied with the symbols' identities.
+pub(crate) fn encode_symbol_dictionary_segments_resumed(
+    symbols: &[&BitImage],
+    resume: Option<(&[usize], &mut DictionaryPrefixCache)>,
+    config: &Jbig2Config,
+    layout: &SymbolDictLayout,
+) -> Result<EncodedSymbolDictionary> {
     let mut encoded = EncodedSymbolDictionary {
         payload: Vec::new(),
         input_to_exported_pos: vec![u32::MAX; symbols.len()],
         exported_symbol_count: 0,
     };
 
-    let (dict_payload, base_order) =
-        encode_symbol_dict_subset_with_order(symbols, config, &layout.export_input_indices, 0)?;
+    let subset = &layout.export_input_indices;
+    let subset_symbols: Vec<&BitImage> = subset.iter().map(|&i| symbols[i]).collect();
+    let (dict_payload, subset_order) = match resume {
+        Some((identities, cache)) => {
+            let subset_identities: Vec<usize> = subset.iter().map(|&i| identities[i]).collect();
+            encode_symbol_dict_with_order_resumed(
+                &subset_symbols,
+                &subset_identities,
+                config,
+                0,
+                cache,
+            )?
+        }
+        None => encode_symbol_dict_with_order(&subset_symbols, config, 0)?,
+    };
+    let base_order: Vec<usize> = subset_order.into_iter().map(|i| subset[i]).collect();
     for (dict_pos, &input_index) in base_order.iter().enumerate() {
         encoded.input_to_exported_pos[input_index] = dict_pos as u32;
     }
@@ -395,249 +420,294 @@ pub(crate) fn encode_symbol_dictionary_segments(
     Ok(encoded)
 }
 
-fn encode_symbol_dict_subset_with_order(
-    symbols: &[&BitImage],
-    config: &Jbig2Config,
-    subset_indices: &[usize],
-    num_imported_symbols: u32,
-) -> Result<(Vec<u8>, Vec<usize>)> {
-    let subset_symbols: Vec<&BitImage> = subset_indices.iter().map(|&i| symbols[i]).collect();
-    let (payload, subset_order) =
-        encode_symbol_dict_with_order(&subset_symbols, config, num_imported_symbols)?;
-    let input_order = subset_order
-        .into_iter()
-        .map(|subset_index| subset_indices[subset_index])
-        .collect();
-    Ok((payload, input_order))
+/// The symbol dictionary stream in construction: symbols are pushed in
+/// canonical (height, width) order and the height-class structure, the
+/// width deltas and the bitmap coding are emitted as each one arrives, so the
+/// state after any symbol is a complete prefix that can be cloned and resumed.
+/// Pushing every symbol then calling [`DictionaryStream::finish`] produces
+/// exactly the bytes of the former one-shot encoder.
+#[derive(Clone)]
+pub(crate) struct DictionaryStream {
+    coder: Jbig2ArithCoder,
+    last_height: i32,
+    last_width: i32,
+    class_open: bool,
+    pushed: u32,
+}
+
+impl DictionaryStream {
+    pub(crate) fn new() -> Self {
+        Self {
+            coder: Jbig2ArithCoder::new(),
+            last_height: 0,
+            last_width: 0,
+            class_open: false,
+            pushed: 0,
+        }
+    }
+
+    /// Symbols pushed so far.
+    pub(crate) fn len(&self) -> usize {
+        self.pushed as usize
+    }
+
+    /// Code the next symbol in canonical order.
+    pub(crate) fn push(&mut self, symbol: &BitImage) -> Result<()> {
+        if symbol.width > (1 << 24) || symbol.height > (1 << 24) {
+            return Err(anyhow!(
+                "Symbol at index {} exceeds maximum dimensions ({}x{})",
+                self.pushed,
+                symbol.width,
+                symbol.height
+            ));
+        }
+        let height = symbol.height as i32;
+        if self.class_open && height != self.last_height {
+            // OOB marks the end of the previous height class.
+            self.coder.encode_oob(IntProc::Iadw)?;
+            self.class_open = false;
+        }
+        if !self.class_open {
+            // A. Encode Delta Height
+            self.coder
+                .encode_integer(IntProc::Iadh, height - self.last_height)?;
+            self.last_height = height;
+            self.last_width = 0;
+            self.class_open = true;
+        }
+
+        // I. Encode Delta Width
+        let delta_w = symbol.width as i32 - self.last_width;
+        debug!(
+            "Height class {}, Symbol {}: width={}, last_width={}, delta_w={}",
+            height, self.pushed, symbol.width, self.last_width, delta_w
+        );
+        self.coder.encode_integer(IntProc::Iadw, delta_w)?;
+        self.last_width = symbol.width as i32;
+
+        // II. Encode Symbol Bitmap using Generic Region Procedure
+        let packed = symbol.packed_words();
+
+        // Verify bit-order correctness: first black pixel should match between symbol and packed data
+        if let Some(expected_first_pixel) = first_black_pixel(symbol) {
+            let actual_first_pixel =
+                crate::jbig2sym::first_black_pixel_in_packed(packed, symbol.width, symbol.height);
+            assert_eq!(
+                actual_first_pixel,
+                Some(expected_first_pixel),
+                "bit-order / row-order mismatch in symbol dict packer! Expected first black pixel at {:?}, got {:?}",
+                expected_first_pixel,
+                actual_first_pixel
+            );
+        }
+
+        self.coder.encode_generic_region(
+            packed,
+            symbol.width,
+            symbol.height,
+            0, // Use standard template 0
+            &[(3, -1), (-3, -1), (2, -2), (-2, -2)],
+        )?;
+        self.pushed += 1;
+        Ok(())
+    }
+
+    /// Close the last height class, code the export flags, terminate the
+    /// arithmetic stream and prepend the segment parameters.
+    pub(crate) fn finish(
+        mut self,
+        config: &Jbig2Config,
+        num_imported_symbols: u32,
+    ) -> Result<Vec<u8>> {
+        if self.class_open {
+            self.coder.encode_oob(IntProc::Iadw)?;
+        }
+        let num_new_syms = self.pushed;
+        // Per T.88 §7.4.2.1.6, SDNUMEXSYMS is the total count of exported symbols which
+        // includes any imported symbols carried forward from referenced dictionaries.
+        let num_export_syms = num_imported_symbols.saturating_add(num_new_syms);
+
+        // Create symbol dictionary parameters
+        let params = SymbolDictParams {
+            sd_template: 0, // Use standard template 0
+            // Match jbig2enc's template-0 adaptive pixels for symbol dictionaries.
+            at: [(3, -1), (-3, -1), (2, -2), (-2, -2)],
+            refine_aggregate: false,
+            refine_template: 0,
+            refine_at: [(0, 0), (0, 0)],
+            exsyms: num_export_syms,
+            newsyms: num_new_syms,
+        };
+
+        if cfg!(debug_assertions) {
+            debug!("encode_symbol_dict: Exporting {} symbols", num_export_syms);
+            trace!("encode_symbol_dict: SymbolDictParams details: {:?}", params);
+        }
+
+        // Export flags come after the symbol bitmap data (run-length form).
+        // T.88 §7.4.2.2: the run-length must cover SDNUMINSYMS + SDNUMNEWSYMS slots.
+        // We export every symbol (both imported and new), so the sequence is a single
+        // "all exported" run covering num_export_syms = num_imported + num_new.
+        self.coder.encode_integer(IntProc::Iaex, 0)?;
+        let num_export_syms =
+            i32::try_from(num_export_syms).map_err(|_| anyhow!("too many exported symbols"))?;
+        self.coder.encode_integer(IntProc::Iaex, num_export_syms)?;
+
+        // flush the coder ONCE
+        self.coder
+            .flush_with_termination(true, config.canonical_arithmetic_termination);
+
+        // The segment parameters precede the single, complete arithmetic payload.
+        let mut payload = params.to_bytes();
+        payload.extend(self.coder.as_bytes());
+        Ok(payload)
+    }
 }
 
 /// Encodes a symbol dictionary, returning both the payload and the mapping from
 /// encoded dictionary position → input index.
 pub fn encode_symbol_dict_with_order(
     symbols: &[&BitImage],
-    _config: &Jbig2Config,
+    config: &Jbig2Config,
     num_imported_symbols: u32,
 ) -> Result<(Vec<u8>, Vec<usize>)> {
     // Compute canonical order (filter + dedup + sort)
     let canonical_order = canonicalize_dict_symbols(symbols);
-
     if canonical_order.is_empty() {
         return Err(anyhow!(
             "encode_symbol_dict: no valid symbols supplied (all symbols had zero width or height)"
         ));
     }
+    let mut stream = DictionaryStream::new();
+    for &index in &canonical_order {
+        stream.push(symbols[index])?;
+    }
+    let payload = stream.finish(config, num_imported_symbols)?;
+    Ok((payload, canonical_order))
+}
 
-    // Build the ordered symbol list
-    let ordered_symbols: Vec<&BitImage> = canonical_order.iter().map(|&i| symbols[i]).collect();
+/// Prefix checkpoints of recent dictionary streams, so an encode whose
+/// canonical symbol sequence shares a prefix with an earlier one resumes from
+/// the last checkpoint inside that prefix instead of starting over. The
+/// measured planner's trials differ from one another by one symbol or one
+/// family, so most of every dictionary is a prefix of a dictionary it has
+/// already coded. Resuming replays exactly the operations the one-shot encoder
+/// would perform from that point, so the bytes are unchanged; only the work is.
+#[derive(Default)]
+pub(crate) struct DictionaryPrefixCache {
+    sets: Vec<PrefixSet>,
+}
 
-    // Verify symbol dimensions are within JBIG2 limits
-    for (i, sym) in ordered_symbols.iter().enumerate() {
-        if sym.width > (1 << 24) || sym.height > (1 << 24) {
-            return Err(anyhow!(
-                "Symbol at index {} exceeds maximum dimensions ({}x{})",
-                i,
-                sym.width,
-                sym.height
-            ));
+struct PrefixSet {
+    /// Symbol identities in canonical coding order.
+    identities: Vec<usize>,
+    /// Stream state after `position` symbols, shared with the sets it was
+    /// resumed from.
+    checkpoints: Vec<(usize, std::sync::Arc<DictionaryStream>)>,
+}
+
+/// Recent sequences retained; the planner alternates between at most three
+/// dictionary policies.
+const PREFIX_SETS: usize = 3;
+/// Checkpoints per sequence are bounded, so the retained coder states stay
+/// within a few megabytes however many symbols a page has.
+const MAX_CHECKPOINTS: usize = 16;
+const MIN_CHECKPOINT_INTERVAL: usize = 8;
+
+impl DictionaryPrefixCache {
+    fn interval(symbols: usize) -> usize {
+        symbols
+            .div_ceil(MAX_CHECKPOINTS)
+            .max(MIN_CHECKPOINT_INTERVAL)
+    }
+
+    /// The best stored state for `identities`: the stream after the furthest
+    /// checkpoint inside the longest common prefix, with that prefix's
+    /// checkpoints to carry forward.
+    fn resume(
+        &self,
+        identities: &[usize],
+    ) -> (
+        DictionaryStream,
+        Vec<(usize, std::sync::Arc<DictionaryStream>)>,
+    ) {
+        let mut best: Option<(usize, &PrefixSet)> = None;
+        for set in &self.sets {
+            let common = set
+                .identities
+                .iter()
+                .zip(identities)
+                .take_while(|(a, b)| a == b)
+                .count();
+            if common > best.map_or(0, |(length, _)| length) {
+                best = Some((common, set));
+            }
+        }
+        let Some((common, set)) = best else {
+            return (DictionaryStream::new(), Vec::new());
+        };
+        let carried: Vec<_> = set
+            .checkpoints
+            .iter()
+            .take_while(|(position, _)| *position <= common)
+            .cloned()
+            .collect();
+        match carried.last() {
+            Some((_, state)) => (DictionaryStream::clone(state), carried),
+            None => (DictionaryStream::new(), carried),
         }
     }
 
-    let mut payload = Vec::new();
-    let mut coder = Jbig2ArithCoder::new();
-
-    let num_new_syms = ordered_symbols.len() as u32;
-    // Per T.88 §7.4.2.1.6, SDNUMEXSYMS is the total count of exported symbols which
-    // includes any imported symbols carried forward from referenced dictionaries.
-    let num_export_syms = num_imported_symbols.saturating_add(num_new_syms);
-
-    // Create symbol dictionary parameters
-    let params = SymbolDictParams {
-        sd_template: 0, // Use standard template 0
-        // Match jbig2enc's template-0 adaptive pixels for symbol dictionaries.
-        at: [(3, -1), (-3, -1), (2, -2), (-2, -2)],
-        refine_aggregate: false,
-        refine_template: 0,
-        refine_at: [(0, 0), (0, 0)],
-        exsyms: num_export_syms,
-        newsyms: num_new_syms,
-    };
-
-    if cfg!(debug_assertions) {
-        debug!("encode_symbol_dict: Exporting {} symbols", num_export_syms);
-        trace!("encode_symbol_dict: SymbolDictParams details: {:?}", params);
-    }
-
-    // Write the symbol dictionary parameters
-    payload.extend(params.to_bytes());
-
-    // Symbols are already in canonical (height, width) order from canonicalize_dict_symbols.
-    // We need to encode them in this exact order, grouped by height class for delta encoding.
-    // Build height classes from the already-sorted ordered_symbols to preserve the canonical order.
-    let mut height_classes: Vec<Vec<&BitImage>> = Vec::new();
-    let mut current_height: Option<usize> = None;
-    let mut current_class: Vec<&BitImage> = Vec::new();
-
-    for &sym in &ordered_symbols {
-        match current_height {
-            None => {
-                // First symbol
-                current_height = Some(sym.height);
-                current_class.push(sym);
-            }
-            Some(h) if sym.height == h => {
-                // Same height class
-                current_class.push(sym);
-            }
-            Some(_) => {
-                // New height class - push previous and start new
-                height_classes.push(current_class);
-                current_height = Some(sym.height);
-                current_class = vec![sym];
-            }
-        }
-    }
-    if !current_class.is_empty() {
-        height_classes.push(current_class);
-    }
-
-    // Debug: log the encoding order and first few pixels of each symbol for verification
-    #[cfg(debug_assertions)]
-    {
-        debug!(
-            "Symbol dictionary encoding order ({} symbols):",
-            ordered_symbols.len()
-        );
-        let mut dict_pos = 0u32;
-        for (hc_idx, symbols_in_class) in height_classes.iter().enumerate() {
-            debug!(
-                "  Height class {}: {} symbols",
-                hc_idx,
-                symbols_in_class.len()
-            );
-            for (sym_idx, sym) in symbols_in_class.iter().enumerate() {
-                // Log first pixel position for each symbol
-                let first_pixel = first_black_pixel(sym);
-                if sym_idx < 5 || sym_idx >= symbols_in_class.len() - 2 {
-                    debug!(
-                        "    dict_pos={} -> {}x{} first_pixel={:?}",
-                        dict_pos, sym.width, sym.height, first_pixel
-                    );
-                } else if sym_idx == 5 {
-                    debug!(
-                        "    ... ({} symbols omitted) ...",
-                        symbols_in_class.len() - 7
-                    );
-                }
-                dict_pos += 1;
-            }
-        }
-    }
-
-    let mut last_height = 0;
-
-    // 4. Encode the height classes
-    for symbols_in_class in &height_classes {
-        let h = symbols_in_class[0].height; // All symbols in class have same height
-        // A. Encode Delta Height
-        let delta_h = h as i32 - last_height as i32;
-        coder.encode_integer(crate::jbig2arith::IntProc::Iadh, delta_h)?;
-        last_height = h;
-
-        let mut last_width = 0;
-        #[cfg(debug_assertions)]
-        let mut dict_pos = 0u32;
-
-        // Debug: check symbols in this height class (disabled in release)
-        #[cfg(debug_assertions)]
+    fn store(
+        &mut self,
+        identities: Vec<usize>,
+        checkpoints: Vec<(usize, std::sync::Arc<DictionaryStream>)>,
+    ) {
+        if let Some(existing) = self
+            .sets
+            .iter()
+            .position(|set| set.identities == identities)
         {
-            debug!("Height class {} has {} symbols:", h, symbols_in_class.len());
-            for (i, symbol) in symbols_in_class.iter().enumerate() {
-                debug!("  Symbol {}: {}x{}", i, symbol.width, symbol.height);
-            }
+            self.sets.remove(existing);
+        } else if self.sets.len() >= PREFIX_SETS {
+            self.sets.remove(0);
         }
-
-        // B. Encode symbols within this height class
-        // Symbols within each height class are already sorted by width from canonicalize_dict_symbols.
-        for (i, symbol) in symbols_in_class.iter().enumerate() {
-            // I. Encode Delta Width
-            let delta_w = symbol.width as i32 - last_width;
-
-            // `debug!` is already gated on `trace_encoder`, and consumes its
-            // arguments with `format_args!` when that feature is off, so it
-            // costs nothing here. A second `#[cfg(debug_assertions)]` on top
-            // bought no speed and made `i` unused in every profile that ships.
-            debug!(
-                "Height class {}, Symbol {}: width={}, last_width={}, delta_w={}",
-                h, i, symbol.width, last_width, delta_w
-            );
-
-            coder.encode_integer(crate::jbig2arith::IntProc::Iadw, delta_w)?;
-            last_width = symbol.width as i32; // last_width becomes current width
-
-            // II. Encode Symbol Bitmap using Generic Region Procedure
-            let packed = symbol.packed_words();
-
-            // Debug: dump first few symbols' bitmap data for verification
-            #[cfg(debug_assertions)]
-            {
-                debug!(
-                    "  dict_pos={} {}x{} first_word={:08x}",
-                    dict_pos,
-                    symbol.width,
-                    symbol.height,
-                    packed.get(0).unwrap_or(&0)
-                );
-            }
-
-            // Verify bit-order correctness: first black pixel should match between symbol and packed data
-            if let Some(expected_first_pixel) = first_black_pixel(symbol) {
-                let actual_first_pixel = crate::jbig2sym::first_black_pixel_in_packed(
-                    packed,
-                    symbol.width,
-                    symbol.height,
-                );
-                assert_eq!(
-                    actual_first_pixel,
-                    Some(expected_first_pixel),
-                    "bit-order / row-order mismatch in symbol dict packer! Expected first black pixel at {:?}, got {:?}",
-                    expected_first_pixel,
-                    actual_first_pixel
-                );
-            }
-
-            coder.encode_generic_region(
-                packed,
-                symbol.width,
-                symbol.height,
-                params.sd_template,
-                &[(3, -1), (-3, -1), (2, -2), (-2, -2)],
-            )?;
-
-            #[cfg(debug_assertions)]
-            {
-                dict_pos += 1;
-            }
-        }
-
-        // OOB marks the end of this height class.
-        coder.encode_oob(IntProc::Iadw)?;
+        self.sets.push(PrefixSet {
+            identities,
+            checkpoints,
+        });
     }
+}
 
-    // Export flags come after the symbol bitmap data (run-length form).
-    // T.88 §7.4.2.2: the run-length must cover SDNUMINSYMS + SDNUMNEWSYMS slots.
-    // We export every symbol (both imported and new), so the sequence is a single
-    // "all exported" run covering num_export_syms = num_imported + num_new.
-    coder.encode_integer(IntProc::Iaex, 0)?;
-    let num_export_syms =
-        i32::try_from(num_export_syms).map_err(|_| anyhow!("too many exported symbols"))?;
-    coder.encode_integer(IntProc::Iaex, num_export_syms)?;
-
-    // 5. flush the coder ONCE
-    coder.flush_with_termination(true, _config.canonical_arithmetic_termination);
-
-    // 6. Append the single, complete arithmetic payload
-    payload.extend(coder.as_bytes());
-
+/// `encode_symbol_dict_with_order`, resuming from and extending `cache`.
+/// `identities[i]` names `symbols[i]` across calls; two symbols with the same
+/// identity must be the same bitmap.
+pub(crate) fn encode_symbol_dict_with_order_resumed(
+    symbols: &[&BitImage],
+    identities: &[usize],
+    config: &Jbig2Config,
+    num_imported_symbols: u32,
+    cache: &mut DictionaryPrefixCache,
+) -> Result<(Vec<u8>, Vec<usize>)> {
+    debug_assert_eq!(symbols.len(), identities.len());
+    let canonical_order = canonicalize_dict_symbols(symbols);
+    if canonical_order.is_empty() {
+        return Err(anyhow!(
+            "encode_symbol_dict: no valid symbols supplied (all symbols had zero width or height)"
+        ));
+    }
+    let ordered: Vec<usize> = canonical_order.iter().map(|&i| identities[i]).collect();
+    let (mut stream, mut checkpoints) = cache.resume(&ordered);
+    let interval = DictionaryPrefixCache::interval(ordered.len());
+    for &index in &canonical_order[stream.len()..] {
+        stream.push(symbols[index])?;
+        let position = stream.len();
+        if position.is_multiple_of(interval) && position < ordered.len() {
+            checkpoints.push((position, std::sync::Arc::new(stream.clone())));
+        }
+    }
+    let payload = stream.finish(config, num_imported_symbols)?;
+    cache.store(ordered, checkpoints);
     Ok((payload, canonical_order))
 }
 /// Represents a single symbol instance in a text region, with refinement info.
@@ -742,4 +812,59 @@ pub fn build_dictionary_and_get_instances(
     }
 
     (dictionary_symbols, instances)
+}
+
+#[cfg(test)]
+mod prefix_cache_tests {
+    use super::{
+        DictionaryPrefixCache, encode_symbol_dict_with_order, encode_symbol_dict_with_order_resumed,
+    };
+    use crate::jbig2structs::Jbig2Config;
+    use crate::jbig2sym::BitImage;
+
+    fn glyph(seed: &mut u64, width: u32, height: u32) -> BitImage {
+        let mut image = BitImage::new(width, height).unwrap();
+        for y in 0..height as usize {
+            for x in 0..width as usize {
+                *seed = seed
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
+                if (*seed >> 33).is_multiple_of(3) {
+                    image.set_usize(x, y, true);
+                }
+            }
+        }
+        image
+    }
+
+    #[test]
+    fn resumed_dictionaries_match_one_shot_encodes() {
+        let mut seed = 0x11u64;
+        let pool: Vec<BitImage> = (0..90)
+            .map(|i| glyph(&mut seed, 5 + (i * 7) % 29, 6 + (i * 5) % 23))
+            .collect();
+        let config = Jbig2Config::text_lossless_max_compression();
+        let mut cache = DictionaryPrefixCache::default();
+        // The full set, then sets that drop one symbol or a family, reinsert,
+        // and a disjoint set: every sequence shares some prefix with a stored
+        // one or none at all.
+        let mut sets: Vec<Vec<usize>> = vec![(0..90).collect()];
+        for drop in [0usize, 1, 7, 8, 15, 16, 17, 40, 63, 64, 88, 89] {
+            sets.push((0..90).filter(|&i| i != drop).collect());
+        }
+        sets.push((0..90).filter(|&i| i % 10 != 3).collect());
+        sets.push((0..90).collect());
+        sets.push((30..60).collect());
+        sets.push((0..20).rev().collect());
+        for (round, set) in sets.iter().enumerate() {
+            let symbols: Vec<&BitImage> = set.iter().map(|&i| &pool[i]).collect();
+            let expected = encode_symbol_dict_with_order(&symbols, &config, 0).unwrap();
+            let actual =
+                encode_symbol_dict_with_order_resumed(&symbols, set, &config, 0, &mut cache)
+                    .unwrap();
+            assert_eq!(actual.1, expected.1, "order, round {round}");
+            assert_eq!(actual.0, expected.0, "payload, round {round}");
+        }
+        assert!(cache.sets.len() <= super::PREFIX_SETS);
+    }
 }

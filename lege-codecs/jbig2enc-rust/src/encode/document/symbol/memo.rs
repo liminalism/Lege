@@ -29,6 +29,9 @@ pub(crate) struct TrialMemo {
     regions: FxHashMap<u64, Vec<RegionEntry>>,
     region_words: usize,
     dictionaries: FxHashMap<Vec<usize>, DictionaryEntry>,
+    /// Checkpointed prefixes of recent dictionary streams: a trial that drops
+    /// one symbol from a dictionary re-codes only the symbols after it.
+    prefixes: super::dictionary::DictionaryPrefixCache,
 }
 
 struct RegionEntry {
@@ -125,13 +128,14 @@ impl<'a> Jbig2Encoder<'a> {
         symbols: &[usize],
         layout: &SymbolDictLayout,
     ) -> Result<EncodedSymbolDictionary> {
-        let encode = || {
-            let refs: Vec<&BitImage> = symbols.iter().map(|&i| &self.global_symbols[i]).collect();
-            super::dictionary::encode_symbol_dictionary_segments(&refs, self.config, layout)
-        };
+        let refs: Vec<&BitImage> = symbols.iter().map(|&i| &self.global_symbols[i]).collect();
         // Only plain layouts are shared; the encode also depends on their order.
         if self.trial_memo.is_none() || layout.refinements.iter().any(Option::is_some) {
-            return encode();
+            return super::dictionary::encode_symbol_dictionary_segments(
+                &refs,
+                self.config,
+                layout,
+            );
         }
         let cached = self.with_trial_memo(|memo| {
             memo.dictionaries
@@ -142,7 +146,17 @@ impl<'a> Jbig2Encoder<'a> {
         if let Some(Some(encoded)) = cached {
             return Ok(encoded);
         }
-        let encoded = encode()?;
+        // Global symbol indices identify bitmaps for the whole planning call.
+        let encoded = self
+            .with_trial_memo(|memo| {
+                super::dictionary::encode_symbol_dictionary_segments_resumed(
+                    &refs,
+                    Some((symbols, &mut memo.prefixes)),
+                    self.config,
+                    layout,
+                )
+            })
+            .expect("trial memo checked above")?;
         self.with_trial_memo(|memo| {
             memo.dictionaries.insert(
                 symbols.to_vec(),

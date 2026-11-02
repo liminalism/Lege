@@ -218,3 +218,62 @@ Raw timings (`raw.csv`), the per-combination summary (`summary.json`),
 fidelity counts (`fidelity.csv`), profile shares, environment, input hashes and
 intermediate comparator runs are in
 [the measurement directory](benchmarks/2026-11-02-symbol-speed).
+
+## Follow-up: the three ranked opportunities — 2026-11-02, later the same day
+
+Three further byte-identical changes, measured with the same harness and
+`taskset -c 2,3` against the final build above as the baseline (interleaved
+pairs, medians; raw lines in `followup-*.log` beside the other data):
+
+| Change | Preset, scope | Ratio (range, pairs) |
+| --- | --- | ---: |
+| Dictionary prefix checkpoints in the measured planner | `text_lossless_max_compression()`, page | 0.828 (0.789–0.843, 3) |
+| Context similarity after the bitmap screens | `text_symbol_unify()`, document | 0.598 (0.547–0.839, 3) |
+| Context similarity after the bitmap screens | `text_symbol_unify()`, page | 0.807 (0.774–0.828, 3) |
+| Windowed refinement contexts | `encode_refinement_region`, per pixel | 0.59 (0.56–0.68, 10 rounds) |
+
+Every preset's output hash and byte total is unchanged on both corpora.
+
+**Dictionary prefix checkpoints** (`dictionary.rs`, `memo.rs`, `arith.rs`).
+The dictionary encoder is now a stream: symbols are pushed in canonical
+order and height classes, width deltas and bitmaps are coded as each one
+arrives, so the state after any symbol is a resumable prefix. During a
+measured planning call the trial memo keeps, for the last three canonical
+symbol sequences it coded, a clone of the stream every N/16 symbols (at least
+every 8). A trial whose sequence shares a prefix with one of them resumes
+from the last checkpoint inside the common prefix and codes only the
+remainder; since the planner's proposals drop one symbol or one family from
+the current best, that remainder is on average about half the dictionary.
+Checkpoints are shared by reference between sequences, so memory stays
+within about sixteen coder states per sequence. The arithmetic coder gained
+`Clone` for this. A test encodes related symbol sets through the cache and
+through the one-shot encoder and requires identical bytes.
+
+**Context similarity after the bitmap screens** (`unify.rs`). The class
+builder asked the context model for a merge decision on every bucket
+neighbour before trying the pair comparison, and the decision walks six
+token maps per pair (weighted Jaccard, cosine and Jensen–Shannon on both
+sides). Pairs now go through the cached ink-profile screens and the
+comparator first, and only survivors consult the context model. An accepted
+edge needs both verdicts, so the classes are the same in either order; what
+changes is the diagnostic attribution of pairs both checks would have
+rejected, which now count as comparison rejections.
+
+**Windowed refinement contexts** (`arith.rs`). The refinement coder read all
+thirteen context pixels per target pixel through bounds-checked lookups. It
+now keeps three-pixel windows on the three reference rows and a two-pixel
+window on the target row above, and slides them one pixel per column; the
+nominal adaptive pixel is the previous column's bit 11, and any other AT is
+one bounded read. A 400-case oracle test (random sizes, offsets up to the
+`i32` extremes, every AT variant and both templates) compares its bytes
+with the per-pixel formation, which is kept as the oracle. This does not
+move the `text()` row: that preset never refines, and the 25% share labelled
+"text region with refinement" in the profiles above is the text region's
+integer coding, not refinement bitmaps. It helps the presets that refine
+instances (`text_symbol_unify_safe()`, the lossy and measured planners when
+they choose refinement).
+
+Noise note: a 3–6% wall-clock drift on `text_lossless()` appeared between
+workers that do not touch its code path; cachegrind counts 523.6, 523.6 and
+524.0 million instructions for the baseline, refinement and prefix-cache
+workers on two pages, so it is layout or scheduling noise, not work.

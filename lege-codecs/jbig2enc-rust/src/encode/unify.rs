@@ -867,21 +867,12 @@ pub fn build_symbol_unify_classes(
                 if other_index <= symbol_index {
                     continue;
                 }
-                let context_decision = inputs
-                    .context_model
-                    .map(|model| {
-                        model.merge_decision(
-                            symbol_index,
-                            other_index,
-                            inputs.config.sym_unify_context_mode,
-                        )
-                    })
-                    .unwrap_or(ContextDecision::Unknown);
-                if context_decision == ContextDecision::Reject {
-                    *reject_reason_counts.entry("context").or_insert(0) += 1;
-                    continue;
-                }
-
+                // The bitmap screens settle most pairs from cached ink
+                // profiles; the context similarity walks six token maps per
+                // pair. Run the cheap rejection first: an edge needs both
+                // verdicts, so the accepted set is the same in either order
+                // and only the diagnostic attribution of double rejections
+                // moves from "context" to "compare".
                 let Some(obs) = get_or_compute_pair(
                     &mut pair_cache,
                     &mut comparator,
@@ -897,6 +888,20 @@ pub fn build_symbol_unify_classes(
                     *reject_reason_counts.entry("compare").or_insert(0) += 1;
                     continue;
                 };
+                let context_decision = inputs
+                    .context_model
+                    .map(|model| {
+                        model.merge_decision(
+                            symbol_index,
+                            other_index,
+                            inputs.config.sym_unify_context_mode,
+                        )
+                    })
+                    .unwrap_or(ContextDecision::Unknown);
+                if context_decision == ContextDecision::Reject {
+                    *reject_reason_counts.entry("context").or_insert(0) += 1;
+                    continue;
+                }
 
                 let accept = if context_decision == ContextDecision::Unknown {
                     obs.class_score <= class_accept_limit.saturating_sub(2)
