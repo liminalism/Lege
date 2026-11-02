@@ -587,6 +587,101 @@ fn best_alignment_narrow<const AW: usize, const BW: usize>(
     }
 }
 
+/// Row and column ink counts of a bitmap at most 32 pixels wide, for
+/// [`narrow_alignment_impossible`]. Column `c` is stored at `columns[c + 1]`
+/// so that one-pixel shifts read zero past either edge.
+#[derive(Debug, Clone)]
+pub(crate) struct NarrowProfile {
+    rows: Vec<u8>,
+    columns: [u16; 34],
+}
+
+impl NarrowProfile {
+    pub(crate) fn new(image: &BitImage) -> Option<Self> {
+        if image.width > 32 || image.height > usize::from(u16::MAX) {
+            return None;
+        }
+        let words = image.packed_words();
+        let mut columns = [0u16; 34];
+        let mut rows = Vec::with_capacity(words.len());
+        for &word in words {
+            rows.push(word.count_ones() as u8);
+            add_columns(&mut columns, word, 1);
+        }
+        Some(Self { rows, columns })
+    }
+}
+
+#[inline]
+fn add_columns(columns: &mut [u16; 34], word: u32, sign: i16) {
+    let mut bits = word;
+    while bits != 0 {
+        let column = bits.leading_zeros() as usize;
+        columns[column + 1] = columns[column + 1].wrapping_add_signed(sign);
+        bits &= !(1u32 << (31 - column));
+    }
+}
+
+/// Whether `Comparator::compare_for_refine_family(a, b, max_err, max_dx, 0)`
+/// must return `None` for `max_dx <= 1`, judged from ink counts alone. Both
+/// bitmaps must be at most 32 pixels wide, with profiles built from them.
+///
+/// With `dy = 0` the search pairs row `r` of `a`, shifted by `dx` with zero
+/// fill inside one word, with row `r` of `b` for `r < min(height)`. Its error
+/// is the XOR popcount of those words, which is at least
+/// - the sum over rows of the ink-count difference, where `a` loses at most
+///   `|dx|` pixels per row to the shift, and
+/// - the sum over the 32 word columns of the difference between the column
+///   counts of `a` (moved by `dx`) and of `b` over the compared rows.
+///
+/// If, for every `|dx| <= max_dx`, one of the bounds exceeds `max_err`, no
+/// alignment is within `max_err` and the search would find none.
+pub(crate) fn narrow_alignment_impossible(
+    a: &BitImage,
+    a_profile: &NarrowProfile,
+    b: &BitImage,
+    b_profile: &NarrowProfile,
+    max_err: u32,
+    max_dx: i32,
+) -> bool {
+    debug_assert!(a.width <= 32 && b.width <= 32 && (0..=1).contains(&max_dx));
+    let height = a.height.min(b.height);
+    let (mut b_gain, mut a_gain, mut a_gain_after_loss) = (0u32, 0u32, 0u32);
+    for (&a_ink, &b_ink) in a_profile.rows[..height]
+        .iter()
+        .zip(&b_profile.rows[..height])
+    {
+        b_gain += u32::from(b_ink.saturating_sub(a_ink));
+        a_gain += u32::from(a_ink.saturating_sub(b_ink));
+        a_gain_after_loss += u32::from(a_ink.saturating_sub(b_ink).saturating_sub(1));
+    }
+    let row_bound = [b_gain + a_gain, b_gain + a_gain_after_loss];
+
+    let mut a_columns = a_profile.columns;
+    for &word in &a.packed_words()[height..] {
+        add_columns(&mut a_columns, word, -1);
+    }
+    let mut b_columns = b_profile.columns;
+    for &word in &b.packed_words()[height..] {
+        add_columns(&mut b_columns, word, -1);
+    }
+    for dx in -max_dx..=max_dx {
+        if row_bound[dx.unsigned_abs() as usize] > max_err {
+            continue;
+        }
+        let start = (1 + dx) as usize;
+        let column_bound: u32 = a_columns[start..start + 32]
+            .iter()
+            .zip(&b_columns[1..33])
+            .map(|(&a_ink, &b_ink)| u32::from(a_ink.abs_diff(b_ink)))
+            .sum();
+        if column_bound <= max_err {
+            return false;
+        }
+    }
+    true
+}
+
 #[inline(always)]
 fn row_kernel_noshift(
     a_row: &[u32],
@@ -659,6 +754,56 @@ fn load_word_or_zero(row: &[u32], idx: isize) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ink_count_bounds_never_reject_a_found_alignment() {
+        let mut state = 0x243f_6a88_85a3_08d3u64;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        let mut rejected = 0usize;
+        let mut found = 0usize;
+        for case in 0..3000u64 {
+            let wa = 1 + (next() % 32) as usize;
+            let ha = 1 + (next() % 36) as usize;
+            let wb = (wa as i64 + (next() % 5) as i64 - 2).clamp(1, 32) as usize;
+            let hb = (ha as i64 + (next() % 5) as i64 - 2).max(1) as usize;
+            let density = 10 + next() % 70;
+            let mut a = BitImage::new(wa as u32, ha as u32).unwrap();
+            let mut b = BitImage::new(wb as u32, hb as u32).unwrap();
+            let flips = next() % 6;
+            for y in 0..ha.max(hb) {
+                for x in 0..wa.max(wb) {
+                    let ink = next() % 100 < density;
+                    a.set_usize(x, y, ink);
+                    b.set_usize(x, y, ink ^ (next() % 97 < flips));
+                }
+            }
+            let (a_profile, b_profile) = (
+                NarrowProfile::new(&a).unwrap(),
+                NarrowProfile::new(&b).unwrap(),
+            );
+            for max_err in [0, 1, 2, 4, 8, 12, 20] {
+                for max_dx in 0..=1 {
+                    let impossible = narrow_alignment_impossible(
+                        &a, &a_profile, &b, &b_profile, max_err, max_dx,
+                    );
+                    let result =
+                        Comparator::default().compare_for_refine_family(&a, &b, max_err, max_dx, 0);
+                    assert!(
+                        !(impossible && result.is_some()),
+                        "case {case}: bound rejected an alignment {result:?}"
+                    );
+                    rejected += usize::from(impossible);
+                    found += usize::from(result.is_some());
+                }
+            }
+        }
+        assert!(rejected > 0 && found > 0);
+    }
 
     #[test]
     fn narrow_search_matches_general_search() {
