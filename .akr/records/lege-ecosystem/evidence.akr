@@ -1077,6 +1077,20 @@ record lege-ecosystem.evidence.jbig2-06-headroom-disposition-20261102/1 : eviden
     author "dk"
 }
 
+record lege-ecosystem.evidence.jbig2-06-planner-text-region-memo-20261102/1 : evidence {
+    title "Text-region payload memo in the measured planner: text_lossless_max_compression() 0.890 per page (4 pairs, 0.841-0.935) and 0.897 in document scope (2 pairs) on the scan corpus, output hashes unchanged; full gate passes except the six jbig2dec-dependent round trips; fmt clean; clippy finding set unchanged apart from a pre-existing planning.rs warning moving line. Component extraction left unchanged after a pprof profile of text_lossless() showed its 26% split across labelling 11%, grouping 8%, run extraction 7% and bitmap extraction 3%."
+    state verified
+    result pass
+    method command
+    observed_at git:8fed2ff3b372db511ec3ae69fdf3d5fe347da744
+    command "SYMBOL_SPEED_DIR=<scan pbms> taskset -c 2,3 cargo test --release --features parallel --test symbol_speed -- --ignored --exact symbol_speed_worker --nocapture (interleaved pairs against 47c4d7c)"
+    artifact "lege-codecs/jbig2enc-rust/docs/benchmarks/2026-11-02-symbol-speed/followup-text-region-memo.log"
+    summary """
+        Text-region payload memo in the measured planner: text_lossless_max_compression() 0.890 per page (4 pairs, 0.841-0.935) and 0.897 in document scope (2 pairs) on the scan corpus, output hashes unchanged; full gate passes except the six jbig2dec-dependent round trips; fmt clean; clippy finding set unchanged apart from a pre-existing planning.rs warning moving line. Component extraction left unchanged after a pprof profile of text_lossless() showed its 26% split across labelling 11%, grouping 8%, run extraction 7% and bitmap extraction 3%.
+        """
+    author "Claude"
+}
+
 record lege-ecosystem.evidence.jbig2-06-readme-rewrite-20261102/1 : evidence {
     title "README rewritten at 45d9be8: leads with capabilities (encoder, decoder, PDF embedding, halftone, Python), Rust and Python usage examples including grouped bounded encoding and decoding, a preset table whose contract column states pixel-exact versus lossy for every constructor, a fidelity-contracts section, a Cargo feature table including the new python feature, compatibility (decoders, emitted stream types, API, platforms, memory bounds) and licensing (MIT AND Apache-2.0, no copyleft component). Performance is described qualitatively with links to GENERIC-SPEED, GENERIC-PERF-FOLLOWUP, GENERIC-06-HEADROOM, GENERIC-06-CLOUD and SYMBOL-SPEED; no competitive timing numbers remain in the README."
     state verified
