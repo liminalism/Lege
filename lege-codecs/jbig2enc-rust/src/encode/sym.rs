@@ -207,6 +207,7 @@ impl BitImage {
 
     /// Sets pixels `x_start..=x_end` of row `y`; the span must lie inside the
     /// bitmap.
+    #[cfg(feature = "symboldict")]
     pub(crate) fn set_span(&mut self, y: usize, x_start: usize, x_end: usize) {
         debug_assert!(x_start <= x_end && x_end < self.width && y < self.height);
         let row = y * self.stride_words;
@@ -997,15 +998,18 @@ mod tests {
             }
             assert_eq!(target, expected);
 
-            let mut spans = BitImage::new(width as u32, height as u32).unwrap();
-            let mut expected = spans.clone();
-            let start = (next() as usize) % width;
-            let end = start + (next() as usize) % (width - start);
-            spans.set_span(rect_y, start, end);
-            for x in start..=end {
-                expected.set_usize(x, rect_y, true);
+            #[cfg(feature = "symboldict")]
+            {
+                let start = (next() as usize) % width;
+                let end = start + (next() as usize) % (width - start);
+                let mut spans = BitImage::new(width as u32, height as u32).unwrap();
+                let mut expected = spans.clone();
+                spans.set_span(rect_y, start, end);
+                for x in start..=end {
+                    expected.set_usize(x, rect_y, true);
+                }
+                assert_eq!(spans, expected);
             }
-            assert_eq!(spans, expected);
 
             let (trim_rect, trimmed) = source.trim();
             let mut black = Vec::new();
