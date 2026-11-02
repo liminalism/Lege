@@ -1680,14 +1680,9 @@ impl<'a> Jbig2Encoder<'a> {
             let mut local_refinement_map = vec![None; self.global_symbols.len()];
             let num_local_dict_symbols = if let Some(local_dict_layout) = &layout.local_dict_layout
             {
-                let refs: Vec<&BitImage> = layout
-                    .local_symbols
-                    .iter()
-                    .map(|&i| &self.global_symbols[i])
-                    .collect();
                 let dict_start = Instant::now();
                 let encoded_local_dict =
-                    encode_symbol_dictionary_segments(&refs, self.config, local_dict_layout)?;
+                    self.symbol_dictionary_for(&layout.local_symbols, local_dict_layout)?;
                 symbol_dict_time += dict_start.elapsed();
 
                 for (refs_idx, &dict_pos) in
@@ -1884,8 +1879,7 @@ impl<'a> Jbig2Encoder<'a> {
             resources.generic_instances = page.symbol_instances.len();
             resources.generic_source_ink_pixels = page.image.count_ones() as u64;
             let generic_start = Instant::now();
-            let generic_region_payload =
-                self.encode_generic_region_payload_at(&page.image, 0, 0)?;
+            let generic_region_payload = self.page_generic_payload(layout.page_index)?;
             generic_region_time += generic_start.elapsed();
 
             page_segments.push(Segment {

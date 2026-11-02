@@ -6,6 +6,7 @@ pub(crate) mod dictionary;
 #[cfg(feature = "symboldict")]
 pub(crate) mod exact;
 pub(crate) mod extraction;
+pub(crate) mod memo;
 #[cfg(feature = "symboldict")]
 pub(crate) mod optimizer;
 pub(crate) mod planning;

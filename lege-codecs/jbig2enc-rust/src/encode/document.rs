@@ -237,6 +237,9 @@ pub struct Jbig2Encoder<'a> {
 
     /// Encoder metrics used by the benchmark harness
     metrics: EncoderMetrics,
+
+    /// Sub-encodes shared between measured-planner trials; `None` otherwise.
+    trial_memo: Option<std::sync::Mutex<symbol::memo::TrialMemo>>,
 }
 
 impl<'a> Jbig2Encoder<'a> {
@@ -267,6 +270,7 @@ impl<'a> Jbig2Encoder<'a> {
             next_segment_number: 1,
             global_dict_segment_numbers: Vec::new(),
             metrics: EncoderMetrics::default(),
+            trial_memo: None,
         }
     }
 
