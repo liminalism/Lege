@@ -1,0 +1,35 @@
+==28260== Cachegrind, a high-precision tracing profiler
+==28260== Copyright (C) 2002-2017, and GNU GPL'd, by Nicholas Nethercote et al.
+==28260== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==28260== Command: ./worker-runscache2 --ignored --exact generic_kernel_worker --nocapture
+==28260== 
+--28260-- warning: L3 cache found, using its data for the LL simulation.
+--28260-- warning: specified LL cache: line_size 64  assoc 20  total_size 272,629,760
+--28260-- warning: simulated LL cache: line_size 64  assoc 33  total_size 276,824,064
+
+running 1 test
+test generic_kernel_worker ... GENERIC_RESULT	5.215665724	812271	1	14
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 15.80s
+
+==28260== 
+==28260== I refs:        3,887,471,724
+==28260== I1  misses:            4,529
+==28260== LLi misses:            3,698
+==28260== I1  miss rate:          0.00%
+==28260== LLi miss rate:          0.00%
+==28260== 
+==28260== D refs:          939,497,895  (666,950,199 rd   + 272,547,696 wr)
+==28260== D1  misses:        6,070,311  (  5,326,800 rd   +     743,511 wr)
+==28260== LLd misses:          488,229  (    238,083 rd   +     250,146 wr)
+==28260== D1  miss rate:           0.6% (        0.8%     +         0.3%  )
+==28260== LLd miss rate:           0.1% (        0.0%     +         0.1%  )
+==28260== 
+==28260== LL refs:           6,074,840  (  5,331,329 rd   +     743,511 wr)
+==28260== LL misses:           491,927  (    241,781 rd   +     250,146 wr)
+==28260== LL miss rate:            0.0% (        0.0%     +         0.1%  )
+==28260== 
+==28260== Branches:        388,313,466  (375,949,818 cond +  12,363,648 ind)
+==28260== Mispredicts:      35,410,450  ( 35,409,523 cond +         927 ind)
+==28260== Mispred rate:            9.1% (        9.4%     +         0.0%   )

@@ -1,0 +1,65 @@
+--- /tmp/claude-0/-home-user/67aea250-4af5-5c6b-9746-0dd15447dbc8/scratchpad/gen/arith-baseline.rs	2026-11-02 05:32:43.786281756 +0000
++++ /tmp/claude-0/-home-user/67aea250-4af5-5c6b-9746-0dd15447dbc8/scratchpad/gen/arith-runs.rs	2026-11-02 05:42:19.770206078 +0000
+@@ -736,19 +736,39 @@
+                     (((word(prev2, block) as u64) << 32) | word(prev2, block + 1) as u64) << 3;
+                 let mut above1 =
+                     (((word(prev1, block) as u64) << 32) | word(prev1, block + 1) as u64) << 4;
+-                let count = (width - block * 32).min(32);
+-                // All pixels and incoming context bits are zero for this word.
+-                // The context remains zero throughout, so batch the common MPS
+-                // updates until the next required probability-state transition.
+-                if context == 0 && pixels == 0 && (above1 >> 32) == 0 && (above2 >> 32) == 0 {
+-                    registers.encode_zero_run(&mut contexts[0], count);
+-                    #[cfg(debug_assertions)]
+-                    {
+-                        *context_distribution.entry(0).or_insert(0) += count;
++                let mut remaining = (width - block * 32).min(32);
++                loop {
++                    // While the context is zero, it stays zero for as long as
++                    // the incoming pixel and both row-above bits are zero: the
++                    // window tops (bit 63 of each shifted row, bit 31 of the
++                    // pixels) are exactly the bits the per-pixel update samples.
++                    // Batch that run of common MPS updates until the next
++                    // required probability-state transition. A fully blank word
++                    // is the run that covers the whole word.
++                    if context == 0 {
++                        let run = pixels
++                            .leading_zeros()
++                            .min(above1.leading_zeros())
++                            .min(above2.leading_zeros())
++                            .min(remaining as u32) as usize;
++                        if run != 0 {
++                            registers.encode_zero_run(&mut contexts[0], run);
++                            #[cfg(debug_assertions)]
++                            {
++                                *context_distribution.entry(0).or_insert(0) += run;
++                            }
++                            remaining -= run;
++                            if remaining == 0 {
++                                break;
++                            }
++                            // `run < 32` here: the word still has pixels left.
++                            pixels <<= run;
++                            above1 <<= run;
++                            above2 <<= run;
++                            // The next incoming bit is set, so the ordinary
++                            // step below codes it and leaves a nonzero context.
++                        }
+                     }
+-                    continue;
+-                }
+-                for _ in 0..count {
+                     let pixel = (pixels >> 31) as u16;
+                     let state = &mut contexts[context as usize];
+                     *state = registers.encode_bit_with_state_idx(*state, pixel != 0);
+@@ -763,6 +783,10 @@
+                     above2 <<= 1;
+                     above1 <<= 1;
+                     pixels <<= 1;
++                    remaining -= 1;
++                    if remaining == 0 {
++                        break;
++                    }
+                 }
+             }
+ 

@@ -9,12 +9,11 @@ no 0.6.0 publication is implied.
 
 - Faster generic encoding through packed-word context windows, native-width
   arithmetic-register storage, blank-span batching and deferred transition-table
-  loads. A cloud re-run then retained two further byte-identical changes:
-  zero-context runs are batched inside partially blank words, not only in
-  blank words, and each bitmap context caches its probability estimate next
-  to its state index. Together they remove about 13% of the kernel's
-  instructions on text and scan-like pages. All of these optimizations
-  preserve the existing generic stream bytes.
+  loads. A re-run on an unloaded machine then retained one further change:
+  each bitmap context caches its probability estimate next to its state
+  index, which halves the context bank and removes the table read from the
+  common path. All of these optimizations preserve the existing generic
+  stream bytes.
 - Explicit pixel-exact symbol presets retain isolated marks; legacy text and
   unify presets remain lossy and retain their settings.
 - Optional residual packing, selective global/local PDF dictionaries and bounded

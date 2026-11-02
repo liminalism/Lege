@@ -1,0 +1,4 @@
+runscache4 text29 I refs: 7,174,193,216|D1 misses: 8,498,121 ( 7,021,246 rd + 1,476,875 wr)|Mispredicts: 54,003,164 ( 54,002,267 cond + 897 ind) out=d0f2e74d3836 base=d0f2e74d3836
+runscache4 scan14 I refs: 3,788,464,430|D1 misses: 6,057,081 ( 5,317,236 rd + 739,845 wr)|Mispredicts: 35,043,708 ( 35,042,811 cond + 897 ind) out=ae3d1e072b2c base=ae3d1e072b2c
+runscache4 noise1 I refs: 2,179,767,275|D1 misses: 21,018,957 ( 20,865,665 rd + 153,292 wr)|Mispredicts: 30,294,557 ( 30,293,661 cond + 896 ind) out=8252c690333f base=8252c690333f
+runscache4 checker1 I refs: 1,055,379,767|D1 misses: 118,552 ( 70,838 rd + 47,714 wr)|Mispredicts: 827,838 ( 826,942 cond + 896 ind) out=cab4c6ae7eb4 base=cab4c6ae7eb4

@@ -113,3 +113,47 @@ fn long_blank_runs_and_sparse_islands_match_per_pixel_arithmetic() {
         assert_eq!(actual.as_bytes(), expected, "sparse={sparse}");
     }
 }
+
+#[test]
+fn zero_context_runs_inside_partially_blank_words_match_per_pixel_arithmetic() {
+    // Runs now start and stop at arbitrary bit positions inside a word, and a
+    // run can be cut short by the current pixel, by the row above (x+3 window)
+    // or by the row two above (x+2 window) alone. Scatter single pixels so
+    // every cut position and every cutting row occurs, including at the last
+    // word of an odd-width row.
+    let width = 101usize;
+    let height = 24usize;
+    let stride = width.div_ceil(32);
+    for layout in 0..3 {
+        let mut words = vec![0u32; stride * height];
+        let mut set = |x: usize, y: usize| words[y * stride + x / 32] |= 1 << (31 - x % 32);
+        match layout {
+            // One pixel per row, walking every bit position across the words.
+            0 => (0..height).for_each(|y| set((y * 37 + 5) % width, y)),
+            // Pixels only on every third row, so the rows between are cut by
+            // the above-row windows alone, at shifting offsets.
+            1 => (0..height)
+                .step_by(3)
+                .for_each(|y| (0..width).step_by(13).for_each(|x| set((x + y) % width, y))),
+            // Dense clusters next to empty words: runs end at a word edge and
+            // restart mid-word after a cluster.
+            _ => (0..height).for_each(|y| {
+                (0..6).for_each(|k| set((64 + y * 3 + k) % width, y));
+                set(y % 32, y);
+            }),
+        }
+        let expected = scalar(&words, width, height);
+        let mut actual = Jbig2ArithCoder::new();
+        actual
+            .encode_generic_region_inner(
+                &words,
+                width,
+                height,
+                0,
+                &[(3, -1), (-3, -1), (2, -2), (-2, -2)],
+            )
+            .unwrap();
+        actual.flush(true);
+        assert_eq!(actual.as_bytes(), expected, "layout={layout}");
+    }
+}
