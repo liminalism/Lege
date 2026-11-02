@@ -6,6 +6,11 @@ use this briefing and the live planning key
 Continue from the checked-out HEAD, not the older capsule snapshot revision.
 The user will push the local commit; no publication is authorized.
 
+Post-checkpoint note: generated AKR views were refreshed after the source commit.
+Historical unmatched-path and command-lint warnings remain; strict CLI checking
+can fail on promoted command warnings. Codec correctness checks pass independently.
+Do not treat those historical lint warnings as a renewed licensing gate.
+
 WORKER PACKET wk-6908fe54c54a
 role         cloud 0.6 release preflight and README editor
 cut          2026-11-02 by codex

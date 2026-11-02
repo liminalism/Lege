@@ -7,7 +7,7 @@
 
 What should not be trusted without re-checking: records the build flagged `stale` or `at_risk`. Neither flag means a record is wrong (D-003); both mean look at it. This view is generated on every successful build, including one that exits 0 with a long queue (D-024). An empty file on an active project is more often a sign the `watches` globs are wrong than a sign the knowledge is perfect.
 
-## Stale (6)
+## Stale (9)
 
 ### Windows OCR first-pass benchmark on a 200-page scanned book
 
@@ -15,17 +15,35 @@ What should not be trusted without re-checking: records the build flagged `stale
 
 **Cause** — `watches "lege-document-ocr/**"` was matched by `1d378566`, which touched `lege-document-ocr/README.md`.
 
-### All ten findings of the 2026-09-05 TrueTyping/halftone review are fixed and corpus-validated
-
-`verified` · `@lege-ecosystem.observation.truetyping-halftone-review-fixes-20260905/2` · observation · **stale** · [All ten findings of the 2026-09-05 TrueTyping/halftone review are fixed and corpus-validated](CURRENT-STATE.md#all-ten-findings-of-the-2026-09-05-truetypinghalftone-review-are-fixed-and-corpus-validated)
-
-**Cause** — `watches "lege-process/core/pdf_artifact.rs"` was matched by `3299468e`, which touched `lege-process/core/pdf_artifact.rs`.
-
 ### Truetyping letters off their baseline came from rises measured against a tilted fit but drawn level, and from OCR text identities handing an occurrence another position variant's id
 
 `verified` · `@lege-ecosystem.observation.truetyping-text-identity-moved-letters-off-their-baseline/2` · observation · **stale** · [Truetyping letters off their baseline came from rises measured against a tilted fit but drawn level, and from OCR text identities handing an occurrence another position variant's id](CURRENT-STATE.md#truetyping-letters-off-their-baseline-came-from-rises-measured-against-a-tilted-fit-but-drawn-level-and-from-ocr-text-identities-handing-an-occurrence-another-position-variants-id)
 
 **Cause** — `watches "lege-process/core/pdf_artifact.rs"` was matched by `3299468e`, which touched `lege-process/core/pdf_artifact.rs`.
+
+### Legacy symbol substitution is lossy; explicit exact symbol presets now preserve input pixels
+
+`verified` · `@lege-ecosystem.observation.jbig2-symbol-mode-is-lossy/4` · observation · **stale** · [Legacy symbol substitution is lossy; explicit exact symbol presets now preserve input pixels](CURRENT-STATE.md#legacy-symbol-substitution-is-lossy-explicit-exact-symbol-presets-now-preserve-input-pixels)
+
+**Cause** — `watches "lege-codecs/jbig2enc-rust/src/encode/**"` was matched by `3bdc98d4`, which touched `lege-codecs/jbig2enc-rust/src/encode/arith.rs`.
+
+### Legacy config invariance measurements do not imply all current symbol paths ignore tolerance or DPI
+
+`verified` · `@lege-ecosystem.observation.jbig2enc-inert-config-fields/3` · observation · **stale** · [Legacy config invariance measurements do not imply all current symbol paths ignore tolerance or DPI](CURRENT-STATE.md#legacy-config-invariance-measurements-do-not-imply-all-current-symbol-paths-ignore-tolerance-or-dpi)
+
+**Cause** — `watches "lege-codecs/jbig2enc-rust/src/encode/**"` was matched by `3bdc98d4`, which touched `lege-codecs/jbig2enc-rust/src/encode/arith.rs`.
+
+### jbig2enc Python binding round-trips pixel-exactly in every mode
+
+`verified` · `@lege-ecosystem.observation.jbig2enc-py-round-trip-verified/2` · observation · **stale** · [jbig2enc Python binding round-trips pixel-exactly in every mode](CURRENT-STATE.md#jbig2enc-python-binding-round-trips-pixel-exactly-in-every-mode)
+
+**Cause** — `watches "lege-codecs/jbig2enc-rust/src/**"` was matched by `3bdc98d4`, which touched `lege-codecs/jbig2enc-rust/src/encode/arith.rs`.
+
+### All ten findings of the 2026-09-05 TrueTyping/halftone review are fixed and corpus-validated
+
+`verified` · `@lege-ecosystem.observation.truetyping-halftone-review-fixes-20260905/2` · observation · **stale** · [All ten findings of the 2026-09-05 TrueTyping/halftone review are fixed and corpus-validated](CURRENT-STATE.md#all-ten-findings-of-the-2026-09-05-truetypinghalftone-review-are-fixed-and-corpus-validated)
+
+**Cause** — `watches "lege-codecs/jbig2enc-rust/src/encode/halftone.rs"` was matched by `3bdc98d4`, which touched `lege-codecs/jbig2enc-rust/src/encode/halftone.rs`.
 
 ### DocLayout-M underdetects text and some images
 

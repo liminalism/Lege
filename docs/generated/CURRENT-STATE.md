@@ -347,6 +347,8 @@ As of the 2026-11-01 working tree on HEAD95b571373a37c199ce92e0ce9c80d7c8a5ff646
 
 **supersedes** `@lege-ecosystem.observation.jbig2-symbol-mode-is-lossy/3` · **verified_by** `@lege-ecosystem.evidence.jbig2-070-canonical-package-20261101/1`, `@lege-ecosystem.evidence.jbig2-070-canonical-termination-20261101/1`, `@lege-ecosystem.evidence.jbig2-070-exact-components-20261101/1`
 
+> **Stale** — `watches "lege-codecs/jbig2enc-rust/src/encode/**"` was matched by `3bdc98d4`, which touched `lege-codecs/jbig2enc-rust/src/encode/arith.rs`. See [REVIEW-REQUIRED.md](REVIEW-REQUIRED.md#legacy-symbol-substitution-is-lossy-explicit-exact-symbol-presets-now-preserve-input-pixels).
+
 ### Legacy config invariance measurements do not imply all current symbol paths ignore tolerance or DPI
 
 `verified` · `@lege-ecosystem.observation.jbig2enc-inert-config-fields/3` · scope `path "lege-codecs/jbig2enc-rust/**"`
@@ -355,6 +357,8 @@ As of the 2026-11-01 working tree on HEAD95b571373a37c199ce92e0ce9c80d7c8a5ff646
 
 **supersedes** `@lege-ecosystem.observation.jbig2enc-inert-config-fields/2` · **verified_by** `@lege-ecosystem.evidence.jbig2-070-canonical-package-20261101/1`
 
+> **Stale** — `watches "lege-codecs/jbig2enc-rust/src/encode/**"` was matched by `3bdc98d4`, which touched `lege-codecs/jbig2enc-rust/src/encode/arith.rs`. See [REVIEW-REQUIRED.md](REVIEW-REQUIRED.md#legacy-config-invariance-measurements-do-not-imply-all-current-symbol-paths-ignore-tolerance-or-dpi).
+
 ### jbig2enc Python binding round-trips pixel-exactly in every mode
 
 `verified` · `@lege-ecosystem.observation.jbig2enc-py-round-trip-verified/2` · scope `path "lege-misc/bindings/jbig2enc-py/**"`
@@ -362,6 +366,8 @@ As of the 2026-11-01 working tree on HEAD95b571373a37c199ce92e0ce9c80d7c8a5ff646
 The jbig2enc pyo3 binding encodes and decodes back byte-identical pixels on a 480x320 glyph page in all exercised modes: standalone generic region (2876 B), standalone symbol mode (1027 B), PDF fragment without globals, PDF fragment with a 64-byte shared dictionary, and a three-page document sharing one dictionary. Zero differing pixels in every case, so both encoder modes are lossless at the exposed settings and the multi-page shared-dictionary symbol indices line up. Verified through the installed wheel (jbig2enc-0.5.4-cp311-abi3-manylinux_2_34_x86_64) in a clean virtualenv, 20 pytest tests green; cargo clippy --release clean.
 
 **supersedes** `@lege-ecosystem.observation.jbig2enc-py-round-trip-verified/1` · **verified_by** `@lege-ecosystem.evidence.stale-observation-requeue-20260908/1`
+
+> **Stale** — `watches "lege-codecs/jbig2enc-rust/src/**"` was matched by `3bdc98d4`, which touched `lege-codecs/jbig2enc-rust/src/encode/arith.rs`. See [REVIEW-REQUIRED.md](REVIEW-REQUIRED.md#jbig2enc-python-binding-round-trips-pixel-exactly-in-every-mode).
 
 ### PP-OCRv6 on wgpu was blocked by four concrete gaps, all now closed
 
@@ -389,7 +395,7 @@ Implemented at working tree on 2325cfd6 (uncommitted): jbig2enc halftone emits c
 
 **supersedes** `@lege-ecosystem.observation.truetyping-halftone-review-fixes-20260905/1` · **derived_from** `@lege-ecosystem.observation.truetyping-halftone-review-20260905/2` · **verified_by** `@lege-ecosystem.evidence.stale-observation-requeue-20260908/1`
 
-> **Stale** — `watches "lege-process/core/pdf_artifact.rs"` was matched by `3299468e`, which touched `lege-process/core/pdf_artifact.rs`. See [REVIEW-REQUIRED.md](REVIEW-REQUIRED.md#all-ten-findings-of-the-2026-09-05-truetypinghalftone-review-are-fixed-and-corpus-validated).
+> **Stale** — `watches "lege-codecs/jbig2enc-rust/src/encode/halftone.rs"` was matched by `3bdc98d4`, which touched `lege-codecs/jbig2enc-rust/src/encode/halftone.rs`. See [REVIEW-REQUIRED.md](REVIEW-REQUIRED.md#all-ten-findings-of-the-2026-09-05-truetypinghalftone-review-are-fixed-and-corpus-validated).
 
 ### Truetyping letters off their baseline came from rises measured against a tilted fit but drawn level, and from OCR text identities handing an occurrence another position variant's id
 
