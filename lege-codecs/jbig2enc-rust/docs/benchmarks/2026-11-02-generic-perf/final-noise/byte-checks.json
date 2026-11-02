@@ -1,0 +1,10 @@
+[
+  {
+    "index": 0,
+    "rust_sha256": "e1f61a07b50e851481104f6b5a74be2114c500ebd9b3db693c300e2968c2ecf7",
+    "c_sha256": "3c7e562934c1d88dc51645b07804edb5d6b5f2593ff77949f0ecc56109cfd724",
+    "canonical_equal": true,
+    "baseline_sha256": "e1f61a07b50e851481104f6b5a74be2114c500ebd9b3db693c300e2968c2ecf7",
+    "raw_baseline_equal": true
+  }
+]

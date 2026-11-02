@@ -1,0 +1,6 @@
+   Packaging jbig2enc-rust v0.6.0 (/home/dk/rust-projects/Lege-ecosystem/lege-codecs/jbig2enc-rust)
+warning: package `spin v0.10.0` in Cargo.lock is yanked in registry `crates-io`, consider updating to a version that is not yanked
+    Packaged 427 files, 6.9MiB (1.4MiB compressed)
+   Verifying jbig2enc-rust v0.6.0 (/home/dk/rust-projects/Lege-ecosystem/lege-codecs/jbig2enc-rust)
+   Compiling jbig2enc-rust v0.6.0 (/home/dk/rust-projects/Lege-ecosystem/lege-codecs/jbig2enc-rust/target/package/jbig2enc-rust-0.6.0)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.91s

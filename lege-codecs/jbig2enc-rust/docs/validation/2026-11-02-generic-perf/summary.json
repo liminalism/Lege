@@ -1,0 +1,37 @@
+{
+  "functional": {
+    "binaries": 37,
+    "passed": 261,
+    "ignored": 8,
+    "filtered": 2
+  },
+  "release": {
+    "binaries": 3,
+    "passed": 7,
+    "ignored": 1,
+    "filtered": 0
+  },
+  "legacy-hashes": {
+    "binaries": 1,
+    "passed": 1,
+    "ignored": 0,
+    "filtered": 2
+  },
+  "encode-only": {
+    "binaries": 2,
+    "passed": 4,
+    "ignored": 1,
+    "filtered": 0
+  },
+  "scope": {
+    "oracles": "Independent jbig2dec0.20 configured. No fresh PDFium/Poppler run; earlier interoperability evidence remains separate.",
+    "filters": "Known GRTEMPLATE1/TPGRON jbig2dec disagreement and the separately verified PDFium control share the filtered prefix; decoder unchanged.",
+    "byte_checks": "All367real pages and dense/noise controls are raw-byte identical before/after and match pinned C after only known legacy FF padding normalization.",
+    "api": "No API, dependency, license, hidden-thread or output-format changes.",
+    "other_checks": [
+      "cargo fmt --check",
+      "Python tool AST",
+      "scoped git diff --check"
+    ]
+  }
+}

@@ -1,0 +1,9 @@
+
+running 1 test
+test generic_kernel_worker ... GENERIC_RESULT	4.628242456	14548880	40	17
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.75s
+
+[ perf record: Woken up 153 times to write data ]
+[ perf record: Captured and wrote 38.133 MB .agent/scratch/jbig2-perf-followup/baseline-perf.data (4740 samples) ]

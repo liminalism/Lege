@@ -1,0 +1,12 @@
+# started on Mon Nov  2 10:22:41 2026
+
+
+ Performance counter stats for 'taskset -c 0 .agent/scratch/jbig2-perf-followup/baseline-worker --ignored --exact generic_kernel_worker --nocapture' (3 runs):
+
+        3937029781      cpu_core/cycles/u                                                       ( +-  0.12% )
+        5275868659      cpu_core/instructions/u                                                 ( +-  0.02% )
+         761013173      cpu_core/branches/u                                                     ( +-  0.02% )
+          74650991      cpu_core/branch-misses/u                                                ( +-  0.02% )
+
+       1.066997448 +- 0.001896206 seconds time elapsed  ( +-  0.18% )
+

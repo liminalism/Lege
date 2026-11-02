@@ -1,0 +1,48 @@
+
+running 1 test
+QUALITY_RESOURCES	globals_encoded=144456	globals_bitmap=940844	globals_pixels=3074292
+QUALITY_PAGE_RESOURCES	0	page_pixels=2777720	local_bitmap=0	exact=46	refined=2	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=3088679
+QUALITY_PAGE_RESOURCES	1	page_pixels=2508480	local_bitmap=0	exact=14	refined=24	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=3080531
+QUALITY_PAGE_RESOURCES	2	page_pixels=2508480	local_bitmap=0	exact=611	refined=1218	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=3093599
+QUALITY_PAGE_RESOURCES	3	page_pixels=2508480	local_bitmap=0	exact=1786	refined=817	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=3384037
+QUALITY_PAGE_RESOURCES	4	page_pixels=2508480	local_bitmap=0	exact=1186	refined=564	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=3299319
+QUALITY_PAGE_RESOURCES	5	page_pixels=2508480	local_bitmap=0	exact=1563	refined=827	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=3687196
+QUALITY_PAGE_RESOURCES	6	page_pixels=2259745	local_bitmap=0	exact=1872	refined=970	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=3630777
+QUALITY_PAGE_RESOURCES	7	page_pixels=2259745	local_bitmap=0	exact=1674	refined=1140	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=3645873
+QUALITY_PAGE_RESOURCES	8	page_pixels=2316665	local_bitmap=0	exact=1490	refined=582	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=3621054
+QUALITY_PAGE_RESOURCES	9	page_pixels=2316665	local_bitmap=0	exact=2409	refined=807	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=3613847
+QUALITY_PAGE_RESOURCES	10	page_pixels=5385600	local_bitmap=0	exact=1773	refined=1395	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=3871069
+QUALITY_PAGE_RESOURCES	11	page_pixels=5385600	local_bitmap=0	exact=1410	refined=993	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=3819872
+QUALITY_PAGE_RESOURCES	12	page_pixels=5385600	local_bitmap=0	exact=1688	refined=1017	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=3980910
+QUALITY_PAGE_RESOURCES	13	page_pixels=3260488	local_bitmap=0	exact=1912	refined=1040	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=3887613
+QUALITY_PAGE_RESOURCES	14	page_pixels=3260488	local_bitmap=0	exact=2190	refined=1212	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=4028612
+QUALITY_PAGE_RESOURCES	15	page_pixels=3260488	local_bitmap=0	exact=2208	refined=1189	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=4010391
+QUALITY_PAGE_RESOURCES	16	page_pixels=3260488	local_bitmap=0	exact=646	refined=405	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=3379908
+QUALITY_TOPOLOGY	corrected_instances=0
+QUALITY_STAGES	cc=0.049467739	match=0.313455866	cluster=0.341642896	plan=0.376932777	dict=0.031453615	text=0.065480079	generic=0.000001015
+PDFTOPPM: Syntax Error (145291): 1 extraneous byte after segment
+
+QUALITY_PDF	0	PDFTOPPM	pass
+QUALITY_PDF	0	PDFIUM_PYTHON	pass
+QUALITY_PAGE	0	226	2719804	0.031923417	0.000245603	2719804
+PDFTOPPM: Syntax Error (145315): 1 extraneous byte after segment
+
+QUALITY_PDF	1	PDFTOPPM	pass
+QUALITY_PDF	1	PDFIUM_PYTHON	pass
+QUALITY_PAGE	1	250	6	0.033624556	0.000451141	6
+PDFTOPPM: Syntax Error (149681): 1 extraneous byte after segment
+
+QUALITY_PDF	2	PDFTOPPM	pass
+
+thread 'quality_corpus_worker' (253) panicked at tests/common/pbm.rs:144:9:
+PDFIUM_PYTHON: pixel mismatch at (84,26) expected=1 got=0 (dims exp 1248x2010 got 1248x2010)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test quality_corpus_worker ... FAILED
+
+failures:
+
+failures:
+    quality_corpus_worker
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 3 filtered out; finished in 2.27s
+

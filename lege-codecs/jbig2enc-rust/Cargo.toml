@@ -3,14 +3,18 @@ name = "jbig2enc-rust"
 version = "0.6.0"
 edition = "2024"
 description = "JBIG2 encoder implementation in Rust with PDF fragment support"
-license = "MIT OR Apache-2.0"
+license = "MIT AND Apache-2.0"
+# Project contributions are MIT; retained upstream arithmetic-coder files
+# carry Apache-2.0 terms. Both license texts and notices are distributed.
 readme = "README.md"
 documentation = "https://docs.rs/jbig2enc-rust"
 homepage = "https://github.com/liminalism/lege/tree/main/lege-codecs/jbig2enc-rust"
 repository = "https://github.com/liminalism/lege"
 keywords = ["jbig2", "encoder", "compression", "image", "pdf"]
 categories = ["multimedia::encoding", "multimedia::images"]
-include = ["Cargo.toml", "Cargo.lock", "README.md", "LICENSE-MIT", "LICENSE-APACHE", "build.rs", "src/**", "tests/**", "benches/**"]
+# Old external scan inputs stay in the checkout for the explicit legacy hash
+# gate, but are not distributed. Default tests use generated original fixtures.
+include = ["Cargo.toml", "Cargo.lock", "README.md", "CHANGELOG.md", "PROVENANCE.md", "NOTICE", "LICENSE-MIT", "LICENSE-APACHE", "build.rs", "src/**", "tests/**/*.rs", "tests/fixtures/*.txt", "tests/fixtures/README.md", "tests/fixtures/original/**", "benches/**", "tools/*.py", "tools/*.cc", "tools/corpus_specs/*.json", "docs/**"]
 
 [lib]
 name = "jbig2enc_rust"
@@ -119,6 +123,10 @@ name = "decode_halftone"
 required-features = ["encode", "decode"]
 
 [[test]]
+name = "halftone_tone_roundtrip"
+required-features = ["encode", "decode"]
+
+[[test]]
 name = "decode_halftone_skip"
 required-features = ["encode", "decode"]
 
@@ -188,6 +196,42 @@ required-features = ["encode", "decode"]
 [[test]]
 name = "multi_page_benchmark"
 required-features = ["symboldict"]
+
+[[test]]
+name = "quality_benchmark"
+required-features = ["symboldict", "decode"]
+
+[[test]]
+name = "pdf_dictionary_policy"
+required-features = ["symboldict", "decode"]
+
+[[test]]
+name = "exact_symbols"
+required-features = ["symboldict", "decode"]
+
+[[test]]
+name = "pdf_groups"
+required-features = ["symboldict", "decode"]
+
+[[test]]
+name = "lossy_topology_guard"
+required-features = ["symboldict", "decode"]
+
+[[test]]
+name = "connected_components"
+required-features = ["symboldict"]
+
+[[test]]
+name = "arithmetic_termination"
+required-features = ["symboldict", "decode"]
+
+[[test]]
+name = "generic_speed"
+required-features = ["encode"]
+
+[[test]]
+name = "generic_contexts"
+required-features = ["encode"]
 
 # Calls `encode_symbol_dict` / `encode_text_region_mapped` directly.
 [[test]]

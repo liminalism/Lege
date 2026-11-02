@@ -1,6 +1,7 @@
 //! Byte-identical encoder verification (jbig2decplan.md §23 Phase 0, Gap D/E).
 //!
-//! This test encodes every fixture in `tests/fixtures/*.pbm` through each
+//! These tests encode the original geometric corpus and the separate legacy
+//! corpus through each
 //! encoder mode and organisation, hashes every emitted stream with SHA-256,
 //! and compares the result against the committed manifest
 //! `tests/fixtures/encode_hashes.txt`.
@@ -11,7 +12,16 @@
 //! encoded byte).
 //!
 //! To regenerate the manifest after an *intentional* encoder change, run:
-//!   UPDATE_ENCODE_HASHES=1 cargo test --test encode_byte_identical
+//!   UPDATE_ENCODE_HASHES=1 cargo test --test encode_byte_identical -- --ignored --exact encoder_output_is_byte_identical
+//!
+//! The old scan inputs are excluded from the package. Its unchanged manifest
+//! gate runs explicitly with --ignored --exact encoder_output_is_byte_identical.
+//! The default original-corpus gate uses original_encode_hashes.txt, captured
+//! independently with the historical HEAD encoder, and never refreshes the old
+//! manifest. See tests/fixtures/README.md for both commands and provenance.
+
+#[path = "common/fixtures.rs"]
+mod fixtures;
 
 use std::io::{BufRead, BufReader, Read};
 use std::path::Path;
@@ -36,7 +46,7 @@ fn modes() -> Vec<(&'static str, Jbig2Config)> {
     refine.refine = true;
     refine.text_refine = true;
 
-    vec![
+    let mut modes = vec![
         // Explicitly generic. This row is about the generic-region path, so
         // it names the preset rather than riding on whatever the default is.
         ("generic", Jbig2Config::generic()),
@@ -44,13 +54,21 @@ fn modes() -> Vec<(&'static str, Jbig2Config)> {
         ("symbol", Jbig2Config::text()),
         ("sym_unify", Jbig2Config::text_symbol_unify()),
         ("refine", refine),
-    ]
+    ];
+    if !cfg!(feature = "symboldict") {
+        modes.retain(|(name, _)| matches!(*name, "generic" | "lossless"));
+    }
+    modes
 }
 
 fn main_manifest_lines() -> Vec<String> {
+    manifest_lines_for(&fixtures())
+}
+
+fn manifest_lines_for(paths: &[&str]) -> Vec<String> {
     let mut lines = Vec::new();
 
-    for fixture in fixtures() {
+    for &fixture in paths {
         let name = Path::new(fixture)
             .file_stem()
             .and_then(|s| s.to_str())
@@ -98,8 +116,11 @@ fn main_manifest_lines() -> Vec<String> {
         }
     }
 
-    // Multi-page PDF split sharing one global dictionary across both fixtures.
-    let pages: Vec<Array2<u8>> = fixtures().iter().map(|f| load_pbm_array(f)).collect();
+    if !cfg!(feature = "symboldict") {
+        return lines;
+    }
+    // Multi-page PDF split sharing one global dictionary across the fixtures.
+    let pages: Vec<Array2<u8>> = paths.iter().map(|f| load_pbm_array(f)).collect();
     let split = encode_document_pdf_split(&pages, &Jbig2Config::text())
         .expect("multipage pdf_split encode failed");
     if let Some(g) = &split.global_segments {
@@ -116,10 +137,15 @@ fn main_manifest_lines() -> Vec<String> {
 }
 
 #[test]
+#[ignore = "external legacy PBM rights unresolved; retain explicit unchanged-manifest regression gate"]
 fn encoder_output_is_byte_identical() {
     let produced = main_manifest_lines();
 
     if std::env::var("UPDATE_ENCODE_HASHES").is_ok() {
+        assert!(
+            cfg!(feature = "symboldict"),
+            "baseline updates require the full symboldict build"
+        );
         let mut body = String::new();
         body.push_str(
             "# SHA-256 of every encoder stream, per fixture/mode/organisation.\n\
@@ -137,12 +163,13 @@ fn encoder_output_is_byte_identical() {
     let expected = std::fs::read_to_string(MANIFEST).unwrap_or_else(|e| {
         panic!(
             "cannot read {MANIFEST}: {e}. Generate it once with \
-             UPDATE_ENCODE_HASHES=1 cargo test --test encode_byte_identical"
+             UPDATE_ENCODE_HASHES=1 cargo test --test encode_byte_identical \
+             -- --ignored --exact encoder_output_is_byte_identical"
         )
     });
     let expected_lines: Vec<&str> = expected
         .lines()
-        .filter(|l| !l.trim_start().starts_with('#') && !l.trim().is_empty())
+        .filter(|l| manifest_line_for_build(l))
         .collect();
 
     assert_eq!(
@@ -159,6 +186,46 @@ fn encoder_output_is_byte_identical() {
             "encoder output diverged from the byte-identical baseline"
         );
     }
+}
+
+#[test]
+fn original_fixture_encoder_output_is_byte_identical() {
+    const ORIGINAL_MANIFEST: &str = "tests/fixtures/original_encode_hashes.txt";
+    let produced = manifest_lines_for(&fixtures::ORIGINAL_FIXTURES);
+    // This separate switch cannot overwrite the inherited legacy manifest.
+    if std::env::var_os("UPDATE_ORIGINAL_ENCODE_HASHES").is_some() {
+        assert!(
+            cfg!(feature = "symboldict"),
+            "baseline updates require the full symboldict build"
+        );
+        let mut text = String::from(
+            "# Original geometric corpus, captured with historical HEAD encoder.\n# See docs/validation/2026-11-01/original-fixture-baseline.json for source identity.\n",
+        );
+        for line in &produced {
+            text.push_str(line);
+            text.push('\n');
+        }
+        std::fs::write(ORIGINAL_MANIFEST, text).expect("write original corpus manifest");
+        return;
+    }
+    let expected =
+        std::fs::read_to_string(ORIGINAL_MANIFEST).expect("read original corpus manifest");
+    let expected: Vec<_> = expected
+        .lines()
+        .filter(|line| manifest_line_for_build(line))
+        .collect();
+    assert_eq!(
+        expected, produced,
+        "original corpus differs from historical encoder baseline"
+    );
+}
+
+fn manifest_line_for_build(line: &str) -> bool {
+    if line.trim_start().starts_with('#') || line.trim().is_empty() {
+        return false;
+    }
+    cfg!(feature = "symboldict")
+        || matches!(line.split_whitespace().nth(1), Some("generic" | "lossless"))
 }
 
 // ─── PBM loading ────────────────────────────────────────────────────────────

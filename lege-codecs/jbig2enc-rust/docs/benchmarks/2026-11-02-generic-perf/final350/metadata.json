@@ -1,0 +1,2125 @@
+{
+  "corpus": [
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0031.pbm",
+      "sha256": "f1b695514bdd7dabcce8a3bafbb99654d7406b0760aefd095313c15c48e7e19c",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0032.pbm",
+      "sha256": "5e9d671541f85c8370bf03570356c96f5aadfb8d896ccd38bc73aaa4d1365c38",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0033.pbm",
+      "sha256": "291bf3063408566d3a7110f356d7c207944c138776327e9ea3eb256367693c9e",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0034.pbm",
+      "sha256": "39c287fd67fee5917bcd5721c6c31e9c6d4c5d557047a19559448dc2f5f4e76c",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0035.pbm",
+      "sha256": "0cab92fcf4e48f10fa08d3cf10992f43de977dfa0311d99b835507a7b2e8d58c",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0036.pbm",
+      "sha256": "64e57a2f4fcb1074dcab91d584b890a1d1ea528dfeb1af952265d653c32e5f8d",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0037.pbm",
+      "sha256": "161994afb78c8dd6ce3bce122decac9b9c47a4b08b7d73375defd0f2c2138c13",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0038.pbm",
+      "sha256": "3c218da42c17ccc23b0010a33d3dc7d83369b9b1d9104034778c3f514e43a5ca",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0039.pbm",
+      "sha256": "ac7e0a44a4f3c90c37294f4982d100b4df011f24668ea2cd9de343a9f9ce7fa9",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0040.pbm",
+      "sha256": "cdb565927ef9ede621c67c32c88ae00a256c449a02192bacd47b0710099562ea",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0041.pbm",
+      "sha256": "724646f372c03f3f1396269488a8b513444232a705ed0a0f1b5cc5e44e1dfc33",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0042.pbm",
+      "sha256": "c956d0f5b847ba0303e0c092eb1c7cb3a1801d625bacc16de6af359713f7c893",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0043.pbm",
+      "sha256": "f11355eeccec298c850f7fb06f3ab3eb648301f31e4101b5a45f2becc1e348aa",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0044.pbm",
+      "sha256": "af922832efc85265b38c8eb5c271eb71636df9bd697129a60b81d0f8243301a5",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0045.pbm",
+      "sha256": "b72d621477ecae50480b14fb747e6543250f8ab4072964affe892214ea7f01f1",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0046.pbm",
+      "sha256": "fa8324cbb702988bba9d89a34ee1c08726043544a8cbe599e8922b42d59516d5",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0047.pbm",
+      "sha256": "21ce1575b84896865d1d73c8963a49a68d4d64d25a505113c22d9475e8070b8f",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0048.pbm",
+      "sha256": "76407f33a09730c65d90b168e221e40a06bfad2ec21f555217c6e27e008df9cc",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0049.pbm",
+      "sha256": "1ff4040b7085dfdde71fae20fc5d05a000ed0f5f0aff3b31c6db5f167e5aa607",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0050.pbm",
+      "sha256": "7b228e644a75483e83b1774a05be3a64196ad0f7b942309eae332d2fbf868a0b",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0051.pbm",
+      "sha256": "f8aa2cfefad95d53f12469aba937d7dbff4ffedcbf8cc414863d2a5a344f38c8",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0052.pbm",
+      "sha256": "716549457f307c22325429b55e3e344a51108688c76640611a8ca301b4cb3a9d",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0053.pbm",
+      "sha256": "bdfcf8e5cfb5f17de2c06ec2c6108d5508eb490449292e64b4a3d46de68b6063",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0054.pbm",
+      "sha256": "cab5c84fb0f0af6762b3716946c4f6718a4f6e0e5a187a82ed7a698b52b1319e",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0055.pbm",
+      "sha256": "b84ee6b17ce419ff403967f0e2c7f2f9bec5ac5a11805b5a8c62249cd8466afa",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0056.pbm",
+      "sha256": "2b2231413f0e359d5f2776c8e8f73ce86293c916076652490a906b1d7cbac1e4",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0057.pbm",
+      "sha256": "1e3fc29bc263f38343d735286821953067bd754a13934829cbd6a6738084aab8",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0058.pbm",
+      "sha256": "e6fc253533d1fb47eaf64e737e187b3d25c8d97ef5b44516bfc292d182949fb1",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0059.pbm",
+      "sha256": "9b5af1c072f0f81eb6a35e5b8829a8a74dda690f867f3c435cdc7e806f6d3077",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0060.pbm",
+      "sha256": "ee0754ab5f9720745d4b88cad58884c3527405d5e8d08423889590b2bc627f46",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0061.pbm",
+      "sha256": "fa7ecd3506763bd1ef77c6ebcd8c1cef41a1600387ebc01274bb5077a80f1390",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0062.pbm",
+      "sha256": "02560981592ef2d26e1e31fc3f4cb79b262a845e6c93a268e04878f558d3444f",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0063.pbm",
+      "sha256": "c0871616e07ecd3738003e76c743706efd0edc2fd7d0f6b7e5e804b1850a32ad",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0064.pbm",
+      "sha256": "c2fb91dea0d81e69631b1a9ff479bfa6b76b2e0e61773b8912969d3273a465ac",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0065.pbm",
+      "sha256": "9b53ad988ed1f39eaa12910ef9659da59a5334ed5f2036d35596396bd3b879b5",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0066.pbm",
+      "sha256": "f180f9f531b2a032f8140d93a8d880f30fe965ab8c2083e6f1b8b19c4bc9f190",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0067.pbm",
+      "sha256": "af1d710dda8069c364114765f5cda05b001d3e23e0a42d1fb79edb47a0ececfc",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0068.pbm",
+      "sha256": "9cc156634667142c0c1489ce385b540e9ace15a1a7c40e52aa3e00f05f23b3dc",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0069.pbm",
+      "sha256": "7bf4b6ebad2b5311ed8c9e03df24e781f4a3e63afee15e2eebe99cf84c0db063",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0070.pbm",
+      "sha256": "e2717c345cb21560d58367f941fdbad44b9aacd7eeda71965462df3594ea4a0b",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0071.pbm",
+      "sha256": "be34aa505983554a58328b1293826e0de73650ac991e4794431f23c7c1b6f661",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0072.pbm",
+      "sha256": "2aef2f3636ad1bae80b75c47755a84c1b4fabd32c961fcd3714c1f68ee5db868",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0073.pbm",
+      "sha256": "8f268b12b472ca6de9b9bd4ab6df43e5ee78546250dffa4fab5274c5d0d0f147",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0074.pbm",
+      "sha256": "693c742b9c4fcc2ced366a1fb47ee93ca1aa91925194ff1d2ecff4e457f53943",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0075.pbm",
+      "sha256": "6e6670aa3991286c8db10c2cf59b90c1a0f3af2a7a9a97ee1f5ee5a0b3f3e52c",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0076.pbm",
+      "sha256": "bb49695c15dc9a1d9786dcd3b19d6872b63b57d95121d43e496b5ccc167d374d",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0077.pbm",
+      "sha256": "ec8d5a1bfeac89f66130652c9b8cc1c231346a3ea19e4043035407f391b056fe",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0078.pbm",
+      "sha256": "55c5b6c522c18787f6a486774c1691166cd478a096465ddba2beaf3d5b369b8e",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0079.pbm",
+      "sha256": "12a646a5834397b8c3b77c359368a12060be012d8dbcc341b2bac4984eae48ae",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0080.pbm",
+      "sha256": "b671f167e31222fae271a4ffd385f625ef48eb5487a35509b3ff685eadbc1327",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0081.pbm",
+      "sha256": "38db4d7ab9a3488956359feef96d1c7a10abb777f165a37c1b579f4ddf6900c1",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0082.pbm",
+      "sha256": "340572d72009368c528bf1923f5a6cedaf645c16f68989e77a3c1840aa280de3",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0083.pbm",
+      "sha256": "706aca8743bdd69281c25998d7b163fea6a760ca1ee2763a09ba3cfc4f2cfa02",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0084.pbm",
+      "sha256": "4dc8d6288e61c93307d7497b82b7f80fccc7b1a182aaa3533d331c8f8ef195b4",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0085.pbm",
+      "sha256": "37147b40daa3cac69a7a208cf0d7d2fe4becd444a89cb2eed8726af698c832a9",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0086.pbm",
+      "sha256": "61abd10c7bddc676ddc9c0bd71f16cee7c9e3b08ab365f542cb6822e7690b7b3",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0087.pbm",
+      "sha256": "f6c4f130e89673bb19d6774ce7dd562bf052df76752606427a9d9119fd7aef61",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0088.pbm",
+      "sha256": "0d0a6e42008280f9ef4946ef8ed4d8a70574bdb4d6ea4d4579ff3fa66d47f7c4",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0089.pbm",
+      "sha256": "d43682188c7c5339974b666c3abd4fdb36e2da8793531683d2e7adc6b9eea389",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0090.pbm",
+      "sha256": "9d3eac97d1e5a2ac3ff6acea9cb2b3bdbbf32c1ff1e8bdedf0c2d34b70f43df3",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0091.pbm",
+      "sha256": "071246a3e9e772d0b54a8404cb29f69e2a4818d2ed93dfcfd08a987528340479",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0092.pbm",
+      "sha256": "8e6ee3b56dc6337898982bba63b7a3facb7360d83d72ed57c00813f0acb20412",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0093.pbm",
+      "sha256": "4fa85a39c2c1a28447c790193c995da7ceb2c258549b27948e53ae0693891ea8",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0094.pbm",
+      "sha256": "07c25325baa9873031668b061cd634e39771b90ecb839fa3ced747b4226e7e6f",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0095.pbm",
+      "sha256": "4898c11b54ea6e4e32c2c5d81669d929517d9a8fd3f489d2b0157b85b3646c5a",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0096.pbm",
+      "sha256": "eebc3051ecb752aee12766905c86f53285605dd5570e69b6ef499d150a953053",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0097.pbm",
+      "sha256": "1add45303d46bd8daf10b67a1714f01fe948d02c654b3f60dd269e97846f7aed",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0098.pbm",
+      "sha256": "4025fcbb98475ced1e4c2c0062043edeb2986483a69eb4efb7b6397aa2119b54",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0099.pbm",
+      "sha256": "4ef272ce008dcf601669768ee7956a098dce8c296e671ea87b331d47975d78c0",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0100.pbm",
+      "sha256": "a06abddc75b83caff3e1f71094a84c93776ce4ebf27ca74e5c85eb43cb705e38",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0101.pbm",
+      "sha256": "25be4967202f27723a53d3bbe59ef6c35aeacb6b9c3ceb9e10cc9d39721e86d9",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0102.pbm",
+      "sha256": "99176dfcaa617f8d3ba72c09230c6c5681bcd6856707bc857303091a38896a03",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0103.pbm",
+      "sha256": "126c00ac246f6b89d9a8dffe48cd14ebb3f27cf09facae5e81ef7151b80d8c8e",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0104.pbm",
+      "sha256": "6c026130c8be998a9e224b8280be583992569f3e11c1b7fb8a2682827bed772b",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0105.pbm",
+      "sha256": "292676ca9b123173356f0bafb5af8d4f86880907d03a9e88a43c4c63b88e6983",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0106.pbm",
+      "sha256": "7a126b148f8600f27c951cb6a87005e11c79e294c67a269d64b34edc7ffafef8",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0107.pbm",
+      "sha256": "45a7697feede729c622286530e0b43941a69bb30451fa14be83699c9a4ef8d0a",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0108.pbm",
+      "sha256": "fb2caab83dae28824721c039eafaa73c89cfc83b40781dedc3c134eb97731269",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0109.pbm",
+      "sha256": "d3a860d1e031821c76a06a0e57be185f0c8c18c82880649abdad96035241c783",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0110.pbm",
+      "sha256": "9d1e0ff2b0500c27ac9bade7b0f2292c59cb6146f850caa125aa2af45f5aefa6",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0111.pbm",
+      "sha256": "181ca60d9fd618124541e60cdee59d71afa2637bfbcd3f4da54f79c06c060357",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0112.pbm",
+      "sha256": "79aadb1008fcffd5fe756f5cfe52f62debc905f39e420c55181154fb482150c3",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0113.pbm",
+      "sha256": "bc8bf837f1aad28f4d761f595dfb0488a1a34a3cd8ebbeae270392c731c05201",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0114.pbm",
+      "sha256": "74b7b5f54827001abcfa8f5647d15ab742c96dabd2a3196a9dff49b52d12e23c",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0115.pbm",
+      "sha256": "0eef20d0076e01805176e2ebe3616bda0684e07c927f4265ac4c27124a0c4287",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0116.pbm",
+      "sha256": "15389fd3be8731af8ab5af2b12547c7b82f8aa7fea258ccc1d78d9dea4e07fb8",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0117.pbm",
+      "sha256": "f438696eb6683ed87611fc0759f7a0e9c0da648d613bca82a70c6d1b19140ee8",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0118.pbm",
+      "sha256": "f517bd52c3492bc94a3e1b027276c714a5867e083a251653703ab77a4e75fe73",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0119.pbm",
+      "sha256": "11e8f6e387addba8f871fd1bf9120b0a50fa1061b5622602b5cc156f44a3902a",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0120.pbm",
+      "sha256": "042610eab1f9f8d9f3f4b41cc3e57a1306be38ed825d86041475df47c58e4ec7",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0121.pbm",
+      "sha256": "9250d56565854ac107ea632eb922d7bbcf295ef3fa0ccb280b23e562f970dc65",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0122.pbm",
+      "sha256": "2a623f6a747bab371c60c14d93693334316fff1e071d3438356ec1ef88e3a16a",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0123.pbm",
+      "sha256": "fce35d47da4f8de51cc1ea8b5262e198b472c8e45488646884246f7255de106c",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0124.pbm",
+      "sha256": "0c05e8a2b497b4fd7ab7c2ef905907fe61d58d3a0ebc6942a7d66e09b97a3afc",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0125.pbm",
+      "sha256": "0513f1a9184fab0f21fadaa9cb97baa8687c87fb83a4edf8c2bf041ea4c22535",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0126.pbm",
+      "sha256": "564cdb46aa4c9b7ab4d555153c8d0bdda65f96f8fc575761bd08db8f0b13ebae",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0127.pbm",
+      "sha256": "319b90a288cd20527588ef1efff6571731f32dae03cc45bd6ebe065f7b0f19ee",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0128.pbm",
+      "sha256": "a452f7dd646fad62ce477e33b8190fc9d06d06e9e524daf7281356670251d466",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0129.pbm",
+      "sha256": "9397de1b55d1e4f0c6c95e82b4672ebee68b407e2c7a24ff019ed0de33019584",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0130.pbm",
+      "sha256": "8edd0906b688a239be1cfce53c548c4f6e16461ab7ca8fe79366629c01514f43",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0131.pbm",
+      "sha256": "5f14aa660b661485316da604336a62bf1b1956de4012877bb7e4496f625e1320",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0132.pbm",
+      "sha256": "80bc3192b03ab1854fabc4ad330a789c8a820aec3611863f4fb81a3586137523",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0133.pbm",
+      "sha256": "dd2eabfff14354fbb823435b40b571b9f65a55e352226d34ec8635428f440cd6",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0134.pbm",
+      "sha256": "ab79a254af50b436ee478497c11046c90488386893a0b567b401c4f33758ee83",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0135.pbm",
+      "sha256": "6b4843dc7c8422e38b53f751ba65a724c5a7e6725e75e57736dbe7c554dcba59",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0136.pbm",
+      "sha256": "3e22fb928f1bdd30e453a8c4a06fb5b67dcf123d9f009cc251ed29d29b9fd71e",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0137.pbm",
+      "sha256": "cf79fe5cfab117deb2742a1a1d786d170aa1d1112cedf84af35878834950b5d5",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0138.pbm",
+      "sha256": "bb0dc1fa9a764df13fdbaa3dc76c02b772efea141120c2f168c2febb008f52e5",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0139.pbm",
+      "sha256": "63b2bca7348a084ccb6d3e6bd6546846a21f49df21ed0cd0a7cdc47608b3d646",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0140.pbm",
+      "sha256": "f360d6de6f338a9c8943c3f2888759ee5c72e0ceea92b5807738056258661e48",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0141.pbm",
+      "sha256": "46aa17ab3d941f5c50dc32ea7ff4f2d20b1a4b0f53154862aaffd0ac224bf685",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0142.pbm",
+      "sha256": "17180d32f408cea8b1b43f9680e0551abc7a4183531aa6e5193a488694da894c",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0143.pbm",
+      "sha256": "4672be8876b78ab517573ee4e859f5540291235d021264459d6d9c9d5bbe4ac1",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0144.pbm",
+      "sha256": "84eec1ac2c6ece1e131731183b603fc62b8c73d1c2365c9b4bb8d6d741fd9fa3",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0145.pbm",
+      "sha256": "bb66c3ce44153ee21796f7b30f896bb1b26f889147b1f9f7fded708e2e632be2",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0146.pbm",
+      "sha256": "85938c382c4ad0425946072d62f0f9a81bf9adc714b6e04480f00b4ead514421",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0147.pbm",
+      "sha256": "bef79e3e53ac8c80fe65abc0233c0063a44e22120c3cf890eab84d10c3667834",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0148.pbm",
+      "sha256": "2e9e64d9498760d07f792076117364cce695a8edc4d83fddf9d910196a4ac119",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0149.pbm",
+      "sha256": "39967911eed50a394bb0b15a1467870d3e025a61b7d74a90b0b7b763d9488171",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0150.pbm",
+      "sha256": "91590f48759279247badbb8d9f18b823322c07b191be35ffb08d1cca4abb7f18",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0151.pbm",
+      "sha256": "f2035d97dda1be545255bbfeb27780f9fe8db812d6f21b9c6de64ab1e5c8749c",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0152.pbm",
+      "sha256": "1426291c3ba943b55e12dcc83962b70dcfc4e90f306f0115788e8899e87cf26b",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0153.pbm",
+      "sha256": "1c670c0360046d98d52c69251a817cd37baa9d668d0701b985f239228cb0c51b",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0154.pbm",
+      "sha256": "e804c10ae8ced77c32110633a91658d75723cadb23a56ca87a358c78bd5a9eb5",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0155.pbm",
+      "sha256": "e8bcf8e6e8c8d5c462b4f29cb81305985304f7f68068d89de4110425e17c7596",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0156.pbm",
+      "sha256": "955f7c94c164c6e9878c1fe234249631a5b7113eb3da2912330d0b428afd4be5",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0157.pbm",
+      "sha256": "4eac6216ff71a536815a8ea2cc90527151fd2af5abe8d28a66e5ba8337d67285",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0158.pbm",
+      "sha256": "ff72d9dcc77150dda1064f9643195791e4b8be35d4f369ce5bd4a39ddf58edca",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0159.pbm",
+      "sha256": "ae01a3be6b1d6efebe55be8d461594b31ba9f4fad7f9b3fee1816b6de5b15843",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0160.pbm",
+      "sha256": "1d591ca4a5e93feed2f66c23fbdaf6bab07f6710812470d02e2409f216993b0f",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0161.pbm",
+      "sha256": "d05b946ff62eb017046a529ea26a443265b4de85b8429baed919641d87e2a7a0",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0162.pbm",
+      "sha256": "3b1c9c76fbd694763b9713228833ff03fc11e01a3ed94fb6f5904dbe9f5960c5",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0163.pbm",
+      "sha256": "6eb16d6ac81442a4c78a029bd831bea9af1ed5e0f7a6e120788b8bbc5a196dc2",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0164.pbm",
+      "sha256": "2db8dfeae129ed510976e164d0560c0ad34dd5a4453308b5ee26fe7596c57066",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0165.pbm",
+      "sha256": "089f207a758d850f18457fe6eb1aa7b97d24850b139df2df1c41407622860191",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0166.pbm",
+      "sha256": "2cca48c0d23a019d95d406fc59da2776b66b7a9b069adcc648d52e247aeb9cc5",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0167.pbm",
+      "sha256": "fc42e2c9f407ae6d8ba3a3999772b8dea858c2d8c9faa2d24037b13eb63e8ba9",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0168.pbm",
+      "sha256": "0d348c41b262edbcf15ba0173e4dcd743fd300e9cdb01da5a892367c6f1706a6",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0169.pbm",
+      "sha256": "9576d2f3dea33f62a98844d264a2ceccb8de7412616373b4a155bdfa54ea98e0",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0170.pbm",
+      "sha256": "d3788dec667acb9f1c21d82cde14303fa8752123276a666753d6c6306a3ff8eb",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0171.pbm",
+      "sha256": "28118c92fce457af57d803ffd5d983c9fff64e93d7515687b5fa96424c1201f2",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0172.pbm",
+      "sha256": "55290d059dff841be48b191e8f7da0893e510c0cb97a320495ea316c0e915e5c",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0173.pbm",
+      "sha256": "ac2d8bd2c2b2f08992f4222bbfba1bb59689a05c0955997289d8e0faa52e2a89",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0174.pbm",
+      "sha256": "368ec252c57055bb2ab767cdafe493dff32492cb8e46f5ee0dfc82e655a2f28f",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0175.pbm",
+      "sha256": "bd046b42c0bba26affd410494fccd141cf4835131dad233797df59ba790d6bab",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0176.pbm",
+      "sha256": "515139d01ecdb3ec1950489f3873dc933a7b564023c408c9b02743bffab28440",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0177.pbm",
+      "sha256": "6a3e5bb1a370ca6412bc5c4080659597d5898355307a43438562b2c856cb72f4",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0178.pbm",
+      "sha256": "62654c32f149fee02d0d17f6f07c079967c3a300abba249e0c8f6473a745ef9d",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0179.pbm",
+      "sha256": "26d21f663b8de58b262e90f2a048dcb6cdf621f99afe069ec1834ad6c8b5c2eb",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0180.pbm",
+      "sha256": "48b407f0f7936224b7c559376de69699fb5fa56089c31526e1dfc9e1f4c302b0",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0181.pbm",
+      "sha256": "4a13a26108c95c0f40b473b03198bccc9a95dc45fbf3437cec83dfd0a3d78689",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0182.pbm",
+      "sha256": "fa475af5c9f6ecabc4e3490475dda7f423014acb7256136880f5f3f5e47395fa",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0183.pbm",
+      "sha256": "89bae4e29a0c7f2011995de1208e635c6e360115f146db762b7cd9ca91bf5354",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0184.pbm",
+      "sha256": "35d41a36d44362aea9211c6af06fa162cdcf6d2bdadb71099e3de9e502f3e9d7",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0185.pbm",
+      "sha256": "ecb692d1a8c3de3fbd7c6a03b93bc407b5ef03456de43356b212bf6941dccf97",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0186.pbm",
+      "sha256": "75c37be216fbd1682e798b8e9042f048dfdf60c1a8c85a6c5ae66b72bb82f4ce",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0187.pbm",
+      "sha256": "3ff5aeb53e35322eeb08514314734af54866b429bcecfc15c28610e9042480b3",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0188.pbm",
+      "sha256": "796e71ce34e52a2166a9666925a05fbd8afd9333eedb6c0d8a084ef7abe220c6",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0189.pbm",
+      "sha256": "47cac495f86df304dd626ba1f4731de32d2cb93b53b55f966a9eb9b386118e2b",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0190.pbm",
+      "sha256": "3bd7055b398e38d775b3808b99e96a2dd4d2fee442b78ed0191d7e29bc5c784a",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0191.pbm",
+      "sha256": "a1fe924211e4a95bde7139294f454d909365475405d2cd511e4b61396e028e8b",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0192.pbm",
+      "sha256": "ebe46dfa1014259745f3be5664f2f31de0d7167fc1ac7e9e479877ef1dee2a24",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0193.pbm",
+      "sha256": "ff1fcb23eb70af820cb289ebd46aedd52a73f8d3f8044c093e3eb661e69480a0",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0194.pbm",
+      "sha256": "5286cec5c304b39cf066fa466dd67caf59333d5dc72a9fed6730374475f51d2e",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0195.pbm",
+      "sha256": "142851412ddb7d5e2598ddce1eb3af2f8982e8c31c4da75ebe234c4f8a0d4ab8",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0196.pbm",
+      "sha256": "5f1802247d054cd5610095fd3700cba74a4cb38e05474325e4b00f5f96420f72",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0197.pbm",
+      "sha256": "8d3d497a23f252dc62a87d4e87f1a421d22a02ef4e2a241f09a69cc427f1dead",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0198.pbm",
+      "sha256": "0d47969bfdcb5e2620d3deef5e4d531b72b318748d6701eaa0105448c14dcd4f",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0199.pbm",
+      "sha256": "1b32b7daeaf313d0da6d97e70f36d2b0280da0fb7cbc86cde2c11520c8a56d1c",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0200.pbm",
+      "sha256": "49d3243c321a23e5e1ab2db2bac92796c144912f4d4ac796003f3f0c23f89018",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0201.pbm",
+      "sha256": "8be322b98a30e53f76715a7582d454d093e55e5aaaacd181dfeb129cc64d61bb",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0202.pbm",
+      "sha256": "bdaa49f250567cdf76e5c47f7defb3690ca332a972798dbc6265eb28b297fbb1",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0203.pbm",
+      "sha256": "bcf28c94981366e607125e40645c49d3f948ba043228c9ed707a6529dac1ac04",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0204.pbm",
+      "sha256": "8d4b23dae9410ae3e4b6d8142e2f54fc6e21a6dfc0f99cf7e74e58b340e1b737",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0205.pbm",
+      "sha256": "e4ed19f3fcded2e8cae09685bedd3823bc44359d01a62e0a6233f398a729055f",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0206.pbm",
+      "sha256": "0f3f7ec014a34c2dcdad388512300a02c8d77058abe6d4753c01a58b7c10a6d9",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0207.pbm",
+      "sha256": "d900a6087a13242ecb504206b0db3019c043187c8ccd5a969f1bece7a50ba248",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0208.pbm",
+      "sha256": "e6418045b8ddb7c44430ba369454232c60c8f1416fb913c5ab0727a6cc052b07",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0209.pbm",
+      "sha256": "ce1007f8d0e867ec38f80f1607b817fbac5bacafd940177ab3c1b87702869a9f",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0210.pbm",
+      "sha256": "65635b85b8c460ab44785c380c03c5bdb591bb6a9eab2c041e458d845b802a14",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0211.pbm",
+      "sha256": "4b9355d03e0d000527d4aac287682a1e0f35a61d2de81c7eac3ff30989acb27c",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0212.pbm",
+      "sha256": "b1793ab25ad4851057c0c0ccd198ac8cf6bb5f0be38b3e1c2995044f34e472ab",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0213.pbm",
+      "sha256": "dc1a1998a923fc55bbd9fdeb894ea14e4fb92c470792210cb05fd957397d4c71",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0214.pbm",
+      "sha256": "20a8b472b294f3bb78698f995071b11bdaa567a17675f6e53624a458fe68c88e",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0215.pbm",
+      "sha256": "754bd362070c307995e6bae198cfa59959f79bbc61b0699c4627c0782f168fa5",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0216.pbm",
+      "sha256": "2eb5f5526f61bfba170f91e3179cce5e1b038e249c47972a52f09757068dd07e",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0217.pbm",
+      "sha256": "a11ada86d707388d5bf4bdfc05d9908a2f2370d85cfdc53bdcac925db27bc741",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0218.pbm",
+      "sha256": "419fbd91c221186acaeadc00c92f7021591527daeaeeddec1f38015868a4e2d6",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0219.pbm",
+      "sha256": "a747f595902e4a621f52d163c81f4b4e09f0da7a6c929c8384e9ca697a2f580f",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0220.pbm",
+      "sha256": "57a9767974397e719d6f241294e004fd28c22d247280f808183e3c6413dc49a1",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0221.pbm",
+      "sha256": "59525e2cd745a814d3e1acaded115740e126d6c8e697cd74fd1b33d3e7c535d2",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0222.pbm",
+      "sha256": "881e1a249cfaad74c44000dc37a050a18472decd9b3358f2595844579be3f24a",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0223.pbm",
+      "sha256": "8342bfdf3bb4f30226574a5d729fc99c537b3ae0bdcdc81f9c41b8ad464d77de",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0224.pbm",
+      "sha256": "be44046dc0f514f631d6db905664c801dadc03bd45cbb4b14c2d4200587073ff",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0225.pbm",
+      "sha256": "cfc51bc574f6243f2fd2dc0f89d2cb2ed54bfbe9d41e865298a9a3460ec700c6",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0226.pbm",
+      "sha256": "c7efc3af77c54596c78f0f9013b87472af86fd9c0402155a9240052bd27ddd5b",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0227.pbm",
+      "sha256": "fe1f85c99f64501e0662b7c212df8adb9f31d9f18125f18e611d4c6154ea5b35",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0228.pbm",
+      "sha256": "fb9823a9c7f0248a23cbcb3a149e4b011bc41e06a223c16eaa05df281f3ad28b",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0229.pbm",
+      "sha256": "38e764bf1b02d7f873157998813bd43e2720872fcf1f22acc29f0a959f3f20e5",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0230.pbm",
+      "sha256": "1a4d07090b8917f52369274cc59ee9bdf5e1c22ff3bfd4a1e552f54726a6bca8",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0231.pbm",
+      "sha256": "491142a90a6be708233be5d075a3ee8b10a6744d0252d93f2ebd30066d5f59a1",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0232.pbm",
+      "sha256": "65c90a39dae2214bf96b85bbfcf1d25038ed8eb682f49e91e3af4737608a31c0",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0233.pbm",
+      "sha256": "d44ce530172b2dac9f16dd9870c14842c69086786c8efcdc75de07be8afd29d4",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0234.pbm",
+      "sha256": "932809b74f1ee2fdeb68a964fdabe49fd058dd1588172e1a29575cfb228134eb",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0235.pbm",
+      "sha256": "64d266bbb763720245481d51da07d1d05d3e6cb68ea26b0501bbc4bf0ee88c44",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0236.pbm",
+      "sha256": "75d81abc99179952e4bdab74919e6641bb2a5a147ba3c5596b8e834bc876661d",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0237.pbm",
+      "sha256": "6ca0ee20c36557e844e1369cb9be6b4e1476855d976dbdd280512ccd9c28fd7c",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0238.pbm",
+      "sha256": "bd4e87adc1d9da26e4a1398f903c5bd8bd31c2419f949b0eb90de8228a6f5c27",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0239.pbm",
+      "sha256": "931eb4dc4d0b9f1037285d11a118a186e66226a50066ab07d56de2ffc6d4d35f",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0240.pbm",
+      "sha256": "c3031caa4946a1d6974575d1d73cf00fb2d80a238aa57d01b96e5a8efdd34432",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0241.pbm",
+      "sha256": "ad9ce8e5aab34ee4410f5fb49b37e3beec386e5d10f7896ff90a3598221be922",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0242.pbm",
+      "sha256": "8c3fe4efb002842d5b31da6af07f7133b7324cd392a00e4f42650378a89fd072",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0243.pbm",
+      "sha256": "32c04843e0c0821086cd5ced21153c91eaa698113b2fc14d3abf8ae833f76652",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0244.pbm",
+      "sha256": "3aa6b807c3cb3d75076078ad4a556de63c7ad5c07d4779a812799605974c36a6",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0245.pbm",
+      "sha256": "2a4aab7ffb42cd69ea5d90489bca0d49d6789b2656b3693e17e0ae59cf246af9",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0246.pbm",
+      "sha256": "633d88ce23e0d953f662ef2d85d6ccadeb99d42d7ce57c41ee4047f524bf7aab",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0247.pbm",
+      "sha256": "b4ebdebe412557812ff62e0c4fa41d551b90ff84bb866942e7103e3ec20c01cd",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0248.pbm",
+      "sha256": "63b4a33f6ebdba11d2489898cc170cd23bca3057024a55fd2cfa8811cbae9b26",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0249.pbm",
+      "sha256": "6f52135253dbd3eecf4923a96156519a43440c3a784ac32a746fc833db60d239",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0250.pbm",
+      "sha256": "aa44bfa2b5638892ff5ac65805b72cbea0e83a4eaca67f9165f3e1c2a4d75e04",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0251.pbm",
+      "sha256": "7082f42f182a1bd5ebfdbb3b3e745280cf413c0783d6d4681b001b288bde763a",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0252.pbm",
+      "sha256": "fed6fb004d732d4cf4855998e38dfc1e317f73d5ce3530566efa06725c81707c",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0253.pbm",
+      "sha256": "b6bfb8739e46d7a3f270e93958c2d0f0c40d7b02619cf8b91e5f50d0ef4e12ad",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0254.pbm",
+      "sha256": "a597890d3d0ea1987a6a33c1569478a31fad96a8aa15cf9d91e7993f6a712939",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0255.pbm",
+      "sha256": "0c320fe86b7aa86dae91b4e702f5b7a4752dc0a6104814cd9d51c4c4bb78c40f",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0256.pbm",
+      "sha256": "75f7cf8f47488ef53ad33e7c014e52ae0fdd61e2b88a63cb69433b0ac3aa6198",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0257.pbm",
+      "sha256": "f6f1a2de68d82b0b803afaf9c481def30470b335f72cb743e52caa8c041f8dd2",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0258.pbm",
+      "sha256": "2d8ad6e44c373a12fdcbce5ba58b57f50a2faec52a951eece722c71698db000a",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0259.pbm",
+      "sha256": "b6611cdf86a4ee9c3aa1ce668fef7804947f6aaad9e7a69c08d4a28e1c2c5bd5",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0260.pbm",
+      "sha256": "b787a5fcd170e7bc01e23a35985394cc6a5f9291941e0538f9b25fbe3f154b3b",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0261.pbm",
+      "sha256": "66388516a080dac3ea3db4bcf6e5a5a01ed0f1da26e9c327502a7e1a2252399d",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0262.pbm",
+      "sha256": "027d797aaa70b7040cbf9050b98a848f05c2bb1d463fc5ecab64712e6caeaf9b",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0263.pbm",
+      "sha256": "740d770fe75d652db7ee29c52000855ce871e2f1cd1914f9fdeb55f7abee6d8a",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0264.pbm",
+      "sha256": "7ae5eb65686f99a39f137d1197bc58dd8aa27c5e5f134031a1248a1e6e779cd9",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0265.pbm",
+      "sha256": "84364879d35288b6ad1f17960d786354c7302655f090dd158b2f0a1c84f8592f",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0266.pbm",
+      "sha256": "64559e86c5ad25e15b6c420763c239463a0f83b1e60822153d28cf2394a4dda2",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0267.pbm",
+      "sha256": "71a0f11722124a8b46a7c4d1abf87f65cc73f83e36a79403507142d8e670fa2c",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0268.pbm",
+      "sha256": "7b7f02681f0238607808f71703b33395c199a6ee24ca4a9fc05906cdbc1cca87",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0269.pbm",
+      "sha256": "6bae1a65e147768b001960a77b3ff73434e781ef60cc447c015f1ceea953b017",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0270.pbm",
+      "sha256": "a9bcf001f4a50e6f67110f7e05302eebddcad22ab9d2d9ddc5d8997c6d02b532",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0271.pbm",
+      "sha256": "d98e8095ad3c21c904ed9fb9496c1fb59b87fdf56a98a7ba6b95095568dcf7a1",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0272.pbm",
+      "sha256": "ff0cdff77b0e24c24f24e724d364d7a3f84d7f3be122fa661dca6cacfb70cb9d",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0273.pbm",
+      "sha256": "8cdd060adea8eebcbbae6ef023b488772e5ec2b78429cf8219fbd158ca17afc7",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0274.pbm",
+      "sha256": "c1325cf3345eba924af2e36938a3494df502c9a714d5a099dbf9b0dadfb18cac",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0275.pbm",
+      "sha256": "c63902a5e9a49595d66d7c40af845633bc69a56d743b436547cdb87210518d6a",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0276.pbm",
+      "sha256": "6befe91378e4e04e7bdffb77c7250aef471515c6aaf52e3c8a130686d301ca95",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0277.pbm",
+      "sha256": "a5ac9d1ad71c5f0dcae399dc96e9111e969ae6660ba5aec30a32a79fef0bed3e",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0278.pbm",
+      "sha256": "462ad48973cb203c386e721912006f787529f1600ccf803817db4390716fb885",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0279.pbm",
+      "sha256": "83b5aa76938e2f3162daab9008fffda7c1c94acc9589648418bc73e1aa88ced1",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0280.pbm",
+      "sha256": "7551b7774b70172c2612c5991d16de7e437c8208c8a5ebff2655ea5f702d0fd0",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0281.pbm",
+      "sha256": "43302559d64c64a8afd9c29f0b9fc9ea77b9188fac390dd86b10e19f8434ae8a",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0282.pbm",
+      "sha256": "1bc37b25655ea66812ee747f3495a31f3f9d557dc4a19daedbc7a33a3fa80e26",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0283.pbm",
+      "sha256": "a07d33816d072305eccc8bb01213e96d9e4d4c29ad76704abb2d68b2fb4be04f",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0284.pbm",
+      "sha256": "9c290a072a63405b4974fe93e208bfbcf2787915a416078c228b6d694522a554",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0285.pbm",
+      "sha256": "71dd5b16c9dad98ed993df3fab749423ebb701b36482da43173defc5c3c51a3e",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0286.pbm",
+      "sha256": "56a853dab2d4ff82134bfcbf901601e3a09d8630d96b6520620d57c7c8e7ad21",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0287.pbm",
+      "sha256": "905b2733f392ed4a911860f0471e47d177f53657420b6348a61376fdc71b2fbe",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0288.pbm",
+      "sha256": "93f6ed76155bd0755953ec4325cfc0a86ac239d6aa714d1cf029b4ab00f2f75d",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0289.pbm",
+      "sha256": "fffea06030eae99cd6ae80ae18a1cd582479190cfa2c14d7cc0b08042bb0d1b8",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0290.pbm",
+      "sha256": "a6c3bb0df850e4cf477e8cb21c28b67efdc04745a4cf941e6271f2c71ce24761",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0291.pbm",
+      "sha256": "1fc7c256dca9a0e273180f7497be918aabf1f3869ae316c20ebb2b91ca371946",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0292.pbm",
+      "sha256": "9f0c8e68ce7d23d6605bcc58627fa80c2b5dd528f317e9fad09845fc946a4c13",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0293.pbm",
+      "sha256": "24d75fb459fab563c5ec9e243ef34ffb9318bf573fa55efaf9c71002bd6ec14d",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0294.pbm",
+      "sha256": "09e93151a69ae4ec09f52b4435f46644344851b1cdfdb5afe39ea6d46fc4b7cc",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0295.pbm",
+      "sha256": "123fec973105c76d1270f52a604ae0cb2b03e57d28447a472ac7854a5717e379",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0296.pbm",
+      "sha256": "298f4826a4936cccc909a7130a1c3a1d05d221111fc3ecbc7d3ec8838ccdc9ed",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0297.pbm",
+      "sha256": "f42029d9e0cc91c48e98ff71269478d9f513f16c84dc8249cbd5617ae55ace1c",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0298.pbm",
+      "sha256": "7eb340ed435bdfdefe15280dab219ce018ac40057e3161ff6fdce0696e669305",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0299.pbm",
+      "sha256": "822ab605490419de72f129e3b947ad91ab4c9af8f4c7e5a6aae20f1dfa9c654e",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0300.pbm",
+      "sha256": "40be06be5333711cf49c5717bb5188f895a4062f5b86638977f684bfa54aa580",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0301.pbm",
+      "sha256": "287a45f8be003b8a3f70dfc1a6090ee98a69dfbd4050d201a357cc24d2dbd293",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0302.pbm",
+      "sha256": "bfd77f9a5d2a93a3f0d3e51fe04d81e05bc5357a39259944d2ab996f617e5119",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0303.pbm",
+      "sha256": "5e3e3a54bfce5e3b3a998054488abe910b52edca71c37abc1a4ee44704fce304",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0304.pbm",
+      "sha256": "52a211b67e4a3d8b3c6315a5ef50ffbb7cbb621e77d724e27b71c32d1c83fd87",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0305.pbm",
+      "sha256": "cb92dfe6eb71375960581c02ae6a41687776c128f6bfaa646276ba86cdde46c1",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0306.pbm",
+      "sha256": "182cefa08861039d2b010821312eca9b97ade3ac8954604c0bee9b1122a1408f",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0307.pbm",
+      "sha256": "526f67a035fb57caa3564d78a169f3c1057175a4da635575fc245f4bdd994a18",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0308.pbm",
+      "sha256": "b9ae2caa305a89069b108771f5772f8ae91f75968da506baf84ef3e10da30c8b",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0309.pbm",
+      "sha256": "ea9a7fffb50484fa50be37a8eb11f923ac874d061a3f7c9ab9775caea867ac6f",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0310.pbm",
+      "sha256": "f62a7dbbc97e91b1b59aac922f0fdab9bc2bbb2ade8d4c588bf3f28b7a5f4401",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0311.pbm",
+      "sha256": "7000c26988c607834f02cee0b8f116a4561df1fe4b9af04ce4905bb59e8e995f",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0312.pbm",
+      "sha256": "2dd73cddf515ce3593b827e32a72e8444eca0e8a06bf2cf042de03331ef0a73b",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0313.pbm",
+      "sha256": "0dfca4c3af768b6c5d8dba7404ff67d547f2ed4ebeb3d28985b0a7a3271cd9b3",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0314.pbm",
+      "sha256": "1cc68d16666bdc24dc57e4eb6c370ac42ddb5fd97ee468d6a4b193f2d0825501",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0315.pbm",
+      "sha256": "39e54a7ad897077787627b095a4c70e435d021a7414dbf50b8bfa32e69c772f2",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0316.pbm",
+      "sha256": "8817e745488df69c2746e13607c8f573a9b515871e6ed706db1b55d69fb39fbe",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0317.pbm",
+      "sha256": "e09fe7f9c36935f3b185b55d468d0eaa83fe8c7d7d326f361373221f8942231a",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0318.pbm",
+      "sha256": "131e2f595ef97654763ff32c6dc943548bf84b8f524915b8757102b22c4fce2e",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0319.pbm",
+      "sha256": "5de15c6a125c1d84c96294907dc2db1d62c64badb2f281af1c053ad5ffbc6c63",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0320.pbm",
+      "sha256": "af493213924428d9900a26dbbd415120c7eeda2741664bfbee80d366929a8495",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0321.pbm",
+      "sha256": "15ec9110baae9907312f1c26957f3baa82d705d316c1c47a635e3c10f76aba60",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0322.pbm",
+      "sha256": "87c4a393f7ea6397c66c5ad6b4fc753794a586f48fd223cf6bf4a571a847ecae",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0323.pbm",
+      "sha256": "20f751751dc6b591a07f25b4633f31814baa2fd786fb2f87cc7f5e4db457ca3d",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0324.pbm",
+      "sha256": "a2be27de1f5f0b44d034e749c6c6bbda8ff41c69ca8e2fbc9cc889e6d7b11c9e",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0325.pbm",
+      "sha256": "106986ed39661ac7abbca1b2ea54e77f0cbed520f487e2cf4e30538bf0dca3d1",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0326.pbm",
+      "sha256": "da97b44fb62d42158b5839bdd8e13f0a86e9e17892837f7754720fad817492a7",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0327.pbm",
+      "sha256": "9f021105262e89b00207ec9d7768743f527eef6482a77ead53e491f9fcf2d2d6",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0328.pbm",
+      "sha256": "84765a7ca9a589db149ef52baa55a0473859c2c7309cef79e3378fe773822378",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0329.pbm",
+      "sha256": "b0e3de6602fd59c58fb07a1da79c3975406df59ecca80a0e4bc8a0955222ac5b",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0330.pbm",
+      "sha256": "3a3c292ac52ab7150651f478bb71296cad57b03fb89c944e91a1ec080b3950ef",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0331.pbm",
+      "sha256": "c1723aef7522cfaa4f396ee6d6bc0b0a32c7e7128ce8bb8a4e0e45a9cbd03ad4",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0332.pbm",
+      "sha256": "41cc95bd3fb05bf0e4281496b3409f6b60da43bdb2bfa8a5e1691d29532414bf",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0333.pbm",
+      "sha256": "96e62d2383df47409dda35ebef4805a6780b5e98f85a8e295f7dc58d4a53b314",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0334.pbm",
+      "sha256": "99c253c4caf3e6ab1e5ba4293f4b0fccd6b52c628825c7a5e118ddba3e7a8665",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0335.pbm",
+      "sha256": "5ed71c654fd63cd821bd85b7b40ee0606a76f3b9fb01a6158cb654ce06a78ffb",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0336.pbm",
+      "sha256": "c52a421597b62c812efb21d0f122cf8c9ee2a2e468edff97dfc622b9073e0b9e",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0337.pbm",
+      "sha256": "83eaa095a61f89f81737daa795c85fb3e260c7135edea31d02ee04d491b14599",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0338.pbm",
+      "sha256": "abfe2b212d38b41a8a45879bfd3390aab8cc1c22e335f5a5a7d1d2694c63b19e",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0339.pbm",
+      "sha256": "84daf9a75ccc6469f2ec235fe1b8a99bbbc7a410fc56de622b772ada9c59d320",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0340.pbm",
+      "sha256": "a18cdf7cdf5928d0c427e5bc7bf40bc0b862e627ba1a3580a90153f3eea25e6e",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0341.pbm",
+      "sha256": "660cbf5225cc17388306b2d31a20597990f94606b18fe06cb48339d2489ea7d2",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0342.pbm",
+      "sha256": "7ed706c376b992f6e3d8c783754b7b720809be2b754243895032e6e7cea3bc7b",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0343.pbm",
+      "sha256": "e462102a771c50fb5695ab5626297f20ba75d79c8021fb9dd3a181dd7dcaf73c",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0344.pbm",
+      "sha256": "ff6ad61287581d0aa9a04a16b631539f28f38b36cfe2702a4c174bbafc760930",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0345.pbm",
+      "sha256": "2df696780cf7d02905658b36785b61b100d778beb05aa38d99e52cb660d5b6e0",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0346.pbm",
+      "sha256": "430b2b8ff024e3c81427aaadad61d85a3d5b281afcda8bcf6b7346f512ed1865",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0347.pbm",
+      "sha256": "8675d50c402a34fde2eed147e546ade336dccd349d27cf12fd6ea7d8a479eab5",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0348.pbm",
+      "sha256": "75279fbdaa85f8c66007f36bec1854f2e2666cdd0d3ca22f21b34eb0f9584b8d",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0349.pbm",
+      "sha256": "beac884907118283168fe54ab970bc4d49f4d36f6f13d4c275e3847cb00aefa9",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0350.pbm",
+      "sha256": "ed91822196f4a519eeb332ff60791004c7f3ce849e0edea1b94621bf3cf5f60e",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0351.pbm",
+      "sha256": "d0ceb3da4162b9ef0eb61fa7c762ee133ed16433e45fa55302b152c05717626f",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0352.pbm",
+      "sha256": "ea6ce01426265d3f8825d11f5525fa4753ed24b3ecab590a914c4ee86c5a9995",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0353.pbm",
+      "sha256": "1b2cf8816bc827abac91d96b58b7866e6a2025d1287d0d0297ff6855c0718fd1",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0354.pbm",
+      "sha256": "9c32c78c813c3cddc47394709e9fa1f1cfe2585ce44db6c6e9bed38572b9d821",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0355.pbm",
+      "sha256": "5f8923204fd52fa929202732dcb43c44eae6cd867d6c623cbef91c4577457cf6",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0356.pbm",
+      "sha256": "8271bfce70e2f9c8ab1e9e5515c7c12d9e321e39a9ee1e0762d5c11fb2814cac",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0357.pbm",
+      "sha256": "acdad342c6458690a531246168da905dd7c3ea63c64e61ca5d7f45e1edfc3dd6",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0358.pbm",
+      "sha256": "79e3334b6cece7e7977ccdbd49464d717bf1c7e959ff6f707f0d67d9798a3f85",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0359.pbm",
+      "sha256": "9420d73e69032bbda890114f75e69e5451291f44e8f803412e785d20c02a0509",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0360.pbm",
+      "sha256": "2a6248f9fc3bff01141489fdca307460760b42df44f6b585c5dcd6f01e43ec65",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0361.pbm",
+      "sha256": "2c503a70185e521b0fa5e015a2bd28d9bcce1dd18950244f5c530e0c6501e96c",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0362.pbm",
+      "sha256": "5c7a2a323c194f4b7da414625f4b58d066cf6cc8e263d1a799013f578f9db377",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0363.pbm",
+      "sha256": "2448bee58bd45960cc5ed0cd74caca36cbafcaea370ec3fce17e5c86b5b6d224",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0364.pbm",
+      "sha256": "d23300ef06e026f3fc89d6e5287c774d107a923d4b8dbdb7239b0a83c7777486",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0365.pbm",
+      "sha256": "20da9401ec433a4a848f21fff8adaa6239d4f6a9994404178bc216feb8070c61",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0366.pbm",
+      "sha256": "f7a7458d0ec7c5e3963450c4c367b1c598909316f00537eabb3570ee0d6844ee",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0367.pbm",
+      "sha256": "5b6ac9e82adc12ddffb7a0d0ca598046a8f51ac5e4884584918b57b053d28d3e",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0368.pbm",
+      "sha256": "b2927c20a3e4189afbe0e31b1f60eaee4d6dd7fda2ad23cf1db79fd931107c19",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0369.pbm",
+      "sha256": "4f3a0f5ee6278672c788a393ed48f6fd24ecb6f42000aa5a0abd5ab5c13067a9",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0370.pbm",
+      "sha256": "50fb8f9fe62adb0be76f95029b0207f61eef970aaed61264be36b099c004fb04",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0371.pbm",
+      "sha256": "31bf3ab7bd904cbc7107749133924658ea14a60ebe14959f6aabb51a5b0cc297",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0372.pbm",
+      "sha256": "1afccdb3755330e0fa6573436555e966e4132d1aaaee1cd761047ec34d22ae37",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0373.pbm",
+      "sha256": "04b654a6b40f0f063e18d4daefbd89707b2c65e61e13bbf3f5e22e9d789c3358",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0374.pbm",
+      "sha256": "461106380ee0ac1fddd160deec2bfa417c6caf1919106a24981dd351aef38308",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0375.pbm",
+      "sha256": "270ed8efba0413d54800a2763abbe177fcb0e382f0a51ec3b2886fd15798b53b",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0376.pbm",
+      "sha256": "fd665e71a0c85032f5e00b0da78421ff1de3bc637b22b7710f0f4e58ef7ef029",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0377.pbm",
+      "sha256": "c4c654d43400797d3c3e0eb49a36e2f5c6825d04a26a3c87e8c18b7c8a93094d",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0378.pbm",
+      "sha256": "6d6e9111fce50692611f52682cf97adec2546f69d1b9a69fede484e449456aaa",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0379.pbm",
+      "sha256": "695f6b4c4e1755898263fb5782a09951b648696654ac2776a2d2514b18376949",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/text350/confed-0380.pbm",
+      "sha256": "1aa425e8ee1f598040df3b62a5af2f1942fa1c5e2a212769eac45e84bde53245",
+      "width": 1229,
+      "height": 1884
+    }
+  ],
+  "packed_sha256": "769eafe8bf8fd040b6dec41816478261c7fa138e5672d46f60b4686fc7e78092",
+  "cpu": 0,
+  "rounds": 2,
+  "pairs": 3,
+  "rust_worker": {
+    "path": "/home/dk/rust-projects/Lege-ecosystem/.agent/scratch/jbig2-perf-followup/final-worker",
+    "sha256": "e86bc96e3474faacc0ec147081bff0b8ba914d7917a88e52deb8906e201189e8"
+  },
+  "c_reference": {
+    "path": "/home/dk/rust-projects/Lege-ecosystem/.agent/scratch/jbig2-perf-followup/reference/runner",
+    "sha256": "42551f62f5c3ca8742d9fd311b1f3cc017803b4527c233f168e3b9ac81aa61f8"
+  },
+  "c_source": {
+    "jbig2arith.cc": "832368d43012c3d5fc2ebca1c23e814c7cb851447a4edb570828ec2d88cffeb1",
+    "jbig2arith.h": "c1e33f5e7d6221d428542833dd78efe725f1013f60c67f536002674a558353cf"
+  },
+  "scope": "Matched, pinned-CPU C/Rust generic kernel runs on identical packed pages.\n\nSPDX-License-Identifier: MIT\nTimes context allocation, template-0 coding (TPGDON off), finalization, output\ncopy and destruction. Input preparation, file output and byte verification are\noutside each reported timer. This is a kernel comparison, not a C PDF pipeline.\n",
+  "baseline_worker": {
+    "path": "/home/dk/rust-projects/Lege-ecosystem/.agent/scratch/jbig2-perf-followup/baseline-worker",
+    "sha256": "887af19d92ed53a8e0455309c1bd190c28782925ca5768df70a4987aebb70d92"
+  }
+}

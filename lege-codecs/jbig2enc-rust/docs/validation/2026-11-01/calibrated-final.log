@@ -1,0 +1,43 @@
+   Compiling jbig2enc-rust v0.6.0 (/home/dk/rust-projects/Lege-ecosystem/lege-codecs/jbig2enc-rust)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.11s
+     Running tests/encode_byte_identical.rs (target/debug/deps/encode_byte_identical-ef7094397da281d0)
+
+running 2 tests
+test sha_selftest::sha256_known_vectors ... ok
+test encoder_output_is_byte_identical ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.55s
+
+     Running tests/exact_symbols.rs (target/debug/deps/exact_symbols-dde548e68e092848)
+
+running 7 tests
+test common::tests::pbm_packing_row_major_msb_first ... ok
+test conflicting_exact_fidelity_settings_fail_before_ingest ... ok
+test exact_symbols_preserve_sparse_odd_widths_blank_and_solid_pages ... ok
+test exact_text_strip_sizes_and_signed_offsets_preserve_source_pixels ... ok
+test optimized_exact_streams_measure_real_costs_with_a_hard_trial_budget ... ok
+test measured_refinement_is_selected_when_it_reduces_complete_stream_cost ... ok
+test exact_symbols_preserve_all_components_in_pdf_and_standalone ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.31s
+
+     Running tests/lossy_topology_guard.rs (target/debug/deps/lossy_topology_guard-57969f5304e49394)
+
+running 4 tests
+test common::tests::pbm_packing_row_major_msb_first ... ok
+test final_guard_corrects_one_pixel_hole_closures_after_lossy_unification ... ok
+test tiny_refinement_reference_offsets_are_portable_across_decoders ... ok
+test bounded_measured_lossy_planner_distinguishes_substitution_and_refinement ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.32s
+
+     Running tests/pdf_groups.rs (target/debug/deps/pdf_groups-9e98433668f91c3d)
+
+running 4 tests
+test common::tests::pbm_packing_row_major_msb_first ... ok
+test group_error_contract_and_empty_input ... ok
+test constraints_choose_an_exact_feasible_candidate_or_return_error ... ok
+test bounded_groups_have_explicit_globals_associations_and_exact_pages ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.02s
+

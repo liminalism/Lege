@@ -7,23 +7,48 @@ scanned documents, PDF-embedded streams, and standalone JBIG2 files.
 
 The crate is split into an `encode` half and a `decode` half over a shared
 protocol core. Both halves are independent Cargo features; a consumer can build
-either alone. Both halves are production ready.
+either alone. The 0.6 release candidate includes the DjVu-code replacement described in
+[PROVENANCE.md](PROVENANCE.md).
+
+## 0.6.0 release notes (unreleased)
+
+Since 0.5.4: faster byte-preserving generic encoding; explicit exact symbol
+presets; measured compression planning, residual packing and PDF dictionary
+policies; bounded PDF groups; refinement interoperability and opt-in canonical
+termination fixes. The DjVu-derived component code/tests are replaced, with
+MIT project contributions and retained Apache-2.0 arithmetic notices.
+New configuration fields affect exhaustive struct literals; existing constructors
+remain. The full [changelog](https://github.com/liminalism/lege/blob/main/lege-codecs/jbig2enc-rust/CHANGELOG.md)
+records compatibility and validation details.
 
 ## Encoder
 
-Three operating points:
+Encoding choices:
 
 - **`generic`** — pages encoded as generic JBIG2 regions, no symbol
-  dictionary. Fastest, lossless with respect to the input bitmap, largest
-  output of the three.
+  dictionary. Pixel-exact with respect to the input bitmap; often larger on
+  repeated text.
 - **`symbol`** — connected components are extracted, repeated glyphs are
   grouped into a symbol dictionary, and page instances reference dictionary
-  entries. Lossy (symbol substitution), much smaller than `generic` on
-  text-heavy scans.
+  entries. Component selection can omit marks, so it has no input-pixel
+  equality contract. Often much smaller than `generic` on text-heavy scans.
 - **`sym_unify`** — the symbol pipeline plus a family-unification pass that
   merges symbol variants across pages (scanning noise, border variation,
   page-to-page drift) using exact dictionary-entry byte accounting and
-  planner-side anchor remapping. Smallest output; slower than plain `symbol`.
+  planner-side anchor remapping. Intentionally permits substitution and is
+  slower than plain `symbol`.
+- **`text_lossless`** — retains every supplied bilevel pixel, including isolated
+  marks. Reuses identical component bitmaps and stores others separately or
+  generically. This is the explicit exact symbol preset.
+- **`text_lossless_max_compression`** — slower exact encoding that measures
+  complete dictionary/refinement/generic candidate streams under bounded trial
+  and matching budgets. Family refinement is accepted only for a byte saving.
+- **`text_symbol_unify_safe`** — legacy lossy unification with final topology
+  checks that force refinement for hole, connectivity or endpoint changes.
+- **`text_lossy_max_compression(limit)`** — explicitly lossy measured planning;
+  bounded same-size substitution competes with exact storage and refinement.
+  `limit` is the per-instance pixel-error cap. Topology checks do not prove
+  character identity; this mode reports actual source differences.
 
 Mode selection is by config preset:
 
@@ -33,9 +58,33 @@ use jbig2enc_rust::Jbig2Config;
 let generic   = Jbig2Config::lossless();
 let symbol    = Jbig2Config::text();
 let sym_unify = Jbig2Config::text_symbol_unify();
+let exact     = Jbig2Config::text_lossless();
+let compact   = Jbig2Config::text_lossless_max_compression();
+let lossy     = Jbig2Config::text_lossy_max_compression(1);
 ```
 
+For bounded book processing, `PdfGroupEncoder` emits each group's globals and
+page streams together and releases retained input before calling the output
+sink. `PdfGroupOptions` bounds pages and optionally source bitmap bytes.
+`decoder_resource_limits` accepts application-measured dictionary/work caps;
+the measured presets choose the smallest feasible candidate. No device budget
+is assumed. See [contracts, resource definitions and benchmark commands](docs/QUALITY.md).
+
 ### Measurements
+
+The 2026-11-02 hardware-profiled follow-up cuts generic-kernel time by a
+further 50% on mixed17 and 42% on scanned text350, with exact byte equality.
+Median new/C ratios are 0.467 and 0.561; procedural noise remains about 7%
+slower than C. See [scope, variation, counters and raw measurements](docs/GENERIC-PERF-FOLLOWUP.md).
+
+The 2026-11-01 generic-kernel optimization reaches C parity: median paired
+Rust/C time ratios are 0.943 on 17 mixed pages and 0.973 on 350 scanned-book
+pages, with every raw payload unchanged. This measures template-0 coding of
+preloaded packed pixels, including coder initialization/finalization; see
+[method, variation and raw results](docs/GENERIC-SPEED.md).
+
+Historical measurements before this optimization follow. These include different
+pipeline scopes and corpora and are retained as historical results.
 
 In-process 350-page comparison against the original C `jbig2enc` (same
 preloaded PBM page set, release builds both sides, page preparation outside
@@ -61,9 +110,14 @@ preserved):
 - `sym_unify`: 145.0 KB in 2.47 s (17.3% smaller than `symbol`)
 
 Known encoder limits: the symbol modes leave more material in generic residual
-regions than an ideal long-book encoder would, and refinement-assisted coding
-is not implemented. These are compression-efficiency limits; no substitution
-errors have been observed on the development corpora.
+regions than an ideal long-book encoder would. Per-instance text refinement
+encoding exists, but dictionary-level refinement planning is not enabled in
+the legacy production path. `text()` and `text_symbol_unify()` do not promise
+pixel-exact output; even small substitutions can change text. Use the explicit
+exact presets when equality to the supplied bilevel input is required.
+
+The 0.7 work in progress adds opt-in measured residual packing and a reproducible
+fidelity/performance harness. See [measurement contracts](docs/QUALITY.md).
 
 ## Decoder
 
@@ -93,14 +147,14 @@ expect it in `PATH`.
 
 ```toml
 [dependencies]
-jbig2enc-rust = "0.5.4"            # encoder + decoder + symboldict (defaults)
+jbig2enc-rust = "0.6.0"            # encoder + decoder + symboldict (defaults)
 ```
 
 Decoder only:
 
 ```toml
 [dependencies.jbig2enc-rust]
-version = "0.5.3"
+version = "0.6.0"
 default-features = false
 features = ["decode"]
 ```
@@ -159,17 +213,18 @@ cargo test --test comparator                 # symbol comparator
 cargo test --test perf_smoke -- --ignored --nocapture
 ```
 
-The encoder's byte-identical output guard lives in
-`tests/encode_byte_identical.rs` (regenerate hashes with
-`UPDATE_ENCODE_HASHES=1`).
+The default byte-identical guard uses original generated PBMs and a separate
+40-stream historical-encoder baseline. The old scan inputs are excluded from
+the package; their original manifest is preserved and its explicit legacy gate
+still passes. See [fixture provenance and both test commands](tests/fixtures/README.md).
 
 ## License
 
-`MIT OR Apache-2.0`.
-
-When built with `symboldict`, the symbol matching path includes code adapted
-from `djvulibre`; binaries built with that functionality may carry GPL
-implications. Review your build configuration before distributing.
+Project contributions are MIT. Retained arithmetic-coder files derived from
+jbig2enc remain Apache-2.0, with their license and Google/Adam Langley notices.
+Cargo describes this permissive mix as `MIT AND Apache-2.0`. The translated
+DjVuLibre component code and inherited tests have been replaced; the GPL
+licensing blocker is closed. See [source provenance](PROVENANCE.md).
 
 ## References
 

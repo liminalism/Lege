@@ -1,0 +1,94 @@
+
+running 1 test
+QUALITY_RESOURCES	globals_encoded=126	globals_bitmap=1760	globals_pixels=11089
+QUALITY_PAGE_RESOURCES	0	page_pixels=4	local_bitmap=0	exact=0	refined=0	substituted=0	generic_instances=0	generic_region_pixels=4	generic_ink=0	cold_work=11093
+QUALITY_PAGE_RESOURCES	1	page_pixels=12707	local_bitmap=0	exact=13	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=21251
+QUALITY_PAGE_RESOURCES	2	page_pixels=49601	local_bitmap=0	exact=135	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=26884
+QUALITY_MATCHING	components=148	ingest_comparisons=0	planner_comparisons=13	legacy_post_ingest_comparisons=unreported
+QUALITY_TOPOLOGY	corrected_instances=0
+QUALITY_TRIAL	None	dictionary control	AllGlobal	None	None	433	raw=None
+QUALITY_TRIAL	None	dictionary control	SharedGlobal	None	None	847	raw=None
+QUALITY_TRIAL	None	dictionary control	SharedGlobalWithLocal	None	None	468	raw=None
+QUALITY_TRIAL	Some(4)	family + refinement	AllGlobal	Some(14)	Some(-87)	520	raw=Some(14)
+QUALITY_TRIAL	Some(4)	family + refinement	SharedGlobal	Some(14)	Some(-414)	847	raw=Some(14)
+QUALITY_TRIAL	Some(4)	family + refinement	SharedGlobalWithLocal	Some(14)	Some(-122)	555	raw=Some(14)
+QUALITY_TRIAL	Some(6)	family + refinement	AllGlobal	Some(-88)	Some(-136)	569	raw=Some(13)
+QUALITY_TRIAL	Some(6)	family + refinement	SharedGlobal	Some(-415)	Some(-414)	847	raw=Some(13)
+QUALITY_TRIAL	Some(6)	family + refinement	SharedGlobalWithLocal	Some(-123)	Some(-170)	603	raw=Some(13)
+QUALITY_TRIAL	Some(7)	family + refinement	AllGlobal	Some(-138)	Some(-107)	540	raw=Some(11)
+QUALITY_TRIAL	Some(7)	family + refinement	SharedGlobal	Some(-417)	Some(-414)	847	raw=Some(11)
+QUALITY_TRIAL	Some(7)	family + refinement	SharedGlobalWithLocal	Some(-172)	Some(-145)	578	raw=Some(11)
+QUALITY_TRIAL	Some(2)	generic residual	AllGlobal	None	Some(-39)	472	raw=None
+QUALITY_TRIAL	Some(2)	generic residual	SharedGlobal	None	Some(-414)	847	raw=None
+QUALITY_TRIAL	Some(2)	generic residual	SharedGlobalWithLocal	None	Some(-70)	503	raw=None
+QUALITY_TRIAL	Some(1)	generic residual	AllGlobal	None	Some(-39)	472	raw=None
+QUALITY_TRIAL	Some(1)	generic residual	SharedGlobal	None	Some(-414)	847	raw=None
+QUALITY_TRIAL	Some(1)	generic residual	SharedGlobalWithLocal	None	Some(-71)	504	raw=None
+QUALITY_TRIAL	Some(3)	generic residual	AllGlobal	None	Some(-39)	472	raw=None
+QUALITY_TRIAL	Some(3)	generic residual	SharedGlobal	None	Some(-414)	847	raw=None
+QUALITY_TRIAL	Some(3)	generic residual	SharedGlobalWithLocal	None	Some(-71)	504	raw=None
+QUALITY_TRIAL	Some(4)	generic residual	AllGlobal	None	Some(-130)	563	raw=None
+QUALITY_TRIAL	Some(4)	generic residual	SharedGlobal	None	Some(-414)	847	raw=None
+QUALITY_TRIAL	Some(4)	generic residual	SharedGlobalWithLocal	None	Some(-164)	597	raw=None
+QUALITY_TRIAL	Some(5)	generic residual	AllGlobal	None	Some(-131)	564	raw=None
+QUALITY_TRIAL	Some(5)	generic residual	SharedGlobal	None	Some(-414)	847	raw=None
+QUALITY_TRIAL	Some(5)	generic residual	SharedGlobalWithLocal	None	Some(-165)	598	raw=None
+QUALITY_TRIAL	Some(6)	reference + refinement	AllGlobal	Some(8)	Some(-44)	477	raw=Some(8)
+QUALITY_TRIAL	Some(6)	reference + refinement	SharedGlobal	Some(8)	Some(-414)	847	raw=Some(8)
+QUALITY_TRIAL	Some(6)	reference + refinement	SharedGlobalWithLocal	Some(8)	Some(-78)	511	raw=Some(8)
+QUALITY_TRIAL	Some(6)	generic residual	AllGlobal	None	Some(-144)	577	raw=None
+QUALITY_TRIAL	Some(6)	generic residual	SharedGlobal	None	Some(-414)	847	raw=None
+QUALITY_TRIAL	Some(6)	generic residual	SharedGlobalWithLocal	None	Some(-180)	613	raw=None
+QUALITY_TRIAL	Some(7)	generic residual	AllGlobal	None	Some(-143)	576	raw=None
+QUALITY_TRIAL	Some(7)	generic residual	SharedGlobal	None	Some(-414)	847	raw=None
+QUALITY_TRIAL	Some(7)	generic residual	SharedGlobalWithLocal	None	Some(-181)	614	raw=None
+QUALITY_TRIAL	Some(7)	reference + refinement	AllGlobal	Some(-47)	Some(-50)	483	raw=Some(5)
+QUALITY_TRIAL	Some(7)	reference + refinement	SharedGlobal	Some(-417)	Some(-414)	847	raw=Some(5)
+QUALITY_TRIAL	Some(7)	reference + refinement	SharedGlobalWithLocal	Some(-81)	Some(-89)	522	raw=Some(5)
+QUALITY_TRIAL	Some(8)	generic residual	AllGlobal	None	Some(-153)	586	raw=None
+QUALITY_TRIAL	Some(8)	generic residual	SharedGlobal	None	Some(-414)	847	raw=None
+QUALITY_TRIAL	Some(8)	generic residual	SharedGlobalWithLocal	None	Some(-191)	624	raw=None
+QUALITY_TRIAL	Some(8)	reference + refinement	AllGlobal	Some(-49)	Some(-42)	475	raw=Some(6)
+QUALITY_TRIAL	Some(8)	reference + refinement	SharedGlobal	Some(-416)	Some(-414)	847	raw=Some(6)
+QUALITY_TRIAL	Some(8)	reference + refinement	SharedGlobalWithLocal	Some(-88)	Some(-80)	513	raw=Some(6)
+QUALITY_TRIAL	Some(8)	reference + refinement	AllGlobal	Some(-51)	Some(-47)	480	raw=Some(1)
+QUALITY_TRIAL	Some(8)	reference + refinement	SharedGlobal	Some(-419)	Some(-414)	847	raw=Some(1)
+QUALITY_TRIAL	Some(8)	reference + refinement	SharedGlobalWithLocal	Some(-85)	Some(-85)	518	raw=Some(1)
+QUALITY_TRIAL	Some(9)	generic residual	AllGlobal	None	Some(-150)	583	raw=None
+QUALITY_TRIAL	Some(9)	generic residual	SharedGlobal	None	Some(-414)	847	raw=None
+QUALITY_TRIAL	Some(9)	generic residual	SharedGlobalWithLocal	None	Some(-186)	619	raw=None
+QUALITY_TRIAL	Some(9)	reference + refinement	AllGlobal	Some(-49)	Some(-68)	501	raw=Some(3)
+QUALITY_TRIAL	Some(9)	reference + refinement	SharedGlobal	Some(-417)	Some(-414)	847	raw=Some(3)
+QUALITY_TRIAL	Some(9)	reference + refinement	SharedGlobalWithLocal	Some(-83)	Some(-102)	535	raw=Some(3)
+QUALITY_TRIAL	Some(10)	generic residual	AllGlobal	None	Some(-161)	594	raw=None
+QUALITY_TRIAL	Some(10)	generic residual	SharedGlobal	None	Some(-414)	847	raw=None
+QUALITY_TRIAL	Some(10)	generic residual	SharedGlobalWithLocal	None	Some(-196)	629	raw=None
+QUALITY_TRIAL	Some(10)	reference + refinement	AllGlobal	Some(-43)	Some(-49)	482	raw=Some(9)
+QUALITY_TRIAL	Some(10)	reference + refinement	SharedGlobal	Some(-410)	Some(-414)	847	raw=Some(9)
+QUALITY_TRIAL	Some(10)	reference + refinement	SharedGlobalWithLocal	Some(-77)	Some(-85)	518	raw=Some(9)
+QUALITY_TRIAL	Some(10)	reference + refinement	AllGlobal	Some(-48)	Some(-54)	487	raw=Some(7)
+QUALITY_TRIAL	Some(10)	reference + refinement	SharedGlobal	Some(-413)	Some(-414)	847	raw=Some(7)
+QUALITY_TRIAL	Some(10)	reference + refinement	SharedGlobalWithLocal	Some(-87)	Some(-90)	523	raw=Some(7)
+QUALITY_TRIAL	None	whole-page generic control	AllGlobal	None	Some(-414)	847	raw=None
+QUALITY_OPTIMIZATION	trials=64	comparisons=13	baseline=433	generic=847	selected=433	exact_instances=148	refined_instances=0	generic_instances=0	substituted_instances=0
+QUALITY_STAGES	cc=0.000332605	match=0.000042645	cluster=0.000000000	plan=0.028504545	dict=0.000000000	text=0.000000000	generic=0.000000000
+PDFTOPPM: Syntax Error (529): 1 extraneous byte after segment
+
+QUALITY_PDF	0	PDFTOPPM	pass
+QUALITY_PDF	0	PDFIUM_PYTHON	pass
+QUALITY_PAGE	0	71	0	0.000060659	0.000001477	0
+PDFTOPPM: Syntax Error (558): 1 extraneous byte after segment
+
+QUALITY_PDF	1	PDFTOPPM	pass
+QUALITY_PDF	1	PDFIUM_PYTHON	pass
+QUALITY_PAGE	1	94	0	0.000105922	0.000007462	0
+PDFTOPPM: Syntax Error (609): 1 extraneous byte after segment
+
+QUALITY_PDF	2	PDFTOPPM	pass
+QUALITY_PDF	2	PDFIUM_PYTHON	pass
+QUALITY_PAGE	2	142	0	0.000093787	0.000021626	0
+QUALITY_RESULT	exact_optimized	3	false	433	126	0	41	0.028949669	0	0.000260368	0.000030565	1760	0	136	0	0
+test quality_corpus_worker ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.48s
+

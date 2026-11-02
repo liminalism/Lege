@@ -1,0 +1,29 @@
+   Compiling jbig2enc-rust v0.6.0 (/tmp/jbig2-head-reference-complete-20261101)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.63s
+     Running tests/decode_refine_templates.rs (/tmp/jbig2-cc-reference-20261101/target/debug/deps/decode_refine_templates-7aeba0d45d055ccc)
+
+running 6 tests
+test common::tests::pbm_packing_row_major_msb_first ... ok
+test grtemplate1_tpgron ... FAILED
+test grtemplate1_no_tpgron ... ok
+test grtemplate0_no_tpgron_still_works ... ok
+test grtemplate0_tpgron ... ok
+test identity_refinements ... ok
+
+failures:
+
+---- grtemplate1_tpgron stdout ----
+
+thread 'grtemplate1_tpgron' (111) panicked at tests/decode_refine_templates.rs:53:17:
+assertion `left == right` failed: gr1-tpgron: oracle (6,4)
+  left: true
+ right: false
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    grtemplate1_tpgron
+
+test result: FAILED. 5 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `--test decode_refine_templates`

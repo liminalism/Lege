@@ -3,7 +3,11 @@
 //! (Was `encode/jbig2enc/mod.rs`; renamed to `encode/document.rs` in the
 //! Phase 0 restructure. Its `symbol` subdirectory stays a child module at
 //! `encode/document/symbol/` — see Gap A.)
+mod grouped;
+mod resources;
 mod symbol;
+pub use grouped::{EncodedPdfGroup, PdfGroupEncoder, PdfGroupOptions};
+pub use resources::{DecoderResourceLimits, DocumentResourceMetrics, PageResourceMetrics};
 
 #[cfg(feature = "symboldict")]
 use symbol::types::*;
@@ -117,6 +121,8 @@ pub struct SymbolModeStageMetrics {
 
 #[derive(Debug, Clone, Default)]
 pub struct SymbolModeStats {
+    /// Connected components before the legacy symbol-selection filters.
+    pub input_components: usize,
     pub symbols_discovered: usize,
     pub symbols_exported: usize,
     pub avg_symbol_reuse: f64,
@@ -127,12 +133,42 @@ pub struct SymbolModeStats {
     pub exact_hits: usize,
     pub refined_hits: usize,
     pub signature_rejects: usize,
+    pub topology_refinements: usize,
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct EncoderMetrics {
     pub symbol_mode: SymbolModeStageMetrics,
     pub symbol_stats: SymbolModeStats,
+    pub optimization: SymbolOptimizationMetrics,
+    pub resources: DocumentResourceMetrics,
+}
+
+#[derive(Debug, Clone)]
+pub struct SymbolCostTrial {
+    pub symbol: Option<usize>,
+    pub representation: &'static str,
+    pub policy: crate::jbig2structs::PdfDictionaryPolicy,
+    pub estimated_gain_bytes: Option<i64>,
+    /// Uncorrected shortlist estimate, retained for calibration diagnostics.
+    pub raw_estimated_gain_bytes: Option<i64>,
+    pub measured_gain_bytes: Option<i64>,
+    pub encoded_bytes: usize,
+    pub meets_resource_limits: bool,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct SymbolOptimizationMetrics {
+    pub trials: Vec<SymbolCostTrial>,
+    pub candidate_comparisons: usize,
+    pub baseline_bytes: usize,
+    pub generic_bytes: usize,
+    pub selected_bytes: usize,
+    pub exact_instances: usize,
+    pub refined_instances: usize,
+    pub generic_instances: usize,
+    pub substituted_instances: usize,
+    pub calibration_samples: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -236,6 +272,9 @@ impl<'a> Jbig2Encoder<'a> {
 
     /// Fallible constructor for callers accepting external configuration.
     pub fn try_new(config: &'a Jbig2Config) -> Result<Self> {
+        config
+            .validate_exact_symbol_mode()
+            .map_err(|error| anyhow!(error))?;
         if config.refine && !config.symbol_mode {
             return Err(anyhow!("refinement requires symbol mode to be enabled"));
         }
@@ -310,8 +349,17 @@ impl<'a> Jbig2Encoder<'a> {
     // `Jbig2Encoder`, and `mod symbol` is a private module, so relocating it
     // there would make it externally unreachable.
     pub fn add_page_bitimage(&mut self, bitimage: BitImage) -> Result<()> {
+        self.config
+            .validate_exact_symbol_mode()
+            .map_err(|error| anyhow!(error))?;
         if self.config.refine && !self.config.symbol_mode {
             return Err(anyhow!("refinement requires symbol mode to be enabled"));
+        }
+        #[cfg(feature = "symboldict")]
+        if self.config.symbol_mode
+            && (self.config.is_lossless || self.config.optimize_lossy_symbols)
+        {
+            return self.add_page_exact_symbols(bitimage);
         }
         #[cfg(feature = "symboldict")]
         let page_num = self.pages.len();
@@ -385,6 +433,7 @@ impl<'a> Jbig2Encoder<'a> {
                 let cc_start = Instant::now();
                 let cc_image = analyze_page(&bitimage, dpi, losslevel);
                 let extracted = cc_image.extract_shape_refs();
+                self.metrics.symbol_stats.input_components += extracted.len();
                 self.metrics.symbol_mode.cc_extraction += cc_start.elapsed();
 
                 // Check if symbol extraction makes sense for this image
@@ -901,6 +950,9 @@ impl<'a> Jbig2Encoder<'a> {
     }
 
     pub fn flush(&mut self) -> Result<Vec<u8>> {
+        self.config
+            .validate_exact_symbol_mode()
+            .map_err(|error| anyhow!(error))?;
         let include_header = self.state.full_headers_remaining;
         self.state.decision_debug_lines.clear();
         match self.config.lossy_symbol_mode {
@@ -909,6 +961,10 @@ impl<'a> Jbig2Encoder<'a> {
         }
         let plan = self.plan_document(include_header)?;
         self.validate_plan(&plan)?;
+        self.metrics.resources = DocumentResourceMetrics::from_plan(&plan)?;
+        self.config
+            .decoder_resource_limits
+            .check(&self.metrics.resources)?;
         let output = self.serialize_full_document(&plan)?;
         self.state.full_headers_remaining = false;
         self.next_segment_number = plan.next_segment_number;
@@ -916,6 +972,9 @@ impl<'a> Jbig2Encoder<'a> {
     }
 
     pub fn flush_pdf_split(&mut self) -> Result<PdfSplitOutput> {
+        self.config
+            .validate_exact_symbol_mode()
+            .map_err(|error| anyhow!(error))?;
         self.state.pdf_mode = true;
         self.state.decision_debug_lines.clear();
         match self.config.lossy_symbol_mode {
@@ -924,6 +983,10 @@ impl<'a> Jbig2Encoder<'a> {
         }
         let plan = self.plan_document(false)?;
         self.validate_plan(&plan)?;
+        self.metrics.resources = DocumentResourceMetrics::from_plan(&plan)?;
+        self.config
+            .decoder_resource_limits
+            .check(&self.metrics.resources)?;
         let (
             global_segments,
             page_streams,
@@ -960,8 +1023,12 @@ pub fn encode_generic_region(img: &BitImage, cfg: &Jbig2Config) -> Result<Vec<u8
     gr_cfg.at_pixels = cfg.generic.at_pixels.clone();
     gr_cfg.validate().map_err(|e: &'static str| anyhow!(e))?;
 
-    let coder_data =
-        Jbig2ArithCoder::encode_generic_payload(img, gr_cfg.template, &gr_cfg.at_pixels)?;
+    let coder_data = Jbig2ArithCoder::encode_generic_payload_with_termination(
+        img,
+        gr_cfg.template,
+        &gr_cfg.at_pixels,
+        cfg.canonical_arithmetic_termination,
+    )?;
 
     let params: GenericRegionParams = gr_cfg.clone();
 

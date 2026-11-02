@@ -1,0 +1,32 @@
+
+running 1 test
+QUALITY_MEMORY_GROUP	0	first=0	pages=32	source_bitmap_bytes=10071320
+QUALITY_MEMORY_GROUP	1	first=32	pages=32	source_bitmap_bytes=10033920
+QUALITY_MEMORY_GROUP	2	first=64	pages=32	source_bitmap_bytes=10007792
+QUALITY_MEMORY_GROUP	3	first=96	pages=32	source_bitmap_bytes=9197824
+QUALITY_MEMORY_GROUP	4	first=128	pages=32	source_bitmap_bytes=9197824
+QUALITY_MEMORY_GROUP	5	first=160	pages=32	source_bitmap_bytes=9197824
+QUALITY_MEMORY_GROUP	6	first=192	pages=32	source_bitmap_bytes=9197824
+QUALITY_MEMORY_GROUP	7	first=224	pages=32	source_bitmap_bytes=9197824
+QUALITY_MEMORY_GROUP	8	first=256	pages=32	source_bitmap_bytes=9244220
+QUALITY_MEMORY_GROUP	9	first=288	pages=32	source_bitmap_bytes=9409920
+QUALITY_MEMORY_GROUP	10	first=320	pages=32	source_bitmap_bytes=9409920
+QUALITY_MEMORY_GROUP	11	first=352	pages=32	source_bitmap_bytes=9409920
+QUALITY_MEMORY_GROUP	12	first=384	pages=32	source_bitmap_bytes=9409920
+QUALITY_MEMORY_GROUP	13	first=416	pages=32	source_bitmap_bytes=9409920
+QUALITY_MEMORY_GROUP	14	first=448	pages=32	source_bitmap_bytes=9409920
+QUALITY_MEMORY_GROUP	15	first=480	pages=32	source_bitmap_bytes=9409920
+QUALITY_MEMORY_GROUP	16	first=512	pages=32	source_bitmap_bytes=9409920
+QUALITY_MEMORY_GROUP	17	first=544	pages=32	source_bitmap_bytes=9409920
+QUALITY_MEMORY_GROUP	18	first=576	pages=32	source_bitmap_bytes=9409920
+QUALITY_MEMORY_GROUP	19	first=608	pages=32	source_bitmap_bytes=9409920
+QUALITY_MEMORY_GROUP	20	first=640	pages=32	source_bitmap_bytes=9409920
+QUALITY_MEMORY_GROUP	21	first=672	pages=32	source_bitmap_bytes=9409920
+QUALITY_MEMORY_GROUP	22	first=704	pages=32	source_bitmap_bytes=9409920
+QUALITY_MEMORY_GROUP	23	first=736	pages=32	source_bitmap_bytes=9409920
+QUALITY_MEMORY_GROUP	24	first=768	pages=14	source_bitmap_bytes=4116840
+QUALITY_MEMORY_RESULT	exact_group32	782	22135580
+test quality_encode_only_worker ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 10.18s
+

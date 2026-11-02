@@ -1,0 +1,113 @@
+
+running 1 test
+QUALITY_RESOURCES	globals_encoded=5816	globals_bitmap=42132	globals_pixels=128213
+QUALITY_PAGE_RESOURCES	0	page_pixels=2777720	local_bitmap=356576	exact=65	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=5745853
+QUALITY_PAGE_RESOURCES	1	page_pixels=2508480	local_bitmap=1228	exact=44	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=140509
+QUALITY_PAGE_RESOURCES	2	page_pixels=2508480	local_bitmap=8504	exact=2877	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=157219
+QUALITY_PAGE_RESOURCES	3	page_pixels=2508480	local_bitmap=115436	exact=2709	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=697889
+QUALITY_PAGE_RESOURCES	4	page_pixels=2508480	local_bitmap=80684	exact=1841	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=533545
+QUALITY_PAGE_RESOURCES	5	page_pixels=2508480	local_bitmap=153908	exact=2482	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1125478
+QUALITY_PAGE_RESOURCES	6	page_pixels=2259745	local_bitmap=162800	exact=2965	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1074188
+QUALITY_PAGE_RESOURCES	7	page_pixels=2259745	local_bitmap=162332	exact=2931	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1053664
+QUALITY_PAGE_RESOURCES	8	page_pixels=2316665	local_bitmap=135568	exact=2150	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1056600
+QUALITY_PAGE_RESOURCES	9	page_pixels=2316665	local_bitmap=177296	exact=3318	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1084955
+QUALITY_PAGE_RESOURCES	10	page_pixels=5385600	local_bitmap=113800	exact=3465	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1713252
+QUALITY_PAGE_RESOURCES	11	page_pixels=5385600	local_bitmap=155404	exact=2513	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=2925306
+QUALITY_PAGE_RESOURCES	12	page_pixels=5385600	local_bitmap=65512	exact=2774	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1454875
+QUALITY_PAGE_RESOURCES	13	page_pixels=3260488	local_bitmap=20564	exact=2973	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=836389
+QUALITY_PAGE_RESOURCES	14	page_pixels=3260488	local_bitmap=4612	exact=3418	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=892424
+QUALITY_PAGE_RESOURCES	15	page_pixels=3260488	local_bitmap=11156	exact=3415	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=912732
+QUALITY_PAGE_RESOURCES	16	page_pixels=3260488	local_bitmap=0	exact=1055	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=363969
+QUALITY_MATCHING	components=40995	ingest_comparisons=0	planner_comparisons=0	legacy_post_ingest_comparisons=unreported
+QUALITY_TOPOLOGY	corrected_instances=0
+QUALITY_STAGES	cc=0.045304842	match=0.016685463	cluster=0.000000000	plan=0.020256867	dict=0.060691610	text=0.011719769	generic=0.000000797
+QUALITY_PDF_DIAGNOSTICS	0	PDFTOPPM	trailing_bytes=0
+QUALITY_PDF	0	PDFTOPPM	pass
+QUALITY_PDF_DIAGNOSTICS	0	PDFIUM_PYTHON	trailing_bytes=0
+QUALITY_PDF	0	PDFIUM_PYTHON	pass
+QUALITY_PAGE	0	3044	0	0.014762253	0.011244621	0
+QUALITY_PDF_DIAGNOSTICS	1	PDFTOPPM	trailing_bytes=0
+QUALITY_PDF	1	PDFTOPPM	pass
+QUALITY_PDF_DIAGNOSTICS	1	PDFIUM_PYTHON	trailing_bytes=0
+QUALITY_PDF	1	PDFIUM_PYTHON	pass
+QUALITY_PAGE	1	490	0	0.001418843	0.000375135	0
+QUALITY_PDF_DIAGNOSTICS	2	PDFTOPPM	trailing_bytes=0
+QUALITY_PDF	2	PDFTOPPM	pass
+QUALITY_PDF_DIAGNOSTICS	2	PDFIUM_PYTHON	trailing_bytes=0
+QUALITY_PDF	2	PDFIUM_PYTHON	pass
+QUALITY_PAGE	2	6617	0	0.002173492	0.001014432	0
+QUALITY_PDF_DIAGNOSTICS	3	PDFTOPPM	trailing_bytes=0
+QUALITY_PDF	3	PDFTOPPM	pass
+QUALITY_PDF_DIAGNOSTICS	3	PDFIUM_PYTHON	trailing_bytes=0
+QUALITY_PDF	3	PDFIUM_PYTHON	pass
+QUALITY_PAGE	3	24023	0	0.004854842	0.004147508	0
+QUALITY_PDF_DIAGNOSTICS	4	PDFTOPPM	trailing_bytes=0
+QUALITY_PDF	4	PDFTOPPM	pass
+QUALITY_PDF_DIAGNOSTICS	4	PDFIUM_PYTHON	trailing_bytes=0
+QUALITY_PDF	4	PDFIUM_PYTHON	pass
+QUALITY_PAGE	4	17043	0	0.003882609	0.005044552	0
+QUALITY_PDF_DIAGNOSTICS	5	PDFTOPPM	trailing_bytes=0
+QUALITY_PDF	5	PDFTOPPM	pass
+QUALITY_PDF_DIAGNOSTICS	5	PDFIUM_PYTHON	trailing_bytes=0
+QUALITY_PDF	5	PDFIUM_PYTHON	pass
+QUALITY_PAGE	5	30030	0	0.008323892	0.008419840	0
+QUALITY_PDF_DIAGNOSTICS	6	PDFTOPPM	trailing_bytes=0
+QUALITY_PDF	6	PDFTOPPM	pass
+QUALITY_PDF_DIAGNOSTICS	6	PDFIUM_PYTHON	trailing_bytes=0
+QUALITY_PDF	6	PDFIUM_PYTHON	pass
+QUALITY_PAGE	6	31692	0	0.007443061	0.007612470	0
+QUALITY_PDF_DIAGNOSTICS	7	PDFTOPPM	trailing_bytes=0
+QUALITY_PDF	7	PDFTOPPM	pass
+QUALITY_PDF_DIAGNOSTICS	7	PDFIUM_PYTHON	trailing_bytes=0
+QUALITY_PDF	7	PDFIUM_PYTHON	pass
+QUALITY_PAGE	7	30350	0	0.007472161	0.009180473	0
+QUALITY_PDF_DIAGNOSTICS	8	PDFTOPPM	trailing_bytes=0
+QUALITY_PDF	8	PDFTOPPM	pass
+QUALITY_PDF_DIAGNOSTICS	8	PDFIUM_PYTHON	trailing_bytes=0
+QUALITY_PDF	8	PDFIUM_PYTHON	pass
+QUALITY_PAGE	8	28842	0	0.006564311	0.005540433	0
+QUALITY_PDF_DIAGNOSTICS	9	PDFTOPPM	trailing_bytes=0
+QUALITY_PDF	9	PDFTOPPM	pass
+QUALITY_PDF_DIAGNOSTICS	9	PDFIUM_PYTHON	trailing_bytes=0
+QUALITY_PDF	9	PDFIUM_PYTHON	pass
+QUALITY_PAGE	9	34857	0	0.009959369	0.008815653	0
+QUALITY_PDF_DIAGNOSTICS	10	PDFTOPPM	trailing_bytes=0
+QUALITY_PDF	10	PDFTOPPM	pass
+QUALITY_PDF_DIAGNOSTICS	10	PDFIUM_PYTHON	trailing_bytes=0
+QUALITY_PDF	10	PDFIUM_PYTHON	pass
+QUALITY_PAGE	10	18226	0	0.005646545	0.005593189	0
+QUALITY_PDF_DIAGNOSTICS	11	PDFTOPPM	trailing_bytes=0
+QUALITY_PDF	11	PDFTOPPM	pass
+QUALITY_PDF_DIAGNOSTICS	11	PDFIUM_PYTHON	trailing_bytes=0
+QUALITY_PDF	11	PDFIUM_PYTHON	pass
+QUALITY_PAGE	11	8257	0	0.009688623	0.005322898	0
+QUALITY_PDF_DIAGNOSTICS	12	PDFTOPPM	trailing_bytes=0
+QUALITY_PDF	12	PDFTOPPM	pass
+QUALITY_PDF_DIAGNOSTICS	12	PDFIUM_PYTHON	trailing_bytes=0
+QUALITY_PDF	12	PDFIUM_PYTHON	pass
+QUALITY_PAGE	12	10634	0	0.006171982	0.004205519	0
+QUALITY_PDF_DIAGNOSTICS	13	PDFTOPPM	trailing_bytes=0
+QUALITY_PDF	13	PDFTOPPM	pass
+QUALITY_PDF_DIAGNOSTICS	13	PDFIUM_PYTHON	trailing_bytes=0
+QUALITY_PDF	13	PDFIUM_PYTHON	pass
+QUALITY_PAGE	13	9621	0	0.002935530	0.001857995	0
+QUALITY_PDF_DIAGNOSTICS	14	PDFTOPPM	trailing_bytes=0
+QUALITY_PDF	14	PDFTOPPM	pass
+QUALITY_PDF_DIAGNOSTICS	14	PDFIUM_PYTHON	trailing_bytes=0
+QUALITY_PDF	14	PDFIUM_PYTHON	pass
+QUALITY_PAGE	14	7781	0	0.002799602	0.002390016	0
+QUALITY_PDF_DIAGNOSTICS	15	PDFTOPPM	trailing_bytes=0
+QUALITY_PDF	15	PDFTOPPM	pass
+QUALITY_PDF_DIAGNOSTICS	15	PDFIUM_PYTHON	trailing_bytes=0
+QUALITY_PDF	15	PDFIUM_PYTHON	pass
+QUALITY_PAGE	15	9082	0	0.003105055	0.001857055	0
+QUALITY_PDF_DIAGNOSTICS	16	PDFTOPPM	trailing_bytes=0
+QUALITY_PDF	16	PDFTOPPM	pass
+QUALITY_PDF_DIAGNOSTICS	16	PDFIUM_PYTHON	trailing_bytes=0
+QUALITY_PDF	16	PDFIUM_PYTHON	pass
+QUALITY_PAGE	16	2131	0	0.001809272	0.000705799	0
+QUALITY_RESULT	exact	17	false	278536	5816	177977	0	0.184305757	0	0.099011442	0.083327588	42132	0	21471	0	0
+test quality_corpus_worker ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 6.16s
+

@@ -1,0 +1,23 @@
+{
+  "checked": "2026-11-02",
+  "conclusion": "No dedicated per-version release-note/changelog metadata field; README renders on crates.io, packaged CHANGELOG and optional GitHub Release provide the practical workflow.",
+  "sources": [
+    "https://doc.rust-lang.org/cargo/reference/registry-web-api.html#publish",
+    "https://doc.rust-lang.org/cargo/reference/manifest.html#the-readme-field",
+    "https://github.com/rust-lang/rfcs/pull/3779",
+    "https://github.com/rust-lang/rfcs/pull/2129",
+    "https://github.com/rust-lang/crates.io-index/blob/master/jb/ig/jbig2enc-rust"
+  ],
+  "rfc3779": {
+    "state": "open",
+    "merged_at": null,
+    "updated_at": "2026-10-02T15:30:46Z"
+  },
+  "published_versions": [
+    "0.5.0",
+    "0.5.1",
+    "0.5.3",
+    "0.5.4"
+  ],
+  "changes": "Draft CHANGELOG.md and README 0.6 summary added; CHANGELOG.md explicitly included in Cargo package; no publication."
+}

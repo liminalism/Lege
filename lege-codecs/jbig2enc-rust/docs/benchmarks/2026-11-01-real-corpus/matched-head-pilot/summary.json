@@ -1,0 +1,29 @@
+{
+  "medians": {
+    "reference": {
+      "encode_seconds": 0.437000173,
+      "cold_decode_seconds": 0.223347216,
+      "warm_decode_seconds": 0.021213949
+    },
+    "candidate": {
+      "encode_seconds": 0.43080813,
+      "cold_decode_seconds": 0.219343543,
+      "warm_decode_seconds": 0.02109696
+    }
+  },
+  "candidate_to_reference": {
+    "encode_seconds": 0.9858305708267993,
+    "cold_decode_seconds": 0.982074220258022,
+    "warm_decode_seconds": 0.9944852794734258
+  },
+  "encoded_bytes": {
+    "reference": [
+      201362
+    ],
+    "candidate": [
+      201482
+    ]
+  },
+  "byte_changes_allowed": true,
+  "scope": "interleaved local comparison on the input hashes in metadata.json; no device/OS-cache claim"
+}

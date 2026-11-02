@@ -1,0 +1,15 @@
+{
+  "files": 854,
+  "bytes": 1868522,
+  "sha256": "e06f982cbf9b26bc6e7b1da1899e1533db49d075833071f5210664c9c7b213b1",
+  "verified_build": true,
+  "changelog_included": true,
+  "arithmetic_matches_starting_release_candidate": true,
+  "original_pbms": [
+    "jbig2enc-rust-0.6.0/tests/fixtures/original/blank.pbm",
+    "jbig2enc-rust-0.6.0/tests/fixtures/original/marks.pbm",
+    "jbig2enc-rust-0.6.0/tests/fixtures/original/symbols.pbm"
+  ],
+  "forbidden": [],
+  "note": "Later validation and ledger changes are outside this archive digest. No publication."
+}

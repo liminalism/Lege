@@ -1,0 +1,20 @@
+{
+  "medians": {
+    "reference": {
+      "encode_seconds": 0.233206925,
+      "cold_decode_seconds": 0.050769916,
+      "warm_decode_seconds": 0.038347715
+    },
+    "candidate": {
+      "encode_seconds": 0.248684813,
+      "cold_decode_seconds": 0.050112391,
+      "warm_decode_seconds": 0.038265048
+    }
+  },
+  "candidate_to_reference": {
+    "encode_seconds": 1.066369761532596,
+    "cold_decode_seconds": 0.9870489248002695,
+    "warm_decode_seconds": 0.9978442783357497
+  },
+  "scope": "interleaved local synthetic-corpus comparison; no device/OS-cache claim"
+}

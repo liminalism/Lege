@@ -1,0 +1,125 @@
+{
+  "scope": "completed CSV rows only; worker RSS includes loading/verification; work and bitmap storage are explicit proxies, not device limits",
+  "modes": [
+    {
+      "csv": {
+        "mode": "exact_optimized",
+        "pages": "17",
+        "auto_thresh": "false",
+        "encoded_bytes": "278560",
+        "global_bytes": "5817",
+        "local_bytes": "177990",
+        "residual_bytes": "0",
+        "encode_seconds": "12.232750392",
+        "differing_pixels": "0",
+        "cold_decode_seconds": "0.077459746",
+        "warm_decode_seconds": "0.059204445",
+        "decoded_global_bitmap_bytes": "42132",
+        "comparator_calls": "0",
+        "exact_hits": "21471",
+        "refined_hits": "0",
+        "jbig2dec_differing_pixels": "0",
+        "worker_peak_rss_kib": "147736"
+      },
+      "page_latency_seconds": {
+        "cold": {
+          "median": 0.004816019,
+          "p95": 0.01008544,
+          "max": 0.01008544
+        },
+        "warm": {
+          "median": 0.003698556,
+          "p95": 0.009251212,
+          "max": 0.009251212
+        }
+      },
+      "selected_resources": {
+        "exact": 40995,
+        "refined": 0,
+        "substituted": 0,
+        "generic_instances": 0,
+        "generic_region_pixels": 0,
+        "generic_ink": 0,
+        "page_pixels": 53671692,
+        "max_local_bitmap_bytes": 356576,
+        "max_cold_work_pixels": 5745853
+      },
+      "comparisons": {
+        "input_components": 40995,
+        "ingest_per_component": 0.0,
+        "measured_planner_per_component": 3.355750701305037,
+        "legacy_post_ingest": "unreported; do not interpret ingest counts as total comparisons"
+      },
+      "shortlist_estimate_calibration": {
+        "measured_trials": 21,
+        "mean_absolute_gain_error_bytes": 1486.2380952380952,
+        "raw_mean_absolute_gain_error_bytes": 4343.761904761905,
+        "online_corrected_trials": 15,
+        "raw_predicted_positive": 21,
+        "predicted_positive": 11,
+        "actual_positive_among_predicted_positive": 7,
+        "scope": "gain against the incumbent at trial time; contexts change, so this is diagnostic calibration, not an additive cost model"
+      }
+    },
+    {
+      "csv": {
+        "mode": "lossy_optimized",
+        "pages": "17",
+        "auto_thresh": "false",
+        "encoded_bytes": "278560",
+        "global_bytes": "5817",
+        "local_bytes": "177990",
+        "residual_bytes": "0",
+        "encode_seconds": "11.968006430",
+        "differing_pixels": "0",
+        "cold_decode_seconds": "0.077448646",
+        "warm_decode_seconds": "0.058875126",
+        "decoded_global_bitmap_bytes": "42132",
+        "comparator_calls": "0",
+        "exact_hits": "21471",
+        "refined_hits": "0",
+        "jbig2dec_differing_pixels": "0",
+        "worker_peak_rss_kib": "148216"
+      },
+      "page_latency_seconds": {
+        "cold": {
+          "median": 0.004851405,
+          "p95": 0.01020999,
+          "max": 0.01020999
+        },
+        "warm": {
+          "median": 0.003813206,
+          "p95": 0.00898333,
+          "max": 0.00898333
+        }
+      },
+      "selected_resources": {
+        "exact": 40995,
+        "refined": 0,
+        "substituted": 0,
+        "generic_instances": 0,
+        "generic_region_pixels": 0,
+        "generic_ink": 0,
+        "page_pixels": 53671692,
+        "max_local_bitmap_bytes": 356576,
+        "max_cold_work_pixels": 5745853
+      },
+      "comparisons": {
+        "input_components": 40995,
+        "ingest_per_component": 0.0,
+        "measured_planner_per_component": 3.355750701305037,
+        "legacy_post_ingest": "unreported; do not interpret ingest counts as total comparisons"
+      },
+      "shortlist_estimate_calibration": {
+        "measured_trials": 21,
+        "mean_absolute_gain_error_bytes": 1486.2380952380952,
+        "raw_mean_absolute_gain_error_bytes": 4343.761904761905,
+        "online_corrected_trials": 15,
+        "raw_predicted_positive": 21,
+        "predicted_positive": 11,
+        "actual_positive_among_predicted_positive": 7,
+        "scope": "gain against the incumbent at trial time; contexts change, so this is diagnostic calibration, not an additive cost model"
+      }
+    }
+  ]
+}

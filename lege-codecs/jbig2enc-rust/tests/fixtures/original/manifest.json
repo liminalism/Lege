@@ -1,0 +1,34 @@
+{
+  "files": [
+    {
+      "black_pixels": 0,
+      "bytes": 68,
+      "description": "Four white pixels; no external generator or image.",
+      "height": 2,
+      "path": "blank.pbm",
+      "sha256": "1d2a5689591f87b8c34f14c12ce1163e4b612ea8e320d3e0ba52e8026f299b3e",
+      "width": 2
+    },
+    {
+      "black_pixels": 7110,
+      "bytes": 6439,
+      "description": "135 repeated geometric symbols, eight variants; odd width.",
+      "height": 193,
+      "path": "symbols.pbm",
+      "sha256": "67b2316a48d1f9bb079984d0bee7cfa74a18d603458f421a9eac0dcd89e6afd3",
+      "width": 257
+    },
+    {
+      "black_pixels": 629,
+      "bytes": 1718,
+      "description": "Rule, dense rectangle, isolated marks and diagonal contacts; odd width.",
+      "height": 97,
+      "path": "marks.pbm",
+      "sha256": "482f5ea3685e600a6e31fd376c59128dca024e315e7418726f676164abd500d8",
+      "width": 131
+    }
+  ],
+  "generator_sha256": "601cbd345a10d22e43dd9dd92db0ee71a4550cdf0242ddd91c15007959ec79c1",
+  "license": "MIT",
+  "origin": "Original geometric rules in tools/generate_test_fixtures.py; no external image/font/scan"
+}

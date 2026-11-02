@@ -1,0 +1,710 @@
+
+running 1 test
+QUALITY_RESOURCES	globals_encoded=31078	globals_bitmap=467248	globals_pixels=754434
+QUALITY_PAGE_RESOURCES	0	page_pixels=2508480	local_bitmap=17772	exact=393	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=855266
+QUALITY_PAGE_RESOURCES	1	page_pixels=2508480	local_bitmap=0	exact=20	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=754535
+QUALITY_PAGE_RESOURCES	2	page_pixels=2508480	local_bitmap=19880	exact=407	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=905127
+QUALITY_PAGE_RESOURCES	3	page_pixels=2508480	local_bitmap=20	exact=20	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=754514
+QUALITY_PAGE_RESOURCES	4	page_pixels=2508480	local_bitmap=111796	exact=1853	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1502781
+QUALITY_PAGE_RESOURCES	5	page_pixels=2508480	local_bitmap=114048	exact=1941	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1491144
+QUALITY_PAGE_RESOURCES	6	page_pixels=2508480	local_bitmap=93148	exact=1559	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1399725
+QUALITY_PAGE_RESOURCES	7	page_pixels=2508480	local_bitmap=168532	exact=3590	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1648992
+QUALITY_PAGE_RESOURCES	8	page_pixels=2508480	local_bitmap=140256	exact=2321	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1695258
+QUALITY_PAGE_RESOURCES	9	page_pixels=2508480	local_bitmap=154996	exact=2549	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1791488
+QUALITY_PAGE_RESOURCES	10	page_pixels=2508480	local_bitmap=144960	exact=2208	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1800081
+QUALITY_PAGE_RESOURCES	11	page_pixels=2508480	local_bitmap=160516	exact=3173	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1661132
+QUALITY_PAGE_RESOURCES	12	page_pixels=2508480	local_bitmap=133724	exact=2198	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1668877
+QUALITY_PAGE_RESOURCES	13	page_pixels=2508480	local_bitmap=154732	exact=2770	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1714350
+QUALITY_PAGE_RESOURCES	14	page_pixels=2508480	local_bitmap=142100	exact=2134	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1779607
+QUALITY_PAGE_RESOURCES	15	page_pixels=2508480	local_bitmap=159420	exact=3131	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1700029
+QUALITY_PAGE_RESOURCES	16	page_pixels=2508480	local_bitmap=147832	exact=2681	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1684098
+QUALITY_PAGE_RESOURCES	17	page_pixels=2508480	local_bitmap=133128	exact=2525	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1570342
+QUALITY_PAGE_RESOURCES	18	page_pixels=2508480	local_bitmap=146344	exact=2404	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1730543
+QUALITY_PAGE_RESOURCES	19	page_pixels=2508480	local_bitmap=148772	exact=2482	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1742850
+QUALITY_PAGE_RESOURCES	20	page_pixels=2508480	local_bitmap=11340	exact=771	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=865543
+QUALITY_PAGE_RESOURCES	21	page_pixels=2508480	local_bitmap=16	exact=767	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=755865
+QUALITY_PAGE_RESOURCES	22	page_pixels=2508480	local_bitmap=166484	exact=3993	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=3193625
+QUALITY_PAGE_RESOURCES	23	page_pixels=2508480	local_bitmap=0	exact=13	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=754468
+QUALITY_PAGE_RESOURCES	24	page_pixels=2508480	local_bitmap=130660	exact=2147	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1633242
+QUALITY_PAGE_RESOURCES	25	page_pixels=2508480	local_bitmap=138428	exact=2346	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1658363
+QUALITY_PAGE_RESOURCES	26	page_pixels=2508480	local_bitmap=136988	exact=2032	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1775580
+QUALITY_PAGE_RESOURCES	27	page_pixels=2508480	local_bitmap=144744	exact=2424	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1713866
+QUALITY_PAGE_RESOURCES	28	page_pixels=2508480	local_bitmap=250572	exact=3433	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=3747847
+QUALITY_PAGE_RESOURCES	29	page_pixels=2508480	local_bitmap=60	exact=37	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=754644
+QUALITY_PAGE_RESOURCES	30	page_pixels=2508480	local_bitmap=163604	exact=3188	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1671103
+QUALITY_PAGE_RESOURCES	31	page_pixels=2508480	local_bitmap=136164	exact=2512	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1586043
+QUALITY_PAGE_RESOURCES	32	page_pixels=2508480	local_bitmap=135608	exact=2044	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1746524
+QUALITY_PAGE_RESOURCES	33	page_pixels=2508480	local_bitmap=151248	exact=2568	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1743542
+QUALITY_PAGE_RESOURCES	34	page_pixels=2508480	local_bitmap=154196	exact=2805	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1709559
+QUALITY_PAGE_RESOURCES	35	page_pixels=2508480	local_bitmap=141772	exact=2592	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1642237
+QUALITY_PAGE_RESOURCES	36	page_pixels=2508480	local_bitmap=145184	exact=2147	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1819456
+QUALITY_PAGE_RESOURCES	37	page_pixels=2508480	local_bitmap=154660	exact=2601	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1782948
+QUALITY_PAGE_RESOURCES	38	page_pixels=2508480	local_bitmap=143288	exact=2118	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1799051
+QUALITY_PAGE_RESOURCES	39	page_pixels=2508480	local_bitmap=156492	exact=2851	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1732975
+QUALITY_PAGE_RESOURCES	40	page_pixels=2508480	local_bitmap=138732	exact=2087	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1767425
+QUALITY_PAGE_RESOURCES	41	page_pixels=2508480	local_bitmap=149144	exact=2446	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1769432
+QUALITY_PAGE_RESOURCES	42	page_pixels=2508480	local_bitmap=141168	exact=2120	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1774533
+QUALITY_PAGE_RESOURCES	43	page_pixels=2508480	local_bitmap=150036	exact=2477	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1763785
+QUALITY_PAGE_RESOURCES	44	page_pixels=2508480	local_bitmap=135636	exact=2110	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1728293
+QUALITY_PAGE_RESOURCES	45	page_pixels=2508480	local_bitmap=149572	exact=2316	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1801731
+QUALITY_PAGE_RESOURCES	46	page_pixels=2508480	local_bitmap=140448	exact=2180	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1724739
+QUALITY_PAGE_RESOURCES	47	page_pixels=2508480	local_bitmap=143892	exact=2181	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1781669
+QUALITY_PAGE_RESOURCES	48	page_pixels=2508480	local_bitmap=144380	exact=2159	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1804837
+QUALITY_PAGE_RESOURCES	49	page_pixels=2508480	local_bitmap=151548	exact=2548	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1764725
+QUALITY_PAGE_RESOURCES	50	page_pixels=2508480	local_bitmap=139136	exact=2186	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1727327
+QUALITY_PAGE_RESOURCES	51	page_pixels=2508480	local_bitmap=142004	exact=2417	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1700847
+QUALITY_PAGE_RESOURCES	52	page_pixels=2508480	local_bitmap=141328	exact=2268	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1722779
+QUALITY_PAGE_RESOURCES	53	page_pixels=2508480	local_bitmap=146452	exact=2709	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1689091
+QUALITY_PAGE_RESOURCES	54	page_pixels=2508480	local_bitmap=145088	exact=2394	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1740511
+QUALITY_PAGE_RESOURCES	55	page_pixels=2508480	local_bitmap=144240	exact=2402	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1733041
+QUALITY_PAGE_RESOURCES	56	page_pixels=2508480	local_bitmap=124668	exact=2067	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1622333
+QUALITY_PAGE_RESOURCES	57	page_pixels=2508480	local_bitmap=154188	exact=2652	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1747387
+QUALITY_PAGE_RESOURCES	58	page_pixels=2508480	local_bitmap=139944	exact=2133	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1788148
+QUALITY_PAGE_RESOURCES	59	page_pixels=2508480	local_bitmap=143624	exact=2500	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1709572
+QUALITY_PAGE_RESOURCES	60	page_pixels=2508480	local_bitmap=136296	exact=2154	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1733113
+QUALITY_PAGE_RESOURCES	61	page_pixels=2508480	local_bitmap=150372	exact=2443	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1785731
+QUALITY_PAGE_RESOURCES	62	page_pixels=2508480	local_bitmap=144848	exact=2161	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1807896
+QUALITY_PAGE_RESOURCES	63	page_pixels=2508480	local_bitmap=158940	exact=2930	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1727611
+QUALITY_PAGE_RESOURCES	64	page_pixels=2508480	local_bitmap=132296	exact=2102	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1681174
+QUALITY_PAGE_RESOURCES	65	page_pixels=2259745	local_bitmap=151844	exact=2489	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1778998
+QUALITY_PAGE_RESOURCES	66	page_pixels=2259745	local_bitmap=121956	exact=1999	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1604039
+QUALITY_PAGE_RESOURCES	67	page_pixels=2259745	local_bitmap=157284	exact=3406	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1590533
+QUALITY_PAGE_RESOURCES	68	page_pixels=2259745	local_bitmap=147880	exact=2655	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1677690
+QUALITY_PAGE_RESOURCES	69	page_pixels=2259745	local_bitmap=156928	exact=2965	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1691847
+QUALITY_PAGE_RESOURCES	70	page_pixels=2259745	local_bitmap=128656	exact=2145	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1632243
+QUALITY_PAGE_RESOURCES	71	page_pixels=2259745	local_bitmap=155996	exact=3035	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1679235
+QUALITY_PAGE_RESOURCES	72	page_pixels=2259745	local_bitmap=143656	exact=2476	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1705378
+QUALITY_PAGE_RESOURCES	73	page_pixels=2259745	local_bitmap=151280	exact=3037	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1654233
+QUALITY_PAGE_RESOURCES	74	page_pixels=2259745	local_bitmap=143780	exact=2360	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1737746
+QUALITY_PAGE_RESOURCES	75	page_pixels=2259745	local_bitmap=155412	exact=2762	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1758231
+QUALITY_PAGE_RESOURCES	76	page_pixels=2259745	local_bitmap=142492	exact=2288	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1734621
+QUALITY_PAGE_RESOURCES	77	page_pixels=2259745	local_bitmap=146700	exact=2621	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1715974
+QUALITY_PAGE_RESOURCES	78	page_pixels=2259745	local_bitmap=134640	exact=2011	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1776781
+QUALITY_PAGE_RESOURCES	79	page_pixels=2259745	local_bitmap=129736	exact=2194	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1610668
+QUALITY_PAGE_RESOURCES	80	page_pixels=2259745	local_bitmap=129192	exact=1934	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1687995
+QUALITY_PAGE_RESOURCES	81	page_pixels=2259745	local_bitmap=141224	exact=2580	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1666381
+QUALITY_PAGE_RESOURCES	82	page_pixels=2259745	local_bitmap=134004	exact=2093	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1705403
+QUALITY_PAGE_RESOURCES	83	page_pixels=2259745	local_bitmap=144680	exact=2374	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1744671
+QUALITY_PAGE_RESOURCES	84	page_pixels=2259745	local_bitmap=138184	exact=2034	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1775073
+QUALITY_PAGE_RESOURCES	85	page_pixels=2259745	local_bitmap=137848	exact=2162	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1711011
+QUALITY_PAGE_RESOURCES	86	page_pixels=2259745	local_bitmap=127224	exact=1993	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1652784
+QUALITY_PAGE_RESOURCES	87	page_pixels=2259745	local_bitmap=149000	exact=2407	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1774299
+QUALITY_PAGE_RESOURCES	88	page_pixels=2259745	local_bitmap=141620	exact=2074	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1812812
+QUALITY_PAGE_RESOURCES	89	page_pixels=2259745	local_bitmap=149636	exact=2637	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1713019
+QUALITY_PAGE_RESOURCES	90	page_pixels=2259745	local_bitmap=133452	exact=2037	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1715947
+QUALITY_PAGE_RESOURCES	91	page_pixels=2259745	local_bitmap=164868	exact=3285	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1680065
+QUALITY_PAGE_RESOURCES	92	page_pixels=2259745	local_bitmap=140628	exact=2156	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1764486
+QUALITY_PAGE_RESOURCES	93	page_pixels=2259745	local_bitmap=162204	exact=3525	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1576776
+QUALITY_PAGE_RESOURCES	94	page_pixels=2259745	local_bitmap=113532	exact=1806	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1541117
+QUALITY_PAGE_RESOURCES	95	page_pixels=2259745	local_bitmap=101136	exact=2014	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1348151
+QUALITY_PAGE_RESOURCES	96	page_pixels=2259745	local_bitmap=142376	exact=2249	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1778307
+QUALITY_PAGE_RESOURCES	97	page_pixels=2259745	local_bitmap=148616	exact=2811	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1664558
+QUALITY_PAGE_RESOURCES	98	page_pixels=2259745	local_bitmap=136532	exact=2184	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1699826
+QUALITY_PAGE_RESOURCES	99	page_pixels=2259745	local_bitmap=160452	exact=3055	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1724112
+QUALITY_PAGE_RESOURCES	100	page_pixels=2259745	local_bitmap=146612	exact=2222	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1827086
+QUALITY_PAGE_RESOURCES	101	page_pixels=2259745	local_bitmap=165392	exact=3117	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1735457
+QUALITY_PAGE_RESOURCES	102	page_pixels=2259745	local_bitmap=139544	exact=2178	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1724062
+QUALITY_PAGE_RESOURCES	103	page_pixels=2259745	local_bitmap=136788	exact=2629	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1561579
+QUALITY_PAGE_RESOURCES	104	page_pixels=2259745	local_bitmap=135984	exact=2303	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1679208
+QUALITY_PAGE_RESOURCES	105	page_pixels=2259745	local_bitmap=146956	exact=2706	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1660272
+QUALITY_PAGE_RESOURCES	106	page_pixels=2259745	local_bitmap=143744	exact=2484	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1695899
+QUALITY_PAGE_RESOURCES	107	page_pixels=2259745	local_bitmap=152940	exact=2669	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1729015
+QUALITY_PAGE_RESOURCES	108	page_pixels=2259745	local_bitmap=137844	exact=2134	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1740379
+QUALITY_PAGE_RESOURCES	109	page_pixels=2259745	local_bitmap=160160	exact=3120	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1688606
+QUALITY_PAGE_RESOURCES	110	page_pixels=2259745	local_bitmap=138772	exact=2209	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1713067
+QUALITY_PAGE_RESOURCES	111	page_pixels=2259745	local_bitmap=155600	exact=2802	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1708951
+QUALITY_PAGE_RESOURCES	112	page_pixels=2259745	local_bitmap=117180	exact=1788	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1594576
+QUALITY_PAGE_RESOURCES	113	page_pixels=2259745	local_bitmap=152772	exact=2710	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1723758
+QUALITY_PAGE_RESOURCES	114	page_pixels=2259745	local_bitmap=127980	exact=2103	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1637610
+QUALITY_PAGE_RESOURCES	115	page_pixels=2259745	local_bitmap=135632	exact=2440	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1623273
+QUALITY_PAGE_RESOURCES	116	page_pixels=2259745	local_bitmap=141068	exact=2103	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1779688
+QUALITY_PAGE_RESOURCES	117	page_pixels=2259745	local_bitmap=153936	exact=2861	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1701741
+QUALITY_PAGE_RESOURCES	118	page_pixels=2259745	local_bitmap=136444	exact=2211	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1710550
+QUALITY_PAGE_RESOURCES	119	page_pixels=2259745	local_bitmap=146788	exact=2661	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1687483
+QUALITY_PAGE_RESOURCES	120	page_pixels=2259745	local_bitmap=132376	exact=2020	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1694644
+QUALITY_PAGE_RESOURCES	121	page_pixels=2259745	local_bitmap=140940	exact=2943	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1557287
+QUALITY_PAGE_RESOURCES	122	page_pixels=2259745	local_bitmap=118808	exact=1863	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1589339
+QUALITY_PAGE_RESOURCES	123	page_pixels=2259745	local_bitmap=133316	exact=2135	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1676968
+QUALITY_PAGE_RESOURCES	124	page_pixels=2259745	local_bitmap=138716	exact=1958	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1838721
+QUALITY_PAGE_RESOURCES	125	page_pixels=2259745	local_bitmap=158296	exact=2719	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1776759
+QUALITY_PAGE_RESOURCES	126	page_pixels=2259745	local_bitmap=142148	exact=2101	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1808762
+QUALITY_PAGE_RESOURCES	127	page_pixels=2259745	local_bitmap=146448	exact=2332	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1756524
+QUALITY_PAGE_RESOURCES	128	page_pixels=2259745	local_bitmap=140352	exact=1965	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1841396
+QUALITY_PAGE_RESOURCES	129	page_pixels=2259745	local_bitmap=123888	exact=1893	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1624930
+QUALITY_PAGE_RESOURCES	130	page_pixels=2259745	local_bitmap=115172	exact=1772	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1571908
+QUALITY_PAGE_RESOURCES	131	page_pixels=2259745	local_bitmap=135960	exact=2246	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1675489
+QUALITY_PAGE_RESOURCES	132	page_pixels=2259745	local_bitmap=131156	exact=1959	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1704270
+QUALITY_PAGE_RESOURCES	133	page_pixels=2259745	local_bitmap=144752	exact=2416	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1706143
+QUALITY_PAGE_RESOURCES	134	page_pixels=2259745	local_bitmap=141812	exact=2170	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1779216
+QUALITY_PAGE_RESOURCES	135	page_pixels=2259745	local_bitmap=148184	exact=2351	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1767080
+QUALITY_PAGE_RESOURCES	136	page_pixels=2259745	local_bitmap=116328	exact=1768	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1600459
+QUALITY_PAGE_RESOURCES	137	page_pixels=2259745	local_bitmap=152776	exact=2765	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1701169
+QUALITY_PAGE_RESOURCES	138	page_pixels=2259745	local_bitmap=130836	exact=2053	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1655449
+QUALITY_PAGE_RESOURCES	139	page_pixels=2259745	local_bitmap=156196	exact=2854	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1714136
+QUALITY_PAGE_RESOURCES	140	page_pixels=2259745	local_bitmap=138404	exact=2046	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1804413
+QUALITY_PAGE_RESOURCES	141	page_pixels=2259745	local_bitmap=161104	exact=3002	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1718108
+QUALITY_PAGE_RESOURCES	142	page_pixels=2259745	local_bitmap=137956	exact=2276	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1688043
+QUALITY_PAGE_RESOURCES	143	page_pixels=2259745	local_bitmap=128344	exact=2261	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1562849
+QUALITY_PAGE_RESOURCES	144	page_pixels=2259745	local_bitmap=130396	exact=2049	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1661109
+QUALITY_PAGE_RESOURCES	145	page_pixels=2259745	local_bitmap=149668	exact=2626	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1709134
+QUALITY_PAGE_RESOURCES	146	page_pixels=2259745	local_bitmap=125976	exact=2052	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1608490
+QUALITY_PAGE_RESOURCES	147	page_pixels=2259745	local_bitmap=138852	exact=2452	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1631721
+QUALITY_PAGE_RESOURCES	148	page_pixels=2259745	local_bitmap=131028	exact=2008	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1686187
+QUALITY_PAGE_RESOURCES	149	page_pixels=2259745	local_bitmap=147372	exact=2556	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1682011
+QUALITY_PAGE_RESOURCES	150	page_pixels=2259745	local_bitmap=123320	exact=2000	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1625833
+QUALITY_PAGE_RESOURCES	151	page_pixels=2259745	local_bitmap=152536	exact=2652	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1733909
+QUALITY_PAGE_RESOURCES	152	page_pixels=2259745	local_bitmap=128328	exact=1972	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1680502
+QUALITY_PAGE_RESOURCES	153	page_pixels=2259745	local_bitmap=139140	exact=2825	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1538879
+QUALITY_PAGE_RESOURCES	154	page_pixels=2259745	local_bitmap=122232	exact=1980	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1588015
+QUALITY_PAGE_RESOURCES	155	page_pixels=2259745	local_bitmap=139304	exact=2765	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1525200
+QUALITY_PAGE_RESOURCES	156	page_pixels=2259745	local_bitmap=125744	exact=2014	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1626264
+QUALITY_PAGE_RESOURCES	157	page_pixels=2259745	local_bitmap=143648	exact=2710	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1626294
+QUALITY_PAGE_RESOURCES	158	page_pixels=2259745	local_bitmap=140292	exact=2206	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1735988
+QUALITY_PAGE_RESOURCES	159	page_pixels=2259745	local_bitmap=150420	exact=2851	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1625833
+QUALITY_PAGE_RESOURCES	160	page_pixels=2259745	local_bitmap=145000	exact=2467	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1717294
+QUALITY_PAGE_RESOURCES	161	page_pixels=2259745	local_bitmap=146524	exact=2805	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1627285
+QUALITY_PAGE_RESOURCES	162	page_pixels=2259745	local_bitmap=145392	exact=2301	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1755302
+QUALITY_PAGE_RESOURCES	163	page_pixels=2259745	local_bitmap=160736	exact=3349	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1631025
+QUALITY_PAGE_RESOURCES	164	page_pixels=2259745	local_bitmap=139464	exact=2251	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1710971
+QUALITY_PAGE_RESOURCES	165	page_pixels=2259745	local_bitmap=136632	exact=2651	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1538328
+QUALITY_PAGE_RESOURCES	166	page_pixels=2259745	local_bitmap=124960	exact=2070	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1605082
+QUALITY_PAGE_RESOURCES	167	page_pixels=2259745	local_bitmap=160312	exact=2984	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1684815
+QUALITY_PAGE_RESOURCES	168	page_pixels=2259745	local_bitmap=141848	exact=2418	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1706402
+QUALITY_PAGE_RESOURCES	169	page_pixels=2259745	local_bitmap=155272	exact=2931	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1669270
+QUALITY_PAGE_RESOURCES	170	page_pixels=2259745	local_bitmap=149488	exact=2344	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1824175
+QUALITY_PAGE_RESOURCES	171	page_pixels=2259745	local_bitmap=147480	exact=2861	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1609189
+QUALITY_PAGE_RESOURCES	172	page_pixels=2259745	local_bitmap=148216	exact=2495	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1751536
+QUALITY_PAGE_RESOURCES	173	page_pixels=2259745	local_bitmap=159568	exact=2900	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1744241
+QUALITY_PAGE_RESOURCES	174	page_pixels=2259745	local_bitmap=137988	exact=2281	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1691901
+QUALITY_PAGE_RESOURCES	175	page_pixels=2259745	local_bitmap=150688	exact=2743	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1693838
+QUALITY_PAGE_RESOURCES	176	page_pixels=2259745	local_bitmap=129492	exact=2104	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1656141
+QUALITY_PAGE_RESOURCES	177	page_pixels=2259745	local_bitmap=137452	exact=2643	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1577436
+QUALITY_PAGE_RESOURCES	178	page_pixels=2259745	local_bitmap=132364	exact=2200	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1646893
+QUALITY_PAGE_RESOURCES	179	page_pixels=2259745	local_bitmap=164696	exact=3233	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1705117
+QUALITY_PAGE_RESOURCES	180	page_pixels=2259745	local_bitmap=140608	exact=2267	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1729490
+QUALITY_PAGE_RESOURCES	181	page_pixels=2259745	local_bitmap=157352	exact=3012	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1702559
+QUALITY_PAGE_RESOURCES	182	page_pixels=2259745	local_bitmap=139684	exact=2162	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1762628
+QUALITY_PAGE_RESOURCES	183	page_pixels=2259745	local_bitmap=155696	exact=2793	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1711296
+QUALITY_PAGE_RESOURCES	184	page_pixels=2259745	local_bitmap=149684	exact=2360	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1779265
+QUALITY_PAGE_RESOURCES	185	page_pixels=2259745	local_bitmap=147944	exact=2705	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1639275
+QUALITY_PAGE_RESOURCES	186	page_pixels=2259745	local_bitmap=127844	exact=2015	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1678917
+QUALITY_PAGE_RESOURCES	187	page_pixels=2259745	local_bitmap=158544	exact=3009	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1689978
+QUALITY_PAGE_RESOURCES	188	page_pixels=2259745	local_bitmap=139004	exact=2232	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1704851
+QUALITY_PAGE_RESOURCES	189	page_pixels=2259745	local_bitmap=139076	exact=2571	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1587123
+QUALITY_PAGE_RESOURCES	190	page_pixels=2259745	local_bitmap=141812	exact=2200	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1747181
+QUALITY_PAGE_RESOURCES	191	page_pixels=2259745	local_bitmap=156360	exact=3198	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1601279
+QUALITY_PAGE_RESOURCES	192	page_pixels=2259745	local_bitmap=141656	exact=2282	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1729154
+QUALITY_PAGE_RESOURCES	193	page_pixels=2259745	local_bitmap=157292	exact=2748	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1738803
+QUALITY_PAGE_RESOURCES	194	page_pixels=2259745	local_bitmap=117248	exact=1977	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1560148
+QUALITY_PAGE_RESOURCES	195	page_pixels=2259745	local_bitmap=149044	exact=2853	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1625886
+QUALITY_PAGE_RESOURCES	196	page_pixels=2259745	local_bitmap=147452	exact=2327	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1775897
+QUALITY_PAGE_RESOURCES	197	page_pixels=2259745	local_bitmap=161348	exact=3090	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1716165
+QUALITY_PAGE_RESOURCES	198	page_pixels=2259745	local_bitmap=140204	exact=2175	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1740223
+QUALITY_PAGE_RESOURCES	199	page_pixels=2259745	local_bitmap=137776	exact=2711	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1561972
+QUALITY_PAGE_RESOURCES	200	page_pixels=2259745	local_bitmap=144144	exact=2357	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1719339
+QUALITY_PAGE_RESOURCES	201	page_pixels=2259745	local_bitmap=116416	exact=2068	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1511815
+QUALITY_PAGE_RESOURCES	202	page_pixels=2259745	local_bitmap=130332	exact=2191	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1627790
+QUALITY_PAGE_RESOURCES	203	page_pixels=2259745	local_bitmap=161252	exact=2728	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1787672
+QUALITY_PAGE_RESOURCES	204	page_pixels=2259745	local_bitmap=133748	exact=1924	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1769958
+QUALITY_PAGE_RESOURCES	205	page_pixels=2259745	local_bitmap=156876	exact=2832	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1729215
+QUALITY_PAGE_RESOURCES	206	page_pixels=2259745	local_bitmap=147432	exact=2204	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1815758
+QUALITY_PAGE_RESOURCES	207	page_pixels=2259745	local_bitmap=36440	exact=583	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1001737
+QUALITY_PAGE_RESOURCES	208	page_pixels=2259745	local_bitmap=88704	exact=1438	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1372458
+QUALITY_PAGE_RESOURCES	209	page_pixels=2259745	local_bitmap=165564	exact=3184	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1720408
+QUALITY_PAGE_RESOURCES	210	page_pixels=2259745	local_bitmap=140036	exact=2151	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1754243
+QUALITY_PAGE_RESOURCES	211	page_pixels=2259745	local_bitmap=156952	exact=2587	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1808600
+QUALITY_PAGE_RESOURCES	212	page_pixels=2259745	local_bitmap=144148	exact=2042	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1861724
+QUALITY_PAGE_RESOURCES	213	page_pixels=2259745	local_bitmap=150652	exact=2724	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1699978
+QUALITY_PAGE_RESOURCES	214	page_pixels=2259745	local_bitmap=144128	exact=2245	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1775050
+QUALITY_PAGE_RESOURCES	215	page_pixels=2259745	local_bitmap=156396	exact=2671	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1748882
+QUALITY_PAGE_RESOURCES	216	page_pixels=2259745	local_bitmap=137484	exact=2280	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1700052
+QUALITY_PAGE_RESOURCES	217	page_pixels=2259745	local_bitmap=161404	exact=3209	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1689842
+QUALITY_PAGE_RESOURCES	218	page_pixels=2259745	local_bitmap=122052	exact=2252	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1537000
+QUALITY_PAGE_RESOURCES	219	page_pixels=2259745	local_bitmap=149108	exact=2899	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1649732
+QUALITY_PAGE_RESOURCES	220	page_pixels=2259745	local_bitmap=137192	exact=2235	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1668573
+QUALITY_PAGE_RESOURCES	221	page_pixels=2259745	local_bitmap=154560	exact=3047	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1656719
+QUALITY_PAGE_RESOURCES	222	page_pixels=2259745	local_bitmap=134568	exact=2176	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1710380
+QUALITY_PAGE_RESOURCES	223	page_pixels=2259745	local_bitmap=162824	exact=3162	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1725898
+QUALITY_PAGE_RESOURCES	224	page_pixels=2259745	local_bitmap=140960	exact=2164	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1759762
+QUALITY_PAGE_RESOURCES	225	page_pixels=2259745	local_bitmap=166800	exact=3147	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1712810
+QUALITY_PAGE_RESOURCES	226	page_pixels=2259745	local_bitmap=149528	exact=2338	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1790955
+QUALITY_PAGE_RESOURCES	227	page_pixels=2259745	local_bitmap=160756	exact=3291	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1637774
+QUALITY_PAGE_RESOURCES	228	page_pixels=2259745	local_bitmap=137164	exact=2269	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1702307
+QUALITY_PAGE_RESOURCES	229	page_pixels=2259745	local_bitmap=137900	exact=2677	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1562283
+QUALITY_PAGE_RESOURCES	230	page_pixels=2259745	local_bitmap=140120	exact=2410	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1691055
+QUALITY_PAGE_RESOURCES	231	page_pixels=2259745	local_bitmap=159500	exact=3375	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1638687
+QUALITY_PAGE_RESOURCES	232	page_pixels=2259745	local_bitmap=145648	exact=2500	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1720205
+QUALITY_PAGE_RESOURCES	233	page_pixels=2259745	local_bitmap=161564	exact=3378	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1631825
+QUALITY_PAGE_RESOURCES	234	page_pixels=2259745	local_bitmap=135400	exact=2218	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1695006
+QUALITY_PAGE_RESOURCES	235	page_pixels=2259745	local_bitmap=124792	exact=2331	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1529929
+QUALITY_PAGE_RESOURCES	236	page_pixels=2259745	local_bitmap=143448	exact=2334	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1745371
+QUALITY_PAGE_RESOURCES	237	page_pixels=2259745	local_bitmap=157032	exact=2941	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1698886
+QUALITY_PAGE_RESOURCES	238	page_pixels=2259745	local_bitmap=112664	exact=1911	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1540347
+QUALITY_PAGE_RESOURCES	239	page_pixels=2259745	local_bitmap=158872	exact=3163	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1645674
+QUALITY_PAGE_RESOURCES	240	page_pixels=2259745	local_bitmap=136708	exact=2104	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1738673
+QUALITY_PAGE_RESOURCES	241	page_pixels=2259745	local_bitmap=151700	exact=2961	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1656428
+QUALITY_PAGE_RESOURCES	242	page_pixels=2259745	local_bitmap=142244	exact=2358	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1723375
+QUALITY_PAGE_RESOURCES	243	page_pixels=2259745	local_bitmap=157796	exact=3280	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1645073
+QUALITY_PAGE_RESOURCES	244	page_pixels=2259745	local_bitmap=140904	exact=2356	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1703065
+QUALITY_PAGE_RESOURCES	245	page_pixels=2259745	local_bitmap=151992	exact=3092	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1650358
+QUALITY_PAGE_RESOURCES	246	page_pixels=2259745	local_bitmap=130232	exact=2172	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1655435
+QUALITY_PAGE_RESOURCES	247	page_pixels=2259745	local_bitmap=139184	exact=2722	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1595537
+QUALITY_PAGE_RESOURCES	248	page_pixels=2259745	local_bitmap=131772	exact=2226	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1651218
+QUALITY_PAGE_RESOURCES	249	page_pixels=2259745	local_bitmap=137028	exact=2806	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1567629
+QUALITY_PAGE_RESOURCES	250	page_pixels=2259745	local_bitmap=118608	exact=1892	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1603856
+QUALITY_PAGE_RESOURCES	251	page_pixels=2316665	local_bitmap=143044	exact=2469	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1714989
+QUALITY_PAGE_RESOURCES	252	page_pixels=2316665	local_bitmap=36596	exact=1022	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1218402
+QUALITY_PAGE_RESOURCES	253	page_pixels=2316665	local_bitmap=68	exact=645	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=755849
+QUALITY_PAGE_RESOURCES	254	page_pixels=2316665	local_bitmap=160904	exact=3128	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=3040046
+QUALITY_PAGE_RESOURCES	255	page_pixels=2316665	local_bitmap=16	exact=15	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=754493
+QUALITY_PAGE_RESOURCES	256	page_pixels=2316665	local_bitmap=114520	exact=1854	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1542639
+QUALITY_PAGE_RESOURCES	257	page_pixels=2316665	local_bitmap=148020	exact=3102	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1554036
+QUALITY_PAGE_RESOURCES	258	page_pixels=2316665	local_bitmap=143904	exact=2288	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1752997
+QUALITY_PAGE_RESOURCES	259	page_pixels=2316665	local_bitmap=166044	exact=3304	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1713624
+QUALITY_PAGE_RESOURCES	260	page_pixels=2316665	local_bitmap=124920	exact=2145	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1592312
+QUALITY_PAGE_RESOURCES	261	page_pixels=2316665	local_bitmap=162796	exact=3297	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1669860
+QUALITY_PAGE_RESOURCES	262	page_pixels=2316665	local_bitmap=136764	exact=2577	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1567818
+QUALITY_PAGE_RESOURCES	263	page_pixels=2316665	local_bitmap=157148	exact=3337	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1611978
+QUALITY_PAGE_RESOURCES	264	page_pixels=2316665	local_bitmap=128372	exact=2301	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1581012
+QUALITY_PAGE_RESOURCES	265	page_pixels=2316665	local_bitmap=158104	exact=3384	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1575739
+QUALITY_PAGE_RESOURCES	266	page_pixels=2316665	local_bitmap=142648	exact=2352	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1722636
+QUALITY_PAGE_RESOURCES	267	page_pixels=2316665	local_bitmap=150088	exact=3115	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1586361
+QUALITY_PAGE_RESOURCES	268	page_pixels=2316665	local_bitmap=129484	exact=2167	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1629423
+QUALITY_PAGE_RESOURCES	269	page_pixels=2316665	local_bitmap=140200	exact=2781	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1547414
+QUALITY_PAGE_RESOURCES	270	page_pixels=2316665	local_bitmap=131592	exact=2008	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1693211
+QUALITY_PAGE_RESOURCES	271	page_pixels=2316665	local_bitmap=125024	exact=2283	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1548392
+QUALITY_PAGE_RESOURCES	272	page_pixels=2316665	local_bitmap=10712	exact=270	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=850816
+QUALITY_PAGE_RESOURCES	273	page_pixels=2316665	local_bitmap=144	exact=496	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=755654
+QUALITY_PAGE_RESOURCES	274	page_pixels=2316665	local_bitmap=66920	exact=651	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1791419
+QUALITY_PAGE_RESOURCES	275	page_pixels=2316665	local_bitmap=24	exact=10	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=754527
+QUALITY_PAGE_RESOURCES	276	page_pixels=2316665	local_bitmap=129040	exact=2130	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1650060
+QUALITY_PAGE_RESOURCES	277	page_pixels=2316665	local_bitmap=144688	exact=2770	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1603339
+QUALITY_PAGE_RESOURCES	278	page_pixels=2316665	local_bitmap=123696	exact=2051	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1593814
+QUALITY_PAGE_RESOURCES	279	page_pixels=2316665	local_bitmap=162360	exact=3534	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1595176
+QUALITY_PAGE_RESOURCES	280	page_pixels=2316665	local_bitmap=131280	exact=2490	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1554327
+QUALITY_PAGE_RESOURCES	281	page_pixels=2316665	local_bitmap=138644	exact=2792	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1563134
+QUALITY_PAGE_RESOURCES	282	page_pixels=2316665	local_bitmap=137252	exact=2357	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1672543
+QUALITY_PAGE_RESOURCES	283	page_pixels=2316665	local_bitmap=150536	exact=3111	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1584897
+QUALITY_PAGE_RESOURCES	284	page_pixels=2316665	local_bitmap=143036	exact=2315	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1745792
+QUALITY_PAGE_RESOURCES	285	page_pixels=2316665	local_bitmap=160356	exact=2949	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1740368
+QUALITY_PAGE_RESOURCES	286	page_pixels=2316665	local_bitmap=141440	exact=2328	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1709581
+QUALITY_PAGE_RESOURCES	287	page_pixels=2316665	local_bitmap=158640	exact=3310	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1614014
+QUALITY_PAGE_RESOURCES	288	page_pixels=2316665	local_bitmap=135216	exact=2289	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1662775
+QUALITY_PAGE_RESOURCES	289	page_pixels=2316665	local_bitmap=150936	exact=2892	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1657936
+QUALITY_PAGE_RESOURCES	290	page_pixels=2316665	local_bitmap=140608	exact=2219	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1740210
+QUALITY_PAGE_RESOURCES	291	page_pixels=2316665	local_bitmap=146800	exact=2904	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1608026
+QUALITY_PAGE_RESOURCES	292	page_pixels=2316665	local_bitmap=146600	exact=2388	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1769481
+QUALITY_PAGE_RESOURCES	293	page_pixels=2316665	local_bitmap=145052	exact=2797	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1619426
+QUALITY_PAGE_RESOURCES	294	page_pixels=2316665	local_bitmap=124752	exact=2023	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1638633
+QUALITY_PAGE_RESOURCES	295	page_pixels=2316665	local_bitmap=141516	exact=2949	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1524354
+QUALITY_PAGE_RESOURCES	296	page_pixels=2316665	local_bitmap=144020	exact=2539	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1685423
+QUALITY_PAGE_RESOURCES	297	page_pixels=2316665	local_bitmap=151572	exact=3223	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1598789
+QUALITY_PAGE_RESOURCES	298	page_pixels=2316665	local_bitmap=115248	exact=1973	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1508708
+QUALITY_PAGE_RESOURCES	299	page_pixels=2316665	local_bitmap=154152	exact=3236	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1610849
+QUALITY_PAGE_RESOURCES	300	page_pixels=2316665	local_bitmap=137332	exact=2419	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1640535
+QUALITY_PAGE_RESOURCES	301	page_pixels=2316665	local_bitmap=141884	exact=3048	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1512079
+QUALITY_PAGE_RESOURCES	302	page_pixels=2316665	local_bitmap=99728	exact=1739	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1427991
+QUALITY_PAGE_RESOURCES	303	page_pixels=2316665	local_bitmap=127068	exact=2927	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1397365
+QUALITY_PAGE_RESOURCES	304	page_pixels=2316665	local_bitmap=115512	exact=2141	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1494424
+QUALITY_PAGE_RESOURCES	305	page_pixels=2316665	local_bitmap=124124	exact=2540	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1444117
+QUALITY_PAGE_RESOURCES	306	page_pixels=2316665	local_bitmap=22944	exact=183	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1055906
+QUALITY_PAGE_RESOURCES	307	page_pixels=2316665	local_bitmap=300	exact=966	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=757212
+QUALITY_PAGE_RESOURCES	308	page_pixels=2316665	local_bitmap=59888	exact=825	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1637198
+QUALITY_PAGE_RESOURCES	309	page_pixels=2316665	local_bitmap=0	exact=10	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=754462
+QUALITY_PAGE_RESOURCES	310	page_pixels=2316665	local_bitmap=126324	exact=1969	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1643844
+QUALITY_PAGE_RESOURCES	311	page_pixels=2316665	local_bitmap=161472	exact=2814	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1760234
+QUALITY_PAGE_RESOURCES	312	page_pixels=2316665	local_bitmap=143324	exact=2289	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1748823
+QUALITY_PAGE_RESOURCES	313	page_pixels=2316665	local_bitmap=166484	exact=3398	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1673197
+QUALITY_PAGE_RESOURCES	314	page_pixels=2316665	local_bitmap=142104	exact=2276	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1745874
+QUALITY_PAGE_RESOURCES	315	page_pixels=2316665	local_bitmap=149216	exact=2649	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1665230
+QUALITY_PAGE_RESOURCES	316	page_pixels=2316665	local_bitmap=37796	exact=563	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1039527
+QUALITY_PAGE_RESOURCES	317	page_pixels=2316665	local_bitmap=106880	exact=2185	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1361846
+QUALITY_PAGE_RESOURCES	318	page_pixels=2316665	local_bitmap=141416	exact=2172	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1771464
+QUALITY_PAGE_RESOURCES	319	page_pixels=2316665	local_bitmap=160428	exact=2793	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1749583
+QUALITY_PAGE_RESOURCES	320	page_pixels=2316665	local_bitmap=141280	exact=2110	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1804149
+QUALITY_PAGE_RESOURCES	321	page_pixels=2316665	local_bitmap=148004	exact=2705	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1659742
+QUALITY_PAGE_RESOURCES	322	page_pixels=2316665	local_bitmap=125880	exact=2137	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1598730
+QUALITY_PAGE_RESOURCES	323	page_pixels=2316665	local_bitmap=164200	exact=3058	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1731936
+QUALITY_PAGE_RESOURCES	324	page_pixels=2316665	local_bitmap=143804	exact=2211	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1770870
+QUALITY_PAGE_RESOURCES	325	page_pixels=2316665	local_bitmap=152076	exact=2867	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1658436
+QUALITY_PAGE_RESOURCES	326	page_pixels=2316665	local_bitmap=149608	exact=2292	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1810340
+QUALITY_PAGE_RESOURCES	327	page_pixels=2316665	local_bitmap=153508	exact=2776	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1718900
+QUALITY_PAGE_RESOURCES	328	page_pixels=2316665	local_bitmap=140576	exact=2281	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1714030
+QUALITY_PAGE_RESOURCES	329	page_pixels=2316665	local_bitmap=164792	exact=3237	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1730432
+QUALITY_PAGE_RESOURCES	330	page_pixels=2316665	local_bitmap=143780	exact=2361	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1753583
+QUALITY_PAGE_RESOURCES	331	page_pixels=2316665	local_bitmap=154112	exact=2905	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1640527
+QUALITY_PAGE_RESOURCES	332	page_pixels=2316665	local_bitmap=122912	exact=2172	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1579159
+QUALITY_PAGE_RESOURCES	333	page_pixels=2316665	local_bitmap=149460	exact=2899	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1651933
+QUALITY_PAGE_RESOURCES	334	page_pixels=2316665	local_bitmap=136544	exact=2183	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1691298
+QUALITY_PAGE_RESOURCES	335	page_pixels=2316665	local_bitmap=167024	exact=3080	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1746713
+QUALITY_PAGE_RESOURCES	336	page_pixels=2316665	local_bitmap=148456	exact=2352	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1803164
+QUALITY_PAGE_RESOURCES	337	page_pixels=2316665	local_bitmap=160188	exact=3002	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1694722
+QUALITY_PAGE_RESOURCES	338	page_pixels=2316665	local_bitmap=136776	exact=2086	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1746207
+QUALITY_PAGE_RESOURCES	339	page_pixels=2316665	local_bitmap=159708	exact=3020	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1698101
+QUALITY_PAGE_RESOURCES	340	page_pixels=2316665	local_bitmap=122800	exact=2071	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1585335
+QUALITY_PAGE_RESOURCES	341	page_pixels=2316665	local_bitmap=155088	exact=2832	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1708842
+QUALITY_PAGE_RESOURCES	342	page_pixels=2316665	local_bitmap=139476	exact=2223	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1726994
+QUALITY_PAGE_RESOURCES	343	page_pixels=2316665	local_bitmap=156872	exact=3194	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1647655
+QUALITY_PAGE_RESOURCES	344	page_pixels=2316665	local_bitmap=145844	exact=2510	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1705572
+QUALITY_PAGE_RESOURCES	345	page_pixels=2316665	local_bitmap=155568	exact=3043	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1650364
+QUALITY_PAGE_RESOURCES	346	page_pixels=2316665	local_bitmap=140444	exact=2243	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1739208
+QUALITY_PAGE_RESOURCES	347	page_pixels=2316665	local_bitmap=166204	exact=3575	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1614254
+QUALITY_PAGE_RESOURCES	348	page_pixels=2316665	local_bitmap=139300	exact=2362	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1687141
+QUALITY_PAGE_RESOURCES	349	page_pixels=2316665	local_bitmap=162496	exact=3057	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=1714727
+QUALITY_MATCHING	components=832422	ingest_comparisons=0	planner_comparisons=0	legacy_post_ingest_comparisons=unreported
+QUALITY_GROUP	0	first=0	pages=350	source_bitmap_bytes=102955692
+QUALITY_PAGE	0	4435	0	0.009801858	0.001205396	0
+QUALITY_PAGE	1	146	0	0.009659375	0.000439287	0
+QUALITY_PAGE	2	5555	0	0.009528996	0.001431270	0
+QUALITY_PAGE	3	180	0	0.008781922	0.000492643	0
+QUALITY_PAGE	4	22985	0	0.011460142	0.004703343	0
+QUALITY_PAGE	5	23135	0	0.011954080	0.005128035	0
+QUALITY_PAGE	6	20457	0	0.012071693	0.004160596	0
+QUALITY_PAGE	7	33133	0	0.013042973	0.005922716	0
+QUALITY_PAGE	8	29448	0	0.014072871	0.006018240	0
+QUALITY_PAGE	9	31633	0	0.014230987	0.006414464	0
+QUALITY_PAGE	10	30332	0	0.014089255	0.006200453	0
+QUALITY_PAGE	11	30524	0	0.013890732	0.006237011	0
+QUALITY_PAGE	12	28432	0	0.013922148	0.006077928	0
+QUALITY_PAGE	13	30456	0	0.014220241	0.006236595	0
+QUALITY_PAGE	14	29526	0	0.016778991	0.006318409	0
+QUALITY_PAGE	15	32068	0	0.014844546	0.006420525	0
+QUALITY_PAGE	16	31536	0	0.015073647	0.006299911	0
+QUALITY_PAGE	17	26561	0	0.012602665	0.005968249	0
+QUALITY_PAGE	18	30413	0	0.018115022	0.006113490	0
+QUALITY_PAGE	19	29762	0	0.014679339	0.006311828	0
+QUALITY_PAGE	20	3534	0	0.009327770	0.001023276	0
+QUALITY_PAGE	21	1671	0	0.009090089	0.000632378	0
+QUALITY_PAGE	22	24476	0	0.015685296	0.007510413	0
+QUALITY_PAGE	23	122	0	0.008521234	0.000424376	0
+QUALITY_PAGE	24	28152	0	0.014379208	0.005893805	0
+QUALITY_PAGE	25	28304	0	0.014158400	0.005904047	0
+QUALITY_PAGE	26	28904	0	0.014228447	0.006452978	0
+QUALITY_PAGE	27	30281	0	0.014474093	0.006159402	0
+QUALITY_PAGE	28	32891	0	0.018201736	0.009817016	0
+QUALITY_PAGE	29	219	0	0.008464047	0.000423553	0
+QUALITY_PAGE	30	33722	0	0.014798924	0.006623962	0
+QUALITY_PAGE	31	27778	0	0.017646339	0.005677356	0
+QUALITY_PAGE	32	28475	0	0.014621751	0.006407314	0
+QUALITY_PAGE	33	30582	0	0.013999642	0.006101943	0
+QUALITY_PAGE	34	32634	0	0.013907655	0.006721875	0
+QUALITY_PAGE	35	28992	0	0.014198751	0.005849242	0
+QUALITY_PAGE	36	30437	0	0.014089801	0.006143512	0
+QUALITY_PAGE	37	31271	0	0.013620202	0.006821190	0
+QUALITY_PAGE	38	30026	0	0.014224982	0.006130349	0
+QUALITY_PAGE	39	32361	0	0.014143913	0.006347635	0
+QUALITY_PAGE	40	29343	0	0.013551731	0.005870429	0
+QUALITY_PAGE	41	30688	0	0.014432199	0.006418943	0
+QUALITY_PAGE	42	29573	0	0.013891865	0.006166929	0
+QUALITY_PAGE	43	30554	0	0.013744406	0.006279396	0
+QUALITY_PAGE	44	28583	0	0.013923126	0.007000406	0
+QUALITY_PAGE	45	30928	0	0.013892791	0.011005926	0
+QUALITY_PAGE	46	29293	0	0.014446369	0.006436564	0
+QUALITY_PAGE	47	30181	0	0.014270933	0.006478048	0
+QUALITY_PAGE	48	30419	0	0.014817968	0.006666974	0
+QUALITY_PAGE	49	30901	0	0.014326119	0.006712456	0
+QUALITY_PAGE	50	29171	0	0.014298977	0.006175111	0
+QUALITY_PAGE	51	30314	0	0.014081330	0.006072298	0
+QUALITY_PAGE	52	29625	0	0.013925725	0.006483686	0
+QUALITY_PAGE	53	30175	0	0.013975459	0.006060289	0
+QUALITY_PAGE	54	30323	0	0.014806550	0.006167188	0
+QUALITY_PAGE	55	30537	0	0.013910000	0.006618431	0
+QUALITY_PAGE	56	27040	0	0.013914083	0.005610589	0
+QUALITY_PAGE	57	30566	0	0.014160437	0.006155625	0
+QUALITY_PAGE	58	29698	0	0.015877917	0.006106940	0
+QUALITY_PAGE	59	29538	0	0.013253984	0.005946937	0
+QUALITY_PAGE	60	29013	0	0.014220836	0.005887231	0
+QUALITY_PAGE	61	31205	0	0.014294012	0.006365817	0
+QUALITY_PAGE	62	30674	0	0.013837400	0.006225114	0
+QUALITY_PAGE	63	31261	0	0.014034428	0.006726756	0
+QUALITY_PAGE	64	28062	0	0.014809195	0.006043244	0
+QUALITY_PAGE	65	30921	0	0.014263471	0.006245216	0
+QUALITY_PAGE	66	26436	0	0.013357983	0.005385681	0
+QUALITY_PAGE	67	31938	0	0.013859788	0.006217572	0
+QUALITY_PAGE	68	31521	0	0.014248379	0.006250196	0
+QUALITY_PAGE	69	31447	0	0.014269791	0.006501433	0
+QUALITY_PAGE	70	27802	0	0.013521395	0.005641799	0
+QUALITY_PAGE	71	31186	0	0.014321040	0.007163868	0
+QUALITY_PAGE	72	30015	0	0.013975112	0.006111569	0
+QUALITY_PAGE	73	30782	0	0.014223115	0.006824393	0
+QUALITY_PAGE	74	30179	0	0.014848102	0.006130213	0
+QUALITY_PAGE	75	32337	0	0.014377760	0.006477053	0
+QUALITY_PAGE	76	29954	0	0.014228465	0.006433431	0
+QUALITY_PAGE	77	30258	0	0.014507332	0.006266641	0
+QUALITY_PAGE	78	29018	0	0.013929473	0.006281854	0
+QUALITY_PAGE	79	26709	0	0.013345335	0.005443567	0
+QUALITY_PAGE	80	27954	0	0.013936763	0.005684549	0
+QUALITY_PAGE	81	29366	0	0.013751400	0.005982112	0
+QUALITY_PAGE	82	28354	0	0.013403220	0.006019790	0
+QUALITY_PAGE	83	30408	0	0.014484793	0.006292530	0
+QUALITY_PAGE	84	29234	0	0.013885432	0.006532630	0
+QUALITY_PAGE	85	28712	0	0.014081600	0.005738757	0
+QUALITY_PAGE	86	27311	0	0.013612491	0.005447714	0
+QUALITY_PAGE	87	30961	0	0.014067018	0.007032987	0
+QUALITY_PAGE	88	30029	0	0.013690836	0.006224906	0
+QUALITY_PAGE	89	30026	0	0.013388776	0.005957418	0
+QUALITY_PAGE	90	28417	0	0.013504945	0.005686086	0
+QUALITY_PAGE	91	33139	0	0.014408372	0.006544582	0
+QUALITY_PAGE	92	29985	0	0.014180844	0.006280797	0
+QUALITY_PAGE	93	32179	0	0.014194500	0.006298716	0
+QUALITY_PAGE	94	23605	0	0.013154084	0.004877419	0
+QUALITY_PAGE	95	20328	0	0.012422471	0.004050641	0
+QUALITY_PAGE	96	30888	0	0.014292493	0.006457327	0
+QUALITY_PAGE	97	30422	0	0.014073109	0.006744819	0
+QUALITY_PAGE	98	28963	0	0.013042944	0.006733575	0
+QUALITY_PAGE	99	32446	0	0.014421611	0.007082143	0
+QUALITY_PAGE	100	32734	0	0.014259947	0.006709093	0
+QUALITY_PAGE	101	32785	0	0.013701690	0.006874101	0
+QUALITY_PAGE	102	29305	0	0.014503460	0.005828430	0
+QUALITY_PAGE	103	27182	0	0.012674867	0.005528915	0
+QUALITY_PAGE	104	29626	0	0.013516311	0.005814213	0
+QUALITY_PAGE	105	29134	0	0.013675748	0.005622136	0
+QUALITY_PAGE	106	30040	0	0.014085930	0.005883651	0
+QUALITY_PAGE	107	30884	0	0.014518588	0.006844328	0
+QUALITY_PAGE	108	29280	0	0.013442849	0.006035255	0
+QUALITY_PAGE	109	31385	0	0.013499788	0.005973757	0
+QUALITY_PAGE	110	28853	0	0.013122910	0.005791338	0
+QUALITY_PAGE	111	30712	0	0.014306244	0.005892083	0
+QUALITY_PAGE	112	24932	0	0.012763375	0.004789486	0
+QUALITY_PAGE	113	30230	0	0.016224692	0.006328669	0
+QUALITY_PAGE	114	27499	0	0.013136756	0.005639669	0
+QUALITY_PAGE	115	28477	0	0.013361534	0.005572775	0
+QUALITY_PAGE	116	30119	0	0.013970514	0.006063192	0
+QUALITY_PAGE	117	30566	0	0.014889309	0.006008001	0
+QUALITY_PAGE	118	29070	0	0.013844654	0.005927438	0
+QUALITY_PAGE	119	30150	0	0.013910102	0.006473817	0
+QUALITY_PAGE	120	27931	0	0.013990085	0.005814084	0
+QUALITY_PAGE	121	27876	0	0.013860954	0.005586813	0
+QUALITY_PAGE	122	25996	0	0.013291534	0.005357842	0
+QUALITY_PAGE	123	28800	0	0.013595252	0.005792754	0
+QUALITY_PAGE	124	30841	0	0.014315077	0.007171785	0
+QUALITY_PAGE	125	31850	0	0.020629107	0.005857939	0
+QUALITY_PAGE	126	30541	0	0.012380124	0.006121276	0
+QUALITY_PAGE	127	30701	0	0.014681391	0.006071311	0
+QUALITY_PAGE	128	30745	0	0.013013056	0.006703095	0
+QUALITY_PAGE	129	26092	0	0.013050174	0.005456646	0
+QUALITY_PAGE	130	24946	0	0.012649660	0.005042023	0
+QUALITY_PAGE	131	29056	0	0.013916507	0.005918787	0
+QUALITY_PAGE	132	27947	0	0.014371785	0.005760906	0
+QUALITY_PAGE	133	29956	0	0.014046300	0.006064631	0
+QUALITY_PAGE	134	29916	0	0.014166097	0.006343304	0
+QUALITY_PAGE	135	31165	0	0.014306966	0.006619157	0
+QUALITY_PAGE	136	25644	0	0.013579030	0.005896648	0
+QUALITY_PAGE	137	30728	0	0.014291339	0.006393270	0
+QUALITY_PAGE	138	27919	0	0.014701394	0.006614691	0
+QUALITY_PAGE	139	30970	0	0.015485972	0.006747142	0
+QUALITY_PAGE	140	30631	0	0.014226324	0.006275475	0
+QUALITY_PAGE	141	31296	0	0.014696861	0.006214495	0
+QUALITY_PAGE	142	29569	0	0.013701780	0.006008772	0
+QUALITY_PAGE	143	26669	0	0.013650371	0.005242663	0
+QUALITY_PAGE	144	27818	0	0.013619672	0.005525574	0
+QUALITY_PAGE	145	30359	0	0.013700527	0.006091147	0
+QUALITY_PAGE	146	26844	0	0.013231509	0.005367895	0
+QUALITY_PAGE	147	28495	0	0.013175872	0.005963916	0
+QUALITY_PAGE	148	28128	0	0.013865863	0.005790512	0
+QUALITY_PAGE	149	29270	0	0.013790789	0.005861043	0
+QUALITY_PAGE	150	26347	0	0.013338077	0.005892721	0
+QUALITY_PAGE	151	30835	0	0.014113720	0.006312717	0
+QUALITY_PAGE	152	27797	0	0.013948092	0.005315795	0
+QUALITY_PAGE	153	27465	0	0.011867240	0.005869281	0
+QUALITY_PAGE	154	26287	0	0.015013322	0.006023720	0
+QUALITY_PAGE	155	26415	0	0.014414783	0.005207505	0
+QUALITY_PAGE	156	27387	0	0.013408943	0.005797221	0
+QUALITY_PAGE	157	28727	0	0.014002499	0.005906748	0
+QUALITY_PAGE	158	29672	0	0.014699611	0.006371759	0
+QUALITY_PAGE	159	28968	0	0.013913543	0.006292997	0
+QUALITY_PAGE	160	30040	0	0.015755583	0.005902961	0
+QUALITY_PAGE	161	28981	0	0.013834130	0.006519195	0
+QUALITY_PAGE	162	30164	0	0.015528222	0.005854109	0
+QUALITY_PAGE	163	30119	0	0.013887346	0.006313621	0
+QUALITY_PAGE	164	29193	0	0.014151841	0.006069787	0
+QUALITY_PAGE	165	26083	0	0.013201137	0.005468760	0
+QUALITY_PAGE	166	26799	0	0.014636959	0.005174996	0
+QUALITY_PAGE	167	30450	0	0.014101557	0.006052345	0
+QUALITY_PAGE	168	29474	0	0.015312397	0.005674910	0
+QUALITY_PAGE	169	30034	0	0.013718017	0.006348563	0
+QUALITY_PAGE	170	31249	0	0.014401272	0.006251387	0
+QUALITY_PAGE	171	29393	0	0.013571864	0.005771312	0
+QUALITY_PAGE	172	30887	0	0.014043254	0.006635653	0
+QUALITY_PAGE	173	31429	0	0.014299090	0.006310653	0
+QUALITY_PAGE	174	29163	0	0.013912974	0.005816231	0
+QUALITY_PAGE	175	30404	0	0.013922696	0.005964045	0
+QUALITY_PAGE	176	27740	0	0.013562772	0.005801066	0
+QUALITY_PAGE	177	27648	0	0.013023877	0.005910586	0
+QUALITY_PAGE	178	28173	0	0.014392886	0.005726464	0
+QUALITY_PAGE	179	31534	0	0.014671874	0.005775271	0
+QUALITY_PAGE	180	30178	0	0.013973216	0.006253866	0
+QUALITY_PAGE	181	30921	0	0.016891881	0.005939423	0
+QUALITY_PAGE	182	29828	0	0.014110176	0.006415406	0
+QUALITY_PAGE	183	30581	0	0.014676429	0.006321404	0
+QUALITY_PAGE	184	30899	0	0.015233534	0.006538459	0
+QUALITY_PAGE	185	28450	0	0.013787205	0.005612896	0
+QUALITY_PAGE	186	27685	0	0.014257343	0.005543247	0
+QUALITY_PAGE	187	30801	0	0.014394997	0.006477134	0
+QUALITY_PAGE	188	28971	0	0.013930248	0.006297721	0
+QUALITY_PAGE	189	27561	0	0.014935821	0.005651161	0
+QUALITY_PAGE	190	30082	0	0.014102293	0.006199553	0
+QUALITY_PAGE	191	29546	0	0.014077608	0.006046929	0
+QUALITY_PAGE	192	29505	0	0.014200536	0.005900478	0
+QUALITY_PAGE	193	31266	0	0.014432083	0.006283965	0
+QUALITY_PAGE	194	25796	0	0.012493166	0.005324154	0
+QUALITY_PAGE	195	29016	0	0.013918594	0.005782217	0
+QUALITY_PAGE	196	30671	0	0.013252246	0.006882726	0
+QUALITY_PAGE	197	31806	0	0.013296821	0.006097037	0
+QUALITY_PAGE	198	29193	0	0.013154896	0.006158404	0
+QUALITY_PAGE	199	28021	0	0.014346974	0.005424787	0
+QUALITY_PAGE	200	30421	0	0.013745106	0.006059390	0
+QUALITY_PAGE	201	23882	0	0.012651448	0.004734912	0
+QUALITY_PAGE	202	27474	0	0.013588401	0.005494066	0
+QUALITY_PAGE	203	31817	0	0.014523610	0.006570308	0
+QUALITY_PAGE	204	28924	0	0.014430951	0.006121008	0
+QUALITY_PAGE	205	31021	0	0.014850435	0.006307025	0
+QUALITY_PAGE	206	30375	0	0.014796216	0.005643582	0
+QUALITY_PAGE	207	7976	0	0.009676013	0.002074740	0
+QUALITY_PAGE	208	19602	0	0.011294051	0.004207809	0
+QUALITY_PAGE	209	31813	0	0.013637526	0.006169497	0
+QUALITY_PAGE	210	29461	0	0.013974967	0.006037566	0
+QUALITY_PAGE	211	32148	0	0.014370600	0.006465468	0
+QUALITY_PAGE	212	31255	0	0.014585828	0.006434983	0
+QUALITY_PAGE	213	31808	0	0.014526334	0.006514792	0
+QUALITY_PAGE	214	29782	0	0.013892952	0.006087764	0
+QUALITY_PAGE	215	30980	0	0.013984085	0.006257673	0
+QUALITY_PAGE	216	29651	0	0.014404569	0.005926934	0
+QUALITY_PAGE	217	31897	0	0.014346997	0.006276654	0
+QUALITY_PAGE	218	26492	0	0.013499165	0.005609160	0
+QUALITY_PAGE	219	30262	0	0.014433530	0.006015330	0
+QUALITY_PAGE	220	29382	0	0.014251629	0.006390254	0
+QUALITY_PAGE	221	30280	0	0.015031074	0.005451255	0
+QUALITY_PAGE	222	28647	0	0.012800225	0.005629511	0
+QUALITY_PAGE	223	31690	0	0.015649283	0.008014401	0
+QUALITY_PAGE	224	29525	0	0.012820570	0.005958278	0
+QUALITY_PAGE	225	31392	0	0.014234046	0.006116108	0
+QUALITY_PAGE	226	30613	0	0.014054939	0.006399557	0
+QUALITY_PAGE	227	30244	0	0.013568705	0.006320972	0
+QUALITY_PAGE	228	29150	0	0.013646233	0.005858599	0
+QUALITY_PAGE	229	26911	0	0.013011279	0.005340663	0
+QUALITY_PAGE	230	29617	0	0.014241231	0.006220447	0
+QUALITY_PAGE	231	31214	0	0.014462895	0.005974535	0
+QUALITY_PAGE	232	30673	0	0.014686396	0.005937346	0
+QUALITY_PAGE	233	31034	0	0.013999832	0.006127192	0
+QUALITY_PAGE	234	28903	0	0.013706560	0.007299365	0
+QUALITY_PAGE	235	25522	0	0.015100375	0.005188494	0
+QUALITY_PAGE	236	29986	0	0.013886292	0.005843878	0
+QUALITY_PAGE	237	30851	0	0.014257504	0.006177153	0
+QUALITY_PAGE	238	24762	0	0.012933360	0.004948748	0
+QUALITY_PAGE	239	30055	0	0.013817295	0.005970566	0
+QUALITY_PAGE	240	29012	0	0.013934002	0.006045541	0
+QUALITY_PAGE	241	30597	0	0.014019219	0.006148147	0
+QUALITY_PAGE	242	30152	0	0.014048104	0.006186813	0
+QUALITY_PAGE	243	31016	0	0.014568345	0.006181454	0
+QUALITY_PAGE	244	29614	0	0.013845843	0.005963170	0
+QUALITY_PAGE	245	31051	0	0.014046682	0.006113576	0
+QUALITY_PAGE	246	28471	0	0.014521557	0.005741959	0
+QUALITY_PAGE	247	28529	0	0.013308549	0.006119151	0
+QUALITY_PAGE	248	28610	0	0.015094152	0.006852747	0
+QUALITY_PAGE	249	28152	0	0.013485211	0.005494741	0
+QUALITY_PAGE	250	25706	0	0.012852559	0.005394350	0
+QUALITY_PAGE	251	29595	0	0.014088791	0.006002307	0
+QUALITY_PAGE	252	6826	0	0.009608395	0.002014477	0
+QUALITY_PAGE	253	1458	0	0.008382191	0.000611275	0
+QUALITY_PAGE	254	22719	0	0.014795236	0.007003604	0
+QUALITY_PAGE	255	159	0	0.008147796	0.000323819	0
+QUALITY_PAGE	256	24799	0	0.013173751	0.004948372	0
+QUALITY_PAGE	257	28395	0	0.013913945	0.005834734	0
+QUALITY_PAGE	258	30219	0	0.014561768	0.005946714	0
+QUALITY_PAGE	259	31764	0	0.014355385	0.006229801	0
+QUALITY_PAGE	260	26563	0	0.012691381	0.005659192	0
+QUALITY_PAGE	261	31287	0	0.014626210	0.006123328	0
+QUALITY_PAGE	262	28924	0	0.013646979	0.008358619	0
+QUALITY_PAGE	263	29810	0	0.017752530	0.005836794	0
+QUALITY_PAGE	264	27379	0	0.013613872	0.006668547	0
+QUALITY_PAGE	265	29661	0	0.014059490	0.006156792	0
+QUALITY_PAGE	266	29768	0	0.015334104	0.005990168	0
+QUALITY_PAGE	267	29281	0	0.013884306	0.008437892	0
+QUALITY_PAGE	268	27239	0	0.014313389	0.005472845	0
+QUALITY_PAGE	269	27416	0	0.013380361	0.005722327	0
+QUALITY_PAGE	270	28200	0	0.013980288	0.005902288	0
+QUALITY_PAGE	271	26120	0	0.013271058	0.005326721	0
+QUALITY_PAGE	272	2178	0	0.008613070	0.000962755	0
+QUALITY_PAGE	273	1186	0	0.008476768	0.000588325	0
+QUALITY_PAGE	274	4341	0	0.010953229	0.002623130	0
+QUALITY_PAGE	275	151	0	0.008193907	0.000341053	0
+QUALITY_PAGE	276	27428	0	0.013721578	0.005836026	0
+QUALITY_PAGE	277	28333	0	0.013839973	0.005746867	0
+QUALITY_PAGE	278	26256	0	0.016989720	0.004588943	0
+QUALITY_PAGE	279	30443	0	0.013526110	0.006115698	0
+QUALITY_PAGE	280	28408	0	0.013423162	0.005644955	0
+QUALITY_PAGE	281	27565	0	0.013178254	0.005419169	0
+QUALITY_PAGE	282	29539	0	0.013479903	0.005842118	0
+QUALITY_PAGE	283	28537	0	0.013635583	0.005602956	0
+QUALITY_PAGE	284	30207	0	0.014061976	0.006237776	0
+QUALITY_PAGE	285	31706	0	0.014013152	0.006347107	0
+QUALITY_PAGE	286	30139	0	0.013700198	0.006122764	0
+QUALITY_PAGE	287	29976	0	0.013824702	0.005973671	0
+QUALITY_PAGE	288	28474	0	0.014070749	0.005853611	0
+QUALITY_PAGE	289	29865	0	0.013889335	0.006058192	0
+QUALITY_PAGE	290	30101	0	0.013779569	0.006032791	0
+QUALITY_PAGE	291	29201	0	0.014966836	0.005299258	0
+QUALITY_PAGE	292	31004	0	0.018942467	0.007049684	0
+QUALITY_PAGE	293	29134	0	0.013762596	0.005770529	0
+QUALITY_PAGE	294	27758	0	0.014030637	0.005903446	0
+QUALITY_PAGE	295	27899	0	0.013537906	0.005695955	0
+QUALITY_PAGE	296	30689	0	0.014207503	0.006279174	0
+QUALITY_PAGE	297	30000	0	0.014600111	0.006224834	0
+QUALITY_PAGE	298	24901	0	0.013554403	0.005174057	0
+QUALITY_PAGE	299	30416	0	0.014670520	0.006011904	0
+QUALITY_PAGE	300	29671	0	0.013852004	0.005974537	0
+QUALITY_PAGE	301	27843	0	0.013618699	0.005604449	0
+QUALITY_PAGE	302	22289	0	0.013004022	0.004635509	0
+QUALITY_PAGE	303	25048	0	0.013239169	0.005121951	0
+QUALITY_PAGE	304	25168	0	0.013577794	0.005069330	0
+QUALITY_PAGE	305	24781	0	0.012520834	0.006959618	0
+QUALITY_PAGE	306	2501	0	0.008681530	0.001423432	0
+QUALITY_PAGE	307	2130	0	0.008158046	0.000621755	0
+QUALITY_PAGE	308	5305	0	0.010217675	0.002742665	0
+QUALITY_PAGE	309	110	0	0.008322622	0.000347251	0
+QUALITY_PAGE	310	26748	0	0.013948935	0.005624816	0
+QUALITY_PAGE	311	31501	0	0.014415336	0.006776522	0
+QUALITY_PAGE	312	29976	0	0.014932367	0.006258969	0
+QUALITY_PAGE	313	30897	0	0.014286129	0.006416784	0
+QUALITY_PAGE	314	29588	0	0.014662669	0.006384556	0
+QUALITY_PAGE	315	29249	0	0.013988445	0.006115065	0
+QUALITY_PAGE	316	8731	0	0.012796228	0.002121124	0
+QUALITY_PAGE	317	21224	0	0.013011099	0.004338936	0
+QUALITY_PAGE	318	29377	0	0.014213066	0.005914380	0
+QUALITY_PAGE	319	31103	0	0.014327203	0.006525654	0
+QUALITY_PAGE	320	30084	0	0.016130697	0.006529634	0
+QUALITY_PAGE	321	28504	0	0.016628567	0.007768406	0
+QUALITY_PAGE	322	26775	0	0.012870786	0.005076394	0
+QUALITY_PAGE	323	31474	0	0.014408341	0.006898293	0
+QUALITY_PAGE	324	29820	0	0.015421878	0.006005812	0
+QUALITY_PAGE	325	29508	0	0.013803272	0.006202769	0
+QUALITY_PAGE	326	31290	0	0.014597101	0.006247731	0
+QUALITY_PAGE	327	30449	0	0.013867448	0.006429211	0
+QUALITY_PAGE	328	29432	0	0.014306609	0.006074427	0
+QUALITY_PAGE	329	31782	0	0.014483035	0.006579085	0
+QUALITY_PAGE	330	30241	0	0.014329233	0.006816983	0
+QUALITY_PAGE	331	28999	0	0.015147703	0.005890742	0
+QUALITY_PAGE	332	26998	0	0.013664905	0.005720584	0
+QUALITY_PAGE	333	29935	0	0.014542975	0.005548262	0
+QUALITY_PAGE	334	28519	0	0.013182013	0.005786454	0
+QUALITY_PAGE	335	31827	0	0.014284420	0.006649616	0
+QUALITY_PAGE	336	30979	0	0.015088476	0.006373957	0
+QUALITY_PAGE	337	30661	0	0.014238932	0.006412482	0
+QUALITY_PAGE	338	28628	0	0.013738642	0.006051805	0
+QUALITY_PAGE	339	30610	0	0.014167823	0.006133523	0
+QUALITY_PAGE	340	26221	0	0.014124146	0.005171070	0
+QUALITY_PAGE	341	30297	0	0.014382642	0.006117524	0
+QUALITY_PAGE	342	29277	0	0.012191053	0.006191289	0
+QUALITY_PAGE	343	30341	0	0.014991855	0.005963526	0
+QUALITY_PAGE	344	29344	0	0.014189268	0.005948837	0
+QUALITY_PAGE	345	30110	0	0.013997720	0.006275821	0
+QUALITY_PAGE	346	29306	0	0.014249043	0.006231849	0
+QUALITY_PAGE	347	30211	0	0.012410041	0.005976326	0
+QUALITY_PAGE	348	28718	0	0.014034273	0.005959563	0
+QUALITY_PAGE	349	30935	0	0.016250249	0.007385858	0
+QUALITY_RESULT	exact_groupwhole	350	false	9715152	31078	7459380	0	4.667229998	0	4.835901022	2.024380743	467248	0	142067	0	0
+test quality_corpus_worker ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 25.44s
+

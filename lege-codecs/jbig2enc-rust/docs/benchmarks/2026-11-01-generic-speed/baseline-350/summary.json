@@ -1,0 +1,47 @@
+{
+  "runs": [
+    {
+      "pair": 0,
+      "role": "c",
+      "seconds": 3.274400203,
+      "bytes_all_rounds": 9205435
+    },
+    {
+      "pair": 0,
+      "role": "rust",
+      "seconds": 4.90146894,
+      "bytes_all_rounds": 9205715
+    },
+    {
+      "pair": 1,
+      "role": "c",
+      "seconds": 2.670091148,
+      "bytes_all_rounds": 9205435
+    },
+    {
+      "pair": 1,
+      "role": "rust",
+      "seconds": 4.968950909,
+      "bytes_all_rounds": 9205715
+    },
+    {
+      "pair": 2,
+      "role": "rust",
+      "seconds": 4.907258904,
+      "bytes_all_rounds": 9205715
+    },
+    {
+      "pair": 2,
+      "role": "c",
+      "seconds": 4.793182595,
+      "bytes_all_rounds": 9205435
+    }
+  ],
+  "rust_over_c_ratios": [
+    1.4969058869191623,
+    1.8609667736331523,
+    1.0237997002490575
+  ],
+  "median_rust_over_c": 1.4969058869191623,
+  "byte_equality": "all page payloads equal after removing the known legacy duplicate FF prefix"
+}

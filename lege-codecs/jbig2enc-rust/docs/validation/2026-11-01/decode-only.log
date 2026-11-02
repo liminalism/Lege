@@ -1,0 +1,73 @@
+   Compiling jbig2enc-rust v0.6.0 (/home/dk/rust-projects/Lege-ecosystem/lege-codecs/jbig2enc-rust)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.30s
+     Running unittests src/lib.rs (target/debug/deps/jbig2enc_rust-c41dfbfed3c93f90)
+
+running 59 tests
+test decode::file::tests::declared_page_count_respects_strictness ... ok
+test decode::context::tests::default_options_are_strict ... ok
+test decode::file::tests::auto_detects_organisation ... ok
+test decode::file::tests::parses_sequential_file ... ok
+test decode::file::tests::reserved_file_flags_respect_strictness ... ok
+test decode::file::tests::random_access_parses_headers_then_data ... ok
+test decode::file::tests::truncated_payload_is_error ... ok
+test decode::file::tests::embedded_sequence_without_header ... ok
+test decode::file::tests::referred_segment_limit_is_checked_before_long_form_allocation ... ok
+test decode::file::tests::random_access_without_eof_is_malformed ... ok
+test decode::halftone_region::tests::hbpp_matches_spec ... ok
+test decode::file::tests::rejects_bad_magic ... ok
+test decode::huffman::tests::custom_table_roundtrip_via_b1_encoding ... ok
+test decode::huffman::tests::table_b14_symmetric ... ok
+test decode::huffman::tests::all_standard_tables_build ... ok
+test decode::huffman::tests::table_b1_codes_match_spec_example ... ok
+test decode::huffman::tests::table_b1_decode_mid_value ... ok
+test decode::huffman::tests::table_b1_decode_small_value ... ok
+test decode::huffman::tests::table_b2_oob ... ok
+test decode::refinement::grat2_tests::context_gr0_reads_the_custom_grat2_reference_pixel ... ok
+test decode::segment::tests::deferred_non_retain_flag ... ok
+test decode::segment::tests::five_references_long_form ... ok
+test decode::segment::tests::four_byte_page_association ... ok
+test decode::segment::tests::four_byte_references_at_65537 ... ok
+test decode::segment::tests::four_references_short_form ... ok
+test decode::segment::tests::referred_size_boundaries ... ok
+test decode::segment::tests::reserved_short_form_counts_are_rejected ... ok
+test decode::segment::tests::truncated_header_is_error ... ok
+test decode::segment::tests::two_byte_references_at_257 ... ok
+test decode::segment::tests::unknown_length_flagged ... ok
+test decode::segment::tests::zero_references ... ok
+test decode::store::limit_tests::aggregate_retained_bytes_and_dependency_depth_are_enforced ... ok
+test decode::text_region::tests::log2_ceil_matches_encoder ... ok
+test shared::bitmap::tests::as_msb_bytes_matches_pixels ... ok
+test decode::context::tests::generic_contexts_are_zeroed_and_sized ... ok
+test shared::bitmap::tests::combine_preserves_destination_padding ... ok
+test shared::bitmap::tests::fill_black_sets_only_in_width_and_zeroes_padding ... ok
+test shared::bitmap::tests::get_set_roundtrip_and_out_of_range_is_safe ... ok
+test shared::bitmap::tests::new_rejects_oversized_dimensions ... ok
+test shared::error::tests::checked_conversion ... ok
+test shared::bitmap::tests::new_zeroes_and_dimensions ... ok
+test shared::error::tests::display_is_populated ... ok
+test shared::error::tests::from_conversions ... ok
+test shared::int_proc::tests::discriminants_are_contiguous ... ok
+test shared::limits::tests::default_is_internally_consistent ... ok
+test shared::mq_table::tests::context_defaults_to_state_zero ... ok
+test shared::mq_table::tests::known_anchor_states ... ok
+test shared::mq_table::tests::lower_and_upper_halves_share_qe ... ok
+test shared::mq_table::tests::table_has_no_out_of_range_transitions ... ok
+test shared::reader::tests::big_endian_widths ... ok
+test shared::reader::tests::oversized_take_reports_eof_not_overflow ... ok
+test shared::reader::tests::peek_does_not_advance ... ok
+test shared::reader::tests::sequential_reads_advance_position ... ok
+test shared::reader::tests::subreader_is_bounded_and_independent ... ok
+test shared::reader::tests::take_zero_is_ok_at_end ... ok
+test shared::reader::tests::truncation_is_a_typed_error ... ok
+test shared::segment::tests::known_codes_round_trip ... ok
+test shared::segment::tests::unassigned_codes_rejected ... ok
+test shared::bitmap::tests::combine_all_operators_widths_and_offsets ... ok
+
+test result: ok. 59 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests/headsup_c_vs_rust.rs (target/debug/deps/headsup_c_vs_rust-e9f67ac65f60802e)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

@@ -1,0 +1,30 @@
+{
+  "dpi": 240,
+  "threshold": 128,
+  "sources": [
+    {
+      "id": "confed",
+      "path": "risefallofconfed01daviuoft.pdf",
+      "expected_sha256": "b4426498d43666c576c54937f75abc42d4740c66000d9216345fb54e993d9d3e",
+      "expected_pages": 782,
+      "tags": [
+        "historical-scan",
+        "text",
+        "long-book"
+      ],
+      "notes": "User-selected corpus. PDF page numbers, fixed 240 DPI grayscale raster and threshold 128; page 50 visually reviewed.",
+      "pages": [
+        1,
+        5,
+        10,
+        20,
+        30,
+        50,
+        100,
+        200,
+        400,
+        700
+      ]
+    }
+  ]
+}

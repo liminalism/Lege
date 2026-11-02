@@ -1,0 +1,19 @@
+   Compiling jbig2enc-rust v0.6.0 (/home/dk/rust-projects/Lege-ecosystem/lege-codecs/jbig2enc-rust)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.51s
+     Running tests/encode_byte_identical.rs (lege-codecs/jbig2enc-rust/target/debug/deps/encode_byte_identical-dec959a7819b659e)
+
+running 3 tests
+test encoder_output_is_byte_identical ... ignored, external legacy PBM rights unresolved; retain explicit unchanged-manifest regression gate
+test sha_selftest::sha256_known_vectors ... ok
+test original_fixture_encoder_output_is_byte_identical ... ok
+
+test result: ok. 2 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/generic_contexts.rs (lege-codecs/jbig2enc-rust/target/debug/deps/generic_contexts-4d28672d0f8f29cb)
+
+running 2 tests
+test packed_word_windows_match_scalar_template_zero_even_with_dirty_tail_padding ... ok
+test long_blank_runs_and_sparse_islands_match_per_pixel_arithmetic ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.72s
+

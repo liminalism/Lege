@@ -13,6 +13,18 @@ record lege-ecosystem.papercut.a-broad-identifier-search-returned-akr-record/1 :
     created_at 2026-08-23
 }
 
+record lege-ecosystem.papercut.a-gui-context-bundle-requested-with-2200-tokens/1 : papercut {
+    title "A GUI context bundle requested with 2200 tokens failed because…"
+    state verified
+    statement """
+        A GUI context bundle requested with 2200 tokens failed because mandatory sections required 2744 tokens. Retried successfully at 4000; the minimum is not apparent before requesting the bundle.
+        """
+    observed_at git:5ca4565f60b48a157bcbd9797c88aab7f805bacb
+    about "akr"
+    author "codex"
+    created_at 2026-11-01
+}
+
 record lege-ecosystem.papercut.a-gui-patch-against-the-pre-rustfmt-include/1 : papercut {
     title "A GUI patch against the pre-rustfmt include_bytes call failed…"
     state verified
@@ -103,6 +115,18 @@ record lege-ecosystem.papercut.a-single-cargo-build-selecting-lege-and-lege/2 : 
         """
     observed_at git:70147b50c31faf7aad4e0eaf056745ccd7cd8e49
     supersedes [ @lege-ecosystem.papercut.a-single-cargo-build-selecting-lege-and-lege/1 ]
+}
+
+record lege-ecosystem.papercut.after-continuation-prior-tmp-benchmark-inputs/1 : papercut {
+    title "After continuation, prior /tmp benchmark inputs/oracles and transient…"
+    state verified
+    statement """
+        After continuation, prior /tmp benchmark inputs/oracles and transient verification logs were no longer visible, while retained repository reports were intact. Final verification is being rerun with durable repository logs; future long-running checks should retain logs before yielding. The CLI get --json spelling also failed; the structured knowledge_get tool avoids flag ambiguity.
+        """
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    about "exec_command"
+    author "codex"
+    created_at 2026-11-02
 }
 
 record lege-ecosystem.papercut.after-validating-the-exact-workspace-scratch/1 : papercut {
@@ -306,6 +330,18 @@ record lege-ecosystem.papercut.akr-supersede-old-with-new-refuses-with-akr/1 : p
     created_at 2026-09-08
 }
 
+record lege-ecosystem.papercut.an-initial-cargo-test-session-handle/1 : papercut {
+    title "An initial cargo test session handle disappeared before polling; a…"
+    state verified
+    statement """
+        An initial cargo test session handle disappeared before polling; a retry exposed ENOSPC in target/debug. Reclaimed affected generated Cargo package artifacts and moved verification builds to CARGO_TARGET_DIR=/tmp/lege-lifecycle-target with debug info and incremental compilation disabled.
+        """
+    observed_at git:5ca4565f60b48a157bcbd9797c88aab7f805bacb
+    about "exec_command"
+    author "codex"
+    created_at 2026-11-01
+}
+
 record lege-ecosystem.papercut.android-emulator-verification-initially-failed/1 : papercut {
     title "Android emulator verification initially failed because adb is installed…"
     state verified
@@ -326,6 +362,17 @@ record lege-ecosystem.papercut.at-the-end-of-a-long-build-and-test-session-the/1
     observed_at git:4a7349f94b1fb6f6f90b871be5dbb9b5736062de
     author "claude"
     created_at 2026-09-04
+}
+
+record lege-ecosystem.papercut.at-the-fixture-distribution-transition-the/1 : papercut {
+    title "At the fixture-distribution transition, the first CLI context call…"
+    state verified
+    statement """
+        At the fixture-distribution transition, the first CLI context call passed comma-separated paths as one literal path. The MCP context call with an array corrected the scope before edits. A guessed matched-pilot comparison.json filename also missed; rg found the actual summary.json/source-comparison.json artifacts.
+        """
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    author "codex"
+    created_at 2026-11-01
 }
 
 record lege-ecosystem.papercut.both-fff-fixture-discovery-and-text-ocr/1 : papercut {
@@ -1326,6 +1373,17 @@ record lege-ecosystem.papercut.configuring-the-lean-turboocr-tensorrt-text/1 : p
     created_at 2026-09-19
 }
 
+record lege-ecosystem.papercut.creating-the-jbig2-roadmap-work-record-failed/1 : papercut {
+    title "Creating the JBIG2 roadmap work record failed because knowledge_propose…"
+    state verified
+    statement """
+        Creating the JBIG2 roadmap work record failed because knowledge_propose permits an untyped slots object but work uses intent rather than body. Retried with the schema-supported intent slot.
+        """
+    observed_at git:5ca4565f60b48a157bcbd9797c88aab7f805bacb
+    author "codex"
+    created_at 2026-11-01
+}
+
 record lege-ecosystem.papercut.creating-the-publication-work-record-first/1 : papercut {
     title "Creating the publication work record first failed because work requires…"
     state verified
@@ -1380,6 +1438,18 @@ record lege-ecosystem.papercut.djvu-page-parallel-test-shared-a-pid-keyed-scratc
     ]
 }
 
+record lege-ecosystem.papercut.during-generic-kernel-profiling-objdump-s-rust/1 : papercut {
+    title "During generic-kernel profiling, objdump's Rust symbol format included…"
+    state verified
+    statement """
+        During generic-kernel profiling, objdump's Rust symbol format included angle brackets around the type, so the initial exact match failed; nm -C supplied the actual spelling. A guessed test executable hash also missed; Cargo JSON executable paths are now used instead. One documentation search named a nonexistent status file and was narrowed to existing paths.
+        """
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    about "exec_command"
+    author "codex"
+    created_at 2026-11-01
+}
+
 record lege-ecosystem.papercut.during-packaging-inventory-an-rg-filter-whose/1 : papercut {
     title "During packaging inventory, an rg filter whose pattern began with…"
     state verified
@@ -1401,6 +1471,17 @@ record lege-ecosystem.papercut.during-session-8c-rescue-gdb-could-not-attach/1 :
     observed_at git:df6bb8cf45e9ee68a6544bbaf9e9136f6cd171d2
     author "root"
     created_at 2026-09-05
+}
+
+record lege-ecosystem.papercut.during-the-pinned-upstream-arithmetic-license/1 : papercut {
+    title "During the pinned upstream arithmetic license review, I queried PATENTS…"
+    state verified
+    statement """
+        During the pinned upstream arithmetic license review, I queried PATENTS at the repository root and received 404. COPYING explicitly points to doc/PATENTS; the corrected path was used. Use referenced paths directly when following upstream notices.
+        """
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    author "codex"
+    created_at 2026-11-01
 }
 
 record lege-ecosystem.papercut.eagerly-creating-and-tearing-down-a-winrt/1 : papercut {
@@ -1470,6 +1551,17 @@ record lege-ecosystem.papercut.evidence-records-routinely-cite-agent-scratch/2 :
     observed_at git:3f520cc03211e48adaa77c1da9bc639c53d2d351
     about "akr"
     supersedes [ @lege-ecosystem.papercut.evidence-records-routinely-cite-agent-scratch/1 ]
+}
+
+record lege-ecosystem.papercut.expanding-the-fixed-book-corpus-exposed-a/1 : papercut {
+    title "Expanding the fixed book corpus exposed a PDFium pixel disagreement in…"
+    state verified
+    statement """
+        Expanding the fixed book corpus exposed a PDFium pixel disagreement in legacy shipping symbol mode although native, jbig2dec and Poppler agree. The strict worker stopped before completing the matrix; stream retention and explicit rendered-control labels are being added so the failed case remains reproducible.
+        """
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    author "codex"
+    created_at 2026-11-01
 }
 
 record lege-ecosystem.papercut.fff-multi-grep-for-exact-djvu-identifiers-such/1 : papercut {
@@ -1542,6 +1634,18 @@ record lege-ecosystem.papercut.formatting-the-edited-rust-files-with-cargo-fmt/1
     created_at 2026-08-14
 }
 
+record lege-ecosystem.papercut.further-jbig2-perf-setup-found-counters-enabled/1 : papercut {
+    title "Further JBIG2 perf setup found counters enabled, but Ghostscript cannot…"
+    state verified
+    statement """
+        Further JBIG2 perf setup found counters enabled, but Ghostscript cannot read the external-media PDF directly or write inside .agent even though the shell can; local input copy and a /tmp raster output are used. One GitHub source fetch returned a transient RemoteProtocolError and succeeded on retry. Initial guessed corpus-tool names were corrected using rg --files.
+        """
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    about "exec_command"
+    author "codex"
+    created_at 2026-11-02
+}
+
 record lege-ecosystem.papercut.generating-the-android-gradle-wrapper-initially/1 : papercut {
     title "Generating the Android Gradle wrapper initially selected Gradle 9.6.1,…"
     state verified
@@ -1563,6 +1667,42 @@ record lege-ecosystem.papercut.healing-an-inherited-akr-t023-on-an-evidence/1 : 
     about "akr"
     author "claude-opus"
     created_at 2026-08-25
+}
+
+record lege-ecosystem.papercut.in-lege-process-akr-uses-the-parent-workspace/1 : papercut {
+    title "In lege-process, AKR uses the parent workspace, which is outside the…"
+    state verified
+    statement """
+        In lege-process, AKR uses the parent workspace, which is outside the sandbox writable roots. Search returned AKR-I022 against the sandbox cache despite the full-text index; AKR writes failed until run with access to the parent workspace.
+        """
+    observed_at git:5ca4565f60b48a157bcbd9797c88aab7f805bacb
+    about "akr"
+    author "codex"
+    created_at 2026-10-31
+}
+
+record lege-ecosystem.papercut.initial-read-only-shell-calls-with-the-default/1 : papercut {
+    title "Initial read-only shell calls with the default login shell printed…"
+    state verified
+    statement """
+        Initial read-only shell calls with the default login shell printed repeated 'Failed to create stream fd: Operation not permitted' messages before otherwise successful output. Setting login=false avoided the noise.
+        """
+    observed_at git:5ca4565f60b48a157bcbd9797c88aab7f805bacb
+    about "exec_command"
+    author "codex"
+    created_at 2026-11-01
+}
+
+record lege-ecosystem.papercut.invoking-a-compiled-encode-byte-identical-test/1 : papercut {
+    title "Invoking a compiled encode-byte-identical test executable directly from…"
+    state verified
+    statement """
+        Invoking a compiled encode-byte-identical test executable directly from the monorepo root failed to find relative PBM paths; cargo test supplies the crate working directory and the same test passed there. A no-store ablation was timed alongside an unintended Cargo rebuild; its noisy negligible median gain was not treated as a useful optimization and the change was reverted.
+        """
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    about "exec_command"
+    author "codex"
+    created_at 2026-11-02
 }
 
 record lege-ecosystem.papercut.knowledge-evidence-add-many-rejected-an/1 : papercut {
@@ -1685,6 +1825,28 @@ record lege-ecosystem.papercut.lege-ecosystem-confirms-the-stale-by-tool/1 : pap
     created_at 2026-09-08
 }
 
+record lege-ecosystem.papercut.mcp-knowledge-get-body-truncated-the-active/1 : papercut {
+    title "MCP knowledge.get body truncated the active JBIG2 work at its…"
+    state verified
+    statement """
+        MCP knowledge.get body truncated the active JBIG2 work at its 1500-token hard limit and suggested a summary that omits the needed acceptance checks. The CLI akr --format json get --detail body returned the full record for a lossless revision; no ledger files were read or edited directly.
+        """
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    author "codex"
+    created_at 2026-11-01
+}
+
+record lege-ecosystem.papercut.multi-hunk-documentation-patches-were-rejected/1 : papercut {
+    title "Multi-hunk documentation patches were rejected atomically when a…"
+    state verified
+    statement """
+        Multi-hunk documentation patches were rejected atomically when a context line did not match; inspecting the files confirmed no partial changes. Smaller single-topic patches avoided repeated context misses while preserving the measured reports.
+        """
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    author "codex"
+    created_at 2026-11-01
+}
+
 record lege-ecosystem.papercut.nothing-warns-when-a-scope-or-watch-glob/1 : papercut {
     title "Nothing warns when a scope or watch glob matches no tracked file, so…"
     state verified
@@ -1708,6 +1870,18 @@ record lege-ecosystem.papercut.pdf-verification-attempted-qpdf-check-but-qpdf/1 
     created_at 2026-08-13
 }
 
+record lege-ecosystem.papercut.preparing-the-cloud-commit-exposed-broad-pbm/1 : papercut {
+    title "Preparing the cloud commit exposed broad *.pbm and *.log ignore rules…"
+    state verified
+    statement """
+        Preparing the cloud commit exposed broad *.pbm and *.log ignore rules hiding the three original default fixtures and retained validation logs. Narrow exceptions now include those required cloud inputs/evidence; private corpus stays ignored. Staged whitespace checking also flags intentionally preserved CSV CRLFs, raw logs and patch context whitespace, so captures are preserved and code/docs are checked separately.
+        """
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    about "git"
+    author "codex"
+    created_at 2026-11-02
+}
+
 record lege-ecosystem.papercut.real-gpu-lege-ocr-test-binaries-sigsegv-during/1 : papercut {
     title "Real-GPU lege-ocr test binaries SIGSEGV during process teardown after…"
     state verified
@@ -1717,6 +1891,28 @@ record lege-ecosystem.papercut.real-gpu-lege-ocr-test-binaries-sigsegv-during/1 
     observed_at git:3f520cc03211e48adaa77c1da9bc639c53d2d351
     author "claude"
     created_at 2026-08-22
+}
+
+record lege-ecosystem.papercut.reduced-feature-runtime-verification-also/1 : papercut {
+    title "Reduced-feature runtime verification also showed that the complete…"
+    state verified
+    statement """
+        Reduced-feature runtime verification also showed that the complete symbol hash manifest cannot be compared against a build with symboldict disabled. The hash test now compares the same manifest generic/lossless entries in that build, retains the full40-entry gate otherwise, and refuses reduced-build manifest updates. Fixture reexports initially produced unused-import warnings across test binaries; explicit module paths removed those without broad suppression. A broad vec replacement and a documentation hunk missed exact context and were corrected before verification.
+        """
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    author "codex"
+    created_at 2026-11-01
+}
+
+record lege-ecosystem.papercut.replacing-the-jbig2-component-extractor-exposed/1 : papercut {
+    title "Replacing the JBIG2 component extractor exposed a historical ordering…"
+    state verified
+    statement """
+        Replacing the JBIG2 component extractor exposed a historical ordering detail: labeling leaves nregularccs at zero, so its reading-order stage normally does nothing. Enabling that stage changed the unchanged-mode golden stream hashes. Retained the staged API behavior in the new graph implementation; all original hashes then passed without regeneration.
+        """
+    observed_at git:5ca4565f60b48a157bcbd9797c88aab7f805bacb
+    author "codex"
+    created_at 2026-11-01
 }
 
 record lege-ecosystem.papercut.review-cli-fallback-akr-start-takes-a/1 : papercut {
@@ -1909,6 +2105,51 @@ record lege-ecosystem.papercut.the-akr-papercut-command-in-this-multi/1 : paperc
     created_at 2026-08-22
 }
 
+record lege-ecosystem.papercut.the-blocking-drain-test-asserted-process-global/1 : papercut {
+    title "The blocking-drain test asserted process-global counts while parallel…"
+    state verified
+    statement """
+        The blocking-drain test asserted process-global counts while parallel pipeline tests submitted their own workers, causing a false idle assertion during the broader lifecycle suite. Isolated its exact-count assertions in a child test harness; it now also exercises queued closures holding buffers.
+        """
+    observed_at git:5ca4565f60b48a157bcbd9797c88aab7f805bacb
+    author "codex"
+    created_at 2026-11-01
+}
+
+record lege-ecosystem.papercut.the-bounded-counter-probe-initially-summarized/1 : papercut {
+    title "The bounded counter probe initially summarized after the first corpus…"
+    state verified
+    statement """
+        The bounded counter probe initially summarized after the first corpus because of an indentation mistake, so it stopped before noise runs. The completed raw CSV/log pairs were retained and reused after fixing the summary indentation; no successful measurements were rerun or discarded.
+        """
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    about "exec_command"
+    author "codex"
+    created_at 2026-11-02
+}
+
+record lege-ecosystem.papercut.the-broad-jbig2-all-target-test-command-found-a/1 : papercut {
+    title "The broad JBIG2 all-target test command found a pre-existing…"
+    state verified
+    statement """
+        The broad JBIG2 all-target test command found a pre-existing GRTEMPLATE-1 TPGRON disagreement with jbig2dec 0.20, reproduced on historical HEAD; independent PDFium rendering agrees with native output. Passing a libtest --skip filter to --all-targets then reached Criterion, which rejects it, so the remaining functional sweep is now explicitly --lib --tests.
+        """
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    author "codex"
+    created_at 2026-11-01
+}
+
+record lege-ecosystem.papercut.the-canonical-termination-check-caught-a/1 : papercut {
+    title "The canonical-termination check caught a fixture-transition regression:…"
+    state verified
+    statement """
+        The canonical-termination check caught a fixture-transition regression: importing all of tests/common into the byte-hash target pulled decoder-only Huffman helpers into an encode-only build. Fixture paths were moved into a dependency-free shared module; encode-only compilation now passes. The first multi-file padding-probe patch also missed the existing symboldict-only target feature list and was reapplied with exact context.
+        """
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    author "codex"
+    created_at 2026-11-01
+}
+
 record lege-ecosystem.papercut.the-cli-help-says-a-single-page-number-such-as/1 : papercut {
     title "The CLI help says a single page number such as `5` is a valid…"
     state superseded
@@ -1954,6 +2195,18 @@ record lege-ecosystem.papercut.the-cli-treats-a-bare-numeric-positional/2 : pape
     created_at 2026-09-04
 }
 
+record lege-ecosystem.papercut.the-crates-io-versions-page-was-inaccessible/1 : papercut {
+    title "The crates.io versions page was inaccessible through the web reader,…"
+    state verified
+    statement """
+        The crates.io versions page was inaccessible through the web reader, and a guessed current source models directory was absent. Release-note support was verified from Cargo's publish/README documentation, the current unmerged changelog RFC, and the official registry index instead; older closed feature issues were closures in favor of an RFC, not proof of implementation.
+        """
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    about "web"
+    author "codex"
+    created_at 2026-11-02
+}
+
 record lege-ecosystem.papercut.the-encode-quality-work-record-points-to-mnt/1 : papercut {
     title "The encode-quality work record points to…"
     state superseded
@@ -1997,6 +2250,17 @@ record lege-ecosystem.papercut.the-first-full-corpus-accuracy-scorer/1 : papercu
     created_at 2026-08-14
 }
 
+record lege-ecosystem.papercut.the-first-generic-benchmark-setup-searched-too/1 : papercut {
+    title "The first generic benchmark setup searched too broadly under /tmp and…"
+    state verified
+    statement """
+        The first generic benchmark setup searched too broadly under /tmp and hit unrelated private-directory permissions, and two JavaScript orchestration cells had an extra closing parenthesis. Searches were narrowed to named task directories and the source fetch was rewritten as a small loop. No protected paths were opened. The C generic kernel can be built without Leptonica, avoiding a missing lept pkg-config dependency in the old whole-encoder bridge harness.
+        """
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    author "codex"
+    created_at 2026-11-01
+}
+
 record lege-ecosystem.papercut.the-focused-no-default-features-djvu-library/1 : papercut {
     title "The focused no-default-features DjVu library test could not compile…"
     state verified
@@ -2017,6 +2281,28 @@ record lege-ecosystem.papercut.the-handoff-path-used-lowercase-lege-ecosystem/1 
     observed_at git:9a41f67896a097271ff3f768db0508d6a72528b2
     author "root"
     created_at 2026-09-04
+}
+
+record lege-ecosystem.papercut.the-jbig2-benchmark-initially-assumed-usr-bin/1 : papercut {
+    title "The JBIG2 benchmark initially assumed /usr/bin/time was installed; this…"
+    state verified
+    statement """
+        The JBIG2 benchmark initially assumed /usr/bin/time was installed; this environment has no binary. Replaced that dependency with per-child Linux wait4 resource accounting, avoiding cumulative child-memory measurements.
+        """
+    observed_at git:5ca4565f60b48a157bcbd9797c88aab7f805bacb
+    author "codex"
+    created_at 2026-11-01
+}
+
+record lege-ecosystem.papercut.the-jbig2-decode-only-all-targets-audit-failed/1 : papercut {
+    title "The JBIG2 decode-only all-targets audit failed before running tests:…"
+    state verified
+    statement """
+        The JBIG2 decode-only all-targets audit failed before running tests: halftone_tone_roundtrip imports encode modules but lacks a Cargo required-features entry. Added the feature requirements matching its encoder/decoder imports so the renderer configuration skips this incompatible test target.
+        """
+    observed_at git:5ca4565f60b48a157bcbd9797c88aab7f805bacb
+    author "codex"
+    created_at 2026-11-01
 }
 
 record lege-ecosystem.papercut.the-lean-turboocr-linux-build-finds-cuda/1 : papercut {
@@ -2076,6 +2362,17 @@ record lege-ecosystem.papercut.the-opt-in-real-gpu-ocr-test-in-lege-ocr-src/2 : 
     supersedes [ @lege-ecosystem.papercut.the-opt-in-real-gpu-ocr-test-in-lege-ocr-src/1 ]
     author "claude"
     created_at 2026-08-22
+}
+
+record lege-ecosystem.papercut.the-poppler-interoperability-investigation/1 : papercut {
+    title "The Poppler interoperability investigation could not open the official…"
+    state verified
+    statement """
+        The Poppler interoperability investigation could not open the official GitLab raw URL through web, and the GitHub mirror did not resolve the guessed release ref. The connector also rejected the tags collection endpoint. Default-source evidence is kept distinct from the exact tested binary version rather than treating a comparable source as an exact match.
+        """
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    author "codex"
+    created_at 2026-11-01
 }
 
 record lege-ecosystem.papercut.the-project-handoff-says-to-run-akr-validate/1 : papercut {
@@ -2139,6 +2436,17 @@ record lege-ecosystem.papercut.the-proposed-viewer-movement-and-reliability/1 : 
     observed_at git:b4fb52b5851b94911e12524bb7836debdb42afb1
     author "codex"
     created_at 2026-10-27
+}
+
+record lege-ecosystem.papercut.the-real-confed-benchmark-session-returned-exit/1 : papercut {
+    title "The real confed benchmark session returned exit 143 after six CSV rows.…"
+    state verified
+    statement """
+        The real confed benchmark session returned exit 143 after six CSV rows. The final exact_optimized worker log nevertheless contains its complete result and passing test footer, while the parent had not appended that CSV/RSS row. Retained the completed rows/log and reran only the missing mode in a new output directory; no existing live worker handle was restarted.
+        """
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    author "codex"
+    created_at 2026-11-01
 }
 
 record lege-ecosystem.papercut.the-recipe-that-turned-stock-paddleocr-onnx/1 : papercut {
@@ -2253,6 +2561,17 @@ record lege-ecosystem.papercut.the-standard-symspell-readme-s-displayed/1 : pape
     observed_at git:3679ebb163b77cd9960b5cb138af642050341c58
     author "codex"
     created_at 2026-08-14
+}
+
+record lege-ecosystem.papercut.the-strict-pdf-renderer-test-initially-compared/1 : papercut {
+    title "The strict PDF renderer test initially compared Poppler monochrome page…"
+    state verified
+    statement """
+        The strict PDF renderer test initially compared Poppler monochrome page samples directly to source pixels. Poppler resamples/dithers even an uncompressed control PDF at this geometry; pdfimages extracted exact decoded image pixels. The harness now compares JBIG2 and uncompressed-source renders from the same backend, while retaining direct source equality in native, jbig2dec and PDFium checks. Existing trailing-byte diagnostics remain visible.
+        """
+    observed_at git:5ca4565f60b48a157bcbd9797c88aab7f805bacb
+    author "codex"
+    created_at 2026-11-01
 }
 
 record lege-ecosystem.papercut.the-verified-gitleaks-installer-was-rejected/1 : papercut {
@@ -2392,6 +2711,17 @@ record lege-ecosystem.papercut.while-discovering-a-windows-opencv-sdk-for-the/1 
     observed_at git:3679ebb163b77cd9960b5cb138af642050341c58
     author "codex"
     created_at 2026-08-14
+}
+
+record lege-ecosystem.papercut.while-extending-the-provenance-audit-a-new/1 : papercut {
+    title "While extending the provenance audit, a new component test initially…"
+    state verified
+    statement """
+        While extending the provenance audit, a new component test initially compared usize input intervals with i32 staged spans, and an inline Python inventory command had an f-string quoting error. Both were corrected and the component/golden tests and inventory reran successfully. A NOTICE patch also missed a line whose prefix was on the same line; a smaller exact hunk corrected it.
+        """
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    author "codex"
+    created_at 2026-11-01
 }
 
 record lege-ecosystem.papercut.while-following-lege-codecs-jp2lam-agents-md/1 : papercut {

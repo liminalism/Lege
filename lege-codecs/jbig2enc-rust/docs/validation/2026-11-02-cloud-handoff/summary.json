@@ -1,0 +1,13 @@
+{
+  "method": "Checkout only the staged JBIG2 files into a fresh /tmp directory with git checkout-index; run its standalone manifest with shared Cargo compilation cache. Ignored working-tree corpus/build files are not copied.",
+  "passed": 261,
+  "ignored": 8,
+  "filtered": 2,
+  "binaries": 37,
+  "oracle": "External jbig2dec0.20 configured. PDFium/Poppler not newly run.",
+  "fixtures": "Three original generated MIT PBMs explicitly unignored; legacy external PBMs absent.",
+  "handoff": "docs/CLOUD-HANDOFF.md is the portable AKR packet export; live next planning key lege-ecosystem.work.jbig2-06-cloud-readme-and-preflight.",
+  "git_review": "All project changes, deleted old plans and two exact-byte specification moves included. Broad ignore exceptions include generated default fixtures and retained evidence logs; no raw PDF/corpus/oracle/build/scratch files staged. No credential marker findings in761new/capturetext files.",
+  "whitespace": "Code and noncapture staged files pass. Original CSV CRLFs, raw log EOFs and patch context whitespace are intentionally preserved.",
+  "publication": "No push or crate publication requested/performed."
+}

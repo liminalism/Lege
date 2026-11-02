@@ -1,0 +1,6 @@
+   Compiling jbig2enc-rust v0.6.0 (/home/dk/rust-projects/Lege-ecosystem/lege-codecs/jbig2enc-rust)
+    Finished `release` profile [optimized] target(s) in 15.47s
+generic bytes=847 pixel_differences=0
+exact bytes=468 pixel_differences=0
+exact_optimized bytes=433 pixel_differences=0
+/tmp/jbig2-original-fixture-oracles-20261101/results.csv

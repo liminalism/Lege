@@ -1,0 +1,12 @@
+{
+  "file": "jbig2enc-rust-0.6.0.crate",
+  "sha256": "ac81d592701fcd434fd2e423c9625dbe13b7d41afab19a98d519fc29ec0d1765",
+  "bytes": 880453,
+  "files": 279,
+  "unexpected_corpus_or_binary_files": [],
+  "legacy_pbm_fixtures": [
+    "jbig2enc-rust-0.6.0/tests/fixtures/test_image.pbm",
+    "jbig2enc-rust-0.6.0/tests/fixtures/test_image1.pbm"
+  ],
+  "scope": "local package build/verification snapshot; no publication or license clearance; later documentation changes may require a refreshed package"
+}

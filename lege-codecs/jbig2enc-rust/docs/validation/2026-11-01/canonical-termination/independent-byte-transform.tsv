@@ -1,0 +1,7 @@
+mode	fixture	removed_bytes	poppler_warnings_before	poppler_warnings_after
+generic	tests/fixtures/original/blank.pbm	1	1	0
+generic	tests/fixtures/original/symbols.pbm	0	0	0
+generic	tests/fixtures/original/marks.pbm	1	1	0
+exact	tests/fixtures/original/blank.pbm	1	1	0
+exact	tests/fixtures/original/symbols.pbm	2	2	0
+exact	tests/fixtures/original/marks.pbm	2	2	0

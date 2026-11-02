@@ -1,0 +1,3173 @@
+{
+  "repository": "https://github.com/liminalism/jbig2enc-rust",
+  "head": "e7a46300882d8c59ef014eb63e13378be134d8b3",
+  "observed_date": "2026-11-01",
+  "method": "GitHub GET commits?path=...&per_page=100 pinned to archive head; two rename-commit changed-file mappings",
+  "limitations": [
+    "Every path query returned fewer than 100 entries; no second page was needed.",
+    "A path addition or upload is not proof of authorship or licensing rights.",
+    "Explicit rename chains are followed; moves/extraction from monolithic source are not automatically attributed.",
+    "New local production files and all support code are separately inventoried in source-history.json.",
+    "No historical source bodies are reproduced in this report."
+  ],
+  "rename_commits": [
+    "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+    "1e64d8b8c3e527203061f51cba5918917be10dd3"
+  ],
+  "files": [
+    {
+      "path": "build.rs",
+      "archive_head_blob": "80fcfedd286dfef04a87fa3bf0355b07c9b719d0",
+      "chain": [
+        {
+          "path": "build.rs",
+          "commits": [
+            {
+              "sha": "ac4c4368c2fce7e5e8c45b39d3db45f514adfced",
+              "date": "2026-07-17T09:43:22Z",
+              "title": "Extract jbig2enc-rust as a standalone crate",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/ac4c4368c2fce7e5e8c45b39d3db45f514adfced"
+            },
+            {
+              "sha": "6c2189454ef6dc034661078f5ca7a805f4f2d5f2",
+              "date": "2026-07-14T12:41:19Z",
+              "title": "Add embedded PaddleOCR and modernize the GPU stack",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/6c2189454ef6dc034661078f5ca7a805f4f2d5f2"
+            },
+            {
+              "sha": "3b743f3cd8a8762cafe77c78fb953a2b6b27a272",
+              "date": "2026-01-15T22:08:46Z",
+              "title": "Add Legencode, windows-rs-71, and ort source code folders",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/3b743f3cd8a8762cafe77c78fb953a2b6b27a272"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "3b743f3cd8a8762cafe77c78fb953a2b6b27a272",
+        "date": "2026-01-15T22:08:46Z",
+        "title": "Add Legencode, windows-rs-71, and ort source code folders",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/3b743f3cd8a8762cafe77c78fb953a2b6b27a272"
+      }
+    },
+    {
+      "path": "src/bin/halftone_tester.rs",
+      "archive_head_blob": "377d406a757146899b1565f413148be27356a7c9",
+      "chain": [
+        {
+          "path": "src/bin/halftone_tester.rs",
+          "commits": [
+            {
+              "sha": "ac4c4368c2fce7e5e8c45b39d3db45f514adfced",
+              "date": "2026-07-17T09:43:22Z",
+              "title": "Extract jbig2enc-rust as a standalone crate",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/ac4c4368c2fce7e5e8c45b39d3db45f514adfced"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "ac4c4368c2fce7e5e8c45b39d3db45f514adfced",
+        "date": "2026-07-17T09:43:22Z",
+        "title": "Extract jbig2enc-rust as a standalone crate",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/ac4c4368c2fce7e5e8c45b39d3db45f514adfced"
+      }
+    },
+    {
+      "path": "src/bin/tester.rs",
+      "archive_head_blob": "3ab3c4498fdd4f6612d1ea496f51360e4b788baf",
+      "chain": [
+        {
+          "path": "src/bin/tester.rs",
+          "commits": [
+            {
+              "sha": "4977e244df7bc1f74924559d20bec225238e3f58",
+              "date": "2026-03-18T06:20:03Z",
+              "title": "sync jbig2enc-rust next-gen file copy/delete",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/4977e244df7bc1f74924559d20bec225238e3f58"
+            },
+            {
+              "sha": "42b7a841f5927912266f11c07bdb6c979e7a365d",
+              "date": "2026-03-11T04:54:48Z",
+              "title": "Stabilize tokio pipeline and sync DJVU/JBIG2 encoder code from 1.45",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/42b7a841f5927912266f11c07bdb6c979e7a365d"
+            },
+            {
+              "sha": "3b743f3cd8a8762cafe77c78fb953a2b6b27a272",
+              "date": "2026-01-15T22:08:46Z",
+              "title": "Add Legencode, windows-rs-71, and ort source code folders",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/3b743f3cd8a8762cafe77c78fb953a2b6b27a272"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "3b743f3cd8a8762cafe77c78fb953a2b6b27a272",
+        "date": "2026-01-15T22:08:46Z",
+        "title": "Add Legencode, windows-rs-71, and ort source code folders",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/3b743f3cd8a8762cafe77c78fb953a2b6b27a272"
+      }
+    },
+    {
+      "path": "src/decode/arith.rs",
+      "archive_head_blob": "51b3c529c8f33b1caa305df6d2749b853782b58e",
+      "chain": [
+        {
+          "path": "src/decode/arith.rs",
+          "commits": [
+            {
+              "sha": "efafdabf3a465ef37dffa95a89d7e1c8a360e3fa",
+              "date": "2026-07-17T11:13:33Z",
+              "title": "Decoder Phase 1: MQ decoder, parsers, generic regions, feature gating",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/efafdabf3a465ef37dffa95a89d7e1c8a360e3fa"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "efafdabf3a465ef37dffa95a89d7e1c8a360e3fa",
+        "date": "2026-07-17T11:13:33Z",
+        "title": "Decoder Phase 1: MQ decoder, parsers, generic regions, feature gating",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/efafdabf3a465ef37dffa95a89d7e1c8a360e3fa"
+      }
+    },
+    {
+      "path": "src/decode/context.rs",
+      "archive_head_blob": "5a41336eb81c67dc8f1129975f7ad0e5967c5ba0",
+      "chain": [
+        {
+          "path": "src/decode/context.rs",
+          "commits": [
+            {
+              "sha": "e58280e691e58e7f40d5dda73b8a78a3dfc6f46c",
+              "date": "2026-07-18T05:18:57Z",
+              "title": "Phase 5: zero-copy decode_embedded_into via a pooled page/bitmap path",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/e58280e691e58e7f40d5dda73b8a78a3dfc6f46c"
+            },
+            {
+              "sha": "d1de36a0b1daa16cd010dbd45a8cfdb862234e58",
+              "date": "2026-07-18T04:43:30Z",
+              "title": "Phase 5: pool the segment store and page-height flags across documents",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/d1de36a0b1daa16cd010dbd45a8cfdb862234e58"
+            },
+            {
+              "sha": "391ff0671841f283a9c2853574d36c33a2dcb305",
+              "date": "2026-07-18T04:34:28Z",
+              "title": "Phase 5: pool generic-decoder row buffers in DecoderContext",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/391ff0671841f283a9c2853574d36c33a2dcb305"
+            },
+            {
+              "sha": "888d099c642c63c0902f265adb6bfd83982a8162",
+              "date": "2026-07-18T03:25:56Z",
+              "title": "Phase 5f: Compatible strictness mode + RecoveryEvent",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/888d099c642c63c0902f265adb6bfd83982a8162"
+            },
+            {
+              "sha": "568e51f1b39976478cb90635a3fad1f2bb7c5cf5",
+              "date": "2026-07-17T12:13:04Z",
+              "title": "Decoder Phase 2: symbol dictionary, text region, store, globals",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/568e51f1b39976478cb90635a3fad1f2bb7c5cf5"
+            },
+            {
+              "sha": "efafdabf3a465ef37dffa95a89d7e1c8a360e3fa",
+              "date": "2026-07-17T11:13:33Z",
+              "title": "Decoder Phase 1: MQ decoder, parsers, generic regions, feature gating",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/efafdabf3a465ef37dffa95a89d7e1c8a360e3fa"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "efafdabf3a465ef37dffa95a89d7e1c8a360e3fa",
+        "date": "2026-07-17T11:13:33Z",
+        "title": "Decoder Phase 1: MQ decoder, parsers, generic regions, feature gating",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/efafdabf3a465ef37dffa95a89d7e1c8a360e3fa"
+      }
+    },
+    {
+      "path": "src/decode/error.rs",
+      "archive_head_blob": "0220441fad5c231da1a05f0d378e59f063d7c97c",
+      "chain": [
+        {
+          "path": "src/decode/error.rs",
+          "commits": [
+            {
+              "sha": "efafdabf3a465ef37dffa95a89d7e1c8a360e3fa",
+              "date": "2026-07-17T11:13:33Z",
+              "title": "Decoder Phase 1: MQ decoder, parsers, generic regions, feature gating",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/efafdabf3a465ef37dffa95a89d7e1c8a360e3fa"
+            },
+            {
+              "sha": "6d530793b8ed10e13fe1415b8a9aa2affe93eaee",
+              "date": "2026-07-17T10:24:35Z",
+              "title": "Add decoder error skeleton in decode/error.rs (Phase 0 / §5)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/6d530793b8ed10e13fe1415b8a9aa2affe93eaee"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "6d530793b8ed10e13fe1415b8a9aa2affe93eaee",
+        "date": "2026-07-17T10:24:35Z",
+        "title": "Add decoder error skeleton in decode/error.rs (Phase 0 / §5)",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/6d530793b8ed10e13fe1415b8a9aa2affe93eaee"
+      }
+    },
+    {
+      "path": "src/decode/file.rs",
+      "archive_head_blob": "cc7268cb4b4ca3321bb502060b160fa37afea0e0",
+      "chain": [
+        {
+          "path": "src/decode/file.rs",
+          "commits": [
+            {
+              "sha": "888d099c642c63c0902f265adb6bfd83982a8162",
+              "date": "2026-07-18T03:25:56Z",
+              "title": "Phase 5f: Compatible strictness mode + RecoveryEvent",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/888d099c642c63c0902f265adb6bfd83982a8162"
+            },
+            {
+              "sha": "fe80915146e92aca5d9dae9ffcc5b7f6d9015461",
+              "date": "2026-07-18T01:57:59Z",
+              "title": "Phase 5f (part 1): random-access file organisation",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/fe80915146e92aca5d9dae9ffcc5b7f6d9015461"
+            },
+            {
+              "sha": "ab739255187b10eb033ed607f271e9a6718d9c44",
+              "date": "2026-07-18T01:07:56Z",
+              "title": "Phase 5d: striped pages and unknown segment lengths",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/ab739255187b10eb033ed607f271e9a6718d9c44"
+            },
+            {
+              "sha": "efafdabf3a465ef37dffa95a89d7e1c8a360e3fa",
+              "date": "2026-07-17T11:13:33Z",
+              "title": "Decoder Phase 1: MQ decoder, parsers, generic regions, feature gating",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/efafdabf3a465ef37dffa95a89d7e1c8a360e3fa"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "efafdabf3a465ef37dffa95a89d7e1c8a360e3fa",
+        "date": "2026-07-17T11:13:33Z",
+        "title": "Decoder Phase 1: MQ decoder, parsers, generic regions, feature gating",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/efafdabf3a465ef37dffa95a89d7e1c8a360e3fa"
+      }
+    },
+    {
+      "path": "src/decode/generic.rs",
+      "archive_head_blob": "f4104f9c1b47a3f398bc34989d0f6aa4614ae288",
+      "chain": [
+        {
+          "path": "src/decode/generic.rs",
+          "commits": [
+            {
+              "sha": "e58280e691e58e7f40d5dda73b8a78a3dfc6f46c",
+              "date": "2026-07-18T05:18:57Z",
+              "title": "Phase 5: zero-copy decode_embedded_into via a pooled page/bitmap path",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/e58280e691e58e7f40d5dda73b8a78a3dfc6f46c"
+            },
+            {
+              "sha": "391ff0671841f283a9c2853574d36c33a2dcb305",
+              "date": "2026-07-18T04:34:28Z",
+              "title": "Phase 5: pool generic-decoder row buffers in DecoderContext",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/391ff0671841f283a9c2853574d36c33a2dcb305"
+            },
+            {
+              "sha": "a3822b6a70a2b6cb290338db19dd07ce3d37ae2a",
+              "date": "2026-07-18T02:11:05Z",
+              "title": "Phase 5e (part 4): halftone HENABLESKIP skip bitmap",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/a3822b6a70a2b6cb290338db19dd07ce3d37ae2a"
+            },
+            {
+              "sha": "5a459e82a813e2f277ff2f327a744e63a0081aaa",
+              "date": "2026-07-18T00:30:36Z",
+              "title": "Phase 5a: generic templates 1-3 and TPGDON",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/5a459e82a813e2f277ff2f327a744e63a0081aaa"
+            },
+            {
+              "sha": "6c02d79f7fe8873ed3f6327f9e528ec0bb481505",
+              "date": "2026-07-17T15:09:43Z",
+              "title": "Phase 4: MMR generic + pattern dict + halftone region decoding",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/6c02d79f7fe8873ed3f6327f9e528ec0bb481505"
+            },
+            {
+              "sha": "568e51f1b39976478cb90635a3fad1f2bb7c5cf5",
+              "date": "2026-07-17T12:13:04Z",
+              "title": "Decoder Phase 2: symbol dictionary, text region, store, globals",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/568e51f1b39976478cb90635a3fad1f2bb7c5cf5"
+            },
+            {
+              "sha": "efafdabf3a465ef37dffa95a89d7e1c8a360e3fa",
+              "date": "2026-07-17T11:13:33Z",
+              "title": "Decoder Phase 1: MQ decoder, parsers, generic regions, feature gating",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/efafdabf3a465ef37dffa95a89d7e1c8a360e3fa"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "efafdabf3a465ef37dffa95a89d7e1c8a360e3fa",
+        "date": "2026-07-17T11:13:33Z",
+        "title": "Decoder Phase 1: MQ decoder, parsers, generic regions, feature gating",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/efafdabf3a465ef37dffa95a89d7e1c8a360e3fa"
+      }
+    },
+    {
+      "path": "src/decode/globals.rs",
+      "archive_head_blob": "4efbeeaf1128a3465d55dc476d553c432d1c2e5e",
+      "chain": [
+        {
+          "path": "src/decode/globals.rs",
+          "commits": [
+            {
+              "sha": "888d099c642c63c0902f265adb6bfd83982a8162",
+              "date": "2026-07-18T03:25:56Z",
+              "title": "Phase 5f: Compatible strictness mode + RecoveryEvent",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/888d099c642c63c0902f265adb6bfd83982a8162"
+            },
+            {
+              "sha": "ea4bd3d7aa8672db8daa6970a18e554239fc6729",
+              "date": "2026-07-18T00:56:28Z",
+              "title": "Phase 5c (part 2): Huffman symbol dictionaries and text regions",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/ea4bd3d7aa8672db8daa6970a18e554239fc6729"
+            },
+            {
+              "sha": "6c02d79f7fe8873ed3f6327f9e528ec0bb481505",
+              "date": "2026-07-17T15:09:43Z",
+              "title": "Phase 4: MMR generic + pattern dict + halftone region decoding",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/6c02d79f7fe8873ed3f6327f9e528ec0bb481505"
+            },
+            {
+              "sha": "568e51f1b39976478cb90635a3fad1f2bb7c5cf5",
+              "date": "2026-07-17T12:13:04Z",
+              "title": "Decoder Phase 2: symbol dictionary, text region, store, globals",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/568e51f1b39976478cb90635a3fad1f2bb7c5cf5"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "568e51f1b39976478cb90635a3fad1f2bb7c5cf5",
+        "date": "2026-07-17T12:13:04Z",
+        "title": "Decoder Phase 2: symbol dictionary, text region, store, globals",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/568e51f1b39976478cb90635a3fad1f2bb7c5cf5"
+      }
+    },
+    {
+      "path": "src/decode/halftone_region.rs",
+      "archive_head_blob": "515980c840d144b0179a8aea8aa9e1f66913f1b5",
+      "chain": [
+        {
+          "path": "src/decode/halftone_region.rs",
+          "commits": [
+            {
+              "sha": "391ff0671841f283a9c2853574d36c33a2dcb305",
+              "date": "2026-07-18T04:34:28Z",
+              "title": "Phase 5: pool generic-decoder row buffers in DecoderContext",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/391ff0671841f283a9c2853574d36c33a2dcb305"
+            },
+            {
+              "sha": "054d673a62c9954ae67a740b3d253517916ebaa3",
+              "date": "2026-07-18T04:02:43Z",
+              "title": "Full decode-spec coverage: Huffman refagg dictionary + MMR skip",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/054d673a62c9954ae67a740b3d253517916ebaa3"
+            },
+            {
+              "sha": "a3822b6a70a2b6cb290338db19dd07ce3d37ae2a",
+              "date": "2026-07-18T02:11:05Z",
+              "title": "Phase 5e (part 4): halftone HENABLESKIP skip bitmap",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/a3822b6a70a2b6cb290338db19dd07ce3d37ae2a"
+            },
+            {
+              "sha": "5a459e82a813e2f277ff2f327a744e63a0081aaa",
+              "date": "2026-07-18T00:30:36Z",
+              "title": "Phase 5a: generic templates 1-3 and TPGDON",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/5a459e82a813e2f277ff2f327a744e63a0081aaa"
+            },
+            {
+              "sha": "6c02d79f7fe8873ed3f6327f9e528ec0bb481505",
+              "date": "2026-07-17T15:09:43Z",
+              "title": "Phase 4: MMR generic + pattern dict + halftone region decoding",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/6c02d79f7fe8873ed3f6327f9e528ec0bb481505"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "6c02d79f7fe8873ed3f6327f9e528ec0bb481505",
+        "date": "2026-07-17T15:09:43Z",
+        "title": "Phase 4: MMR generic + pattern dict + halftone region decoding",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/6c02d79f7fe8873ed3f6327f9e528ec0bb481505"
+      }
+    },
+    {
+      "path": "src/decode/huffman.rs",
+      "archive_head_blob": "71c3928492afe01d05aa0bb2c91fc1de50fa0bf2",
+      "chain": [
+        {
+          "path": "src/decode/huffman.rs",
+          "commits": [
+            {
+              "sha": "ea4bd3d7aa8672db8daa6970a18e554239fc6729",
+              "date": "2026-07-18T00:56:28Z",
+              "title": "Phase 5c (part 2): Huffman symbol dictionaries and text regions",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/ea4bd3d7aa8672db8daa6970a18e554239fc6729"
+            },
+            {
+              "sha": "08697cb54d03fe57f63f9ea8ae15c85168bced5b",
+              "date": "2026-07-18T00:36:53Z",
+              "title": "Phase 5c (part 1): Huffman table machinery",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/08697cb54d03fe57f63f9ea8ae15c85168bced5b"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "08697cb54d03fe57f63f9ea8ae15c85168bced5b",
+        "date": "2026-07-18T00:36:53Z",
+        "title": "Phase 5c (part 1): Huffman table machinery",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/08697cb54d03fe57f63f9ea8ae15c85168bced5b"
+      }
+    },
+    {
+      "path": "src/decode/iaid.rs",
+      "archive_head_blob": "b30211f895562453284f9be27b8f7cbab0f568d4",
+      "chain": [
+        {
+          "path": "src/decode/iaid.rs",
+          "commits": [
+            {
+              "sha": "2a2d2cab0f03d41b6bef7c987bc6a4899f8d1bdc",
+              "date": "2026-07-17T12:12:50Z",
+              "title": "Decoder Phase 2: arithmetic integer, IAID, refinement primitives",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/2a2d2cab0f03d41b6bef7c987bc6a4899f8d1bdc"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "2a2d2cab0f03d41b6bef7c987bc6a4899f8d1bdc",
+        "date": "2026-07-17T12:12:50Z",
+        "title": "Decoder Phase 2: arithmetic integer, IAID, refinement primitives",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/2a2d2cab0f03d41b6bef7c987bc6a4899f8d1bdc"
+      }
+    },
+    {
+      "path": "src/decode/integer.rs",
+      "archive_head_blob": "7efce28eb83b4ecde6329d51511507d5c7edee6d",
+      "chain": [
+        {
+          "path": "src/decode/integer.rs",
+          "commits": [
+            {
+              "sha": "2a2d2cab0f03d41b6bef7c987bc6a4899f8d1bdc",
+              "date": "2026-07-17T12:12:50Z",
+              "title": "Decoder Phase 2: arithmetic integer, IAID, refinement primitives",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/2a2d2cab0f03d41b6bef7c987bc6a4899f8d1bdc"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "2a2d2cab0f03d41b6bef7c987bc6a4899f8d1bdc",
+        "date": "2026-07-17T12:12:50Z",
+        "title": "Decoder Phase 2: arithmetic integer, IAID, refinement primitives",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/2a2d2cab0f03d41b6bef7c987bc6a4899f8d1bdc"
+      }
+    },
+    {
+      "path": "src/decode/mmr.rs",
+      "archive_head_blob": "896051d2277071a5e23af6d50203974b66981a59",
+      "chain": [
+        {
+          "path": "src/decode/mmr.rs",
+          "commits": [
+            {
+              "sha": "6c02d79f7fe8873ed3f6327f9e528ec0bb481505",
+              "date": "2026-07-17T15:09:43Z",
+              "title": "Phase 4: MMR generic + pattern dict + halftone region decoding",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/6c02d79f7fe8873ed3f6327f9e528ec0bb481505"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "6c02d79f7fe8873ed3f6327f9e528ec0bb481505",
+        "date": "2026-07-17T15:09:43Z",
+        "title": "Phase 4: MMR generic + pattern dict + halftone region decoding",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/6c02d79f7fe8873ed3f6327f9e528ec0bb481505"
+      }
+    },
+    {
+      "path": "src/decode/mod.rs",
+      "archive_head_blob": "ede7c066a953f809f4ff6a3ef6c6566f2831084e",
+      "chain": [
+        {
+          "path": "src/decode/mod.rs",
+          "commits": [
+            {
+              "sha": "e58280e691e58e7f40d5dda73b8a78a3dfc6f46c",
+              "date": "2026-07-18T05:18:57Z",
+              "title": "Phase 5: zero-copy decode_embedded_into via a pooled page/bitmap path",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/e58280e691e58e7f40d5dda73b8a78a3dfc6f46c"
+            },
+            {
+              "sha": "888d099c642c63c0902f265adb6bfd83982a8162",
+              "date": "2026-07-18T03:25:56Z",
+              "title": "Phase 5f: Compatible strictness mode + RecoveryEvent",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/888d099c642c63c0902f265adb6bfd83982a8162"
+            },
+            {
+              "sha": "a9057be50b87f82493e25fc851770531950f8f36",
+              "date": "2026-07-18T03:14:38Z",
+              "title": "Phase 5f: decode_embedded_into zero-alloc renderer API",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/a9057be50b87f82493e25fc851770531950f8f36"
+            },
+            {
+              "sha": "08697cb54d03fe57f63f9ea8ae15c85168bced5b",
+              "date": "2026-07-18T00:36:53Z",
+              "title": "Phase 5c (part 1): Huffman table machinery",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/08697cb54d03fe57f63f9ea8ae15c85168bced5b"
+            },
+            {
+              "sha": "6c02d79f7fe8873ed3f6327f9e528ec0bb481505",
+              "date": "2026-07-17T15:09:43Z",
+              "title": "Phase 4: MMR generic + pattern dict + halftone region decoding",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/6c02d79f7fe8873ed3f6327f9e528ec0bb481505"
+            },
+            {
+              "sha": "dfead5420710be719c94acffe9604287a8da1a8f",
+              "date": "2026-07-17T12:13:15Z",
+              "title": "Decoder Phase 2: page wiring and shared-globals decode API",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/dfead5420710be719c94acffe9604287a8da1a8f"
+            },
+            {
+              "sha": "efafdabf3a465ef37dffa95a89d7e1c8a360e3fa",
+              "date": "2026-07-17T11:13:33Z",
+              "title": "Decoder Phase 1: MQ decoder, parsers, generic regions, feature gating",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/efafdabf3a465ef37dffa95a89d7e1c8a360e3fa"
+            },
+            {
+              "sha": "6d530793b8ed10e13fe1415b8a9aa2affe93eaee",
+              "date": "2026-07-17T10:24:35Z",
+              "title": "Add decoder error skeleton in decode/error.rs (Phase 0 / §5)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/6d530793b8ed10e13fe1415b8a9aa2affe93eaee"
+            },
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+        "date": "2026-07-17T09:48:26Z",
+        "title": "Restructure crate into encode/decode/shared halves",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+      }
+    },
+    {
+      "path": "src/decode/page.rs",
+      "archive_head_blob": "92b746b945b7370d2c3d82a517e11b99d64d0159",
+      "chain": [
+        {
+          "path": "src/decode/page.rs",
+          "commits": [
+            {
+              "sha": "e58280e691e58e7f40d5dda73b8a78a3dfc6f46c",
+              "date": "2026-07-18T05:18:57Z",
+              "title": "Phase 5: zero-copy decode_embedded_into via a pooled page/bitmap path",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/e58280e691e58e7f40d5dda73b8a78a3dfc6f46c"
+            },
+            {
+              "sha": "d1de36a0b1daa16cd010dbd45a8cfdb862234e58",
+              "date": "2026-07-18T04:43:30Z",
+              "title": "Phase 5: pool the segment store and page-height flags across documents",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/d1de36a0b1daa16cd010dbd45a8cfdb862234e58"
+            },
+            {
+              "sha": "391ff0671841f283a9c2853574d36c33a2dcb305",
+              "date": "2026-07-18T04:34:28Z",
+              "title": "Phase 5: pool generic-decoder row buffers in DecoderContext",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/391ff0671841f283a9c2853574d36c33a2dcb305"
+            },
+            {
+              "sha": "888d099c642c63c0902f265adb6bfd83982a8162",
+              "date": "2026-07-18T03:25:56Z",
+              "title": "Phase 5f: Compatible strictness mode + RecoveryEvent",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/888d099c642c63c0902f265adb6bfd83982a8162"
+            },
+            {
+              "sha": "033fbe718f993b5ec52a972cfcbf5bcee1d3a709",
+              "date": "2026-07-18T03:11:50Z",
+              "title": "Phase 5f: intermediate regions and refinement auxiliary buffers",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/033fbe718f993b5ec52a972cfcbf5bcee1d3a709"
+            },
+            {
+              "sha": "5cae8253fb8c3718c1ca84abe811038caff55882",
+              "date": "2026-07-18T02:57:01Z",
+              "title": "Phase 5e: retained arithmetic contexts across symbol dictionaries",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/5cae8253fb8c3718c1ca84abe811038caff55882"
+            },
+            {
+              "sha": "b8b2a52a5132cf0c1b69e3faaedb690fb688dd3a",
+              "date": "2026-07-18T02:04:49Z",
+              "title": "Phase 5e (part 3): SDREFAGG refinement-coded symbol dictionaries",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/b8b2a52a5132cf0c1b69e3faaedb690fb688dd3a"
+            },
+            {
+              "sha": "6d6c1ca0789890f62ad45262e0d9f7b83347e7c6",
+              "date": "2026-07-18T01:43:12Z",
+              "title": "Phase 5e (part 1): GRTEMPLATE-1 refinement and TPGRON",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/6d6c1ca0789890f62ad45262e0d9f7b83347e7c6"
+            },
+            {
+              "sha": "ab739255187b10eb033ed607f271e9a6718d9c44",
+              "date": "2026-07-18T01:07:56Z",
+              "title": "Phase 5d: striped pages and unknown segment lengths",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/ab739255187b10eb033ed607f271e9a6718d9c44"
+            },
+            {
+              "sha": "ea4bd3d7aa8672db8daa6970a18e554239fc6729",
+              "date": "2026-07-18T00:56:28Z",
+              "title": "Phase 5c (part 2): Huffman symbol dictionaries and text regions",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/ea4bd3d7aa8672db8daa6970a18e554239fc6729"
+            },
+            {
+              "sha": "6c02d79f7fe8873ed3f6327f9e528ec0bb481505",
+              "date": "2026-07-17T15:09:43Z",
+              "title": "Phase 4: MMR generic + pattern dict + halftone region decoding",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/6c02d79f7fe8873ed3f6327f9e528ec0bb481505"
+            },
+            {
+              "sha": "5236937aa28d967919bbdde8b3ee6d75b18d9efc",
+              "date": "2026-07-17T14:08:38Z",
+              "title": "Decoder Phase 3: standalone refinement regions + refinement hardening",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/5236937aa28d967919bbdde8b3ee6d75b18d9efc"
+            },
+            {
+              "sha": "dfead5420710be719c94acffe9604287a8da1a8f",
+              "date": "2026-07-17T12:13:15Z",
+              "title": "Decoder Phase 2: page wiring and shared-globals decode API",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/dfead5420710be719c94acffe9604287a8da1a8f"
+            },
+            {
+              "sha": "efafdabf3a465ef37dffa95a89d7e1c8a360e3fa",
+              "date": "2026-07-17T11:13:33Z",
+              "title": "Decoder Phase 1: MQ decoder, parsers, generic regions, feature gating",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/efafdabf3a465ef37dffa95a89d7e1c8a360e3fa"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "efafdabf3a465ef37dffa95a89d7e1c8a360e3fa",
+        "date": "2026-07-17T11:13:33Z",
+        "title": "Decoder Phase 1: MQ decoder, parsers, generic regions, feature gating",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/efafdabf3a465ef37dffa95a89d7e1c8a360e3fa"
+      }
+    },
+    {
+      "path": "src/decode/pattern_dictionary.rs",
+      "archive_head_blob": "b89aae8e621ec31b0d680d77695465d52b1c3bec",
+      "chain": [
+        {
+          "path": "src/decode/pattern_dictionary.rs",
+          "commits": [
+            {
+              "sha": "391ff0671841f283a9c2853574d36c33a2dcb305",
+              "date": "2026-07-18T04:34:28Z",
+              "title": "Phase 5: pool generic-decoder row buffers in DecoderContext",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/391ff0671841f283a9c2853574d36c33a2dcb305"
+            },
+            {
+              "sha": "5a459e82a813e2f277ff2f327a744e63a0081aaa",
+              "date": "2026-07-18T00:30:36Z",
+              "title": "Phase 5a: generic templates 1-3 and TPGDON",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/5a459e82a813e2f277ff2f327a744e63a0081aaa"
+            },
+            {
+              "sha": "6c02d79f7fe8873ed3f6327f9e528ec0bb481505",
+              "date": "2026-07-17T15:09:43Z",
+              "title": "Phase 4: MMR generic + pattern dict + halftone region decoding",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/6c02d79f7fe8873ed3f6327f9e528ec0bb481505"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "6c02d79f7fe8873ed3f6327f9e528ec0bb481505",
+        "date": "2026-07-17T15:09:43Z",
+        "title": "Phase 4: MMR generic + pattern dict + halftone region decoding",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/6c02d79f7fe8873ed3f6327f9e528ec0bb481505"
+      }
+    },
+    {
+      "path": "src/decode/refinement.rs",
+      "archive_head_blob": "ef41f5788126c0a2d63004e470c0c80d801fce9a",
+      "chain": [
+        {
+          "path": "src/decode/refinement.rs",
+          "commits": [
+            {
+              "sha": "6d6c1ca0789890f62ad45262e0d9f7b83347e7c6",
+              "date": "2026-07-18T01:43:12Z",
+              "title": "Phase 5e (part 1): GRTEMPLATE-1 refinement and TPGRON",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/6d6c1ca0789890f62ad45262e0d9f7b83347e7c6"
+            },
+            {
+              "sha": "5236937aa28d967919bbdde8b3ee6d75b18d9efc",
+              "date": "2026-07-17T14:08:38Z",
+              "title": "Decoder Phase 3: standalone refinement regions + refinement hardening",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/5236937aa28d967919bbdde8b3ee6d75b18d9efc"
+            },
+            {
+              "sha": "2a2d2cab0f03d41b6bef7c987bc6a4899f8d1bdc",
+              "date": "2026-07-17T12:12:50Z",
+              "title": "Decoder Phase 2: arithmetic integer, IAID, refinement primitives",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/2a2d2cab0f03d41b6bef7c987bc6a4899f8d1bdc"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "2a2d2cab0f03d41b6bef7c987bc6a4899f8d1bdc",
+        "date": "2026-07-17T12:12:50Z",
+        "title": "Decoder Phase 2: arithmetic integer, IAID, refinement primitives",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/2a2d2cab0f03d41b6bef7c987bc6a4899f8d1bdc"
+      }
+    },
+    {
+      "path": "src/decode/segment.rs",
+      "archive_head_blob": "25ee998ccb91db0755edaef85c5952f203c01631",
+      "chain": [
+        {
+          "path": "src/decode/segment.rs",
+          "commits": [
+            {
+              "sha": "efafdabf3a465ef37dffa95a89d7e1c8a360e3fa",
+              "date": "2026-07-17T11:13:33Z",
+              "title": "Decoder Phase 1: MQ decoder, parsers, generic regions, feature gating",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/efafdabf3a465ef37dffa95a89d7e1c8a360e3fa"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "efafdabf3a465ef37dffa95a89d7e1c8a360e3fa",
+        "date": "2026-07-17T11:13:33Z",
+        "title": "Decoder Phase 1: MQ decoder, parsers, generic regions, feature gating",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/efafdabf3a465ef37dffa95a89d7e1c8a360e3fa"
+      }
+    },
+    {
+      "path": "src/decode/store.rs",
+      "archive_head_blob": "b08c49b62c9e31889e716f88c802e0a356e22de5",
+      "chain": [
+        {
+          "path": "src/decode/store.rs",
+          "commits": [
+            {
+              "sha": "d1de36a0b1daa16cd010dbd45a8cfdb862234e58",
+              "date": "2026-07-18T04:43:30Z",
+              "title": "Phase 5: pool the segment store and page-height flags across documents",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/d1de36a0b1daa16cd010dbd45a8cfdb862234e58"
+            },
+            {
+              "sha": "033fbe718f993b5ec52a972cfcbf5bcee1d3a709",
+              "date": "2026-07-18T03:11:50Z",
+              "title": "Phase 5f: intermediate regions and refinement auxiliary buffers",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/033fbe718f993b5ec52a972cfcbf5bcee1d3a709"
+            },
+            {
+              "sha": "5cae8253fb8c3718c1ca84abe811038caff55882",
+              "date": "2026-07-18T02:57:01Z",
+              "title": "Phase 5e: retained arithmetic contexts across symbol dictionaries",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/5cae8253fb8c3718c1ca84abe811038caff55882"
+            },
+            {
+              "sha": "ea4bd3d7aa8672db8daa6970a18e554239fc6729",
+              "date": "2026-07-18T00:56:28Z",
+              "title": "Phase 5c (part 2): Huffman symbol dictionaries and text regions",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/ea4bd3d7aa8672db8daa6970a18e554239fc6729"
+            },
+            {
+              "sha": "6c02d79f7fe8873ed3f6327f9e528ec0bb481505",
+              "date": "2026-07-17T15:09:43Z",
+              "title": "Phase 4: MMR generic + pattern dict + halftone region decoding",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/6c02d79f7fe8873ed3f6327f9e528ec0bb481505"
+            },
+            {
+              "sha": "568e51f1b39976478cb90635a3fad1f2bb7c5cf5",
+              "date": "2026-07-17T12:13:04Z",
+              "title": "Decoder Phase 2: symbol dictionary, text region, store, globals",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/568e51f1b39976478cb90635a3fad1f2bb7c5cf5"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "568e51f1b39976478cb90635a3fad1f2bb7c5cf5",
+        "date": "2026-07-17T12:13:04Z",
+        "title": "Decoder Phase 2: symbol dictionary, text region, store, globals",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/568e51f1b39976478cb90635a3fad1f2bb7c5cf5"
+      }
+    },
+    {
+      "path": "src/decode/symbol_dictionary.rs",
+      "archive_head_blob": "0f063414f5e8c4f9f957765d5f8b7641cfefdd7a",
+      "chain": [
+        {
+          "path": "src/decode/symbol_dictionary.rs",
+          "commits": [
+            {
+              "sha": "391ff0671841f283a9c2853574d36c33a2dcb305",
+              "date": "2026-07-18T04:34:28Z",
+              "title": "Phase 5: pool generic-decoder row buffers in DecoderContext",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/391ff0671841f283a9c2853574d36c33a2dcb305"
+            },
+            {
+              "sha": "054d673a62c9954ae67a740b3d253517916ebaa3",
+              "date": "2026-07-18T04:02:43Z",
+              "title": "Full decode-spec coverage: Huffman refagg dictionary + MMR skip",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/054d673a62c9954ae67a740b3d253517916ebaa3"
+            },
+            {
+              "sha": "5cae8253fb8c3718c1ca84abe811038caff55882",
+              "date": "2026-07-18T02:57:01Z",
+              "title": "Phase 5e: retained arithmetic contexts across symbol dictionaries",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/5cae8253fb8c3718c1ca84abe811038caff55882"
+            },
+            {
+              "sha": "75bd532f622e8835980bac725e27f85824fdd801",
+              "date": "2026-07-18T02:31:33Z",
+              "title": "Phase 5e: REFAGGNINST>1 true aggregate dictionary symbols",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/75bd532f622e8835980bac725e27f85824fdd801"
+            },
+            {
+              "sha": "b8b2a52a5132cf0c1b69e3faaedb690fb688dd3a",
+              "date": "2026-07-18T02:04:49Z",
+              "title": "Phase 5e (part 3): SDREFAGG refinement-coded symbol dictionaries",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/b8b2a52a5132cf0c1b69e3faaedb690fb688dd3a"
+            },
+            {
+              "sha": "ea4bd3d7aa8672db8daa6970a18e554239fc6729",
+              "date": "2026-07-18T00:56:28Z",
+              "title": "Phase 5c (part 2): Huffman symbol dictionaries and text regions",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/ea4bd3d7aa8672db8daa6970a18e554239fc6729"
+            },
+            {
+              "sha": "5a459e82a813e2f277ff2f327a744e63a0081aaa",
+              "date": "2026-07-18T00:30:36Z",
+              "title": "Phase 5a: generic templates 1-3 and TPGDON",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/5a459e82a813e2f277ff2f327a744e63a0081aaa"
+            },
+            {
+              "sha": "568e51f1b39976478cb90635a3fad1f2bb7c5cf5",
+              "date": "2026-07-17T12:13:04Z",
+              "title": "Decoder Phase 2: symbol dictionary, text region, store, globals",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/568e51f1b39976478cb90635a3fad1f2bb7c5cf5"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "568e51f1b39976478cb90635a3fad1f2bb7c5cf5",
+        "date": "2026-07-17T12:13:04Z",
+        "title": "Decoder Phase 2: symbol dictionary, text region, store, globals",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/568e51f1b39976478cb90635a3fad1f2bb7c5cf5"
+      }
+    },
+    {
+      "path": "src/decode/text_region.rs",
+      "archive_head_blob": "20cd95d7e324081253d2ea2bdcde5f884d38c638",
+      "chain": [
+        {
+          "path": "src/decode/text_region.rs",
+          "commits": [
+            {
+              "sha": "054d673a62c9954ae67a740b3d253517916ebaa3",
+              "date": "2026-07-18T04:02:43Z",
+              "title": "Full decode-spec coverage: Huffman refagg dictionary + MMR skip",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/054d673a62c9954ae67a740b3d253517916ebaa3"
+            },
+            {
+              "sha": "2324d9ce31dfd411be0994330d426de65cd2fdfa",
+              "date": "2026-07-18T02:41:50Z",
+              "title": "Phase 5e: Huffman text regions with refinement (SBHUFF=1 ∧ SBREFINE=1)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/2324d9ce31dfd411be0994330d426de65cd2fdfa"
+            },
+            {
+              "sha": "75bd532f622e8835980bac725e27f85824fdd801",
+              "date": "2026-07-18T02:31:33Z",
+              "title": "Phase 5e: REFAGGNINST>1 true aggregate dictionary symbols",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/75bd532f622e8835980bac725e27f85824fdd801"
+            },
+            {
+              "sha": "c33e51dc37f7f5e49b2306b7ce167d291124d72a",
+              "date": "2026-07-18T01:50:14Z",
+              "title": "Phase 5e (part 2): transposed text regions",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/c33e51dc37f7f5e49b2306b7ce167d291124d72a"
+            },
+            {
+              "sha": "ea4bd3d7aa8672db8daa6970a18e554239fc6729",
+              "date": "2026-07-18T00:56:28Z",
+              "title": "Phase 5c (part 2): Huffman symbol dictionaries and text regions",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/ea4bd3d7aa8672db8daa6970a18e554239fc6729"
+            },
+            {
+              "sha": "5236937aa28d967919bbdde8b3ee6d75b18d9efc",
+              "date": "2026-07-17T14:08:38Z",
+              "title": "Decoder Phase 3: standalone refinement regions + refinement hardening",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/5236937aa28d967919bbdde8b3ee6d75b18d9efc"
+            },
+            {
+              "sha": "568e51f1b39976478cb90635a3fad1f2bb7c5cf5",
+              "date": "2026-07-17T12:13:04Z",
+              "title": "Decoder Phase 2: symbol dictionary, text region, store, globals",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/568e51f1b39976478cb90635a3fad1f2bb7c5cf5"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "568e51f1b39976478cb90635a3fad1f2bb7c5cf5",
+        "date": "2026-07-17T12:13:04Z",
+        "title": "Decoder Phase 2: symbol dictionary, text region, store, globals",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/568e51f1b39976478cb90635a3fad1f2bb7c5cf5"
+      }
+    },
+    {
+      "path": "src/encode/api.rs",
+      "archive_head_blob": "5c564505dad65e891efcee8122d1024c5a400161",
+      "chain": [
+        {
+          "path": "src/encode/api.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            }
+          ]
+        },
+        {
+          "path": "src/encode/jbig2.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            },
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            }
+          ]
+        },
+        {
+          "path": "src/jbig2.rs",
+          "commits": [
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            },
+            {
+              "sha": "118ae37ca144fd3e1e9f875ccb291ae2e85350c3",
+              "date": "2026-06-09T02:37:44Z",
+              "title": "Add raster reflow and refactor JBIG2 encoder",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/118ae37ca144fd3e1e9f875ccb291ae2e85350c3"
+            },
+            {
+              "sha": "bd3ff015b30b98a5a2e80855fa8d8f7e797b84f1",
+              "date": "2026-06-03T05:53:55Z",
+              "title": "Fix JBIG2 symbol substitution and refinement; consolidate symboldict feature",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/bd3ff015b30b98a5a2e80855fa8d8f7e797b84f1"
+            },
+            {
+              "sha": "282e4feef6932658ced1a2956160d26e5acef5e3",
+              "date": "2026-05-02T00:31:59Z",
+              "title": "Refactor source pipeline and update processing UI",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/282e4feef6932658ced1a2956160d26e5acef5e3"
+            },
+            {
+              "sha": "31ef0c11a1560b0d0dd2c4766c58bc3430c23d73",
+              "date": "2026-03-19T03:06:23Z",
+              "title": "Fix JBIG2 API integration and resolve compilation errors",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/31ef0c11a1560b0d0dd2c4766c58bc3430c23d73"
+            },
+            {
+              "sha": "4977e244df7bc1f74924559d20bec225238e3f58",
+              "date": "2026-03-18T06:20:03Z",
+              "title": "sync jbig2enc-rust next-gen file copy/delete",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/4977e244df7bc1f74924559d20bec225238e3f58"
+            },
+            {
+              "sha": "42b7a841f5927912266f11c07bdb6c979e7a365d",
+              "date": "2026-03-11T04:54:48Z",
+              "title": "Stabilize tokio pipeline and sync DJVU/JBIG2 encoder code from 1.45",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/42b7a841f5927912266f11c07bdb6c979e7a365d"
+            },
+            {
+              "sha": "3b743f3cd8a8762cafe77c78fb953a2b6b27a272",
+              "date": "2026-01-15T22:08:46Z",
+              "title": "Add Legencode, windows-rs-71, and ort source code folders",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/3b743f3cd8a8762cafe77c78fb953a2b6b27a272"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "3b743f3cd8a8762cafe77c78fb953a2b6b27a272",
+        "date": "2026-01-15T22:08:46Z",
+        "title": "Add Legencode, windows-rs-71, and ort source code folders",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/3b743f3cd8a8762cafe77c78fb953a2b6b27a272"
+      }
+    },
+    {
+      "path": "src/encode/arith.rs",
+      "archive_head_blob": "d7ceb554aa03758f6cd6558c56c95d5fe80bc773",
+      "chain": [
+        {
+          "path": "src/encode/arith.rs",
+          "commits": [
+            {
+              "sha": "5cae8253fb8c3718c1ca84abe811038caff55882",
+              "date": "2026-07-18T02:57:01Z",
+              "title": "Phase 5e: retained arithmetic contexts across symbol dictionaries",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/5cae8253fb8c3718c1ca84abe811038caff55882"
+            },
+            {
+              "sha": "4013364875ca2d985910a426e4c18a516f4aae85",
+              "date": "2026-07-17T10:21:52Z",
+              "title": "Extract IntProc identifiers into shared/int_proc.rs (Phase 0 / §11)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/4013364875ca2d985910a426e4c18a516f4aae85"
+            },
+            {
+              "sha": "67d7fad70ff0871a6c7b4ebd50f4a90b86fe4103",
+              "date": "2026-07-17T10:20:06Z",
+              "title": "Extract MQ probability table into shared/mq_table.rs (Phase 0 / §10)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/67d7fad70ff0871a6c7b4ebd50f4a90b86fe4103"
+            },
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            }
+          ]
+        },
+        {
+          "path": "src/encode/jbig2arith.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            },
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            }
+          ]
+        },
+        {
+          "path": "src/jbig2arith.rs",
+          "commits": [
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            },
+            {
+              "sha": "e84381c776a1db2d7d2de57432c618bca8ea0a6e",
+              "date": "2026-06-06T09:16:20Z",
+              "title": "Update CLI and processing support",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/e84381c776a1db2d7d2de57432c618bca8ea0a6e"
+            },
+            {
+              "sha": "bd3ff015b30b98a5a2e80855fa8d8f7e797b84f1",
+              "date": "2026-06-03T05:53:55Z",
+              "title": "Fix JBIG2 symbol substitution and refinement; consolidate symboldict feature",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/bd3ff015b30b98a5a2e80855fa8d8f7e797b84f1"
+            },
+            {
+              "sha": "4977e244df7bc1f74924559d20bec225238e3f58",
+              "date": "2026-03-18T06:20:03Z",
+              "title": "sync jbig2enc-rust next-gen file copy/delete",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/4977e244df7bc1f74924559d20bec225238e3f58"
+            },
+            {
+              "sha": "42b7a841f5927912266f11c07bdb6c979e7a365d",
+              "date": "2026-03-11T04:54:48Z",
+              "title": "Stabilize tokio pipeline and sync DJVU/JBIG2 encoder code from 1.45",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/42b7a841f5927912266f11c07bdb6c979e7a365d"
+            },
+            {
+              "sha": "13e76b6f9c180434278a37b29387640cc9268b9c",
+              "date": "2026-03-06T20:37:15Z",
+              "title": "Add WGPU resize backend and CLI polish",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/13e76b6f9c180434278a37b29387640cc9268b9c"
+            },
+            {
+              "sha": "eefd8250378a747572d323473bb569526e89f8ba",
+              "date": "2026-03-06T17:28:03Z",
+              "title": "Harden pipeline concurrency and trim JBIG2 overhead",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/eefd8250378a747572d323473bb569526e89f8ba"
+            },
+            {
+              "sha": "adcfb2ee45fe5bbc14b684b33169ae055531ee07",
+              "date": "2026-02-02T20:52:58Z",
+              "title": "Add files via upload",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/adcfb2ee45fe5bbc14b684b33169ae055531ee07"
+            },
+            {
+              "sha": "3b743f3cd8a8762cafe77c78fb953a2b6b27a272",
+              "date": "2026-01-15T22:08:46Z",
+              "title": "Add Legencode, windows-rs-71, and ort source code folders",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/3b743f3cd8a8762cafe77c78fb953a2b6b27a272"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "3b743f3cd8a8762cafe77c78fb953a2b6b27a272",
+        "date": "2026-01-15T22:08:46Z",
+        "title": "Add Legencode, windows-rs-71, and ort source code folders",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/3b743f3cd8a8762cafe77c78fb953a2b6b27a272"
+      }
+    },
+    {
+      "path": "src/encode/cc.rs",
+      "archive_head_blob": "045a9f2a5a20d88f49a0b43afbd256cf63ad3635",
+      "chain": [
+        {
+          "path": "src/encode/cc.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            }
+          ]
+        },
+        {
+          "path": "src/encode/jbig2cc.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            },
+            {
+              "sha": "973b45aecb704dbb86e26b33d4d8d1d3c020f36c",
+              "date": "2026-07-17T10:03:22Z",
+              "title": "Restore tiny-CC noise removal in analyze() (Gap B.2)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/973b45aecb704dbb86e26b33d4d8d1d3c020f36c"
+            },
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            }
+          ]
+        },
+        {
+          "path": "src/jbig2cc.rs",
+          "commits": [
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            },
+            {
+              "sha": "bd3ff015b30b98a5a2e80855fa8d8f7e797b84f1",
+              "date": "2026-06-03T05:53:55Z",
+              "title": "Fix JBIG2 symbol substitution and refinement; consolidate symboldict feature",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/bd3ff015b30b98a5a2e80855fa8d8f7e797b84f1"
+            },
+            {
+              "sha": "4977e244df7bc1f74924559d20bec225238e3f58",
+              "date": "2026-03-18T06:20:03Z",
+              "title": "sync jbig2enc-rust next-gen file copy/delete",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/4977e244df7bc1f74924559d20bec225238e3f58"
+            },
+            {
+              "sha": "42b7a841f5927912266f11c07bdb6c979e7a365d",
+              "date": "2026-03-11T04:54:48Z",
+              "title": "Stabilize tokio pipeline and sync DJVU/JBIG2 encoder code from 1.45",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/42b7a841f5927912266f11c07bdb6c979e7a365d"
+            },
+            {
+              "sha": "adcfb2ee45fe5bbc14b684b33169ae055531ee07",
+              "date": "2026-02-02T20:52:58Z",
+              "title": "Add files via upload",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/adcfb2ee45fe5bbc14b684b33169ae055531ee07"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "adcfb2ee45fe5bbc14b684b33169ae055531ee07",
+        "date": "2026-02-02T20:52:58Z",
+        "title": "Add files via upload",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/adcfb2ee45fe5bbc14b684b33169ae055531ee07"
+      }
+    },
+    {
+      "path": "src/encode/classify.rs",
+      "archive_head_blob": "3a1e730cb804b2bac6d9003de38ead18884229b0",
+      "chain": [
+        {
+          "path": "src/encode/classify.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            }
+          ]
+        },
+        {
+          "path": "src/encode/jbig2classify.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            },
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            }
+          ]
+        },
+        {
+          "path": "src/jbig2classify.rs",
+          "commits": [
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            },
+            {
+              "sha": "4977e244df7bc1f74924559d20bec225238e3f58",
+              "date": "2026-03-18T06:20:03Z",
+              "title": "sync jbig2enc-rust next-gen file copy/delete",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/4977e244df7bc1f74924559d20bec225238e3f58"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "4977e244df7bc1f74924559d20bec225238e3f58",
+        "date": "2026-03-18T06:20:03Z",
+        "title": "sync jbig2enc-rust next-gen file copy/delete",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/4977e244df7bc1f74924559d20bec225238e3f58"
+      }
+    },
+    {
+      "path": "src/encode/comparator.rs",
+      "archive_head_blob": "a3918b2973d533529558bf74a784d760eb29244c",
+      "chain": [
+        {
+          "path": "src/encode/comparator.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            }
+          ]
+        },
+        {
+          "path": "src/encode/jbig2comparator.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            },
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            }
+          ]
+        },
+        {
+          "path": "src/jbig2comparator.rs",
+          "commits": [
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            },
+            {
+              "sha": "fc5c7fe6a9ca80be2130ad5cb711bfa81f213372",
+              "date": "2026-07-01T11:17:42Z",
+              "title": "Update jbig2enc-rust to 0.5.3",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/fc5c7fe6a9ca80be2130ad5cb711bfa81f213372"
+            },
+            {
+              "sha": "4977e244df7bc1f74924559d20bec225238e3f58",
+              "date": "2026-03-18T06:20:03Z",
+              "title": "sync jbig2enc-rust next-gen file copy/delete",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/4977e244df7bc1f74924559d20bec225238e3f58"
+            },
+            {
+              "sha": "eefd8250378a747572d323473bb569526e89f8ba",
+              "date": "2026-03-06T17:28:03Z",
+              "title": "Harden pipeline concurrency and trim JBIG2 overhead",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/eefd8250378a747572d323473bb569526e89f8ba"
+            },
+            {
+              "sha": "3b743f3cd8a8762cafe77c78fb953a2b6b27a272",
+              "date": "2026-01-15T22:08:46Z",
+              "title": "Add Legencode, windows-rs-71, and ort source code folders",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/3b743f3cd8a8762cafe77c78fb953a2b6b27a272"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "3b743f3cd8a8762cafe77c78fb953a2b6b27a272",
+        "date": "2026-01-15T22:08:46Z",
+        "title": "Add Legencode, windows-rs-71, and ort source code folders",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/3b743f3cd8a8762cafe77c78fb953a2b6b27a272"
+      }
+    },
+    {
+      "path": "src/encode/context.rs",
+      "archive_head_blob": "3d8c0677a3ae0e9c58779e1876b2856b94dbff41",
+      "chain": [
+        {
+          "path": "src/encode/context.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            }
+          ]
+        },
+        {
+          "path": "src/encode/jbig2context.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            },
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            }
+          ]
+        },
+        {
+          "path": "src/jbig2context.rs",
+          "commits": [
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            },
+            {
+              "sha": "4977e244df7bc1f74924559d20bec225238e3f58",
+              "date": "2026-03-18T06:20:03Z",
+              "title": "sync jbig2enc-rust next-gen file copy/delete",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/4977e244df7bc1f74924559d20bec225238e3f58"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "4977e244df7bc1f74924559d20bec225238e3f58",
+        "date": "2026-03-18T06:20:03Z",
+        "title": "sync jbig2enc-rust next-gen file copy/delete",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/4977e244df7bc1f74924559d20bec225238e3f58"
+      }
+    },
+    {
+      "path": "src/encode/cost.rs",
+      "archive_head_blob": "436a99d3beb4748aad56509aac617bcaa89abd7c",
+      "chain": [
+        {
+          "path": "src/encode/cost.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            }
+          ]
+        },
+        {
+          "path": "src/encode/jbig2cost.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            },
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            }
+          ]
+        },
+        {
+          "path": "src/jbig2cost.rs",
+          "commits": [
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            },
+            {
+              "sha": "4977e244df7bc1f74924559d20bec225238e3f58",
+              "date": "2026-03-18T06:20:03Z",
+              "title": "sync jbig2enc-rust next-gen file copy/delete",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/4977e244df7bc1f74924559d20bec225238e3f58"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "4977e244df7bc1f74924559d20bec225238e3f58",
+        "date": "2026-03-18T06:20:03Z",
+        "title": "sync jbig2enc-rust next-gen file copy/delete",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/4977e244df7bc1f74924559d20bec225238e3f58"
+      }
+    },
+    {
+      "path": "src/encode/document.rs",
+      "archive_head_blob": "3b5f33b27bf4526681ba8473bb1d1702681a0e0f",
+      "chain": [
+        {
+          "path": "src/encode/document.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            }
+          ]
+        },
+        {
+          "path": "src/encode/jbig2enc/mod.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            },
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            }
+          ]
+        },
+        {
+          "path": "src/jbig2enc/mod.rs",
+          "commits": [
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            },
+            {
+              "sha": "118ae37ca144fd3e1e9f875ccb291ae2e85350c3",
+              "date": "2026-06-09T02:37:44Z",
+              "title": "Add raster reflow and refactor JBIG2 encoder",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/118ae37ca144fd3e1e9f875ccb291ae2e85350c3"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "118ae37ca144fd3e1e9f875ccb291ae2e85350c3",
+        "date": "2026-06-09T02:37:44Z",
+        "title": "Add raster reflow and refactor JBIG2 encoder",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/118ae37ca144fd3e1e9f875ccb291ae2e85350c3"
+      }
+    },
+    {
+      "path": "src/encode/document/symbol/clustering.rs",
+      "archive_head_blob": "58b8f042d56b9eec5deab93fc2effb19b98a6e77",
+      "chain": [
+        {
+          "path": "src/encode/document/symbol/clustering.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            }
+          ]
+        },
+        {
+          "path": "src/encode/jbig2enc/symbol/clustering.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            },
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            }
+          ]
+        },
+        {
+          "path": "src/jbig2enc/symbol/clustering.rs",
+          "commits": [
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            },
+            {
+              "sha": "118ae37ca144fd3e1e9f875ccb291ae2e85350c3",
+              "date": "2026-06-09T02:37:44Z",
+              "title": "Add raster reflow and refactor JBIG2 encoder",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/118ae37ca144fd3e1e9f875ccb291ae2e85350c3"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "118ae37ca144fd3e1e9f875ccb291ae2e85350c3",
+        "date": "2026-06-09T02:37:44Z",
+        "title": "Add raster reflow and refactor JBIG2 encoder",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/118ae37ca144fd3e1e9f875ccb291ae2e85350c3"
+      }
+    },
+    {
+      "path": "src/encode/document/symbol/dictionary.rs",
+      "archive_head_blob": "bbad3d65047f595daa953927a1f13f3b719ded4b",
+      "chain": [
+        {
+          "path": "src/encode/document/symbol/dictionary.rs",
+          "commits": [
+            {
+              "sha": "74ecedb20ee2d270f1b7e064ed8dbbf409ce9f0f",
+              "date": "2026-07-17T15:11:52Z",
+              "title": "Encoder fix: repair stale refinement_layout_collapses_to_prototypes test",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/74ecedb20ee2d270f1b7e064ed8dbbf409ce9f0f"
+            },
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            }
+          ]
+        },
+        {
+          "path": "src/encode/jbig2enc/symbol/dictionary.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            },
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            }
+          ]
+        },
+        {
+          "path": "src/jbig2enc/symbol/dictionary.rs",
+          "commits": [
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            },
+            {
+              "sha": "118ae37ca144fd3e1e9f875ccb291ae2e85350c3",
+              "date": "2026-06-09T02:37:44Z",
+              "title": "Add raster reflow and refactor JBIG2 encoder",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/118ae37ca144fd3e1e9f875ccb291ae2e85350c3"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "118ae37ca144fd3e1e9f875ccb291ae2e85350c3",
+        "date": "2026-06-09T02:37:44Z",
+        "title": "Add raster reflow and refactor JBIG2 encoder",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/118ae37ca144fd3e1e9f875ccb291ae2e85350c3"
+      }
+    },
+    {
+      "path": "src/encode/document/symbol/extraction.rs",
+      "archive_head_blob": "4359e40f8e44227225e214ad9b13579118b108e3",
+      "chain": [
+        {
+          "path": "src/encode/document/symbol/extraction.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            }
+          ]
+        },
+        {
+          "path": "src/encode/jbig2enc/symbol/extraction.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            },
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            }
+          ]
+        },
+        {
+          "path": "src/jbig2enc/symbol/extraction.rs",
+          "commits": [
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            },
+            {
+              "sha": "fc5c7fe6a9ca80be2130ad5cb711bfa81f213372",
+              "date": "2026-07-01T11:17:42Z",
+              "title": "Update jbig2enc-rust to 0.5.3",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/fc5c7fe6a9ca80be2130ad5cb711bfa81f213372"
+            },
+            {
+              "sha": "118ae37ca144fd3e1e9f875ccb291ae2e85350c3",
+              "date": "2026-06-09T02:37:44Z",
+              "title": "Add raster reflow and refactor JBIG2 encoder",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/118ae37ca144fd3e1e9f875ccb291ae2e85350c3"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "118ae37ca144fd3e1e9f875ccb291ae2e85350c3",
+        "date": "2026-06-09T02:37:44Z",
+        "title": "Add raster reflow and refactor JBIG2 encoder",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/118ae37ca144fd3e1e9f875ccb291ae2e85350c3"
+      }
+    },
+    {
+      "path": "src/encode/document/symbol/mod.rs",
+      "archive_head_blob": "ade35da6abde7650a30dbe86d9315a8a8d0a3588",
+      "chain": [
+        {
+          "path": "src/encode/document/symbol/mod.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            }
+          ]
+        },
+        {
+          "path": "src/encode/jbig2enc/symbol/mod.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            },
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            }
+          ]
+        },
+        {
+          "path": "src/jbig2enc/symbol/mod.rs",
+          "commits": [
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            },
+            {
+              "sha": "118ae37ca144fd3e1e9f875ccb291ae2e85350c3",
+              "date": "2026-06-09T02:37:44Z",
+              "title": "Add raster reflow and refactor JBIG2 encoder",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/118ae37ca144fd3e1e9f875ccb291ae2e85350c3"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "118ae37ca144fd3e1e9f875ccb291ae2e85350c3",
+        "date": "2026-06-09T02:37:44Z",
+        "title": "Add raster reflow and refactor JBIG2 encoder",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/118ae37ca144fd3e1e9f875ccb291ae2e85350c3"
+      }
+    },
+    {
+      "path": "src/encode/document/symbol/planning.rs",
+      "archive_head_blob": "02ea4d0a3478e6ed28668d40601d505de9344203",
+      "chain": [
+        {
+          "path": "src/encode/document/symbol/planning.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            }
+          ]
+        },
+        {
+          "path": "src/encode/jbig2enc/symbol/planning.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            },
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            }
+          ]
+        },
+        {
+          "path": "src/jbig2enc/symbol/planning.rs",
+          "commits": [
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            },
+            {
+              "sha": "118ae37ca144fd3e1e9f875ccb291ae2e85350c3",
+              "date": "2026-06-09T02:37:44Z",
+              "title": "Add raster reflow and refactor JBIG2 encoder",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/118ae37ca144fd3e1e9f875ccb291ae2e85350c3"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "118ae37ca144fd3e1e9f875ccb291ae2e85350c3",
+        "date": "2026-06-09T02:37:44Z",
+        "title": "Add raster reflow and refactor JBIG2 encoder",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/118ae37ca144fd3e1e9f875ccb291ae2e85350c3"
+      }
+    },
+    {
+      "path": "src/encode/document/symbol/serialize.rs",
+      "archive_head_blob": "7b1d70e13431ac3a804015a2a26cc0b016b0dfa5",
+      "chain": [
+        {
+          "path": "src/encode/document/symbol/serialize.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            }
+          ]
+        },
+        {
+          "path": "src/encode/jbig2enc/symbol/serialize.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            },
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            }
+          ]
+        },
+        {
+          "path": "src/jbig2enc/symbol/serialize.rs",
+          "commits": [
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            },
+            {
+              "sha": "118ae37ca144fd3e1e9f875ccb291ae2e85350c3",
+              "date": "2026-06-09T02:37:44Z",
+              "title": "Add raster reflow and refactor JBIG2 encoder",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/118ae37ca144fd3e1e9f875ccb291ae2e85350c3"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "118ae37ca144fd3e1e9f875ccb291ae2e85350c3",
+        "date": "2026-06-09T02:37:44Z",
+        "title": "Add raster reflow and refactor JBIG2 encoder",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/118ae37ca144fd3e1e9f875ccb291ae2e85350c3"
+      }
+    },
+    {
+      "path": "src/encode/document/symbol/tests.rs",
+      "archive_head_blob": "3dc3cff33db2914e48df224519ad04ef49edcb99",
+      "chain": [
+        {
+          "path": "src/encode/document/symbol/tests.rs",
+          "commits": [
+            {
+              "sha": "74ecedb20ee2d270f1b7e064ed8dbbf409ce9f0f",
+              "date": "2026-07-17T15:11:52Z",
+              "title": "Encoder fix: repair stale refinement_layout_collapses_to_prototypes test",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/74ecedb20ee2d270f1b7e064ed8dbbf409ce9f0f"
+            },
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            }
+          ]
+        },
+        {
+          "path": "src/encode/jbig2enc/symbol/tests.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            },
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            }
+          ]
+        },
+        {
+          "path": "src/jbig2enc/symbol/tests.rs",
+          "commits": [
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            },
+            {
+              "sha": "118ae37ca144fd3e1e9f875ccb291ae2e85350c3",
+              "date": "2026-06-09T02:37:44Z",
+              "title": "Add raster reflow and refactor JBIG2 encoder",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/118ae37ca144fd3e1e9f875ccb291ae2e85350c3"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "118ae37ca144fd3e1e9f875ccb291ae2e85350c3",
+        "date": "2026-06-09T02:37:44Z",
+        "title": "Add raster reflow and refactor JBIG2 encoder",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/118ae37ca144fd3e1e9f875ccb291ae2e85350c3"
+      }
+    },
+    {
+      "path": "src/encode/document/symbol/text_region.rs",
+      "archive_head_blob": "a1aaacc6a543fdbbc1b53bf79aa99521d89a10e7",
+      "chain": [
+        {
+          "path": "src/encode/document/symbol/text_region.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            }
+          ]
+        },
+        {
+          "path": "src/encode/jbig2enc/symbol/text_region.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            },
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            }
+          ]
+        },
+        {
+          "path": "src/jbig2enc/symbol/text_region.rs",
+          "commits": [
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            },
+            {
+              "sha": "118ae37ca144fd3e1e9f875ccb291ae2e85350c3",
+              "date": "2026-06-09T02:37:44Z",
+              "title": "Add raster reflow and refactor JBIG2 encoder",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/118ae37ca144fd3e1e9f875ccb291ae2e85350c3"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "118ae37ca144fd3e1e9f875ccb291ae2e85350c3",
+        "date": "2026-06-09T02:37:44Z",
+        "title": "Add raster reflow and refactor JBIG2 encoder",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/118ae37ca144fd3e1e9f875ccb291ae2e85350c3"
+      }
+    },
+    {
+      "path": "src/encode/document/symbol/text_region_refine.rs",
+      "archive_head_blob": "d25ea4bf6e153ee2bffa607f04a984f4ca179754",
+      "chain": [
+        {
+          "path": "src/encode/document/symbol/text_region_refine.rs",
+          "commits": [
+            {
+              "sha": "cd3fd96d860ae76cabca9161f7f5f199c2e5cdce",
+              "date": "2026-07-17T12:52:07Z",
+              "title": "Encoder: advance CURS by refined placed width in refined text regions",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/cd3fd96d860ae76cabca9161f7f5f199c2e5cdce"
+            },
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            }
+          ]
+        },
+        {
+          "path": "src/encode/jbig2enc/symbol/text_region_refine.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            },
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            }
+          ]
+        },
+        {
+          "path": "src/jbig2enc/symbol/text_region_refine.rs",
+          "commits": [
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            },
+            {
+              "sha": "118ae37ca144fd3e1e9f875ccb291ae2e85350c3",
+              "date": "2026-06-09T02:37:44Z",
+              "title": "Add raster reflow and refactor JBIG2 encoder",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/118ae37ca144fd3e1e9f875ccb291ae2e85350c3"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "118ae37ca144fd3e1e9f875ccb291ae2e85350c3",
+        "date": "2026-06-09T02:37:44Z",
+        "title": "Add raster reflow and refactor JBIG2 encoder",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/118ae37ca144fd3e1e9f875ccb291ae2e85350c3"
+      }
+    },
+    {
+      "path": "src/encode/document/symbol/types.rs",
+      "archive_head_blob": "0854c8e25d7f0f94bebe2d22bf89f6a107512e27",
+      "chain": [
+        {
+          "path": "src/encode/document/symbol/types.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            }
+          ]
+        },
+        {
+          "path": "src/encode/jbig2enc/symbol/types.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            },
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            }
+          ]
+        },
+        {
+          "path": "src/jbig2enc/symbol/types.rs",
+          "commits": [
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            },
+            {
+              "sha": "118ae37ca144fd3e1e9f875ccb291ae2e85350c3",
+              "date": "2026-06-09T02:37:44Z",
+              "title": "Add raster reflow and refactor JBIG2 encoder",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/118ae37ca144fd3e1e9f875ccb291ae2e85350c3"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "118ae37ca144fd3e1e9f875ccb291ae2e85350c3",
+        "date": "2026-06-09T02:37:44Z",
+        "title": "Add raster reflow and refactor JBIG2 encoder",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/118ae37ca144fd3e1e9f875ccb291ae2e85350c3"
+      }
+    },
+    {
+      "path": "src/encode/document/symbol/unify_apply.rs",
+      "archive_head_blob": "935057b68226f9d730cafb6e1df0acb5990880b2",
+      "chain": [
+        {
+          "path": "src/encode/document/symbol/unify_apply.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            }
+          ]
+        },
+        {
+          "path": "src/encode/jbig2enc/symbol/unify_apply.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            },
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            }
+          ]
+        },
+        {
+          "path": "src/jbig2enc/symbol/unify_apply.rs",
+          "commits": [
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            },
+            {
+              "sha": "118ae37ca144fd3e1e9f875ccb291ae2e85350c3",
+              "date": "2026-06-09T02:37:44Z",
+              "title": "Add raster reflow and refactor JBIG2 encoder",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/118ae37ca144fd3e1e9f875ccb291ae2e85350c3"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "118ae37ca144fd3e1e9f875ccb291ae2e85350c3",
+        "date": "2026-06-09T02:37:44Z",
+        "title": "Add raster reflow and refactor JBIG2 encoder",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/118ae37ca144fd3e1e9f875ccb291ae2e85350c3"
+      }
+    },
+    {
+      "path": "src/encode/document/symbol/unify_match.rs",
+      "archive_head_blob": "ea8f64ddbd51de9f5597016dfd870ab9cf95a7d0",
+      "chain": [
+        {
+          "path": "src/encode/document/symbol/unify_match.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            }
+          ]
+        },
+        {
+          "path": "src/encode/jbig2enc/symbol/unify_match.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            },
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            }
+          ]
+        },
+        {
+          "path": "src/jbig2enc/symbol/unify_match.rs",
+          "commits": [
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            },
+            {
+              "sha": "118ae37ca144fd3e1e9f875ccb291ae2e85350c3",
+              "date": "2026-06-09T02:37:44Z",
+              "title": "Add raster reflow and refactor JBIG2 encoder",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/118ae37ca144fd3e1e9f875ccb291ae2e85350c3"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "118ae37ca144fd3e1e9f875ccb291ae2e85350c3",
+        "date": "2026-06-09T02:37:44Z",
+        "title": "Add raster reflow and refactor JBIG2 encoder",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/118ae37ca144fd3e1e9f875ccb291ae2e85350c3"
+      }
+    },
+    {
+      "path": "src/encode/halftone.rs",
+      "archive_head_blob": "65e7b2c49cbacd6ca7b4ceef7c34e7a134262aaf",
+      "chain": [
+        {
+          "path": "src/encode/halftone.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            }
+          ]
+        },
+        {
+          "path": "src/encode/jbig2halftone.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            },
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            }
+          ]
+        },
+        {
+          "path": "src/jbig2halftone.rs",
+          "commits": [
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            },
+            {
+              "sha": "6c2189454ef6dc034661078f5ca7a805f4f2d5f2",
+              "date": "2026-07-14T12:41:19Z",
+              "title": "Add embedded PaddleOCR and modernize the GPU stack",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/6c2189454ef6dc034661078f5ca7a805f4f2d5f2"
+            },
+            {
+              "sha": "f9bf416565ad2f428f39536e7eabf5c2c4749f97",
+              "date": "2026-05-24T21:27:08Z",
+              "title": "Fix bugs, sync pipelines, and remove overhead from engine/accumulator",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/f9bf416565ad2f428f39536e7eabf5c2c4749f97"
+            },
+            {
+              "sha": "4977e244df7bc1f74924559d20bec225238e3f58",
+              "date": "2026-03-18T06:20:03Z",
+              "title": "sync jbig2enc-rust next-gen file copy/delete",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/4977e244df7bc1f74924559d20bec225238e3f58"
+            },
+            {
+              "sha": "42b7a841f5927912266f11c07bdb6c979e7a365d",
+              "date": "2026-03-11T04:54:48Z",
+              "title": "Stabilize tokio pipeline and sync DJVU/JBIG2 encoder code from 1.45",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/42b7a841f5927912266f11c07bdb6c979e7a365d"
+            },
+            {
+              "sha": "eefd8250378a747572d323473bb569526e89f8ba",
+              "date": "2026-03-06T17:28:03Z",
+              "title": "Harden pipeline concurrency and trim JBIG2 overhead",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/eefd8250378a747572d323473bb569526e89f8ba"
+            },
+            {
+              "sha": "3b743f3cd8a8762cafe77c78fb953a2b6b27a272",
+              "date": "2026-01-15T22:08:46Z",
+              "title": "Add Legencode, windows-rs-71, and ort source code folders",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/3b743f3cd8a8762cafe77c78fb953a2b6b27a272"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "3b743f3cd8a8762cafe77c78fb953a2b6b27a272",
+        "date": "2026-01-15T22:08:46Z",
+        "title": "Add Legencode, windows-rs-71, and ort source code folders",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/3b743f3cd8a8762cafe77c78fb953a2b6b27a272"
+      }
+    },
+    {
+      "path": "src/encode/mod.rs",
+      "archive_head_blob": "363e716ed44039c4b6eebd92deafd94d90acfe52",
+      "chain": [
+        {
+          "path": "src/encode/mod.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            },
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+        "date": "2026-07-17T09:48:26Z",
+        "title": "Restructure crate into encode/decode/shared halves",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+      }
+    },
+    {
+      "path": "src/encode/shared.rs",
+      "archive_head_blob": "8665b32518eedac3eef8243ae3856fe10ddb92b4",
+      "chain": [
+        {
+          "path": "src/encode/shared.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            }
+          ]
+        },
+        {
+          "path": "src/encode/jbig2shared.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            },
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            }
+          ]
+        },
+        {
+          "path": "src/jbig2shared.rs",
+          "commits": [
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            },
+            {
+              "sha": "4977e244df7bc1f74924559d20bec225238e3f58",
+              "date": "2026-03-18T06:20:03Z",
+              "title": "sync jbig2enc-rust next-gen file copy/delete",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/4977e244df7bc1f74924559d20bec225238e3f58"
+            },
+            {
+              "sha": "42b7a841f5927912266f11c07bdb6c979e7a365d",
+              "date": "2026-03-11T04:54:48Z",
+              "title": "Stabilize tokio pipeline and sync DJVU/JBIG2 encoder code from 1.45",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/42b7a841f5927912266f11c07bdb6c979e7a365d"
+            },
+            {
+              "sha": "13e76b6f9c180434278a37b29387640cc9268b9c",
+              "date": "2026-03-06T20:37:15Z",
+              "title": "Add WGPU resize backend and CLI polish",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/13e76b6f9c180434278a37b29387640cc9268b9c"
+            },
+            {
+              "sha": "adcfb2ee45fe5bbc14b684b33169ae055531ee07",
+              "date": "2026-02-02T20:52:58Z",
+              "title": "Add files via upload",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/adcfb2ee45fe5bbc14b684b33169ae055531ee07"
+            },
+            {
+              "sha": "3b743f3cd8a8762cafe77c78fb953a2b6b27a272",
+              "date": "2026-01-15T22:08:46Z",
+              "title": "Add Legencode, windows-rs-71, and ort source code folders",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/3b743f3cd8a8762cafe77c78fb953a2b6b27a272"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "3b743f3cd8a8762cafe77c78fb953a2b6b27a272",
+        "date": "2026-01-15T22:08:46Z",
+        "title": "Add Legencode, windows-rs-71, and ort source code folders",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/3b743f3cd8a8762cafe77c78fb953a2b6b27a272"
+      }
+    },
+    {
+      "path": "src/encode/simd.rs",
+      "archive_head_blob": "fe87b1b19e6bab24793fa8e5c8ff105571a58f4f",
+      "chain": [
+        {
+          "path": "src/encode/simd.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            }
+          ]
+        },
+        {
+          "path": "src/encode/jbig2simd.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            },
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            }
+          ]
+        },
+        {
+          "path": "src/jbig2simd.rs",
+          "commits": [
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            },
+            {
+              "sha": "fc5c7fe6a9ca80be2130ad5cb711bfa81f213372",
+              "date": "2026-07-01T11:17:42Z",
+              "title": "Update jbig2enc-rust to 0.5.3",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/fc5c7fe6a9ca80be2130ad5cb711bfa81f213372"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "fc5c7fe6a9ca80be2130ad5cb711bfa81f213372",
+        "date": "2026-07-01T11:17:42Z",
+        "title": "Update jbig2enc-rust to 0.5.3",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/fc5c7fe6a9ca80be2130ad5cb711bfa81f213372"
+      }
+    },
+    {
+      "path": "src/encode/structs.rs",
+      "archive_head_blob": "302cc0069c9a1a343a50d8d128cb33149ccf9ed9",
+      "chain": [
+        {
+          "path": "src/encode/structs.rs",
+          "commits": [
+            {
+              "sha": "00f80208f12a335385ab3886e161fe72581c13d9",
+              "date": "2026-07-17T15:09:55Z",
+              "title": "Encoder fix: referred-segment number width uses inclusive boundaries",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/00f80208f12a335385ab3886e161fe72581c13d9"
+            },
+            {
+              "sha": "3eef1d695feeb7f012499111e6bcfe317effdf38",
+              "date": "2026-07-17T10:15:33Z",
+              "title": "Extract SegmentType into shared/segment.rs (Phase 0)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/3eef1d695feeb7f012499111e6bcfe317effdf38"
+            },
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            }
+          ]
+        },
+        {
+          "path": "src/encode/jbig2structs.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            },
+            {
+              "sha": "55e39f0b06e59bb0a57a7bde8d6efb02791db5d6",
+              "date": "2026-07-17T10:03:12Z",
+              "title": "Fix standalone file-header organisation flag (Gap B.4)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/55e39f0b06e59bb0a57a7bde8d6efb02791db5d6"
+            },
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            }
+          ]
+        },
+        {
+          "path": "src/jbig2structs.rs",
+          "commits": [
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            },
+            {
+              "sha": "f9bf416565ad2f428f39536e7eabf5c2c4749f97",
+              "date": "2026-05-24T21:27:08Z",
+              "title": "Fix bugs, sync pipelines, and remove overhead from engine/accumulator",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/f9bf416565ad2f428f39536e7eabf5c2c4749f97"
+            },
+            {
+              "sha": "23df9fda84dcd57ad6ddf15a081dc89aa0679a69",
+              "date": "2026-03-19T02:29:21Z",
+              "title": "Fix JBIG2 PDF symbol generation",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/23df9fda84dcd57ad6ddf15a081dc89aa0679a69"
+            },
+            {
+              "sha": "4977e244df7bc1f74924559d20bec225238e3f58",
+              "date": "2026-03-18T06:20:03Z",
+              "title": "sync jbig2enc-rust next-gen file copy/delete",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/4977e244df7bc1f74924559d20bec225238e3f58"
+            },
+            {
+              "sha": "42b7a841f5927912266f11c07bdb6c979e7a365d",
+              "date": "2026-03-11T04:54:48Z",
+              "title": "Stabilize tokio pipeline and sync DJVU/JBIG2 encoder code from 1.45",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/42b7a841f5927912266f11c07bdb6c979e7a365d"
+            },
+            {
+              "sha": "3b743f3cd8a8762cafe77c78fb953a2b6b27a272",
+              "date": "2026-01-15T22:08:46Z",
+              "title": "Add Legencode, windows-rs-71, and ort source code folders",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/3b743f3cd8a8762cafe77c78fb953a2b6b27a272"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "3b743f3cd8a8762cafe77c78fb953a2b6b27a272",
+        "date": "2026-01-15T22:08:46Z",
+        "title": "Add Legencode, windows-rs-71, and ort source code folders",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/3b743f3cd8a8762cafe77c78fb953a2b6b27a272"
+      }
+    },
+    {
+      "path": "src/encode/sym.rs",
+      "archive_head_blob": "dcbada85d7371b3327f5e933456e256b82d118ba",
+      "chain": [
+        {
+          "path": "src/encode/sym.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            }
+          ]
+        },
+        {
+          "path": "src/encode/jbig2sym.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            },
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            }
+          ]
+        },
+        {
+          "path": "src/jbig2sym.rs",
+          "commits": [
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            },
+            {
+              "sha": "fc5c7fe6a9ca80be2130ad5cb711bfa81f213372",
+              "date": "2026-07-01T11:17:42Z",
+              "title": "Update jbig2enc-rust to 0.5.3",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/fc5c7fe6a9ca80be2130ad5cb711bfa81f213372"
+            },
+            {
+              "sha": "f9bf416565ad2f428f39536e7eabf5c2c4749f97",
+              "date": "2026-05-24T21:27:08Z",
+              "title": "Fix bugs, sync pipelines, and remove overhead from engine/accumulator",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/f9bf416565ad2f428f39536e7eabf5c2c4749f97"
+            },
+            {
+              "sha": "4977e244df7bc1f74924559d20bec225238e3f58",
+              "date": "2026-03-18T06:20:03Z",
+              "title": "sync jbig2enc-rust next-gen file copy/delete",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/4977e244df7bc1f74924559d20bec225238e3f58"
+            },
+            {
+              "sha": "42b7a841f5927912266f11c07bdb6c979e7a365d",
+              "date": "2026-03-11T04:54:48Z",
+              "title": "Stabilize tokio pipeline and sync DJVU/JBIG2 encoder code from 1.45",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/42b7a841f5927912266f11c07bdb6c979e7a365d"
+            },
+            {
+              "sha": "eefd8250378a747572d323473bb569526e89f8ba",
+              "date": "2026-03-06T17:28:03Z",
+              "title": "Harden pipeline concurrency and trim JBIG2 overhead",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/eefd8250378a747572d323473bb569526e89f8ba"
+            },
+            {
+              "sha": "adcfb2ee45fe5bbc14b684b33169ae055531ee07",
+              "date": "2026-02-02T20:52:58Z",
+              "title": "Add files via upload",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/adcfb2ee45fe5bbc14b684b33169ae055531ee07"
+            },
+            {
+              "sha": "3b743f3cd8a8762cafe77c78fb953a2b6b27a272",
+              "date": "2026-01-15T22:08:46Z",
+              "title": "Add Legencode, windows-rs-71, and ort source code folders",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/3b743f3cd8a8762cafe77c78fb953a2b6b27a272"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "3b743f3cd8a8762cafe77c78fb953a2b6b27a272",
+        "date": "2026-01-15T22:08:46Z",
+        "title": "Add Legencode, windows-rs-71, and ort source code folders",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/3b743f3cd8a8762cafe77c78fb953a2b6b27a272"
+      }
+    },
+    {
+      "path": "src/encode/unify.rs",
+      "archive_head_blob": "5df237c4a8e4480d258c8d4e565864832e23bd9a",
+      "chain": [
+        {
+          "path": "src/encode/unify.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            }
+          ]
+        },
+        {
+          "path": "src/encode/jbig2unify.rs",
+          "commits": [
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            },
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            }
+          ]
+        },
+        {
+          "path": "src/jbig2unify.rs",
+          "commits": [
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            },
+            {
+              "sha": "4977e244df7bc1f74924559d20bec225238e3f58",
+              "date": "2026-03-18T06:20:03Z",
+              "title": "sync jbig2enc-rust next-gen file copy/delete",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/4977e244df7bc1f74924559d20bec225238e3f58"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "4977e244df7bc1f74924559d20bec225238e3f58",
+        "date": "2026-03-18T06:20:03Z",
+        "title": "sync jbig2enc-rust next-gen file copy/delete",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/4977e244df7bc1f74924559d20bec225238e3f58"
+      }
+    },
+    {
+      "path": "src/lib.rs",
+      "archive_head_blob": "63d49bc56ca8ffd4c3c54c7828d340f85b5e046d",
+      "chain": [
+        {
+          "path": "src/lib.rs",
+          "commits": [
+            {
+              "sha": "efafdabf3a465ef37dffa95a89d7e1c8a360e3fa",
+              "date": "2026-07-17T11:13:33Z",
+              "title": "Decoder Phase 1: MQ decoder, parsers, generic regions, feature gating",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/efafdabf3a465ef37dffa95a89d7e1c8a360e3fa"
+            },
+            {
+              "sha": "7979f70dd10d641d784fbdbbd840a24dd706b18e",
+              "date": "2026-07-17T10:13:57Z",
+              "title": "Rename encoder modules to encode/ layout (Gap A)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/7979f70dd10d641d784fbdbbd840a24dd706b18e"
+            },
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            },
+            {
+              "sha": "49f9e83e597d487a241db64aa78248606a29c569",
+              "date": "2026-07-03T04:40:14Z",
+              "title": "Add appearance selector and AppImage packaging task",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/49f9e83e597d487a241db64aa78248606a29c569"
+            },
+            {
+              "sha": "fc5c7fe6a9ca80be2130ad5cb711bfa81f213372",
+              "date": "2026-07-01T11:17:42Z",
+              "title": "Update jbig2enc-rust to 0.5.3",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/fc5c7fe6a9ca80be2130ad5cb711bfa81f213372"
+            },
+            {
+              "sha": "118ae37ca144fd3e1e9f875ccb291ae2e85350c3",
+              "date": "2026-06-09T02:37:44Z",
+              "title": "Add raster reflow and refactor JBIG2 encoder",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/118ae37ca144fd3e1e9f875ccb291ae2e85350c3"
+            },
+            {
+              "sha": "bd3ff015b30b98a5a2e80855fa8d8f7e797b84f1",
+              "date": "2026-06-03T05:53:55Z",
+              "title": "Fix JBIG2 symbol substitution and refinement; consolidate symboldict feature",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/bd3ff015b30b98a5a2e80855fa8d8f7e797b84f1"
+            },
+            {
+              "sha": "282e4feef6932658ced1a2956160d26e5acef5e3",
+              "date": "2026-05-02T00:31:59Z",
+              "title": "Refactor source pipeline and update processing UI",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/282e4feef6932658ced1a2956160d26e5acef5e3"
+            },
+            {
+              "sha": "c2d1b680867d4bedd39ad8b1897f0c91958751e4",
+              "date": "2026-03-20T03:32:38Z",
+              "title": "Fix halftone/JBIG2 polarity for image overlays",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/c2d1b680867d4bedd39ad8b1897f0c91958751e4"
+            },
+            {
+              "sha": "31ef0c11a1560b0d0dd2c4766c58bc3430c23d73",
+              "date": "2026-03-19T03:06:23Z",
+              "title": "Fix JBIG2 API integration and resolve compilation errors",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/31ef0c11a1560b0d0dd2c4766c58bc3430c23d73"
+            },
+            {
+              "sha": "23df9fda84dcd57ad6ddf15a081dc89aa0679a69",
+              "date": "2026-03-19T02:29:21Z",
+              "title": "Fix JBIG2 PDF symbol generation",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/23df9fda84dcd57ad6ddf15a081dc89aa0679a69"
+            },
+            {
+              "sha": "4977e244df7bc1f74924559d20bec225238e3f58",
+              "date": "2026-03-18T06:20:03Z",
+              "title": "sync jbig2enc-rust next-gen file copy/delete",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/4977e244df7bc1f74924559d20bec225238e3f58"
+            },
+            {
+              "sha": "42b7a841f5927912266f11c07bdb6c979e7a365d",
+              "date": "2026-03-11T04:54:48Z",
+              "title": "Stabilize tokio pipeline and sync DJVU/JBIG2 encoder code from 1.45",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/42b7a841f5927912266f11c07bdb6c979e7a365d"
+            },
+            {
+              "sha": "eefd8250378a747572d323473bb569526e89f8ba",
+              "date": "2026-03-06T17:28:03Z",
+              "title": "Harden pipeline concurrency and trim JBIG2 overhead",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/eefd8250378a747572d323473bb569526e89f8ba"
+            },
+            {
+              "sha": "adcfb2ee45fe5bbc14b684b33169ae055531ee07",
+              "date": "2026-02-02T20:52:58Z",
+              "title": "Add files via upload",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/adcfb2ee45fe5bbc14b684b33169ae055531ee07"
+            },
+            {
+              "sha": "3b743f3cd8a8762cafe77c78fb953a2b6b27a272",
+              "date": "2026-01-15T22:08:46Z",
+              "title": "Add Legencode, windows-rs-71, and ort source code folders",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/3b743f3cd8a8762cafe77c78fb953a2b6b27a272"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "3b743f3cd8a8762cafe77c78fb953a2b6b27a272",
+        "date": "2026-01-15T22:08:46Z",
+        "title": "Add Legencode, windows-rs-71, and ort source code folders",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/3b743f3cd8a8762cafe77c78fb953a2b6b27a272"
+      }
+    },
+    {
+      "path": "src/shared/bitmap.rs",
+      "archive_head_blob": "1de035f89e824bd5862e8cf9e999c8494f1cca90",
+      "chain": [
+        {
+          "path": "src/shared/bitmap.rs",
+          "commits": [
+            {
+              "sha": "e58280e691e58e7f40d5dda73b8a78a3dfc6f46c",
+              "date": "2026-07-18T05:18:57Z",
+              "title": "Phase 5: zero-copy decode_embedded_into via a pooled page/bitmap path",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/e58280e691e58e7f40d5dda73b8a78a3dfc6f46c"
+            },
+            {
+              "sha": "a9057be50b87f82493e25fc851770531950f8f36",
+              "date": "2026-07-18T03:14:38Z",
+              "title": "Phase 5f: decode_embedded_into zero-alloc renderer API",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/a9057be50b87f82493e25fc851770531950f8f36"
+            },
+            {
+              "sha": "ab739255187b10eb033ed607f271e9a6718d9c44",
+              "date": "2026-07-18T01:07:56Z",
+              "title": "Phase 5d: striped pages and unknown segment lengths",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/ab739255187b10eb033ed607f271e9a6718d9c44"
+            },
+            {
+              "sha": "efafdabf3a465ef37dffa95a89d7e1c8a360e3fa",
+              "date": "2026-07-17T11:13:33Z",
+              "title": "Decoder Phase 1: MQ decoder, parsers, generic regions, feature gating",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/efafdabf3a465ef37dffa95a89d7e1c8a360e3fa"
+            },
+            {
+              "sha": "144e5b76395112ea34828e2340bc31122a494724",
+              "date": "2026-07-17T10:35:31Z",
+              "title": "Make MonoBitmap clippy-clean under -D warnings (Phase 0 / Gap E)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/144e5b76395112ea34828e2340bc31122a494724"
+            },
+            {
+              "sha": "101b2cb075f5dc0fbfa17196bd716540285e01ab",
+              "date": "2026-07-17T10:29:45Z",
+              "title": "Add packed MonoBitmap in shared/bitmap.rs (Phase 0 / §7)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/101b2cb075f5dc0fbfa17196bd716540285e01ab"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "101b2cb075f5dc0fbfa17196bd716540285e01ab",
+        "date": "2026-07-17T10:29:45Z",
+        "title": "Add packed MonoBitmap in shared/bitmap.rs (Phase 0 / §7)",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/101b2cb075f5dc0fbfa17196bd716540285e01ab"
+      }
+    },
+    {
+      "path": "src/shared/error.rs",
+      "archive_head_blob": "1e958ba54c8bd9cae6a16d6d64bbdab78482f6d7",
+      "chain": [
+        {
+          "path": "src/shared/error.rs",
+          "commits": [
+            {
+              "sha": "054d673a62c9954ae67a740b3d253517916ebaa3",
+              "date": "2026-07-18T04:02:43Z",
+              "title": "Full decode-spec coverage: Huffman refagg dictionary + MMR skip",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/054d673a62c9954ae67a740b3d253517916ebaa3"
+            },
+            {
+              "sha": "033fbe718f993b5ec52a972cfcbf5bcee1d3a709",
+              "date": "2026-07-18T03:11:50Z",
+              "title": "Phase 5f: intermediate regions and refinement auxiliary buffers",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/033fbe718f993b5ec52a972cfcbf5bcee1d3a709"
+            },
+            {
+              "sha": "fe80915146e92aca5d9dae9ffcc5b7f6d9015461",
+              "date": "2026-07-18T01:57:59Z",
+              "title": "Phase 5f (part 1): random-access file organisation",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/fe80915146e92aca5d9dae9ffcc5b7f6d9015461"
+            },
+            {
+              "sha": "c33e51dc37f7f5e49b2306b7ce167d291124d72a",
+              "date": "2026-07-18T01:50:14Z",
+              "title": "Phase 5e (part 2): transposed text regions",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/c33e51dc37f7f5e49b2306b7ce167d291124d72a"
+            },
+            {
+              "sha": "ab739255187b10eb033ed607f271e9a6718d9c44",
+              "date": "2026-07-18T01:07:56Z",
+              "title": "Phase 5d: striped pages and unknown segment lengths",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/ab739255187b10eb033ed607f271e9a6718d9c44"
+            },
+            {
+              "sha": "ea4bd3d7aa8672db8daa6970a18e554239fc6729",
+              "date": "2026-07-18T00:56:28Z",
+              "title": "Phase 5c (part 2): Huffman symbol dictionaries and text regions",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/ea4bd3d7aa8672db8daa6970a18e554239fc6729"
+            },
+            {
+              "sha": "5a459e82a813e2f277ff2f327a744e63a0081aaa",
+              "date": "2026-07-18T00:30:36Z",
+              "title": "Phase 5a: generic templates 1-3 and TPGDON",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/5a459e82a813e2f277ff2f327a744e63a0081aaa"
+            },
+            {
+              "sha": "2a2d2cab0f03d41b6bef7c987bc6a4899f8d1bdc",
+              "date": "2026-07-17T12:12:50Z",
+              "title": "Decoder Phase 2: arithmetic integer, IAID, refinement primitives",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/2a2d2cab0f03d41b6bef7c987bc6a4899f8d1bdc"
+            },
+            {
+              "sha": "efafdabf3a465ef37dffa95a89d7e1c8a360e3fa",
+              "date": "2026-07-17T11:13:33Z",
+              "title": "Decoder Phase 1: MQ decoder, parsers, generic regions, feature gating",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/efafdabf3a465ef37dffa95a89d7e1c8a360e3fa"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "efafdabf3a465ef37dffa95a89d7e1c8a360e3fa",
+        "date": "2026-07-17T11:13:33Z",
+        "title": "Decoder Phase 1: MQ decoder, parsers, generic regions, feature gating",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/efafdabf3a465ef37dffa95a89d7e1c8a360e3fa"
+      }
+    },
+    {
+      "path": "src/shared/int_proc.rs",
+      "archive_head_blob": "9b6e3071e3ebb146812e88d5ac15f3b85807d59a",
+      "chain": [
+        {
+          "path": "src/shared/int_proc.rs",
+          "commits": [
+            {
+              "sha": "4013364875ca2d985910a426e4c18a516f4aae85",
+              "date": "2026-07-17T10:21:52Z",
+              "title": "Extract IntProc identifiers into shared/int_proc.rs (Phase 0 / §11)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/4013364875ca2d985910a426e4c18a516f4aae85"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "4013364875ca2d985910a426e4c18a516f4aae85",
+        "date": "2026-07-17T10:21:52Z",
+        "title": "Extract IntProc identifiers into shared/int_proc.rs (Phase 0 / §11)",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/4013364875ca2d985910a426e4c18a516f4aae85"
+      }
+    },
+    {
+      "path": "src/shared/limits.rs",
+      "archive_head_blob": "0fae98f8ea0e46bd314573b75fdb1cd6968ac0a4",
+      "chain": [
+        {
+          "path": "src/shared/limits.rs",
+          "commits": [
+            {
+              "sha": "bd02af04d65a7551df2840c5e45d4739d2ca87e0",
+              "date": "2026-07-17T10:24:35Z",
+              "title": "Add DecodeLimits to shared/limits.rs (Phase 0 / §12)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/bd02af04d65a7551df2840c5e45d4739d2ca87e0"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "bd02af04d65a7551df2840c5e45d4739d2ca87e0",
+        "date": "2026-07-17T10:24:35Z",
+        "title": "Add DecodeLimits to shared/limits.rs (Phase 0 / §12)",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/bd02af04d65a7551df2840c5e45d4739d2ca87e0"
+      }
+    },
+    {
+      "path": "src/shared/mod.rs",
+      "archive_head_blob": "671ac58a882febd35b4bf460019db1f14525ee1a",
+      "chain": [
+        {
+          "path": "src/shared/mod.rs",
+          "commits": [
+            {
+              "sha": "efafdabf3a465ef37dffa95a89d7e1c8a360e3fa",
+              "date": "2026-07-17T11:13:33Z",
+              "title": "Decoder Phase 1: MQ decoder, parsers, generic regions, feature gating",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/efafdabf3a465ef37dffa95a89d7e1c8a360e3fa"
+            },
+            {
+              "sha": "101b2cb075f5dc0fbfa17196bd716540285e01ab",
+              "date": "2026-07-17T10:29:45Z",
+              "title": "Add packed MonoBitmap in shared/bitmap.rs (Phase 0 / §7)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/101b2cb075f5dc0fbfa17196bd716540285e01ab"
+            },
+            {
+              "sha": "775eb5bdcceba9b2203d509019aa3ab683366092",
+              "date": "2026-07-17T10:26:06Z",
+              "title": "Add checked slice Reader in shared/reader.rs (Phase 0 / §8)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/775eb5bdcceba9b2203d509019aa3ab683366092"
+            },
+            {
+              "sha": "bd02af04d65a7551df2840c5e45d4739d2ca87e0",
+              "date": "2026-07-17T10:24:35Z",
+              "title": "Add DecodeLimits to shared/limits.rs (Phase 0 / §12)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/bd02af04d65a7551df2840c5e45d4739d2ca87e0"
+            },
+            {
+              "sha": "4013364875ca2d985910a426e4c18a516f4aae85",
+              "date": "2026-07-17T10:21:52Z",
+              "title": "Extract IntProc identifiers into shared/int_proc.rs (Phase 0 / §11)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/4013364875ca2d985910a426e4c18a516f4aae85"
+            },
+            {
+              "sha": "67d7fad70ff0871a6c7b4ebd50f4a90b86fe4103",
+              "date": "2026-07-17T10:20:06Z",
+              "title": "Extract MQ probability table into shared/mq_table.rs (Phase 0 / §10)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/67d7fad70ff0871a6c7b4ebd50f4a90b86fe4103"
+            },
+            {
+              "sha": "3eef1d695feeb7f012499111e6bcfe317effdf38",
+              "date": "2026-07-17T10:15:33Z",
+              "title": "Extract SegmentType into shared/segment.rs (Phase 0)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/3eef1d695feeb7f012499111e6bcfe317effdf38"
+            },
+            {
+              "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+              "date": "2026-07-17T09:48:26Z",
+              "title": "Restructure crate into encode/decode/shared halves",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "1e64d8b8c3e527203061f51cba5918917be10dd3",
+        "date": "2026-07-17T09:48:26Z",
+        "title": "Restructure crate into encode/decode/shared halves",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/1e64d8b8c3e527203061f51cba5918917be10dd3"
+      }
+    },
+    {
+      "path": "src/shared/mq_table.rs",
+      "archive_head_blob": "2bc0a4b21e536bcc60d9b0da1328f44bbdf37534",
+      "chain": [
+        {
+          "path": "src/shared/mq_table.rs",
+          "commits": [
+            {
+              "sha": "67d7fad70ff0871a6c7b4ebd50f4a90b86fe4103",
+              "date": "2026-07-17T10:20:06Z",
+              "title": "Extract MQ probability table into shared/mq_table.rs (Phase 0 / §10)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/67d7fad70ff0871a6c7b4ebd50f4a90b86fe4103"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "67d7fad70ff0871a6c7b4ebd50f4a90b86fe4103",
+        "date": "2026-07-17T10:20:06Z",
+        "title": "Extract MQ probability table into shared/mq_table.rs (Phase 0 / §10)",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/67d7fad70ff0871a6c7b4ebd50f4a90b86fe4103"
+      }
+    },
+    {
+      "path": "src/shared/reader.rs",
+      "archive_head_blob": "9701dbeadd4d57efb31cb971b400111cafb57c4f",
+      "chain": [
+        {
+          "path": "src/shared/reader.rs",
+          "commits": [
+            {
+              "sha": "efafdabf3a465ef37dffa95a89d7e1c8a360e3fa",
+              "date": "2026-07-17T11:13:33Z",
+              "title": "Decoder Phase 1: MQ decoder, parsers, generic regions, feature gating",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/efafdabf3a465ef37dffa95a89d7e1c8a360e3fa"
+            },
+            {
+              "sha": "775eb5bdcceba9b2203d509019aa3ab683366092",
+              "date": "2026-07-17T10:26:06Z",
+              "title": "Add checked slice Reader in shared/reader.rs (Phase 0 / §8)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/775eb5bdcceba9b2203d509019aa3ab683366092"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "775eb5bdcceba9b2203d509019aa3ab683366092",
+        "date": "2026-07-17T10:26:06Z",
+        "title": "Add checked slice Reader in shared/reader.rs (Phase 0 / §8)",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/775eb5bdcceba9b2203d509019aa3ab683366092"
+      }
+    },
+    {
+      "path": "src/shared/segment.rs",
+      "archive_head_blob": "49d0ce0855f729fc5f6f4983e7ec0b056750401f",
+      "chain": [
+        {
+          "path": "src/shared/segment.rs",
+          "commits": [
+            {
+              "sha": "3eef1d695feeb7f012499111e6bcfe317effdf38",
+              "date": "2026-07-17T10:15:33Z",
+              "title": "Extract SegmentType into shared/segment.rs (Phase 0)",
+              "url": "https://github.com/liminalism/jbig2enc-rust/commit/3eef1d695feeb7f012499111e6bcfe317effdf38"
+            }
+          ]
+        }
+      ],
+      "earliest_path_commit": {
+        "sha": "3eef1d695feeb7f012499111e6bcfe317effdf38",
+        "date": "2026-07-17T10:15:33Z",
+        "title": "Extract SegmentType into shared/segment.rs (Phase 0)",
+        "url": "https://github.com/liminalism/jbig2enc-rust/commit/3eef1d695feeb7f012499111e6bcfe317effdf38"
+      }
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+mode,pages,auto_thresh,encoded_bytes,global_bytes,local_bytes,residual_bytes,encode_seconds,differing_pixels,cold_decode_seconds,warm_decode_seconds,decoded_global_bitmap_bytes,comparator_calls,exact_hits,refined_hits,jbig2dec_differing_pixels,worker_peak_rss_kib
+unify_shipping,350,true,56119,152,0,0,0.280440817,26983,0.027524882,0.015426726,872,138944,51898,0,26983,76728
+unify_safe,350,true,56719,152,0,0,0.369991249,26487,0.025444504,0.014091096,872,138944,51898,0,26487,76372
+exact,350,false,82460,1240,0,0,0.094627557,0,0.112936538,0.012359539,17268,0,79278,0,0,77444
+exact_optimized,350,false,82460,1240,0,0,1.765440470,0,0.113278753,0.012399481,17268,0,79278,0,0,78292

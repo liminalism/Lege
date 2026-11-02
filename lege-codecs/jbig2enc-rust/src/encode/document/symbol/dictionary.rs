@@ -633,7 +633,7 @@ pub fn encode_symbol_dict_with_order(
     coder.encode_integer(IntProc::Iaex, num_export_syms)?;
 
     // 5. flush the coder ONCE
-    coder.flush(true);
+    coder.flush_with_termination(true, _config.canonical_arithmetic_termination);
 
     // 6. Append the single, complete arithmetic payload
     payload.extend(coder.as_bytes());

@@ -1,0 +1,70 @@
+   Compiling jbig2enc-rust v0.6.0 (/home/dk/rust-projects/Lege-ecosystem/lege-codecs/jbig2enc-rust)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.32s
+     Running tests/decode_roundtrip.rs (lege-codecs/jbig2enc-rust/target/debug/deps/decode_roundtrip-23149636a7a1927d)
+
+running 15 tests
+test decoded_globals_is_send_sync ... ok
+test common::tests::pbm_packing_row_major_msb_first ... ok
+test embedded_without_globals_is_typed_error ... ok
+test dictionary_export_count_mismatch_is_typed_error ... ok
+test symbol_truncations_never_panic ... ok
+test property_odd_widths_jbig2dec_agreement ... ok
+test fixtures_generic_standalone ... ok
+test fixtures_lossless_standalone ... ok
+test fixtures_lossless_embedded ... ok
+test multipage_shared_globals_vs_jbig2dec ... ok
+test multipage_deterministic_across_thread_counts ... ok
+test fixtures_generic_embedded ... ok
+test property_odd_widths_native_roundtrip ... ok
+test symbol_modes_embedded_globals_vs_jbig2dec ... ok
+test symbol_modes_standalone_vs_jbig2dec ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+     Running tests/encode_byte_identical.rs (lege-codecs/jbig2enc-rust/target/debug/deps/encode_byte_identical-ef7094397da281d0)
+
+running 4 tests
+test encoder_output_is_byte_identical ... ignored, external legacy PBM rights unresolved; retain explicit unchanged-manifest regression gate
+test common::tests::pbm_packing_row_major_msb_first ... ok
+test sha_selftest::sha256_known_vectors ... ok
+test original_fixture_encoder_output_is_byte_identical ... ok
+
+test result: ok. 3 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.35s
+
+     Running tests/encoder.rs (lege-codecs/jbig2enc-rust/target/debug/deps/encoder-1bdeba0e5cd40799)
+
+running 17 tests
+test common::tests::pbm_packing_row_major_msb_first ... ok
+test pbm_packing_row_major_msb_first ... ok
+test empty_symbol_list_returns_error ... ok
+test generic_region_roundtrip_with_jbig2dec ... ok
+test test_arithmetic_coder_base_table ... ok
+test test_encode_symbol_dict_empty_fails ... ok
+test single_symbol_dict_outputs_nonempty ... ok
+test test_encode_symbol_dict_single ... ok
+test duplicate_symbols_are_deduplicated ... ok
+test test_encode_test_image_pbm ... ok
+test test_glyph_creation ... ok
+test test_arithmetic_coder_annex_h2 ... ok
+test test_encode_page_with_symbol_dictionary ... ok
+test test_symbol_sorting ... ok
+test test_generic_region_default_gbat_fallback ... ok
+test test_encode_test_image1_pbm_full_page ... ok
+test full_page_with_symbol_dictionary_roundtrips ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/mode_comparison.rs (lege-codecs/jbig2enc-rust/target/debug/deps/mode_comparison-15ff363ab9ad65d7)
+
+running 8 tests
+test common::tests::pbm_packing_row_major_msb_first ... ok
+test test_specified_image_only ... ok
+test test_lossless_only ... ok
+test test_small_patterns ... ok
+test test_medium_patterns ... ok
+test test_symbol_only ... ok
+test test_comprehensive_comparison ... ok
+test test_real_images ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+

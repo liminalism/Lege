@@ -1,0 +1,9 @@
+   Compiling jbig2enc-rust v0.6.0 (/home/dk/rust-projects/Lege-ecosystem/lege-codecs/jbig2enc-rust)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.63s
+     Running tests/encode_byte_identical.rs (lege-codecs/jbig2enc-rust/target/debug/deps/encode_byte_identical-ef7094397da281d0)
+
+running 1 test
+test encoder_output_is_byte_identical ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 2.32s
+

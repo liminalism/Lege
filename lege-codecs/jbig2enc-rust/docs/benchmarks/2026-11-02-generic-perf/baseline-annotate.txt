@@ -1,0 +1,333 @@
+ Percent |	Source code & Disassembly of baseline-worker for cpu_core/cycles/u (4164 samples, percent: local period)
+------------------------------------------------------------------------------------------------------------------------
+         : 0     0xd5030 <<jbig2enc_rust::encode::arith::Jbig2ArithCoder>::encode_generic_region_inner>:
+    0.00 :   d5030:        pushq   %rbp
+    0.00 :   d5031:        pushq   %r15
+    0.00 :   d5033:        pushq   %r14
+    0.00 :   d5035:        pushq   %r13
+    0.00 :   d5037:        pushq   %r12
+    0.00 :   d5039:        pushq   %rbx
+    0.00 :   d503a:        subq    $0x108, %rsp
+    0.00 :   d5041:        movq    %r8, 0x30(%rsp)
+    0.00 :   d5046:        movq    %rcx, 0x10(%rsp)
+    0.00 :   d504b:        movq    %rdx, 0x8(%rsp)
+    0.00 :   d5050:        movq    %rsi, %rbx
+    0.00 :   d5053:        movq    %rdi, %r10
+    0.00 :   d5056:        movb    %r9b, 0x6(%rsp)
+    0.00 :   d505b:        testb   %r9b, %r9b
+    0.00 :   d505e:        je      0xd51f2 <<jbig2enc_rust::encode::arith::Jbig2ArithCoder>::encode_generic_region_inner+0x1c2>
+    0.00 :   d5064:        movq    0xcbaf5(%rip), %rax  # 0x1a0b60 <_RNvCscnlUOcQL42x_3log20MAX_LOG_LEVEL_FILTER$got>
+    0.00 :   d506b:        movq    (%rax), %rax
+    0.00 :   d506e:        cmpb    $0x4, %r9b
+    0.00 :   d5072:        jae     0xd5112 <<jbig2enc_rust::encode::arith::Jbig2ArithCoder>::encode_generic_region_inner+0xe2>
+    0.00 :   d5078:        cmpq    $0x1, %rax
+    0.00 :   d507c:        jbe     0xd51f2 <<jbig2enc_rust::encode::arith::Jbig2ArithCoder>::encode_generic_region_inner+0x1c2>
+    0.00 :   d5082:        leaq    0x6(%rsp), %rax
+    0.00 :   d5087:        movq    %rax, 0x40(%rsp)
+    0.00 :   d508c:        movq    0xcb55d(%rip), %rax  # 0x1a05f0 <_RNvXNtNtNtCs4NRVxsYgnAr_4core3fmt3num3imphNtB6_7Display3fmt$got>
+    0.00 :   d5093:        movq    %rax, 0x48(%rsp)
+    0.00 :   d5098:        movq    $0x0, 0x50(%rsp)
+    0.00 :   d50a1:        leaq    -0x8a566(%rip), %rax  # 0x4ab42
+    0.00 :   d50a8:        movq    %rax, 0x58(%rsp)
+    0.00 :   d50ad:        movq    $0x1c, 0x60(%rsp)
+    0.00 :   d50b6:        movq    $0x0, 0x68(%rsp)
+    0.00 :   d50bf:        leaq    -0x77209(%rip), %rcx  # 0x5debd
+    0.00 :   d50c6:        movq    %rcx, 0x70(%rsp)
+    0.00 :   d50cb:        movq    $0x13, 0x78(%rsp)
+    0.00 :   d50d4:        movq    $0x2, 0x80(%rsp)
+    0.00 :   d50e0:        movq    %rax, 0x88(%rsp)
+    0.00 :   d50e8:        movq    $0x1c, 0x90(%rsp)
+    0.00 :   d50f4:        movabsq $0x27600000001, %rax
+    0.00 :   d50fe:        movq    %rax, 0x98(%rsp)
+    0.00 :   d5106:        leaq    -0x7736e(%rip), %rax  # 0x5dd9f
+    0.00 :   d510d:        jmp     0xd51a6 <<jbig2enc_rust::encode::arith::Jbig2ArithCoder>::encode_generic_region_inner+0x176>
+    0.00 :   d5112:        testq   %rax, %rax
+    0.00 :   d5115:        je      0xd51f2 <<jbig2enc_rust::encode::arith::Jbig2ArithCoder>::encode_generic_region_inner+0x1c2>
+    0.00 :   d511b:        leaq    0x6(%rsp), %rax
+    0.00 :   d5120:        movq    %rax, 0x40(%rsp)
+    0.00 :   d5125:        movq    0xcb4c4(%rip), %rax  # 0x1a05f0 <_RNvXNtNtNtCs4NRVxsYgnAr_4core3fmt3num3imphNtB6_7Display3fmt$got>
+    0.00 :   d512c:        movq    %rax, 0x48(%rsp)
+    0.00 :   d5131:        movq    $0x0, 0x50(%rsp)
+    0.00 :   d513a:        leaq    -0x8a5ff(%rip), %rax  # 0x4ab42
+    0.00 :   d5141:        movq    %rax, 0x58(%rsp)
+    0.00 :   d5146:        movq    $0x1c, 0x60(%rsp)
+    0.00 :   d514f:        movq    $0x0, 0x68(%rsp)
+    0.00 :   d5158:        leaq    -0x772a2(%rip), %rcx  # 0x5debd
+    0.00 :   d515f:        movq    %rcx, 0x70(%rsp)
+    0.00 :   d5164:        movq    $0x13, 0x78(%rsp)
+    0.00 :   d516d:        movq    $0x1, 0x80(%rsp)
+    0.00 :   d5179:        movq    %rax, 0x88(%rsp)
+    0.00 :   d5181:        movq    $0x1c, 0x90(%rsp)
+    0.00 :   d518d:        movabsq $0x27700000001, %rax
+    0.00 :   d5197:        movq    %rax, 0x98(%rsp)
+    0.00 :   d519f:        leaq    -0x7668d(%rip), %rax  # 0x5eb19
+    0.00 :   d51a6:        movq    %rax, 0xa0(%rsp)
+    0.00 :   d51ae:        leaq    0x40(%rsp), %rax
+    0.00 :   d51b3:        movq    %rax, 0xa8(%rsp)
+    0.00 :   d51bb:        movq    0xce98e(%rip), %rax  # 0x1a3b50 <log::STATE>
+    0.00 :   d51c2:        cmpq    $0x2, %rax
+    0.00 :   d51c6:        leaq    0xbfb7b(%rip), %rax  # 0x194d48 <anon.0570c047ab1eedbff6bb726126cbf1c9.11.llvm.4417494089428379589>
+    0.00 :   d51cd:        cmoveq  0xcdeeb(%rip), %rax  # 0x1a30c0 <log::LOGGER.1>
+    0.00 :   d51d5:        leaq    -0x8a66b(%rip), %rdi  # 0x4ab71 <log::logger::NOP>
+    0.00 :   d51dc:        cmoveq  0xcded4(%rip), %rdi  # 0x1a30b8 <log::LOGGER.0>
+    0.00 :   d51e4:        leaq    0x50(%rsp), %rsi
+    0.00 :   d51e9:        movq    %r10, %r14
+    0.00 :   d51ec:        callq   *0x20(%rax)
+    0.00 :   d51ef:        movq    %r14, %r10
+    0.00 :   d51f2:        movq    0x10(%rsp), %rax
+    0.00 :   d51f7:        leaq    0x1f(%rax), %r11
+    0.00 :   d51fb:        shrq    $0x5, %r11
+    0.00 :   d51ff:        movq    $0x0, 0x18(%rsp)
+    0.00 :   d5208:        cmpq    $0x10000, 0x40(%r10)
+    0.00 :   d5210:        jne     0xd521b <<jbig2enc_rust::encode::arith::Jbig2ArithCoder>::encode_generic_region_inner+0x1eb>
+    0.00 :   d5212:        movq    0x38(%r10), %rax
+    0.00 :   d5216:        movq    %rax, 0x18(%rsp)
+    0.00 :   d521b:        jne     0xd5620 <<jbig2enc_rust::encode::arith::Jbig2ArithCoder>::encode_generic_region_inner+0x5f0>
+    0.00 :   d5221:        cmpq    $0x0, 0x30(%rsp)
+    0.00 :   d5227:        je      0xd55b5 <<jbig2enc_rust::encode::arith::Jbig2ArithCoder>::encode_generic_region_inner+0x585>
+    0.00 :   d522d:        movq    0x10(%rsp), %rax
+    0.00 :   d5232:        andl    $0x1f, %eax
+    0.00 :   d5235:        movl    %eax, %ecx
+    0.00 :   d5237:        negb    %cl
+    0.00 :   d5239:        movl    $0xffffffff, %edx
+    0.00 :   d523e:        shll    %cl, %edx
+    0.00 :   d5240:        xorl    %ebp, %ebp
+    0.00 :   d5242:        cmpq    $0x1, %rax
+    0.00 :   d5246:        sbbl    %ebp, %ebp
+    0.00 :   d5248:        orl     %edx, %ebp
+    0.00 :   d524a:        cmpq    $0x1, %r11
+    0.00 :   d524e:        movl    $0xe0000000, %eax
+    0.00 :   d5253:        cmovel  %ebp, %eax
+    0.00 :   d5256:        movl    %eax, 0x24(%rsp)
+    0.00 :   d525a:        movl    $0xf0000000, %eax
+    0.00 :   d525f:        cmovel  %ebp, %eax
+    0.00 :   d5262:        movl    %eax, 0x28(%rsp)
+    0.00 :   d5266:        testq   %r11, %r11
+    0.00 :   d5269:        je      0xd55b5 <<jbig2enc_rust::encode::arith::Jbig2ArithCoder>::encode_generic_region_inner+0x585>
+    0.00 :   d526f:        xorl    %r14d, %r14d
+    0.00 :   d5272:        movq    %rbx, 0xb0(%rsp)
+    0.00 :   d527a:        movq    %r11, 0xc8(%rsp)
+    0.00 :   d5282:        movl    %ebp, 0x2c(%rsp)
+    0.00 :   d5286:        movq    %r10, 0x100(%rsp)
+    0.00 :   d528e:        jmp     0xd52ae <<jbig2enc_rust::encode::arith::Jbig2ArithCoder>::encode_generic_region_inner+0x27e>
+    0.00 :   d5290:        movq    0xb8(%rsp), %rax
+    0.00 :   d5298:        movq    %rax, %r14
+    0.00 :   d529b:        cmpq    0x30(%rsp), %rax
+    0.00 :   d52a0:        movq    0xb0(%rsp), %rbx
+    0.00 :   d52a8:        je      0xd55b5 <<jbig2enc_rust::encode::arith::Jbig2ArithCoder>::encode_generic_region_inner+0x585>
+    0.00 :   d52ae:        leaq    0x1(%r14), %rcx
+    0.00 :   d52b2:        movq    %r14, %rdx
+    0.00 :   d52b5:        imulq   %r11, %rdx
+    0.00 :   d52b9:        movq    %rcx, %rsi
+    0.00 :   d52bc:        imulq   %r11, %rsi
+    0.00 :   d52c0:        cmpq    %rdx, %rsi
+    0.00 :   d52c3:        jb      0xd55c9 <<jbig2enc_rust::encode::arith::Jbig2ArithCoder>::encode_generic_region_inner+0x599>
+    0.00 :   d52c9:        cmpq    0x8(%rsp), %rsi
+    0.00 :   d52ce:        ja      0xd55c9 <<jbig2enc_rust::encode::arith::Jbig2ArithCoder>::encode_generic_region_inner+0x599>
+    0.00 :   d52d4:        testq   %r14, %r14
+    0.00 :   d52d7:        movq    %rcx, 0xb8(%rsp)
+    0.00 :   d52df:        je      0xd5330 <<jbig2enc_rust::encode::arith::Jbig2ArithCoder>::encode_generic_region_inner+0x300>
+    0.00 :   d52e1:        leaq    -0x1(%r14), %rax
+    0.02 :   d52e5:        imulq   %r11, %rax
+    0.00 :   d52e9:        cmpq    %rax, %rdx
+    0.00 :   d52ec:        jb      0xd55de <<jbig2enc_rust::encode::arith::Jbig2ArithCoder>::encode_generic_region_inner+0x5ae>
+    0.00 :   d52f2:        cmpq    $0x1, %r14
+    0.00 :   d52f6:        setne   %sil
+    0.00 :   d52fa:        movq    %rsi, 0x38(%rsp)
+    0.00 :   d52ff:        je      0xd5350 <<jbig2enc_rust::encode::arith::Jbig2ArithCoder>::encode_generic_region_inner+0x320>
+    0.00 :   d5301:        leaq    -0x2(%r14), %rdi
+    0.00 :   d5305:        imulq   %r11, %rdi
+    0.07 :   d5309:        cmpq    %rdi, %rax
+    0.00 :   d530c:        jb      0xd560b <<jbig2enc_rust::encode::arith::Jbig2ArithCoder>::encode_generic_region_inner+0x5db>
+    0.00 :   d5312:        leaq    (%rbx,%rdi,4), %r15
+    0.00 :   d5316:        movl    (%rbx,%rdi,4), %ecx
+    0.02 :   d5319:        andl    0x24(%rsp), %ecx
+    0.00 :   d531d:        shrl    $0x12, %ecx
+    0.00 :   d5320:        andl    $0x3800, %ecx
+    0.00 :   d5326:        jmp     0xd5355 <<jbig2enc_rust::encode::arith::Jbig2ArithCoder>::encode_generic_region_inner+0x325>
+    0.00 :   d5328:        nopl    (%rax,%rax)
+    0.00 :   d5330:        xorl    %r13d, %r13d
+    0.00 :   d5333:        xorl    %r15d, %r15d
+    0.00 :   d5336:        movq    $0x0, 0x38(%rsp)
+    0.00 :   d533f:        xorl    %eax, %eax
+    0.00 :   d5341:        jmp     0xd536c <<jbig2enc_rust::encode::arith::Jbig2ArithCoder>::encode_generic_region_inner+0x33c>
+    0.00 :   d5343:        nopw    %cs:(%rax,%rax)
+    0.00 :   d5350:        xorl    %ecx, %ecx
+    0.00 :   d5352:        xorl    %r15d, %r15d
+    0.00 :   d5355:        leaq    (%rbx,%rax,4), %r13
+    0.00 :   d5359:        movl    (%r13), %esi
+    0.00 :   d535d:        andl    0x28(%rsp), %esi
+    0.00 :   d5361:        shrl    $0x18, %esi
+    0.00 :   d5364:        andl    $-0x10, %esi
+    0.00 :   d5367:        movzwl  %cx, %eax
+    0.00 :   d536a:        orl     %esi, %eax
+    0.00 :   d536c:        leaq    (%rbx,%rdx,4), %rcx
+    0.00 :   d5370:        movq    %rcx, 0xc0(%rsp)
+    0.00 :   d5378:        movq    0x10(%rsp), %rdx
+    0.00 :   d537d:        xorl    %ecx, %ecx
+    0.00 :   d537f:        movq    0x18(%rsp), %rbx
+    0.00 :   d5384:        movq    %r14, 0xe0(%rsp)
+    0.00 :   d538c:        movq    %r15, 0xd8(%rsp)
+    0.00 :   d5394:        movq    %r13, 0xd0(%rsp)
+    0.00 :   d539c:        jmp     0xd53e4 <<jbig2enc_rust::encode::arith::Jbig2ArithCoder>::encode_generic_region_inner+0x3b4>
+    0.00 :   d539e:        nop
+    0.02 :   d53a0:        movq    0xf8(%rsp), %rdx
+    0.53 :   d53a8:        addq    $-0x20, %rdx
+    0.00 :   d53ac:        movq    0xf0(%rsp), %rsi
+    0.00 :   d53b4:        movq    %rsi, %rcx
+    0.00 :   d53b7:        movq    0xc8(%rsp), %r11
+    0.02 :   d53bf:        cmpq    %r11, %rsi
+    0.00 :   d53c2:        movl    0x2c(%rsp), %ebp
+    0.05 :   d53c6:        movq    0xe0(%rsp), %r14
+    0.00 :   d53ce:        movq    0xd8(%rsp), %r15
+    0.31 :   d53d6:        movq    0xd0(%rsp), %r13
+    0.00 :   d53de:        je      0xd5290 <<jbig2enc_rust::encode::arith::Jbig2ArithCoder>::encode_generic_region_inner+0x260>
+    0.26 :   d53e4:        cmpq    $0x1, %rdx
+    0.02 :   d53e8:        movq    %rdx, 0xf8(%rsp)
+    0.02 :   d53f0:        movq    %rdx, %rsi
+    0.00 :   d53f3:        adcq    $0x0, %rsi
+    0.05 :   d53f7:        cmpq    $0x20, %rsi
+    0.02 :   d53fb:        movl    $0x20, %edx
+    0.02 :   d5400:        cmovaeq %rdx, %rsi
+    0.12 :   d5404:        movq    %rsi, 0xe8(%rsp)
+    0.24 :   d540c:        leaq    0x1(%rcx), %rdi
+    0.00 :   d5410:        cmpb    $0x0, 0x38(%rsp)
+    0.00 :   d5415:        je      0xd5440 <<jbig2enc_rust::encode::arith::Jbig2ArithCoder>::encode_generic_region_inner+0x410>
+    0.00 :   d5417:        cmpq    %r11, %rdi
+    0.00 :   d541a:        movl    $0x1fffffff, %edx
+    0.00 :   d541f:        cmovel  %ebp, %edx
+    0.00 :   d5422:        andl    (%r15,%rcx,4), %edx
+    0.02 :   d5426:        xorl    %r8d, %r8d
+    0.17 :   d5429:        cmpq    %r11, %rdi
+    0.00 :   d542c:        sete    %r9b
+    0.00 :   d5430:        jae     0xd544d <<jbig2enc_rust::encode::arith::Jbig2ArithCoder>::encode_generic_region_inner+0x41d>
+    0.00 :   d5432:        movl    (%r15,%rdi,4), %esi
+    0.00 :   d5436:        movb    $0x1, %r8b
+    0.02 :   d5439:        xorl    %r9d, %r9d
+    0.00 :   d543c:        jmp     0xd544f <<jbig2enc_rust::encode::arith::Jbig2ArithCoder>::encode_generic_region_inner+0x41f>
+    0.00 :   d543e:        nop
+    0.00 :   d5440:        cmpq    %r11, %rdi
+    0.00 :   d5443:        sete    %r9b
+    0.00 :   d5447:        setb    %r8b
+    0.00 :   d544b:        xorl    %edx, %edx
+    0.00 :   d544d:        xorl    %esi, %esi
+    0.02 :   d544f:        movq    %rdi, 0xf0(%rsp)
+    0.34 :   d5457:        leaq    0x2(%rcx), %rdi
+    0.02 :   d545b:        cmpq    %r11, %rdi
+    0.00 :   d545e:        movl    $0xffffffff, %edi
+    0.00 :   d5463:        cmovel  %ebp, %edi
+    0.05 :   d5466:        testq   %r14, %r14
+    0.00 :   d5469:        je      0xd54b0 <<jbig2enc_rust::encode::arith::Jbig2ArithCoder>::encode_generic_region_inner+0x480>
+    0.00 :   d546b:        testb   %r9b, %r9b
+    0.02 :   d546e:        movl    $0xfffffff, %r12d
+    0.02 :   d5474:        cmovnel %ebp, %r12d
+    0.34 :   d5478:        andl    (%r13,%rcx,4), %r12d
+    0.02 :   d547d:        testb   %r8b, %r8b
+    0.02 :   d5480:        je      0xd54b3 <<jbig2enc_rust::encode::arith::Jbig2ArithCoder>::encode_generic_region_inner+0x483>
+    0.00 :   d5482:        leaq    0x1(%rcx), %r8
+    0.05 :   d5486:        movl    (%r13,%r8,4), %r8d
+    0.07 :   d548b:        andl    %edi, %r8d
+    0.00 :   d548e:        shlq    $0x4, %r8
+    0.07 :   d5492:        movq    %rcx, %r9
+    0.22 :   d5495:        shlq    $0x5, %r9
+    0.05 :   d5499:        cmpq    %r9, 0x10(%rsp)
+    0.00 :   d549e:        je      0xd53a0 <<jbig2enc_rust::encode::arith::Jbig2ArithCoder>::encode_generic_region_inner+0x370>
+    0.00 :   d54a4:        jmp     0xd54c8 <<jbig2enc_rust::encode::arith::Jbig2ArithCoder>::encode_generic_region_inner+0x498>
+    0.00 :   d54a6:        nopw    %cs:(%rax,%rax)
+    0.00 :   d54b0:        xorl    %r12d, %r12d
+    0.00 :   d54b3:        xorl    %r8d, %r8d
+    0.00 :   d54b6:        movq    %rcx, %r9
+    0.00 :   d54b9:        shlq    $0x5, %r9
+    0.00 :   d54bd:        cmpq    %r9, 0x10(%rsp)
+    0.00 :   d54c2:        je      0xd53a0 <<jbig2enc_rust::encode::arith::Jbig2ArithCoder>::encode_generic_region_inner+0x370>
+    0.00 :   d54c8:        movq    0xc0(%rsp), %r9
+    0.02 :   d54d0:        movl    (%r9,%rcx,4), %ebp
+    0.36 :   d54d4:        andl    %edi, %esi
+    0.00 :   d54d6:        shlq    $0x23, %rdx
+    0.00 :   d54da:        leaq    (%rdx,%rsi,8), %r14
+    0.24 :   d54de:        shlq    $0x24, %r12
+    0.00 :   d54e2:        orq     %r8, %r12
+    0.00 :   d54e5:        movq    0xe8(%rsp), %r8
+    0.00 :   d54ed:        jmp     0xd5556 <<jbig2enc_rust::encode::arith::Jbig2ArithCoder>::encode_generic_region_inner+0x526>
+    0.00 :   d54ef:        nop
+    1.56 :   d54f0:        shll    $0x10, %esi
+    4.18 :   d54f3:        orl     %ecx, %esi
+    0.12 :   d54f5:        movq    %r10, %rdi
+    0.00 :   d54f8:        movq    %rax, %rdx
+    0.00 :   d54fb:        movl    %r15d, %ecx
+    0.00 :   d54fe:        movq    %r8, %rbx
+    0.00 :   d5501:        callq   *0xcb649(%rip)  # 0x1a0b50 <_RNvMs_NtNtCs6rAeeEL17sX_13jbig2enc_rust6encode5arithNtB4_14ArithRegisters23encode_bit_renormalized$got>
+    0.22 :   d5507:        movq    %rbx, %r8
+    0.00 :   d550a:        movq    0x100(%rsp), %r10
+    0.12 :   d5512:        movq    0x18(%rsp), %rbx
+    0.86 :   d5517:        movq    %rax, (%rbx,%r13,8)
+    3.99 :   d551b:        andl    $0xfbf7, %r13d
+    1.20 :   d5522:        movq    %r14, %rcx
+    0.34 :   d5525:        shrq    $0x34, %rcx
+    2.98 :   d5529:        andl    $0x800, %ecx
+    0.77 :   d552f:        movq    %r12, %rax
+    0.38 :   d5532:        shrq    $0x3b, %rax
+    3.08 :   d5536:        andl    $-0x10, %eax
+    0.53 :   d5539:        leal    (%rax,%r13,2), %edx
+    3.39 :   d553d:        movzwl  %r15w, %eax
+    1.47 :   d5541:        orl     %edx, %eax
+    0.58 :   d5543:        orl     %ecx, %eax
+    2.84 :   d5545:        addq    %r14, %r14
+    0.67 :   d5548:        addq    %r12, %r12
+    0.26 :   d554b:        addl    %ebp, %ebp
+    2.64 :   d554d:        decq    %r8
+    0.00 :   d5550:        je      0xd53a0 <<jbig2enc_rust::encode::arith::Jbig2ArithCoder>::encode_generic_region_inner+0x370>
+    0.50 :   d5556:        movzwl  %ax, %r13d
+    4.95 :   d555a:        movq    (%rbx,%r13,8), %rax
+    3.49 :   d555e:        cmpq    $0x5d, %rax
+    0.00 :   d5562:        ja      0xd55f6 <<jbig2enc_rust::encode::arith::Jbig2ArithCoder>::encode_generic_region_inner+0x5c6>
+    1.83 :   d5568:        movl    %ebp, %r15d
+    4.95 :   d556b:        shrl    $0x1f, %r15d
+    0.50 :   d556f:        testl   %ebp, %ebp
+    0.50 :   d5571:        sets    %dil
+    4.42 :   d5575:        leaq    -0x8abb2(%rip), %rdx  # 0x4a9ca
+    1.64 :   d557c:        movzwl  (%rdx,%rax,4), %ecx
+   12.55 :   d5580:        movzwl  0x2(%rdx,%rax,4), %esi
+    2.65 :   d5585:        movl    0x20(%r10), %edx
+    1.27 :   d5589:        subl    %ecx, %edx
+    7.77 :   d558b:        movzwl  %dx, %edx
+    1.75 :   d558e:        movl    %edx, 0x20(%r10)
+    5.46 :   d5592:        cmpq    $0x2f, %rax
+    1.51 :   d5596:        sbbb    $0x0, %dil
+    0.55 :   d559a:        je      0xd54f0 <<jbig2enc_rust::encode::arith::Jbig2ArithCoder>::encode_generic_region_inner+0x4c0>
+    2.76 :   d55a0:        cmpl    $0x7fff, %edx
+    0.00 :   d55a6:        jbe     0xd54f0 <<jbig2enc_rust::encode::arith::Jbig2ArithCoder>::encode_generic_region_inner+0x4c0>
+    0.98 :   d55ac:        addl    %ecx, 0x24(%r10)
+    3.76 :   d55b0:        jmp     0xd5517 <<jbig2enc_rust::encode::arith::Jbig2ArithCoder>::encode_generic_region_inner+0x4e7>
+    0.00 :   d55b5:        xorl    %eax, %eax
+    0.00 :   d55b7:        addq    $0x108, %rsp
+    0.00 :   d55be:        popq    %rbx
+    0.00 :   d55bf:        popq    %r12
+    0.00 :   d55c1:        popq    %r13
+    0.00 :   d55c3:        popq    %r14
+    0.00 :   d55c5:        popq    %r15
+    0.00 :   d55c7:        popq    %rbp
+    0.00 :   d55c8:        retq
+    0.00 :   d55c9:        leaq    0xbf748(%rip), %rcx  # 0x194d18
+    0.00 :   d55d0:        movq    %rdx, %rdi
+    0.00 :   d55d3:        movq    0x8(%rsp), %rdx
+    0.00 :   d55d8:        callq   *0xcae9a(%rip)  # 0x1a0478 <_RNvNtNtCs4NRVxsYgnAr_4core5slice5index16slice_index_fail$got>
+    0.00 :   d55de:        leaq    0xbf71b(%rip), %rcx  # 0x194d00
+    0.00 :   d55e5:        movq    %rax, %rdi
+    0.00 :   d55e8:        movq    %rdx, %rsi
+    0.00 :   d55eb:        movq    0x8(%rsp), %rdx
+    0.00 :   d55f0:        callq   *0xcae82(%rip)  # 0x1a0478 <_RNvNtNtCs4NRVxsYgnAr_4core5slice5index16slice_index_fail$got>
+    0.00 :   d55f6:        leaq    0xbf733(%rip), %rdx  # 0x194d30
+    0.00 :   d55fd:        movl    $0x5e, %esi
+    0.00 :   d5602:        movq    %rax, %rdi
+    0.00 :   d5605:        callq   *0xcae9d(%rip)  # 0x1a04a8 <_RNvNtCs4NRVxsYgnAr_4core9panicking18panic_bounds_check$got>
+    0.00 :   d560b:        leaq    0xbf6d6(%rip), %rcx  # 0x194ce8
+    0.00 :   d5612:        movq    %rax, %rsi
+    0.00 :   d5615:        movq    0x8(%rsp), %rdx
+    0.00 :   d561a:        callq   *0xcae58(%rip)  # 0x1a0478 <_RNvNtNtCs4NRVxsYgnAr_4core5slice5index16slice_index_fail$got>
+    0.00 :   d5620:        leaq    -0x8ac89(%rip), %rdi  # 0x4a99e
+    0.00 :   d5627:        leaq    0xbf682(%rip), %rcx  # 0x194cb0
+    0.00 :   d562e:        leaq    0xbf69b(%rip), %r8  # 0x194cd0
+    0.00 :   d5635:        leaq    0x7(%rsp), %rdx
+    0.00 :   d563a:        movl    $0x2b, %esi
+    0.00 :   d563f:        callq   *0xcaf1b(%rip)  # 0x1a0560 <_RNvNtCs4NRVxsYgnAr_4core6result13unwrap_failed$got>

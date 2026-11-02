@@ -1,0 +1,1471 @@
+{
+  "files": [
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "benches/decode.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "f2c001389095deaf2be14be627292a11d7f9b1e7e98dba30ff45f39e49d2fc49"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "build.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "838d412efbcbd961b7359b4e254387c47035db1453eb6b7a2455fc17e6ce70b2"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "398ecd6cf04c166871847edd638471cf913e135b 2026-08-02 Harden rendering codecs and processing integration",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "fuzz/fuzz_targets/embedded_document.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "266f029493dd880e1fd3f87ca50db50b5cdf4821aa7f9a220a3f1f9e3b1d76fb"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "398ecd6cf04c166871847edd638471cf913e135b 2026-08-02 Harden rendering codecs and processing integration",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "fuzz/fuzz_targets/generic_region.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "679b3aa25a0e96c2542b2d2557c41e7328770c61a98ec6368ae20f33990eefe5"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "fuzz/fuzz_targets/halftone_region.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "5fec5591e6a5aaa0deb46923c3718d3616f1494b771f9b6fea6a58fda6c73528"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "fuzz/fuzz_targets/huffman_table.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "21708676899a3bbe7933e6d6f4714fe44cb6f679dd13347d871dab6d216f125c"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "398ecd6cf04c166871847edd638471cf913e135b 2026-08-02 Harden rendering codecs and processing integration",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "fuzz/fuzz_targets/mmr_generic.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "7d2eed46f4aee4604a46f5bb3c1040d70941504f6ffb93dcf8dc11cc45a0eccd"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "398ecd6cf04c166871847edd638471cf913e135b 2026-08-02 Harden rendering codecs and processing integration",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "fuzz/fuzz_targets/parse_segment_header.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "1e7ba240a00c654a4789ecb14e601506f4f91d1fa99eea5e354a5ae69e319993"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "398ecd6cf04c166871847edd638471cf913e135b 2026-08-02 Harden rendering codecs and processing integration",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "fuzz/fuzz_targets/refinement_region.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "4f5e9d15e357fe87902221b5b7add429fbecc6f63aec31e7037b36b7499b5209"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "398ecd6cf04c166871847edd638471cf913e135b 2026-08-02 Harden rendering codecs and processing integration",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "fuzz/fuzz_targets/symbol_dictionary.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "b68b633ff1bee7b25a623587affe380f21f8a1bd4a3050985a3fc76d7bc5c906"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "398ecd6cf04c166871847edd638471cf913e135b 2026-08-02 Harden rendering codecs and processing integration",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "fuzz/fuzz_targets/text_region.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "b25aa9b38aad407938f84599604fdbcdd18f2cdc33ae356f97003aa58e47c7fe"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "src/bin/halftone_tester.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "8f1fa60f2dcee504020a2b9f14e1fd98b918632deb246cf369f25999121dc3a1"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "398ecd6cf04c166871847edd638471cf913e135b 2026-08-02 Harden rendering codecs and processing integration",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)",
+        "907ec3dc25dc172cff6a66e5a1047b4f57bcdbe1 2026-06-02 Migrate vision and GPU backends to wgpu DX12",
+        "7d051cf75ee89de5e6f0e8b429ff1ec0bdbf846e 2026-03-18 sync jbig2enc-rust next-gen file copy/delete",
+        "512b08ff81269d24e4f4d661574f614c91c6ed48 2026-03-10 Stabilize tokio pipeline and sync DJVU/JBIG2 encoder code from 1.45",
+        "c06252bcd6a965162116383e549a91f43414b9c1 2026-01-15 Add Legencode, windows-rs-71, and ort source code folders"
+      ],
+      "path": "src/bin/tester.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "acd6d0136f8d5eea01afa9337e6ad351601f92ffe7b80d86702092290f9d0007"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "src/decode/arith.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "a166acfbf350cef45c5919f1e8805e52a1505ab5d7255283448cc318433c86a7"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "398ecd6cf04c166871847edd638471cf913e135b 2026-08-02 Harden rendering codecs and processing integration",
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "src/decode/context.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "17738cce46d0646d6f2d13849859a41a29f4e7fd7997fb542e2274a1ec30aaab"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "src/decode/error.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "9477f372c8136d349e9552826423eb62fafce88fc557f5e1a2854753586990fd"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "4b35882873f7e2b334a747e43b19081b64201841 2026-08-25 refactor(codecs): remove the blanket suppressions and fix what they hid",
+        "398ecd6cf04c166871847edd638471cf913e135b 2026-08-02 Harden rendering codecs and processing integration",
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "src/decode/file.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "dff0d3c00bbe7de3a06df002de040efdf186fb925ffc0b39a844543c08ca56e7"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "0864be431b3761523cb102618108641fa17be653 2026-07-21 fix(jbig2/decode): correct template-0 TPGDON and deep custom-AT sampling",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "src/decode/generic.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "78e5e29d6fbf13fe8388dd5ec7bcc89f7bff7316ce502a4498d2d52a0cb0f3f1"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "4b35882873f7e2b334a747e43b19081b64201841 2026-08-25 refactor(codecs): remove the blanket suppressions and fix what they hid",
+        "398ecd6cf04c166871847edd638471cf913e135b 2026-08-02 Harden rendering codecs and processing integration",
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "src/decode/globals.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "3681915668828bd25478e301f9679465c1ef9eeeb86221a1e75c7920e56559b7"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "src/decode/halftone_region.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "be0a206e64bec6341295a76c9be15aeba4235e6c2a499e5e90227a7ca987dd3c"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "4b35882873f7e2b334a747e43b19081b64201841 2026-08-25 refactor(codecs): remove the blanket suppressions and fix what they hid",
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "src/decode/huffman.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "117951691266599980bfc952a00c8463e2b77a2c7ed4b20307eb5c67f937f73f"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "398ecd6cf04c166871847edd638471cf913e135b 2026-08-02 Harden rendering codecs and processing integration",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "src/decode/iaid.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "362cf6bd9ac3d463e1a9021dc1effb0bfa4d93be8d90869fbe3115a19132d7ea"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "src/decode/integer.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "5ffc4d42126a83db2df1300ad512db542cef3b28829f8d15ad70afa80d607735"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "4b35882873f7e2b334a747e43b19081b64201841 2026-08-25 refactor(codecs): remove the blanket suppressions and fix what they hid",
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "6544d72d4c5a8642709311e4c803b53b72fd0c8d 2026-07-23 codecs: fix four blank-page causes found in sweep 12",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "src/decode/mmr.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "31db24cc7c70ed1d8969feaf819fdf3f085687ad1ba2b7966fd54b24e16acbc9"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "src/decode/mod.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "18c29723c3012a49b473618bc9fc714b5151c48fc404315a9a817685950519af"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "4b35882873f7e2b334a747e43b19081b64201841 2026-08-25 refactor(codecs): remove the blanket suppressions and fix what they hid",
+        "398ecd6cf04c166871847edd638471cf913e135b 2026-08-02 Harden rendering codecs and processing integration",
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "src/decode/page.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "9abca4b7c7e4ffa0d91c6c8f07c9957f936f415c64a32bfc8826eac2afa98ae7"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "src/decode/pattern_dictionary.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "7ed293bc24d2c17de198ff72cca55225282fc086a756907f9c5d7536c6919c53"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "src/decode/refinement.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "bdbcddde46cc1a4ca4a08f2dfaf0ee52e8d5777458b8b0d643a0be6ee78c1822"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "398ecd6cf04c166871847edd638471cf913e135b 2026-08-02 Harden rendering codecs and processing integration",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "src/decode/segment.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "7bfe81f81bf5b30b3426571c434079e994b68bb755bd64313dfdf5c987e36648"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "398ecd6cf04c166871847edd638471cf913e135b 2026-08-02 Harden rendering codecs and processing integration",
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "src/decode/store.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "51e24a147a8f609b78edd28773f226176cd43f270acdd2358e312a8ecae73ea3"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "src/decode/symbol_dictionary.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "c8fe00f1e5f6cef21e7f82dec694d0a163bf8e686b0b9cd212fabaf12d1f2d4b"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "src/decode/text_region.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "a0b97eb22e7e9de0a9ee3b5e6b09c5cd6d10349fdd4b7bd5cefaebcb75c7e457"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "4b35882873f7e2b334a747e43b19081b64201841 2026-08-25 refactor(codecs): remove the blanket suppressions and fix what they hid",
+        "50ac50f7acfca0bbe539d55df96aa1f59479e917 2026-08-25 build(deps): replace generalized crates with specialized in-tree code; bump lege to 1.5.0",
+        "398ecd6cf04c166871847edd638471cf913e135b 2026-08-02 Harden rendering codecs and processing integration",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)",
+        "1fa0373047f1f75c41ac10560119951c57f45e9e 2026-06-09 Add raster reflow and refactor JBIG2 encoder",
+        "845d01b2b66db17cb8effe891272b0ec79dcc3c6 2026-06-03 Fix JBIG2 symbol substitution and refinement; consolidate symboldict feature",
+        "907ec3dc25dc172cff6a66e5a1047b4f57bcdbe1 2026-06-02 Migrate vision and GPU backends to wgpu DX12",
+        "9868e76b996c80baabb021dfb3bbe7d8147758fd 2026-05-02 Refactor source pipeline and update processing UI",
+        "5527343e982f83a4bdde1cef560f05ff3cf2ed69 2026-03-19 Fix JBIG2 API integration and resolve compilation errors",
+        "7d051cf75ee89de5e6f0e8b429ff1ec0bdbf846e 2026-03-18 sync jbig2enc-rust next-gen file copy/delete",
+        "512b08ff81269d24e4f4d661574f614c91c6ed48 2026-03-10 Stabilize tokio pipeline and sync DJVU/JBIG2 encoder code from 1.45",
+        "c06252bcd6a965162116383e549a91f43414b9c1 2026-01-15 Add Legencode, windows-rs-71, and ort source code folders"
+      ],
+      "path": "src/encode/api.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "5f13a3d38cdbcd74e701cfe4d0ad9d4f6f8e211dc59bbfc1cd0b3bd5582c9165"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [
+        "// Copyright 2006 Google Inc. All Rights Reserved.",
+        "//! A pure Rust port of the context-adaptive arithmetic coder from jbig2enc.",
+        "/// Derived from the canonical rows in [`crate::shared::mq_table`] so the"
+      ],
+      "history": [
+        "ab695ff71f4776afff97db082a2b16f0bc373d5e 2026-09-02 fix(jbig2enc-rust): keep the template check in release builds, gate the shipping profile",
+        "4b35882873f7e2b334a747e43b19081b64201841 2026-08-25 refactor(codecs): remove the blanket suppressions and fix what they hid",
+        "398ecd6cf04c166871847edd638471cf913e135b 2026-08-02 Harden rendering codecs and processing integration",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)",
+        "666984128e47869bbdf3430723917430124cd934 2026-06-06 Update CLI and processing support",
+        "a1a0b1e91f1bbfd8d467aeb15acc79ffd464402a 2026-06-06 Update CLI and processing support",
+        "845d01b2b66db17cb8effe891272b0ec79dcc3c6 2026-06-03 Fix JBIG2 symbol substitution and refinement; consolidate symboldict feature",
+        "907ec3dc25dc172cff6a66e5a1047b4f57bcdbe1 2026-06-02 Migrate vision and GPU backends to wgpu DX12",
+        "7d051cf75ee89de5e6f0e8b429ff1ec0bdbf846e 2026-03-18 sync jbig2enc-rust next-gen file copy/delete",
+        "512b08ff81269d24e4f4d661574f614c91c6ed48 2026-03-10 Stabilize tokio pipeline and sync DJVU/JBIG2 encoder code from 1.45",
+        "92c1620da418fed106cb5e87959c5fffbbc4a495 2026-03-07 Add WGPU resize backend and CLI polish",
+        "11edbb612c8e929c2fa36a7955f7e256cb24761e 2026-03-07 Harden pipeline concurrency and trim JBIG2 overhead",
+        "3eea199d8916a9a670aa554caeec22dc847766d8 2026-02-02 Add files via upload",
+        "c06252bcd6a965162116383e549a91f43414b9c1 2026-01-15 Add Legencode, windows-rs-71, and ort source code folders"
+      ],
+      "path": "src/encode/arith.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "309a10822274aa6f692b4a28ec87c8459cf785caf1775b97af37cc34d9373fa7"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [
+        "//! This is a new implementation, not a clean-room claim: the author had access"
+      ],
+      "history": [
+        "50ac50f7acfca0bbe539d55df96aa1f59479e917 2026-08-25 build(deps): replace generalized crates with specialized in-tree code; bump lege to 1.5.0",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)",
+        "845d01b2b66db17cb8effe891272b0ec79dcc3c6 2026-06-03 Fix JBIG2 symbol substitution and refinement; consolidate symboldict feature",
+        "907ec3dc25dc172cff6a66e5a1047b4f57bcdbe1 2026-06-02 Migrate vision and GPU backends to wgpu DX12",
+        "7d051cf75ee89de5e6f0e8b429ff1ec0bdbf846e 2026-03-18 sync jbig2enc-rust next-gen file copy/delete",
+        "512b08ff81269d24e4f4d661574f614c91c6ed48 2026-03-10 Stabilize tokio pipeline and sync DJVU/JBIG2 encoder code from 1.45",
+        "3eea199d8916a9a670aa554caeec22dc847766d8 2026-02-02 Add files via upload"
+      ],
+      "path": "src/encode/cc.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "3fc927b3db1137b8f31f422fb8bcced3ee76e25a4f5f29b02eb86c5ac6fa8fa5"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)",
+        "907ec3dc25dc172cff6a66e5a1047b4f57bcdbe1 2026-06-02 Migrate vision and GPU backends to wgpu DX12",
+        "7d051cf75ee89de5e6f0e8b429ff1ec0bdbf846e 2026-03-18 sync jbig2enc-rust next-gen file copy/delete"
+      ],
+      "path": "src/encode/classify.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "e3bfd4521ee454d7083a25c1142a47a475ac9daa2994d6e5ac8e6025d8abbcb5"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "4b35882873f7e2b334a747e43b19081b64201841 2026-08-25 refactor(codecs): remove the blanket suppressions and fix what they hid",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)",
+        "7a97f05570176e0b308a7671b91ce48d6459a240 2026-07-01 Update jbig2enc-rust to 0.5.3",
+        "907ec3dc25dc172cff6a66e5a1047b4f57bcdbe1 2026-06-02 Migrate vision and GPU backends to wgpu DX12",
+        "7d051cf75ee89de5e6f0e8b429ff1ec0bdbf846e 2026-03-18 sync jbig2enc-rust next-gen file copy/delete",
+        "11edbb612c8e929c2fa36a7955f7e256cb24761e 2026-03-07 Harden pipeline concurrency and trim JBIG2 overhead",
+        "c06252bcd6a965162116383e549a91f43414b9c1 2026-01-15 Add Legencode, windows-rs-71, and ort source code folders"
+      ],
+      "path": "src/encode/comparator.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "45a88f6da37a3cdc403d20da85291f54fec8852fee2c85f1923a6ef6f731c924"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)",
+        "907ec3dc25dc172cff6a66e5a1047b4f57bcdbe1 2026-06-02 Migrate vision and GPU backends to wgpu DX12",
+        "7d051cf75ee89de5e6f0e8b429ff1ec0bdbf846e 2026-03-18 sync jbig2enc-rust next-gen file copy/delete"
+      ],
+      "path": "src/encode/context.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "7d66ac3f054a385febe9f93a9cbdfdbe0cc24642123291f06fe82093ab5efd28"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)",
+        "907ec3dc25dc172cff6a66e5a1047b4f57bcdbe1 2026-06-02 Migrate vision and GPU backends to wgpu DX12",
+        "7d051cf75ee89de5e6f0e8b429ff1ec0bdbf846e 2026-03-18 sync jbig2enc-rust next-gen file copy/delete"
+      ],
+      "path": "src/encode/cost.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "4f84eedb593db11250d0d771e79180b2c6549d9229909ba4b941d088e314fbac"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [],
+      "path": "src/encode/document/grouped.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "7537871ac58ae5146a68448f81332c7709ebb8a0da4e306e24b4cfaa9a0627e9"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [],
+      "path": "src/encode/document/resources.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "0fb28af43cd97761c5f949d20df7af0b473a029f836670ad61a25de5149e6fc5"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "4b35882873f7e2b334a747e43b19081b64201841 2026-08-25 refactor(codecs): remove the blanket suppressions and fix what they hid",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)",
+        "1fa0373047f1f75c41ac10560119951c57f45e9e 2026-06-09 Add raster reflow and refactor JBIG2 encoder"
+      ],
+      "path": "src/encode/document/symbol/clustering.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "f44fc1897c5866d71cddffe4c51a033ee9cf498836f55b4455531067aa727cce"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "ab695ff71f4776afff97db082a2b16f0bc373d5e 2026-09-02 fix(jbig2enc-rust): keep the template check in release builds, gate the shipping profile",
+        "cb920e51431ff4c761e2c06463379877adfacad0 2026-08-25 style: cargo fmt",
+        "4b35882873f7e2b334a747e43b19081b64201841 2026-08-25 refactor(codecs): remove the blanket suppressions and fix what they hid",
+        "398ecd6cf04c166871847edd638471cf913e135b 2026-08-02 Harden rendering codecs and processing integration",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)",
+        "1fa0373047f1f75c41ac10560119951c57f45e9e 2026-06-09 Add raster reflow and refactor JBIG2 encoder"
+      ],
+      "path": "src/encode/document/symbol/dictionary.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "4183a73e84527b55ad47aba3108ef6e511d1e9883ce67b27ec2451f68c122afb"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [],
+      "path": "src/encode/document/symbol/exact.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "5ea0b9a87e2bbf86835ff78816c2b7e2ae7d1628cba506d7c19d7cd5362e7f21"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "4b35882873f7e2b334a747e43b19081b64201841 2026-08-25 refactor(codecs): remove the blanket suppressions and fix what they hid",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)",
+        "7a97f05570176e0b308a7671b91ce48d6459a240 2026-07-01 Update jbig2enc-rust to 0.5.3",
+        "1fa0373047f1f75c41ac10560119951c57f45e9e 2026-06-09 Add raster reflow and refactor JBIG2 encoder"
+      ],
+      "path": "src/encode/document/symbol/extraction.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "33025fc0cb761b8be2711920b7bc2da1250a9002a4857386edc8e01fedfdee85"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)",
+        "1fa0373047f1f75c41ac10560119951c57f45e9e 2026-06-09 Add raster reflow and refactor JBIG2 encoder"
+      ],
+      "path": "src/encode/document/symbol/mod.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "44d037752cf12b956efee33c8afba6a7676fe2441752a318200a0a0f5588c0d4"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [],
+      "path": "src/encode/document/symbol/optimizer.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "ec8c115d0b8851a5933fcbdbd831fdb35e2a7b04dc265070a1929851c969072c"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "cb920e51431ff4c761e2c06463379877adfacad0 2026-08-25 style: cargo fmt",
+        "4b35882873f7e2b334a747e43b19081b64201841 2026-08-25 refactor(codecs): remove the blanket suppressions and fix what they hid",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)",
+        "1fa0373047f1f75c41ac10560119951c57f45e9e 2026-06-09 Add raster reflow and refactor JBIG2 encoder"
+      ],
+      "path": "src/encode/document/symbol/planning.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "8ea6282bce2b8e6ab23518f0c93c845e42e0f3eda42f114615c1a87865bb78b4"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [],
+      "path": "src/encode/document/symbol/residual.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "41e528918b0afa0093488726d4393adf162428c8c55e1cb9186b27ff7f0a7adb"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "4b35882873f7e2b334a747e43b19081b64201841 2026-08-25 refactor(codecs): remove the blanket suppressions and fix what they hid",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)",
+        "1fa0373047f1f75c41ac10560119951c57f45e9e 2026-06-09 Add raster reflow and refactor JBIG2 encoder"
+      ],
+      "path": "src/encode/document/symbol/serialize.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "4978f338f5380714bcd14d0c6c476015e86b119fc695c5711d7aa5c9184ffadd"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "src/encode/document/symbol/tests.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "e021d102fd6f32e0c38fbf95b2a8bcbe95d68ee497d471068fca82c1b6b1dba9"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "4b35882873f7e2b334a747e43b19081b64201841 2026-08-25 refactor(codecs): remove the blanket suppressions and fix what they hid",
+        "398ecd6cf04c166871847edd638471cf913e135b 2026-08-02 Harden rendering codecs and processing integration",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)",
+        "1fa0373047f1f75c41ac10560119951c57f45e9e 2026-06-09 Add raster reflow and refactor JBIG2 encoder"
+      ],
+      "path": "src/encode/document/symbol/text_region.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "ed29f9f5ad6e128891073539d13a461bd25c1da164a0b228fb7a35a2a85c25b6"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "398ecd6cf04c166871847edd638471cf913e135b 2026-08-02 Harden rendering codecs and processing integration",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)",
+        "1fa0373047f1f75c41ac10560119951c57f45e9e 2026-06-09 Add raster reflow and refactor JBIG2 encoder"
+      ],
+      "path": "src/encode/document/symbol/text_region_refine.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "2ecd56babab6bfcd848823170d237567e90818cfc86dace356d2dda227deb5e1"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [],
+      "path": "src/encode/document/symbol/topology.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "1b03bdfec0e15606911c7b78f20382c8ac7f36ae42acfa8cbdf3f1f38cc14d67"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "4b35882873f7e2b334a747e43b19081b64201841 2026-08-25 refactor(codecs): remove the blanket suppressions and fix what they hid",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)",
+        "1fa0373047f1f75c41ac10560119951c57f45e9e 2026-06-09 Add raster reflow and refactor JBIG2 encoder"
+      ],
+      "path": "src/encode/document/symbol/types.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "68f1937d99745d57e74c7010a069b2ba425df25c6ccb08c5146bef3efa01fc34"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)",
+        "1fa0373047f1f75c41ac10560119951c57f45e9e 2026-06-09 Add raster reflow and refactor JBIG2 encoder"
+      ],
+      "path": "src/encode/document/symbol/unify_apply.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "13df3b7ac9d774e4b4ede922b1f55a86c7c777627af92a6d716c91da8520d4f6"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "4b35882873f7e2b334a747e43b19081b64201841 2026-08-25 refactor(codecs): remove the blanket suppressions and fix what they hid",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)",
+        "1fa0373047f1f75c41ac10560119951c57f45e9e 2026-06-09 Add raster reflow and refactor JBIG2 encoder"
+      ],
+      "path": "src/encode/document/symbol/unify_match.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "80cf57bdfa2da8dca1a2b64751a74f9d27d52e955feff59fcf4441f94d9fa634"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "4b35882873f7e2b334a747e43b19081b64201841 2026-08-25 refactor(codecs): remove the blanket suppressions and fix what they hid",
+        "398ecd6cf04c166871847edd638471cf913e135b 2026-08-02 Harden rendering codecs and processing integration",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)",
+        "1fa0373047f1f75c41ac10560119951c57f45e9e 2026-06-09 Add raster reflow and refactor JBIG2 encoder"
+      ],
+      "path": "src/encode/document.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "d90c6732cd0df84cb8ab2d11e035f0372c33bf1d3adff9e72151f2f49aa27e7c"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "12e08f7a6f999daec570d0eb12b7a1284f27f857 2026-09-05 fix(jbig2enc): halftone regions that decoders can actually read",
+        "4b35882873f7e2b334a747e43b19081b64201841 2026-08-25 refactor(codecs): remove the blanket suppressions and fix what they hid",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)",
+        "907ec3dc25dc172cff6a66e5a1047b4f57bcdbe1 2026-06-02 Migrate vision and GPU backends to wgpu DX12",
+        "5e12fbae6491dff05bd0621dcce98e05ce6b6ed2 2026-05-25 Fix bugs, sync pipelines, and remove overhead from engine/accumulator",
+        "7d051cf75ee89de5e6f0e8b429ff1ec0bdbf846e 2026-03-18 sync jbig2enc-rust next-gen file copy/delete",
+        "512b08ff81269d24e4f4d661574f614c91c6ed48 2026-03-10 Stabilize tokio pipeline and sync DJVU/JBIG2 encoder code from 1.45",
+        "11edbb612c8e929c2fa36a7955f7e256cb24761e 2026-03-07 Harden pipeline concurrency and trim JBIG2 overhead",
+        "c06252bcd6a965162116383e549a91f43414b9c1 2026-01-15 Add Legencode, windows-rs-71, and ort source code folders"
+      ],
+      "path": "src/encode/halftone.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "d558481f55c3fc77d1107ed917fcd7b58b10c760a9ae5ef0f64c247c146955c0"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "src/encode/mod.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "dd122ff47cb1523b6ca5f75f4b9792d95d70deb89873c1674395a6b619d175d8"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)",
+        "907ec3dc25dc172cff6a66e5a1047b4f57bcdbe1 2026-06-02 Migrate vision and GPU backends to wgpu DX12",
+        "7d051cf75ee89de5e6f0e8b429ff1ec0bdbf846e 2026-03-18 sync jbig2enc-rust next-gen file copy/delete",
+        "512b08ff81269d24e4f4d661574f614c91c6ed48 2026-03-10 Stabilize tokio pipeline and sync DJVU/JBIG2 encoder code from 1.45",
+        "92c1620da418fed106cb5e87959c5fffbbc4a495 2026-03-07 Add WGPU resize backend and CLI polish",
+        "3eea199d8916a9a670aa554caeec22dc847766d8 2026-02-02 Add files via upload",
+        "c06252bcd6a965162116383e549a91f43414b9c1 2026-01-15 Add Legencode, windows-rs-71, and ort source code folders"
+      ],
+      "path": "src/encode/shared.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "ee17a0adf9567c1c54801ebd94db55d9e44ffe23f9febdaa0d50ebb47f84bcde"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)",
+        "7a97f05570176e0b308a7671b91ce48d6459a240 2026-07-01 Update jbig2enc-rust to 0.5.3"
+      ],
+      "path": "src/encode/simd.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "315d43ea4fbde9babf2613a6a2cbf93c6e91c8535cdaccea4dce00a04ae19db7"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "12e08f7a6f999daec570d0eb12b7a1284f27f857 2026-09-05 fix(jbig2enc): halftone regions that decoders can actually read",
+        "b01dcf83c4d6f009a7afc7fd644afc97840b54dc 2026-08-29 feat(jbig2enc-rust)!: default to symbol substitution",
+        "4b35882873f7e2b334a747e43b19081b64201841 2026-08-25 refactor(codecs): remove the blanket suppressions and fix what they hid",
+        "50ac50f7acfca0bbe539d55df96aa1f59479e917 2026-08-25 build(deps): replace generalized crates with specialized in-tree code; bump lege to 1.5.0",
+        "398ecd6cf04c166871847edd638471cf913e135b 2026-08-02 Harden rendering codecs and processing integration",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)",
+        "907ec3dc25dc172cff6a66e5a1047b4f57bcdbe1 2026-06-02 Migrate vision and GPU backends to wgpu DX12",
+        "5e12fbae6491dff05bd0621dcce98e05ce6b6ed2 2026-05-25 Fix bugs, sync pipelines, and remove overhead from engine/accumulator",
+        "f2cec2dc3619d76035841c777506f0760ccb81dc 2026-03-19 Fix JBIG2 PDF symbol generation",
+        "7d051cf75ee89de5e6f0e8b429ff1ec0bdbf846e 2026-03-18 sync jbig2enc-rust next-gen file copy/delete",
+        "512b08ff81269d24e4f4d661574f614c91c6ed48 2026-03-10 Stabilize tokio pipeline and sync DJVU/JBIG2 encoder code from 1.45",
+        "c06252bcd6a965162116383e549a91f43414b9c1 2026-01-15 Add Legencode, windows-rs-71, and ort source code folders"
+      ],
+      "path": "src/encode/structs.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "aba5f41fc7147303d8ca34bc414ca1dfb9be9f13b58b61a9c50531a37a33236a"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "4b35882873f7e2b334a747e43b19081b64201841 2026-08-25 refactor(codecs): remove the blanket suppressions and fix what they hid",
+        "50ac50f7acfca0bbe539d55df96aa1f59479e917 2026-08-25 build(deps): replace generalized crates with specialized in-tree code; bump lege to 1.5.0",
+        "398ecd6cf04c166871847edd638471cf913e135b 2026-08-02 Harden rendering codecs and processing integration",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)",
+        "7a97f05570176e0b308a7671b91ce48d6459a240 2026-07-01 Update jbig2enc-rust to 0.5.3",
+        "907ec3dc25dc172cff6a66e5a1047b4f57bcdbe1 2026-06-02 Migrate vision and GPU backends to wgpu DX12",
+        "5e12fbae6491dff05bd0621dcce98e05ce6b6ed2 2026-05-25 Fix bugs, sync pipelines, and remove overhead from engine/accumulator",
+        "7d051cf75ee89de5e6f0e8b429ff1ec0bdbf846e 2026-03-18 sync jbig2enc-rust next-gen file copy/delete",
+        "512b08ff81269d24e4f4d661574f614c91c6ed48 2026-03-10 Stabilize tokio pipeline and sync DJVU/JBIG2 encoder code from 1.45",
+        "11edbb612c8e929c2fa36a7955f7e256cb24761e 2026-03-07 Harden pipeline concurrency and trim JBIG2 overhead",
+        "3eea199d8916a9a670aa554caeec22dc847766d8 2026-02-02 Add files via upload",
+        "c06252bcd6a965162116383e549a91f43414b9c1 2026-01-15 Add Legencode, windows-rs-71, and ort source code folders"
+      ],
+      "path": "src/encode/sym.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "d9a76b7608f051675f102de5b96998611a938c9ccbdf8ed3b54524bc7fa5cbab"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)",
+        "907ec3dc25dc172cff6a66e5a1047b4f57bcdbe1 2026-06-02 Migrate vision and GPU backends to wgpu DX12",
+        "7d051cf75ee89de5e6f0e8b429ff1ec0bdbf846e 2026-03-18 sync jbig2enc-rust next-gen file copy/delete"
+      ],
+      "path": "src/encode/unify.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "59a5ea2e0b4539777c52bc49f8837e57c4d1078273e0f5c03e3fdcf440e1d2bc"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "4b35882873f7e2b334a747e43b19081b64201841 2026-08-25 refactor(codecs): remove the blanket suppressions and fix what they hid",
+        "398ecd6cf04c166871847edd638471cf913e135b 2026-08-02 Harden rendering codecs and processing integration",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)",
+        "c6d75c01927b813877fafd589459beb659fb5f64 2026-07-03 Add appearance selector and AppImage packaging task",
+        "7a97f05570176e0b308a7671b91ce48d6459a240 2026-07-01 Update jbig2enc-rust to 0.5.3",
+        "1fa0373047f1f75c41ac10560119951c57f45e9e 2026-06-09 Add raster reflow and refactor JBIG2 encoder",
+        "845d01b2b66db17cb8effe891272b0ec79dcc3c6 2026-06-03 Fix JBIG2 symbol substitution and refinement; consolidate symboldict feature",
+        "907ec3dc25dc172cff6a66e5a1047b4f57bcdbe1 2026-06-02 Migrate vision and GPU backends to wgpu DX12",
+        "9868e76b996c80baabb021dfb3bbe7d8147758fd 2026-05-02 Refactor source pipeline and update processing UI",
+        "0cff012cfd56b00bbae759ea1a56727f5d1a05d8 2026-03-20 Fix halftone/JBIG2 polarity for image overlays",
+        "5527343e982f83a4bdde1cef560f05ff3cf2ed69 2026-03-19 Fix JBIG2 API integration and resolve compilation errors",
+        "f2cec2dc3619d76035841c777506f0760ccb81dc 2026-03-19 Fix JBIG2 PDF symbol generation",
+        "7d051cf75ee89de5e6f0e8b429ff1ec0bdbf846e 2026-03-18 sync jbig2enc-rust next-gen file copy/delete",
+        "512b08ff81269d24e4f4d661574f614c91c6ed48 2026-03-10 Stabilize tokio pipeline and sync DJVU/JBIG2 encoder code from 1.45",
+        "11edbb612c8e929c2fa36a7955f7e256cb24761e 2026-03-07 Harden pipeline concurrency and trim JBIG2 overhead",
+        "3eea199d8916a9a670aa554caeec22dc847766d8 2026-02-02 Add files via upload",
+        "c06252bcd6a965162116383e549a91f43414b9c1 2026-01-15 Add Legencode, windows-rs-71, and ort source code folders"
+      ],
+      "path": "src/lib.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "a92943127ef771098cb0ecafd41ef1b1cc0ac7d5f838634fe573ed20253036c3"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "50ac50f7acfca0bbe539d55df96aa1f59479e917 2026-08-25 build(deps): replace generalized crates with specialized in-tree code; bump lege to 1.5.0",
+        "398ecd6cf04c166871847edd638471cf913e135b 2026-08-02 Harden rendering codecs and processing integration",
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "src/shared/bitmap.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "94bff0d8433f9e29704999746dfe9d5c085cbae69f7143e2f464e1c2103fcd33"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "src/shared/error.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "d13be8b95d482e2ef657feb8c43e667cabd7bdd12731f000bb7a82a92d6398f4"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [
+        "// Upstream coder attribution: Copyright 2006 Google Inc.; Adam Langley."
+      ],
+      "history": [
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "src/shared/int_proc.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "19b375cea5aa2ff53f87b15ccab537206051a344c7c3f235b4969548c96210d5"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "src/shared/limits.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "affe6fdec277c61b6713c409c690264e7ccb9f5072eb887cb47d56942b581311"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "src/shared/mod.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "821b3b29de49f4748dcd1a3497ade03d6063a930c9800e774189513cca7908ed"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [
+        "// Upstream coder attribution: Copyright 2006 Google Inc.; Adam Langley.",
+        "/// table is derived from these; keeping them in one place is the single"
+      ],
+      "history": [
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "src/shared/mq_table.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "c16cdf1a49a54034ced3407df881dd5fcc4d0c3f15022f4b82713fed1a1d499c"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "src/shared/reader.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "8f8bf61411034a024676d67ae0bb6a2f04fe6d20bc1ebd61bb97c18e814e1e37"
+    },
+    {
+      "category": "production/build",
+      "explicit_origin_comments": [],
+      "history": [
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "src/shared/segment.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "ce360bc8b0db698282525d1004764cf816990c463e5fe8727ffd3ecf0694bce0"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [],
+      "path": "tests/arithmetic_termination.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "1f0a03c0e853d903f28c7c2396e155fac347ae7e147c38813b5ee632a3af009c"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [],
+      "path": "tests/common/fixtures.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "974f9e7aa3953c07b927016715b86f024aac7feaf996fca4d9bd734c3a770663"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "4b35882873f7e2b334a747e43b19081b64201841 2026-08-25 refactor(codecs): remove the blanket suppressions and fix what they hid",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)",
+        "907ec3dc25dc172cff6a66e5a1047b4f57bcdbe1 2026-06-02 Migrate vision and GPU backends to wgpu DX12",
+        "c06252bcd6a965162116383e549a91f43414b9c1 2026-01-15 Add Legencode, windows-rs-71, and ort source code folders"
+      ],
+      "path": "tests/common/mod.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "d53e07adc4a7a605f778d3727ea79fe361f4f7c17e0ba4738c46ac00dd96034e"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "4b35882873f7e2b334a747e43b19081b64201841 2026-08-25 refactor(codecs): remove the blanket suppressions and fix what they hid",
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "tests/common/oracle.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "36bed451b624055fc3e28b31ae816d9a7f601188aac7a9ad59399d222083c496"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "4b35882873f7e2b334a747e43b19081b64201841 2026-08-25 refactor(codecs): remove the blanket suppressions and fix what they hid",
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "tests/common/pbm.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "c15a0919e013007bab04ad905fa08fbb21b9f651ce46b808f1835c9284019e40"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [],
+      "path": "tests/common/pdf.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "846659137110868338966994a66e4e1a173a2022bd348ae536d7a499af53c75a"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "4b35882873f7e2b334a747e43b19081b64201841 2026-08-25 refactor(codecs): remove the blanket suppressions and fix what they hid",
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "0864be431b3761523cb102618108641fa17be653 2026-07-21 fix(jbig2/decode): correct template-0 TPGDON and deep custom-AT sampling",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "tests/common/writer.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "351a01b46414ce3fb33bb06a298fc9ca4993d551cb8cefee77db2837771c91f0"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "4b35882873f7e2b334a747e43b19081b64201841 2026-08-25 refactor(codecs): remove the blanket suppressions and fix what they hid",
+        "50ac50f7acfca0bbe539d55df96aa1f59479e917 2026-08-25 build(deps): replace generalized crates with specialized in-tree code; bump lege to 1.5.0",
+        "398ecd6cf04c166871847edd638471cf913e135b 2026-08-02 Harden rendering codecs and processing integration",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)",
+        "907ec3dc25dc172cff6a66e5a1047b4f57bcdbe1 2026-06-02 Migrate vision and GPU backends to wgpu DX12",
+        "7d051cf75ee89de5e6f0e8b429ff1ec0bdbf846e 2026-03-18 sync jbig2enc-rust next-gen file copy/delete",
+        "c06252bcd6a965162116383e549a91f43414b9c1 2026-01-15 Add Legencode, windows-rs-71, and ort source code folders"
+      ],
+      "path": "tests/comparator.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "9a56cb22f90e2de6d3e6be6eaecd72ffa722cbf6d2467fb7c8ebad36cb35b294"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [],
+      "path": "tests/connected_components.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "c925ce3604384abb456b981344da2fd6872eeafe5a2f7480bb29035e9873631e"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "tests/decode_alloc.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "ecaee22599e9ad7bfcebb82279efa508900b1d8d4648f842ab511423daac6cb5"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "tests/decode_chaos.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "e71e1176c8f54e2051973b55648bd179097f97b5e8a30dc00b76611d0bdd4dbb"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "0864be431b3761523cb102618108641fa17be653 2026-07-21 fix(jbig2/decode): correct template-0 TPGDON and deep custom-AT sampling",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "tests/decode_generic_templates.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "9f3e2dd1af095ccfa3cfc7550596d0318888f2d29737134134d2ce98d4f4d4aa"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "tests/decode_halftone.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "2f2d8161e0ee9770ccdd630ec87d58cde5808b7f71688f7006e0d0d2a86d0143"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "tests/decode_halftone_skip.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "c94ca869fbebf8b8433f812f9593d71c5a4d8c0b7eab0ae05688c6664430a84b"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "tests/decode_huffman.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "8f2404b4ef236fdd9720ef1f2b24410b94786a41f4f5c96eb9a867e7df2e5443"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "tests/decode_huffman_refagg.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "2ec3e3c08b9cf5d5faa329c8ef6ccdee0bc159407cc4065e1b87a4ccf6145903"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "tests/decode_huffman_refine.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "a3ea1b14c2d985d70f22596f558928c5cb29fbafbd23efd0981adef8a797d190"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "tests/decode_intermediate.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "3a92d266c363ae80c480a1857fbbe36318be17506af728453c452baecb94f8ee"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "tests/decode_organisation.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "a3b7d67052991006f0ae38f5c631b97f99f9426b5b0b30142e921b605751a474"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "tests/decode_recovery.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "cd072ecb2c95fa1f191055371cd78cbace64ee8a4d4a2d54225bb20a151b3025"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "tests/decode_refagg.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "840c0233c33fea72dcc4b3478031725ff4a20e8746be00b7fd2cc91096ced35b"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "tests/decode_refine.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "5ac4e90b25c78403c0b7220a0e39a714ae371ec657f46417fe50881fe05b6217"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "tests/decode_refine_templates.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "160265f189326675486f046a7b91b07621f0e9a23295355a84af0dd601c07c48"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "tests/decode_retained_ctx.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "6a322fb3ba62ba8eff03345de0bf3c2669061e3052645888fc715fa3d3ad5198"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "ab695ff71f4776afff97db082a2b16f0bc373d5e 2026-09-02 fix(jbig2enc-rust): keep the template check in release builds, gate the shipping profile",
+        "b01dcf83c4d6f009a7afc7fd644afc97840b54dc 2026-08-29 feat(jbig2enc-rust)!: default to symbol substitution",
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "tests/decode_roundtrip.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "0a77ea1185d2f8caf9fab200ef9851820e208a1f8f684675cef63a80c3ab96b9"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "tests/decode_striped.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "be7cfba9960ea9279890f5c3c15d09e6688f2312c0cab48d7e75585bd57766df"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "b01dcf83c4d6f009a7afc7fd644afc97840b54dc 2026-08-29 feat(jbig2enc-rust)!: default to symbol substitution",
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)"
+      ],
+      "path": "tests/encode_byte_identical.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "e56094c78d813427658664d3834a6745d1994055dc8f51b69b0f34f9b0a77ca0"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "4b35882873f7e2b334a747e43b19081b64201841 2026-08-25 refactor(codecs): remove the blanket suppressions and fix what they hid",
+        "50ac50f7acfca0bbe539d55df96aa1f59479e917 2026-08-25 build(deps): replace generalized crates with specialized in-tree code; bump lege to 1.5.0",
+        "398ecd6cf04c166871847edd638471cf913e135b 2026-08-02 Harden rendering codecs and processing integration",
+        "eae870362d9569f28db54f4601e1842669cd096c 2026-07-24 jbig2: honour custom GRAT2 refinement AT across all refinement paths",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)",
+        "907ec3dc25dc172cff6a66e5a1047b4f57bcdbe1 2026-06-02 Migrate vision and GPU backends to wgpu DX12",
+        "7d051cf75ee89de5e6f0e8b429ff1ec0bdbf846e 2026-03-18 sync jbig2enc-rust next-gen file copy/delete",
+        "512b08ff81269d24e4f4d661574f614c91c6ed48 2026-03-10 Stabilize tokio pipeline and sync DJVU/JBIG2 encoder code from 1.45",
+        "c06252bcd6a965162116383e549a91f43414b9c1 2026-01-15 Add Legencode, windows-rs-71, and ort source code folders"
+      ],
+      "path": "tests/encoder.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "37fe1c93a1a1d21b2e68368e90d9e5009bf342bbc257fbc9ebbe37c4d9550f31"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [],
+      "path": "tests/exact_symbols.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "96b6e54d97e993244589e3965859d402c27f9e443bdd3626e8fb072ab7714c2c"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "12e08f7a6f999daec570d0eb12b7a1284f27f857 2026-09-05 fix(jbig2enc): halftone regions that decoders can actually read"
+      ],
+      "path": "tests/halftone_tone_roundtrip.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "5fbf1b246e3a2b250489a55cce8ef226390ad2bc5ef8ba73c862cf15f7eeefa2"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)",
+        "907ec3dc25dc172cff6a66e5a1047b4f57bcdbe1 2026-06-02 Migrate vision and GPU backends to wgpu DX12",
+        "7d051cf75ee89de5e6f0e8b429ff1ec0bdbf846e 2026-03-18 sync jbig2enc-rust next-gen file copy/delete"
+      ],
+      "path": "tests/headsup_c_vs_rust.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "51778344a88381157e2dcc357d942296a284fa51db1832c3f84bb77ec52affa3"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [],
+      "path": "tests/lossy_topology_guard.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "d6c4d9d13595e710f51e6bf2144782a7e30dc85fab8b7c5a033813c39a2fa5f8"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "4b35882873f7e2b334a747e43b19081b64201841 2026-08-25 refactor(codecs): remove the blanket suppressions and fix what they hid",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)",
+        "907ec3dc25dc172cff6a66e5a1047b4f57bcdbe1 2026-06-02 Migrate vision and GPU backends to wgpu DX12",
+        "512b08ff81269d24e4f4d661574f614c91c6ed48 2026-03-10 Stabilize tokio pipeline and sync DJVU/JBIG2 encoder code from 1.45",
+        "c06252bcd6a965162116383e549a91f43414b9c1 2026-01-15 Add Legencode, windows-rs-71, and ort source code folders"
+      ],
+      "path": "tests/mode_comparison.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "7a45e9ce8849beb17b6f8bd387ca3ca4ebd08d6abcbe55c3ccf1deb14aa20193"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)",
+        "907ec3dc25dc172cff6a66e5a1047b4f57bcdbe1 2026-06-02 Migrate vision and GPU backends to wgpu DX12",
+        "7d051cf75ee89de5e6f0e8b429ff1ec0bdbf846e 2026-03-18 sync jbig2enc-rust next-gen file copy/delete"
+      ],
+      "path": "tests/multi_page_benchmark.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "c58c42dc1644836f9b8943c191bd91f670f984db11e6d00267a84fa780570f4a"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [],
+      "path": "tests/pdf_dictionary_policy.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "1e231a73d6b03e15cf07271587f80eb6cf3e0bf61674edf905887c47b5bba6f0"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [],
+      "path": "tests/pdf_groups.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "d5647f52914e6465602c62d51cece230fb9bee51b1129f9e7c75c49230bc58f5"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "cb920e51431ff4c761e2c06463379877adfacad0 2026-08-25 style: cargo fmt",
+        "50ac50f7acfca0bbe539d55df96aa1f59479e917 2026-08-25 build(deps): replace generalized crates with specialized in-tree code; bump lege to 1.5.0",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)",
+        "907ec3dc25dc172cff6a66e5a1047b4f57bcdbe1 2026-06-02 Migrate vision and GPU backends to wgpu DX12",
+        "7d051cf75ee89de5e6f0e8b429ff1ec0bdbf846e 2026-03-18 sync jbig2enc-rust next-gen file copy/delete"
+      ],
+      "path": "tests/perf_smoke.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "03911c2c133ae5e62f6e39ab81b12db22f43695da6421e81518356cd782d8e4e"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [],
+      "path": "tests/quality_benchmark/grouped.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "7216d4ec0ce391324a83ad95941422fce3de3cc62f00a2ac850b8397dcbd24d3"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [],
+      "path": "tests/quality_benchmark/memory.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "ecb1539b4f719e313f9eb8489c58c0bec82f6e605829fb6c8aa89ac75cf77c79"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [],
+      "path": "tests/quality_benchmark.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "aa015bc4395caa0320dfedc2eab9d7759e4e9ea6735803523eb4057476d140e8"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)",
+        "666984128e47869bbdf3430723917430124cd934 2026-06-06 Update CLI and processing support",
+        "a1a0b1e91f1bbfd8d467aeb15acc79ffd464402a 2026-06-06 Update CLI and processing support",
+        "845d01b2b66db17cb8effe891272b0ec79dcc3c6 2026-06-03 Fix JBIG2 symbol substitution and refinement; consolidate symboldict feature"
+      ],
+      "path": "tests/refine_pdf_lossless.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "61dc56b3f510cdfef56f7d79c147d1bc1cf82511fd3a2455bc6133e263c192eb"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [
+        "b01dcf83c4d6f009a7afc7fd644afc97840b54dc 2026-08-29 feat(jbig2enc-rust)!: default to symbol substitution",
+        "6d84063970890ec907a11206f044b19951b5921d 2026-07-21 Migrate Lege source into private lege_internal (ecosystem restructure)",
+        "1fa0373047f1f75c41ac10560119951c57f45e9e 2026-06-09 Add raster reflow and refactor JBIG2 encoder",
+        "907ec3dc25dc172cff6a66e5a1047b4f57bcdbe1 2026-06-02 Migrate vision and GPU backends to wgpu DX12",
+        "5e12fbae6491dff05bd0621dcce98e05ce6b6ed2 2026-05-25 Fix bugs, sync pipelines, and remove overhead from engine/accumulator"
+      ],
+      "path": "tests/roundtrip_after_fix.rs",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "3a575da40bfc5228aea5bb0f056da6283a83e637f4779a54fae523dcb7be62d3"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [
+        "and re.match(r\"(?i)^(license|licence|copying|notice|copyright)([._-]|$)\", path.name)]",
+        "if re.search(r\"(?i)(copyright|clean.room|\\bport(?:ed)?\\b|adapted|translated|derived from)\", line)]"
+      ],
+      "history": [],
+      "path": "tools/audit_provenance.py",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "760ffd0754811f617eb5f04b71c9245ee2e8d2d7f4283ce4a6c00e654553022c"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [
+        "This is a triage aid, not an authorship detector: translated, renamed, reordered",
+        "\"limitations\": \"Not a proof of independence, infringement or license compatibility. Translated/renamed/reordered expressions and non-Rust sources are outside this comparison.\","
+      ],
+      "history": [],
+      "path": "tools/audit_source_overlap.py",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "befe8a0de883746054cd74ef33467e3bee6569ca45fc1a102084061597eb45fa"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [],
+      "path": "tools/compare_quality_workers.py",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "e08c58d843bda512eca0d696666cd3a8424403ecd8c1dae0a68174c2db3f91f5"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [],
+      "path": "tools/generate_test_fixtures.py",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "41c668acb97f944c6f8f3fc98c72c9a6ec62973ff7a9ec13e28fdd6099e21998"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [],
+      "path": "tools/measure_encode_memory.py",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "0f43739792bd656163516bcc28590bf99fb20bcc2b57a02123b1f3331b2b064b"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [],
+      "path": "tools/pdfium_oracle.py",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "7e19b5702fb43b885162e34ab7653eac0d0035f5b44ff41946ca3ca2d41849cf"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [],
+      "path": "tools/prepare_quality_corpus.py",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "e26fb86e600d84d746fd38d5ea2bc195e65521e101fb193f2306d6f4e3735226"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [
+        "\"Original source notices are retained. The old cc.rs identifies a GPLv2-or-later DjVuLibre port.\\n\""
+      ],
+      "history": [],
+      "path": "tools/prepare_reference_worker.py",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "8e3e54971e5d2bc10be01cbccc48b87c939c4a88fe0d3d6a50cad8ad82f66760"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [],
+      "path": "tools/quality_benchmark.py",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "6b09554fd390dcc04f4c1302a597f4f76a1c6cf7b5ecb9faf943290a03176056"
+    },
+    {
+      "category": "test/benchmark/fuzz/tool",
+      "explicit_origin_comments": [],
+      "history": [],
+      "path": "tools/summarize_quality.py",
+      "review": "history/origin inventory only; authorship and earlier upstream history not established",
+      "sha256": "4c5e551d6a7312df45efa2fba468c839940607871acf9ddf126160f236932a31"
+    }
+  ],
+  "head": "95b571373a37c199ce92e0ce9c80d7c8a5ff6464",
+  "limitation": "Local history begins with the monorepo import; absence of a notice or GPL keyword proves no origin claim.",
+  "production_file_count": 64
+}

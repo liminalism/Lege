@@ -82,8 +82,12 @@ pub fn encode_halftone_region(
     } else {
         ht_config.template
     };
-    let dict_payload =
-        encode_pattern_dictionary_payload(&pattern_dictionary, dict_template, ht_config.dict_mmr)?;
+    let dict_payload = encode_pattern_dictionary_payload(
+        &pattern_dictionary,
+        dict_template,
+        ht_config.dict_mmr,
+        config.canonical_arithmetic_termination,
+    )?;
 
     // Step 6: Encode the quantized grayscale image payload according to Annex C.
     let effective_template = if ht_config.gray_mmr {
@@ -98,6 +102,7 @@ pub fn encode_halftone_region(
             &quantized_gray_image,
             effective_template,
             pattern_dictionary.len(),
+            config.canonical_arithmetic_termination,
         )?
     };
 
@@ -412,8 +417,12 @@ pub fn encode_halftone_pdf_split_auto_from_grayscale(
     } else {
         ht_config.template
     };
-    let dict_payload =
-        encode_pattern_dictionary_payload(&pattern_dictionary, dict_template, ht_config.dict_mmr)?;
+    let dict_payload = encode_pattern_dictionary_payload(
+        &pattern_dictionary,
+        dict_template,
+        ht_config.dict_mmr,
+        config.canonical_arithmetic_termination,
+    )?;
 
     let effective_template = if ht_config.gray_mmr {
         0
@@ -423,7 +432,12 @@ pub fn encode_halftone_pdf_split_auto_from_grayscale(
     let gray_image_payload = if ht_config.gray_mmr {
         encode_grayscale_image_mmr(&quantized, pattern_dictionary.len())?
     } else {
-        encode_grayscale_image_annex_c(&quantized, effective_template, pattern_dictionary.len())?
+        encode_grayscale_image_annex_c(
+            &quantized,
+            effective_template,
+            pattern_dictionary.len(),
+            config.canonical_arithmetic_termination,
+        )?
     };
 
     let page_num = page_number.unwrap_or(1);
@@ -805,6 +819,7 @@ fn encode_pattern_dictionary_payload(
     patterns: &[BitImage],
     template: u8,
     mmr: bool,
+    canonical: bool,
 ) -> Result<Vec<u8>> {
     if patterns.is_empty() {
         return Ok(Vec::new());
@@ -846,10 +861,11 @@ fn encode_pattern_dictionary_payload(
         } else {
             vec![(-(p_w as i8), 0)]
         };
-        payload.extend(Jbig2ArithCoder::encode_generic_payload(
+        payload.extend(Jbig2ArithCoder::encode_generic_payload_with_termination(
             &collective_bitmap,
             template,
             &at_pixels,
+            canonical,
         )?);
     }
     Ok(payload)
@@ -861,6 +877,7 @@ fn encode_grayscale_image_annex_c(
     gray_image: &Array2<u8>,
     template: u8,
     num_patterns: usize,
+    canonical: bool,
 ) -> Result<Vec<u8>> {
     let bitplanes = gray_coded_bitplanes(gray_image, num_patterns);
     let (h, w) = gray_image.dim();
@@ -883,7 +900,7 @@ fn encode_grayscale_image_annex_c(
         // We will flush once at the end.
     }
 
-    coder.flush(true);
+    coder.flush_with_termination(true, canonical);
     encoded_payload.extend(coder.as_bytes());
 
     Ok(encoded_payload)

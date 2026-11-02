@@ -172,7 +172,7 @@ record lege-ecosystem.observation.jbig2-symbol-mode-is-lossy/1 : observation {
 
 record lege-ecosystem.observation.jbig2-symbol-mode-is-lossy/2 : observation {
     title "JBIG2 symbol substitution is lossy, and its size win depends on content"
-    state verified
+    state superseded
     scope [ path "lege-codecs/jbig2enc-rust/**", path "lege-process/**" ]
     statement """
         Symbol substitution does not round-trip bit-exactly, and no configuration makes it do so. On tests/fixtures/test_image1.pbm (956x1557, 185395 ink px) symbol mode changed 175 pixels and produced 13211 bytes against the generic region's 12941 bytes and 0 changed pixels -- lossy AND larger. Enabling refine, text_refine, is_lossless, or disabling auto_thresh left the count at exactly 175 in every combination, so refinement does not close the gap as ISO/IEC 14492 refinement is supposed to. text_symbol_unify() is far lossier at 1215 pixels. The win is real on genuine text: a 4-page scanned paper through the full lege pipeline gave 225527 bytes with symbol mode against 234513 with --no-symbol (3.8% smaller), and a synthetic page of exactly repeated glyphs gave 1027 against 2876. Symbol mode is now the default in Jbig2Config, the lege CLI and the Python wheel; Jbig2Config::generic(), --no-symbol, the option-string 'g' modifier and the GUI's No symbol mode toggle are the bit-exact opt-out. The unclosed refinement gap is the follow-up worth taking: it is what would make symbol mode safe for archival masters.
@@ -182,6 +182,49 @@ record lege-ecosystem.observation.jbig2-symbol-mode-is-lossy/2 : observation {
     watches [ "lege-codecs/jbig2enc-rust/src/encode/**" ]
     supersedes [ @lege-ecosystem.observation.jbig2-symbol-mode-is-lossy/1 ]
     verified_by [ @lege-ecosystem.evidence.stale-observation-requeue-20260908/1 ]
+}
+
+record lege-ecosystem.observation.jbig2-symbol-mode-is-lossy/3 : observation {
+    title "Legacy symbol substitution is lossy; explicit exact symbol presets now preserve input pixels"
+    state superseded
+    scope [ path "lege-codecs/jbig2enc-rust/**", path "lege-process/**" ]
+    statement """
+        As of the 2026-11-01 working tree on HEAD95b571373a37c199ce92e0ce9c80d7c8a5ff6464, legacy Jbig2Config::text() and text_symbol_unify() remain intentionally lossy and their original byte-hash baselines remain unchanged. The earlier 175/1215-pixel legacy fixture findings and old size comparisons describe that legacy path, not all current configurations. New text_lossless() retains every component, disables input-changing cleanup/substitution, uses full bitmap equality, and preserves nonmatches through separate dictionary/generic representations; its measured variant additionally chooses exact refinement using full-stream costs. All782 confed pages pass exact native/jbig2dec equality in32/64/128/whole-book groups. The17-page mixed corpus passes native/jbig2dec/PDFium/Poppler with zero exact differences, whereas explicit measured lossy output reports20 source differences. New presets use canonical arithmetic termination; legacy callers may select it explicitly without changing pixel fidelity. This supersedes the old blanket claim that no symbol-mode configuration is exact. The Lege application's existing default/GUI/Python exposure was not changed to select the new preset by this crate work; use the explicit library constructor. No source-rights clearance is inferred from codec fidelity.
+        """
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    method instrumented
+    watches [
+        "lege-codecs/jbig2enc-rust/src/encode/**",
+        "lege-codecs/jbig2enc-rust/tests/exact_symbols.rs"
+    ]
+    supersedes [ @lege-ecosystem.observation.jbig2-symbol-mode-is-lossy/2 ]
+    verified_by [
+        @lege-ecosystem.evidence.jbig2-070-canonical-package-20261101,
+        @lege-ecosystem.evidence.jbig2-070-canonical-termination-20261101,
+        @lege-ecosystem.evidence.jbig2-070-exact-components-20261101
+    ]
+    acknowledged true
+    author "dk"
+}
+
+record lege-ecosystem.observation.jbig2-symbol-mode-is-lossy/4 : observation {
+    title "Legacy symbol substitution is lossy; explicit exact symbol presets now preserve input pixels"
+    state verified
+    scope [ path "lege-codecs/jbig2enc-rust/**", path "lege-process/**" ]
+    statement """
+        As of the 2026-11-01 working tree on HEAD95b571373a37c199ce92e0ce9c80d7c8a5ff6464, legacy Jbig2Config::text() and text_symbol_unify() remain intentionally lossy and their original byte-hash baselines remain unchanged. The earlier 175/1215-pixel legacy fixture findings and old size comparisons describe that legacy path, not all current configurations. New text_lossless() retains every component, disables input-changing cleanup/substitution, uses full bitmap equality, and preserves nonmatches through separate dictionary/generic representations; its measured variant additionally chooses exact refinement using full-stream costs. All782 confed pages pass exact native/jbig2dec equality in32/64/128/whole-book groups. The17-page mixed corpus passes native/jbig2dec/PDFium/Poppler with zero exact differences, whereas explicit measured lossy output reports20 source differences. New presets use canonical arithmetic termination; legacy callers may select it explicitly without changing pixel fidelity. This supersedes the old blanket claim that no symbol-mode configuration is exact. The Lege application's existing default/GUI/Python exposure was not changed to select the new preset by this crate work; use the explicit library constructor. No source-rights clearance is inferred from codec fidelity.
+        """
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    method instrumented
+    watches [ "lege-codecs/jbig2enc-rust/src/encode/**", "lege-codecs/jbig2enc-rust/tests/**" ]
+    supersedes [ @lege-ecosystem.observation.jbig2-symbol-mode-is-lossy/3 ]
+    verified_by [
+        @lege-ecosystem.evidence.jbig2-070-canonical-package-20261101,
+        @lege-ecosystem.evidence.jbig2-070-canonical-termination-20261101,
+        @lege-ecosystem.evidence.jbig2-070-exact-components-20261101
+    ]
+    acknowledged true
+    author "dk"
 }
 
 record lege-ecosystem.observation.jbig2enc-inert-config-fields/1 : observation {
@@ -198,7 +241,7 @@ record lege-ecosystem.observation.jbig2enc-inert-config-fields/1 : observation {
 
 record lege-ecosystem.observation.jbig2enc-inert-config-fields/2 : observation {
     title "Three jbig2enc-rust config fields are inert in the encoder"
-    state verified
+    state superseded
     scope [ path "lege-codecs/jbig2enc-rust/**" ]
     statement """
         Jbig2Config::{dpi, duplicate_line_removal, match_tolerance} do not change encoder output. Measured on a 480x320 glyph page via encode_single_image_with_config: default 2876 bytes, and dpi=600, duplicate_line_removal=false and match_tolerance in {4,7,10} all produced 2876 bytes byte-for-byte. match_tolerance is only read when config.text_refine is set (encode/document.rs:451), and produced identical output (1046 bytes) at every tolerance even with text_refine enabled. By contrast symbol_mode=true works as documented (2876 -> 1027 bytes) and is required for a shared /JBIG2Globals dictionary. Consequence: the jbig2enc Python binding deliberately exposes only symbol_mode, refine and the lossless preset, and rejects the three inert names as unknown options rather than accepting them silently.
@@ -208,6 +251,22 @@ record lege-ecosystem.observation.jbig2enc-inert-config-fields/2 : observation {
     watches [ "lege-codecs/jbig2enc-rust/src/encode/**" ]
     supersedes [ @lege-ecosystem.observation.jbig2enc-inert-config-fields/1 ]
     verified_by [ @lege-ecosystem.evidence.stale-observation-requeue-20260908/1 ]
+}
+
+record lege-ecosystem.observation.jbig2enc-inert-config-fields/3 : observation {
+    title "Legacy config invariance measurements do not imply all current symbol paths ignore tolerance or DPI"
+    state verified
+    scope [ path "lege-codecs/jbig2enc-rust/**" ]
+    statement """
+        2026-11-01 working-tree source review on HEAD95b571373a37c199ce92e0ce9c80d7c8a5ff6464: the earlier480x320 fixture's unchanged outputs under dpi/duplicate_line_removal/match_tolerance were measurements of that historical legacy path, not proof of general field inertness. Current match_tolerance is read by legacy refinement in document.rs and by the new bounded planner candidate threshold in symbol/optimizer.rs, plus topology-safe unify/refinement guards in unify_apply.rs. Exact matches and selected refinements still preserve pixels; the explicit measured lossy per-instance error cap remains separate. Top-level dpi is read by exact component extraction with cleanup disabled; that read alone does not prove a byte change for a particular input. duplicate_line_removal still has no runtime read in the inspected encoder sources outside configuration construction; exact presets force it false. No new Python option exposure was added here, and the binding's prior rejection behavior was not remeasured in this review. Constructors plus documented field scope should guide callers; the old three-field blanket inertness claim is no longer a safe description of every current encoding path.
+        """
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    method manual
+    watches [ "lege-codecs/jbig2enc-rust/src/encode/**" ]
+    supersedes [ @lege-ecosystem.observation.jbig2enc-inert-config-fields/2 ]
+    verified_by [ @lege-ecosystem.evidence.jbig2-070-canonical-package-20261101 ]
+    acknowledged true
+    author "dk"
 }
 
 record lege-ecosystem.observation.jbig2enc-py-round-trip-verified/1 : observation {

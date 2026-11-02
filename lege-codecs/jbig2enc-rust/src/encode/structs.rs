@@ -70,6 +70,29 @@ pub struct Jbig2Config {
     pub hash: bool,
     pub want_full_headers: bool,
     pub is_lossless: bool,
+    /// Emit one FF prefix for the FF AC arithmetic stop marker. New fidelity
+    /// presets enable this; legacy presets retain their byte-compatible padding.
+    pub canonical_arithmetic_termination: bool,
+    /// Measure alternative generic residual layouts, including segment headers.
+    /// Opt-in so existing presets retain their encoded-byte baselines.
+    pub pack_residuals: bool,
+    /// Explicit PDF dictionary allocation policy. Legacy presets use AllGlobal.
+    pub pdf_dictionary_policy: PdfDictionaryPolicy,
+    /// Trial whole streams to choose exact symbols, refinement or generic bits.
+    /// This explicitly slower optimizer is separate from the shipping presets.
+    pub optimize_exact_symbols: bool,
+    /// Explicitly allow bounded, topology-screened direct substitutions in the
+    /// measured planner. Exact presets reject this flag.
+    pub optimize_lossy_symbols: bool,
+    /// Maximum differing pixels for one same-sized directly substituted glyph.
+    pub symbol_substitution_error_limit: u32,
+    pub symbol_candidate_limit: usize,
+    /// Maximum full-document trial encodes, including policy and generic controls.
+    pub symbol_trial_limit: usize,
+    /// Correct topology-changing substitutions with per-instance refinement.
+    pub topology_safe_substitution: bool,
+    /// Caller-measured decoder budgets. Unset limits impose no resource policy.
+    pub decoder_resource_limits: crate::jbig2enc::DecoderResourceLimits,
     pub default_pixel: bool,
     /// Pixel-error tolerance divisor for symbol matching.
     /// max_err = (width * height) / match_tolerance
@@ -102,6 +125,17 @@ pub struct Jbig2Config {
 pub enum LossySymbolMode {
     Off,
     SymbolUnify,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PdfDictionaryPolicy {
+    /// Preserve the existing all-global PDF output.
+    #[default]
+    AllGlobal,
+    /// Share symbols used on multiple pages; put the rest in generic residuals.
+    SharedGlobal,
+    /// Share symbols used on multiple pages; allow page-associated dictionaries.
+    SharedGlobalWithLocal,
 }
 
 /// Configuration for halftone encoding
@@ -170,10 +204,9 @@ impl Default for Jbig2Config {
             // Symbol substitution is the encoder's primary mode and the whole
             // reason to choose JBIG2 over CCITT G4 for scanned text: roughly
             // 3x smaller on a page of repeated glyphs. It was defaulted off
-            // while global-dictionary encoding was unreliable; that is fixed,
-            // and encode/decode round trips are pixel-exact in both standalone
-            // and PDF-fragment form, including multiple pages against one
-            // shared dictionary. Callers wanting a plain generic region ask
+            // while global-dictionary encoding was unreliable. Symbol extraction
+            // can omit marks, so this preset does not promise exact input pixels.
+            // Callers wanting a pixel-exact generic region ask
             // for it: `Jbig2Config::lossless()`, or clear this field.
             symbol_mode: true,
             // Refinement stays opt-in: it requires symbol_mode and costs
@@ -185,6 +218,16 @@ impl Default for Jbig2Config {
             hash: true,
             want_full_headers: true,
             is_lossless: false,
+            canonical_arithmetic_termination: false,
+            pack_residuals: false,
+            pdf_dictionary_policy: PdfDictionaryPolicy::AllGlobal,
+            optimize_exact_symbols: false,
+            symbol_candidate_limit: 16,
+            symbol_trial_limit: 64,
+            optimize_lossy_symbols: false,
+            symbol_substitution_error_limit: 1,
+            decoder_resource_limits: Default::default(),
+            topology_safe_substitution: false,
             default_pixel: false,
             match_tolerance: 7,
             lossy_symbol_mode: LossySymbolMode::Off,
@@ -232,6 +275,97 @@ impl Jbig2Config {
         cfg
     }
 
+    /// Pixel-exact symbol encoding of the supplied bilevel image.
+    ///
+    /// Retains isolated marks, uses bitmap equality for dictionary reuse, and
+    /// stores other components separately or generically. Clustering, cleanup
+    /// and lossy substitution cannot weaken this contract. The existing
+    /// `lossless()` preset continues to use generic-region encoding.
+    pub fn text_lossless() -> Self {
+        let mut cfg = Self::text();
+        cfg.is_lossless = true;
+        cfg.auto_thresh = false;
+        cfg.canonical_arithmetic_termination = true;
+        cfg.duplicate_line_removal = false;
+        cfg.refine = false;
+        cfg.text_refine = false;
+        cfg.lossy_symbol_mode = LossySymbolMode::Off;
+        cfg.pack_residuals = true;
+        cfg.pdf_dictionary_policy = PdfDictionaryPolicy::SharedGlobalWithLocal;
+        cfg
+    }
+
+    /// Slower pixel-exact preset that measures dictionary/refinement/residual
+    /// alternatives in their actual arithmetic streams, including headers.
+    pub fn text_lossless_max_compression() -> Self {
+        let mut cfg = Self::text_lossless();
+        cfg.optimize_exact_symbols = true;
+        cfg
+    }
+
+    /// Slower measured encoding with explicit lossy substitution. Input
+    /// components are retained, but same-sized glyphs may change by at most the
+    /// supplied per-instance pixel count when their topology agrees. This does
+    /// not guarantee character identity. Exact/refinement/generic alternatives
+    /// remain available and actual output bytes decide between them.
+    pub fn text_lossy_max_compression(max_symbol_error: u32) -> Self {
+        let mut cfg = Self::text_lossless_max_compression();
+        cfg.is_lossless = false;
+        cfg.optimize_exact_symbols = false;
+        cfg.optimize_lossy_symbols = true;
+        cfg.symbol_substitution_error_limit = max_symbol_error;
+        cfg.topology_safe_substitution = true;
+        cfg
+    }
+
+    pub(crate) fn validate_exact_symbol_mode(&self) -> Result<(), &'static str> {
+        if self.optimize_exact_symbols || self.optimize_lossy_symbols {
+            if !cfg!(feature = "symboldict") {
+                return Err("exact symbol optimization requires the symboldict feature");
+            }
+            if !self.symbol_mode || (self.optimize_exact_symbols && !self.is_lossless) {
+                return Err("exact symbol optimization requires pixel-exact symbol mode");
+            }
+            if self.optimize_lossy_symbols
+                && (self.is_lossless
+                    || self.optimize_exact_symbols
+                    || !self.topology_safe_substitution
+                    || self.lossy_symbol_mode != LossySymbolMode::Off
+                    || self.text_comb_op != 0
+                    || self.generic.comb_operator != 0
+                    || self.default_pixel)
+            {
+                return Err(
+                    "measured lossy optimization requires its explicit topology-safe OR preset",
+                );
+            }
+            if self.symbol_trial_limit < 4 {
+                return Err("exact symbol optimization needs at least four control trials");
+            }
+        }
+        if self.symbol_mode && self.is_lossless {
+            if self.uses_lossy_symbol_dictionary() {
+                return Err("pixel-exact symbol mode cannot use lossy substitution");
+            }
+            if self.text_comb_op != 0 || self.generic.comb_operator != 0 || self.default_pixel {
+                return Err("pixel-exact symbol mode requires OR composition on a white page");
+            }
+        }
+        if (self.symbol_mode && self.is_lossless) || self.topology_safe_substitution {
+            if self.text_transposed || self.text_ref_corner != 1 || self.text_refine_template != 0 {
+                return Err(
+                    "fidelity safeguards require top-left non-transposed text and refinement template zero",
+                );
+            }
+            if self.text_log_strips > 3 || !(-16..=15).contains(&self.text_ds_offset) {
+                return Err(
+                    "fidelity safeguards require encodable text-strip and signed offset settings",
+                );
+            }
+        }
+        Ok(())
+    }
+
     /// Generic-region only: no symbol dictionary and no substitution, so the
     /// round trip is bit-exact.
     ///
@@ -275,6 +409,16 @@ impl Jbig2Config {
         cfg
     }
 
+    /// Lossy unification with a final structural guard on every retained
+    /// substitution. Omitted components are still outside an exact contract;
+    /// use text_lossless() when every source pixel must survive.
+    pub fn text_symbol_unify_safe() -> Self {
+        let mut cfg = Self::text_symbol_unify();
+        cfg.topology_safe_substitution = true;
+        cfg.canonical_arithmetic_termination = true;
+        cfg
+    }
+
     #[inline]
     pub fn uses_symbol_unify(&self) -> bool {
         self.lossy_symbol_mode == LossySymbolMode::SymbolUnify
@@ -282,7 +426,7 @@ impl Jbig2Config {
 
     #[inline]
     pub fn uses_lossy_symbol_dictionary(&self) -> bool {
-        self.lossy_symbol_mode != LossySymbolMode::Off
+        self.lossy_symbol_mode != LossySymbolMode::Off || self.optimize_lossy_symbols
     }
 
     /// Creates a configuration for lossless image encoding

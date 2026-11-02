@@ -1,0 +1,31 @@
+
+running 1 test
+QUALITY_RESOURCES	globals_encoded=0	globals_bitmap=0	globals_pixels=0
+QUALITY_PAGE_RESOURCES	0	page_pixels=4	local_bitmap=0	exact=0	refined=0	substituted=0	generic_instances=0	generic_region_pixels=4	generic_ink=0	cold_work=4
+QUALITY_PAGE_RESOURCES	1	page_pixels=12707	local_bitmap=1344	exact=13	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=20315
+QUALITY_PAGE_RESOURCES	2	page_pixels=49601	local_bitmap=416	exact=135	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=16731
+QUALITY_MATCHING	components=148	ingest_comparisons=0	planner_comparisons=0	legacy_post_ingest_comparisons=unreported
+QUALITY_TOPOLOGY	corrected_instances=0
+QUALITY_STAGES	cc=0.000338056	match=0.000044173	cluster=0.000000000	plan=0.000017948	dict=0.000172692	text=0.000215665	generic=0.000028990
+PDFTOPPM: Syntax Error (491): 1 extraneous byte after segment
+
+QUALITY_PDF	0	PDFTOPPM	pass
+QUALITY_PDF	0	PDFIUM_PYTHON	pass
+QUALITY_PAGE	0	71	0	0.000012987	0.000002392	0
+PDFTOPPM: Syntax Error (527): 1 extraneous byte after segment
+Syntax Error (590): 1 extraneous byte after segment
+
+QUALITY_PDF	1	PDFTOPPM	pass
+QUALITY_PDF	1	PDFIUM_PYTHON	pass
+QUALITY_PAGE	1	163	0	0.000059120	0.000038259	0
+PDFTOPPM: Syntax Error (553): 1 extraneous byte after segment
+Syntax Error (663): 1 extraneous byte after segment
+
+QUALITY_PDF	2	PDFTOPPM	pass
+QUALITY_PDF	2	PDFIUM_PYTHON	pass
+QUALITY_PAGE	2	234	0	0.000047269	0.000025880	0
+QUALITY_RESULT	exact	3	false	468	0	164	41	0.000910050	0	0.000119376	0.000066531	0	0	136	0	0
+test quality_corpus_worker ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.45s
+

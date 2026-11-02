@@ -1,3 +1,8 @@
+// SPDX-License-Identifier: Apache-2.0
+// Extracted from this crate's jbig2enc arithmetic-coder translation.
+// Upstream coder attribution: Copyright 2006 Google Inc.; Adam Langley.
+// The state table itself is protocol data. See LICENSE-APACHE and NOTICE.
+
 //! The MQ arithmetic-coder probability state table (T.88 §E / ISO 14492
 //! Table E.1), shared by the encoder and decoder (jbig2decplan.md §10, §23).
 //!

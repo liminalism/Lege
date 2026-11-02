@@ -1,0 +1,46 @@
+    Blocking waiting for file lock on build directory
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.13s
+     Running tests/decode_roundtrip.rs (lege-codecs/jbig2enc-rust/target/debug/deps/decode_roundtrip-23149636a7a1927d)
+
+running 15 tests
+test common::tests::pbm_packing_row_major_msb_first ... ok
+test decoded_globals_is_send_sync ... ok
+test property_odd_widths_jbig2dec_agreement ... ok
+test property_odd_widths_native_roundtrip ... ok
+test dictionary_export_count_mismatch_is_typed_error ... ok
+test symbol_truncations_never_panic ... ok
+test embedded_without_globals_is_typed_error ... ok
+test multipage_shared_globals_vs_jbig2dec ... ok
+test fixtures_generic_embedded ... ok
+test fixtures_lossless_embedded ... ok
+test fixtures_lossless_standalone ... ok
+test multipage_deterministic_across_thread_counts ... ok
+test fixtures_generic_standalone ... ok
+test symbol_modes_embedded_globals_vs_jbig2dec ... ok
+test symbol_modes_standalone_vs_jbig2dec ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.30s
+
+     Running tests/encoder.rs (lege-codecs/jbig2enc-rust/target/debug/deps/encoder-1bdeba0e5cd40799)
+
+running 17 tests
+test common::tests::pbm_packing_row_major_msb_first ... ok
+test generic_region_roundtrip_with_jbig2dec ... ok
+test test_arithmetic_coder_base_table ... ok
+test pbm_packing_row_major_msb_first ... ok
+test empty_symbol_list_returns_error ... ok
+test test_encode_symbol_dict_empty_fails ... ok
+test test_encode_test_image_pbm ... ok
+test single_symbol_dict_outputs_nonempty ... ok
+test test_symbol_sorting ... ok
+test test_glyph_creation ... ok
+test test_arithmetic_coder_annex_h2 ... ok
+test test_encode_symbol_dict_single ... ok
+test duplicate_symbols_are_deduplicated ... ok
+test test_generic_region_default_gbat_fallback ... ok
+test test_encode_page_with_symbol_dictionary ... ok
+test full_page_with_symbol_dictionary_roundtrips ... ok
+test test_encode_test_image1_pbm_full_page ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.38s
+

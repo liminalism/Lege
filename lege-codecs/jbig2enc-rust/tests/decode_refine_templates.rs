@@ -82,6 +82,35 @@ fn grtemplate1_tpgron() {
 }
 
 #[test]
+fn grtemplate1_tpgron_pdfium_control() {
+    // jbig2dec 0.20 disagrees on this pre-existing decoder-only case. Keep that
+    // differential test above intact and obtain an independent rendered control
+    // instead of changing the normative context to make that oracle agree.
+    let reference = bordered(22, 20, 3);
+    let target = toggled(&reference, &[(7, 7), (11, 12), (3, 15)]);
+    let stream = refinement_page(&reference, &target, 1, true);
+    let expected = common::pbm::Pbm::new(
+        22,
+        20,
+        (0..20)
+            .flat_map(|y| {
+                let target = &target;
+                (0..22).map(move |x| u8::from(target.get(x, y)))
+            })
+            .collect(),
+    );
+    if let Some(rendered) = common::pdf::render(
+        "PDFIUM_PYTHON",
+        &common::pdf::wrap_page(22, 20, None, &stream),
+    ) {
+        let control =
+            common::pdf::render("PDFIUM_PYTHON", &common::pdf::wrap_uncompressed(&expected))
+                .unwrap();
+        common::pbm::assert_pixels_eq(&control, &rendered, "GRTEMPLATE1 TPGRON PDFium");
+    }
+}
+
+#[test]
 fn identity_refinements() {
     // Target == reference exercises the pure typical-prediction path under TPGRON.
     let reference = bordered(18, 14, 4);

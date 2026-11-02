@@ -163,9 +163,12 @@ pub use crate::jbig2arith::Jbig2ArithCoder;
 #[cfg(feature = "symboldict")]
 pub use jbig2cc::{BBox, CC, CCImage, Run, analyze_page, extract_symbols_for_jbig2};
 #[cfg(feature = "encode")]
-pub use jbig2enc::{PdfSplitOutput, encode_document};
+pub use jbig2enc::{
+    DecoderResourceLimits, DocumentResourceMetrics, EncodedPdfGroup, PageResourceMetrics,
+    PdfGroupEncoder, PdfGroupOptions, PdfSplitOutput, encode_document,
+};
 #[cfg(feature = "encode")]
-pub use jbig2structs::Jbig2Config;
+pub use jbig2structs::{Jbig2Config, PdfDictionaryPolicy};
 
 #[cfg(feature = "encode")]
 use jbig2enc::Jbig2Encoder;

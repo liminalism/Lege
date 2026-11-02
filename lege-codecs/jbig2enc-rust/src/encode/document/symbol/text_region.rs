@@ -371,7 +371,7 @@ pub fn encode_text_region_mapped(
         }
     }
 
-    coder.flush(true);
+    coder.flush_with_termination(true, config.canonical_arithmetic_termination);
     payload.extend(coder.as_bytes());
 
     Ok(payload)
@@ -591,7 +591,7 @@ pub fn encode_text_region(
         coder.encode_oob(IntProc::Iads)?;
     }
 
-    coder.flush(true);
+    coder.flush_with_termination(true, config.canonical_arithmetic_termination);
     payload.extend(coder.as_bytes());
 
     Ok(payload)

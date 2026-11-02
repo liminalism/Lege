@@ -1,0 +1,123 @@
+{
+  "corpus": [
+    {
+      "file": "/tmp/pdfs/jbig2-mixed-real-20261101/confed-0001.pbm",
+      "sha256": "fd87d4178330e6de44dd055eac5d4126144ad66cec2542b1a5b95b180c8b8f3c",
+      "width": 1298,
+      "height": 2140
+    },
+    {
+      "file": "/tmp/pdfs/jbig2-mixed-real-20261101/confed-0005.pbm",
+      "sha256": "3e81ec02acb98a9476657bafc4846a2e809ec182a1acfdb10960ba6401ae50ae",
+      "width": 1248,
+      "height": 2010
+    },
+    {
+      "file": "/tmp/pdfs/jbig2-mixed-real-20261101/confed-0010.pbm",
+      "sha256": "fd7072151bd0d0069765aed1e3aa9f9a249732dfcf47cde2eb1c7ad9df1f5509",
+      "width": 1248,
+      "height": 2010
+    },
+    {
+      "file": "/tmp/pdfs/jbig2-mixed-real-20261101/confed-0020.pbm",
+      "sha256": "f312fc233262e156545db88d99520ec617311f43cc76cced1f7e1fe8bbc85605",
+      "width": 1248,
+      "height": 2010
+    },
+    {
+      "file": "/tmp/pdfs/jbig2-mixed-real-20261101/confed-0030.pbm",
+      "sha256": "18d8454dd468e36beb3a49c0984427bc408362fc31a3035216e88daa5180fdc2",
+      "width": 1248,
+      "height": 2010
+    },
+    {
+      "file": "/tmp/pdfs/jbig2-mixed-real-20261101/confed-0050.pbm",
+      "sha256": "eb70211f676a719d36a4351344ea1504b6525eace87aeeb8db68e8cc40b7c6c4",
+      "width": 1248,
+      "height": 2010
+    },
+    {
+      "file": "/tmp/pdfs/jbig2-mixed-real-20261101/confed-0100.pbm",
+      "sha256": "8eb1b1e7a2986832f561100bc6c53165d9162d04fc4c5c85bc40bb6f05470395",
+      "width": 1195,
+      "height": 1891
+    },
+    {
+      "file": "/tmp/pdfs/jbig2-mixed-real-20261101/confed-0200.pbm",
+      "sha256": "0cb946660d34b6613cdaba705aecf18baef3603ad6d48142f7ba0c6c98476211",
+      "width": 1195,
+      "height": 1891
+    },
+    {
+      "file": "/tmp/pdfs/jbig2-mixed-real-20261101/confed-0400.pbm",
+      "sha256": "bfbe2cc904359e8deee44062731e23e1bf52464149e59022b4098486a755b579",
+      "width": 1229,
+      "height": 1885
+    },
+    {
+      "file": "/tmp/pdfs/jbig2-mixed-real-20261101/confed-0700.pbm",
+      "sha256": "582c386b0498699dc2c976962c31ed4b601936d50fef3515c4006946538bef27",
+      "width": 1229,
+      "height": 1885
+    },
+    {
+      "file": "/tmp/pdfs/jbig2-mixed-real-20261101/radar-math-0125.pbm",
+      "sha256": "a9bd09248714e72c65f87ff6b28c19c0abb7828c8c3d75201491b4bc1a2f0439",
+      "width": 2040,
+      "height": 2640
+    },
+    {
+      "file": "/tmp/pdfs/jbig2-mixed-real-20261101/radar-math-0150.pbm",
+      "sha256": "177f82ab2b9f64754f14ab0618ee91d8feaf3545cec92d321b0e4770c84905ff",
+      "width": 2040,
+      "height": 2640
+    },
+    {
+      "file": "/tmp/pdfs/jbig2-mixed-real-20261101/radar-math-0200.pbm",
+      "sha256": "5a0d93d51481dce60e113ae79c54c71ce5488f6965c8b81379ab516a6dddde96",
+      "width": 2040,
+      "height": 2640
+    },
+    {
+      "file": "/tmp/pdfs/jbig2-mixed-real-20261101/sinitic-0001.pbm",
+      "sha256": "17d78a60675b541db3ae1e507ca26020887f93b21aa5bb97b766ea7c2f530723",
+      "width": 1474,
+      "height": 2212
+    },
+    {
+      "file": "/tmp/pdfs/jbig2-mixed-real-20261101/sinitic-0002.pbm",
+      "sha256": "88591f6c51a5d56a6e67ea5b050c3e88ba8665be480ce525957d6eddf3c2bf76",
+      "width": 1474,
+      "height": 2212
+    },
+    {
+      "file": "/tmp/pdfs/jbig2-mixed-real-20261101/sinitic-0003.pbm",
+      "sha256": "1c206d9a50b8a8f3dc1100012555ec0bf5f51f1730354a547153844df3882232",
+      "width": 1474,
+      "height": 2212
+    },
+    {
+      "file": "/tmp/pdfs/jbig2-mixed-real-20261101/sinitic-0004.pbm",
+      "sha256": "389a8a37f0c2800cab035137e87bbddbab576ec4de7480133f564aa625a88c6f",
+      "width": 1474,
+      "height": 2212
+    }
+  ],
+  "packed_sha256": "fe5320988d66b0b52136e114c37f01cc9aebbd7f3c1a335e16b92ec134e26b70",
+  "cpu": 0,
+  "rounds": 3,
+  "pairs": 5,
+  "rust_worker": {
+    "path": "/tmp/jbig2-generic-u8-worker",
+    "sha256": "8fd877fb97fbbe07144a685c511d51389b591525bf322afdb513ce4395d47915"
+  },
+  "c_reference": {
+    "path": "/tmp/jbig2-generic-c-2026-reference/runner",
+    "sha256": "42551f62f5c3ca8742d9fd311b1f3cc017803b4527c233f168e3b9ac81aa61f8"
+  },
+  "c_source": {
+    "jbig2arith.h": "6ce68f4855624ef023d95563b3e89eab351a3c1d773a68d258ecc046be1d696f",
+    "jbig2arith.cc": "16b57c36cfe1406db8d61206c8fc880f76c47bf0369357cce111f0b0bf2611dd"
+  },
+  "scope": "Matched, pinned-CPU C/Rust generic kernel runs on identical packed pages.\n\nSPDX-License-Identifier: MIT\nTimes context allocation, template-0 coding (TPGDON off), finalization, output\ncopy and destruction. Input preparation, file output and byte verification are\noutside each reported timer. This is a kernel comparison, not a C PDF pipeline.\n"
+}

@@ -1,0 +1,30 @@
+   Compiling jbig2enc-rust v0.6.0 (/home/dk/rust-projects/Lege-ecosystem/lege-codecs/jbig2enc-rust)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.85s
+     Running tests/arithmetic_termination.rs (lege-codecs/jbig2enc-rust/target/debug/deps/arithmetic_termination-2272a505ef026f9f)
+
+running 2 tests
+test common::tests::pbm_packing_row_major_msb_first ... ok
+PDFTOPPM: Syntax Error (491): 1 extraneous byte after segment
+
+PDFTOPPM: Syntax Error (556): 1 extraneous byte after segment
+
+PDFTOPPM: Syntax Error (491): 1 extraneous byte after segment
+
+PDFTOPPM: Syntax Error (553): 1 extraneous byte after segment
+Syntax Error (663): 1 extraneous byte after segment
+
+PDFTOPPM: Syntax Error (527): 1 extraneous byte after segment
+Syntax Error (590): 1 extraneous byte after segment
+
+mode	fixture	removed_bytes	poppler_warnings_before	poppler_warnings_after
+generic	tests/fixtures/original/blank.pbm	1	1	0
+generic	tests/fixtures/original/symbols.pbm	0	0	0
+generic	tests/fixtures/original/marks.pbm	1	1	0
+exact	tests/fixtures/original/blank.pbm	1	1	0
+exact	tests/fixtures/original/symbols.pbm	2	2	0
+exact	tests/fixtures/original/marks.pbm	2	2	0
+
+test duplicate_stop_prefix_is_redundant_in_arithmetic_segments ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.48s
+

@@ -1,0 +1,27 @@
+
+running 1 test
+QUALITY_RESOURCES	globals_encoded=0	globals_bitmap=0	globals_pixels=0
+QUALITY_PAGE_RESOURCES	0	page_pixels=4	local_bitmap=0	exact=0	refined=0	substituted=0	generic_instances=0	generic_region_pixels=4	generic_ink=0	cold_work=4
+QUALITY_PAGE_RESOURCES	1	page_pixels=12707	local_bitmap=0	exact=0	refined=0	substituted=0	generic_instances=0	generic_region_pixels=12707	generic_ink=629	cold_work=12707
+QUALITY_PAGE_RESOURCES	2	page_pixels=49601	local_bitmap=0	exact=0	refined=0	substituted=0	generic_instances=0	generic_region_pixels=49601	generic_ink=7110	cold_work=49601
+QUALITY_MATCHING	components=0	ingest_comparisons=0	planner_comparisons=0	legacy_post_ingest_comparisons=unreported
+QUALITY_TOPOLOGY	corrected_instances=0
+QUALITY_STAGES	cc=0.000000000	match=0.000000000	cluster=0.000000000	plan=0.000009516	dict=0.000000000	text=0.000000000	generic=0.000693291
+PDFTOPPM: Syntax Error (491): 1 extraneous byte after segment
+
+QUALITY_PDF	0	PDFTOPPM	pass
+QUALITY_PDF	0	PDFIUM_PYTHON	pass
+QUALITY_PAGE	0	71	0	0.000010690	0.000001343	0
+PDFTOPPM: Syntax Error (556): 1 extraneous byte after segment
+
+QUALITY_PDF	1	PDFTOPPM	pass
+QUALITY_PDF	1	PDFIUM_PYTHON	pass
+QUALITY_PAGE	1	129	0	0.000066680	0.000047069	0
+QUALITY_PDF	2	PDFTOPPM	pass
+QUALITY_PDF	2	PDFIUM_PYTHON	pass
+QUALITY_PAGE	2	647	0	0.000225865	0.000211415	0
+QUALITY_RESULT	generic	3	true	847	0	0	757	0.000790897	0	0.000303235	0.000259827	0	0	0	0	0
+test quality_corpus_worker ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.47s
+

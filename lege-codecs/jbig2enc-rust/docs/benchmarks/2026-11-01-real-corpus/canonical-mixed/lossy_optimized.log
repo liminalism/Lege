@@ -1,0 +1,178 @@
+
+running 1 test
+QUALITY_RESOURCES	globals_encoded=172159	globals_bitmap=1416336	globals_pixels=5307153
+QUALITY_PAGE_RESOURCES	0	page_pixels=2777720	local_bitmap=0	exact=64	refined=0	substituted=0	generic_instances=1	generic_region_pixels=2777720	generic_ink=2704298	cold_work=8115985
+QUALITY_PAGE_RESOURCES	1	page_pixels=2508480	local_bitmap=0	exact=44	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=5313350
+QUALITY_PAGE_RESOURCES	2	page_pixels=2508480	local_bitmap=0	exact=2877	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=5325030
+QUALITY_PAGE_RESOURCES	3	page_pixels=2508480	local_bitmap=0	exact=2709	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=5594225
+QUALITY_PAGE_RESOURCES	4	page_pixels=2508480	local_bitmap=0	exact=1841	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=5511116
+QUALITY_PAGE_RESOURCES	5	page_pixels=2508480	local_bitmap=0	exact=2475	refined=0	substituted=7	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=5807627
+QUALITY_PAGE_RESOURCES	6	page_pixels=2259745	local_bitmap=0	exact=2963	refined=0	substituted=2	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=5782222
+QUALITY_PAGE_RESOURCES	7	page_pixels=2259745	local_bitmap=0	exact=2928	refined=0	substituted=3	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=5772023
+QUALITY_PAGE_RESOURCES	8	page_pixels=2316665	local_bitmap=0	exact=2146	refined=0	substituted=4	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=5772497
+QUALITY_PAGE_RESOURCES	9	page_pixels=2316665	local_bitmap=0	exact=3315	refined=0	substituted=3	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=5787576
+QUALITY_PAGE_RESOURCES	10	page_pixels=5385600	local_bitmap=0	exact=3464	refined=0	substituted=1	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=6285390
+QUALITY_PAGE_RESOURCES	11	page_pixels=5385600	local_bitmap=0	exact=2513	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=6952938
+QUALITY_PAGE_RESOURCES	12	page_pixels=5385600	local_bitmap=0	exact=2774	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=6245025
+QUALITY_PAGE_RESOURCES	13	page_pixels=3260488	local_bitmap=0	exact=2973	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=5946832
+QUALITY_PAGE_RESOURCES	14	page_pixels=3260488	local_bitmap=0	exact=3418	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=6050864
+QUALITY_PAGE_RESOURCES	15	page_pixels=3260488	local_bitmap=0	exact=3415	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=6048318
+QUALITY_PAGE_RESOURCES	16	page_pixels=3260488	local_bitmap=0	exact=1055	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=5542909
+QUALITY_MATCHING	components=40995	ingest_comparisons=0	planner_comparisons=137569	legacy_post_ingest_comparisons=unreported
+QUALITY_TOPOLOGY	corrected_instances=0
+QUALITY_TRIAL	None	dictionary control	AllGlobal	None	None	272245	raw=None
+QUALITY_TRIAL	None	dictionary control	SharedGlobal	None	None	284331	raw=None
+QUALITY_TRIAL	None	dictionary control	SharedGlobalWithLocal	None	None	278536	raw=None
+QUALITY_TRIAL	Some(5415)	family + refinement	AllGlobal	Some(1179)	Some(-184)	272429	raw=Some(1179)
+QUALITY_TRIAL	Some(5415)	family + refinement	SharedGlobal	Some(1179)	Some(-12197)	284442	raw=Some(1179)
+QUALITY_TRIAL	Some(5415)	family + refinement	SharedGlobalWithLocal	Some(1179)	Some(-6338)	278583	raw=Some(1179)
+QUALITY_TRIAL	Some(9543)	family + direct substitution	AllGlobal	Some(18)	Some(-34)	272279	raw=Some(18)
+QUALITY_TRIAL	Some(9543)	family + direct substitution	SharedGlobal	Some(18)	Some(-12084)	284329	raw=Some(18)
+QUALITY_TRIAL	Some(9543)	family + direct substitution	SharedGlobalWithLocal	Some(18)	Some(-6385)	278630	raw=Some(18)
+QUALITY_TRIAL	Some(1250)	family + direct substitution	AllGlobal	Some(-38)	Some(-6)	272251	raw=Some(14)
+QUALITY_TRIAL	Some(1250)	family + direct substitution	SharedGlobal	Some(-12088)	Some(-12107)	284352	raw=Some(14)
+QUALITY_TRIAL	Some(1250)	family + direct substitution	SharedGlobalWithLocal	Some(-6389)	Some(-6251)	278496	raw=Some(14)
+QUALITY_TRIAL	Some(3345)	family + direct substitution	AllGlobal	Some(-40)	Some(37)	272208	raw=Some(12)
+QUALITY_TRIAL	Some(3345)	family + direct substitution	SharedGlobal	Some(-12109)	Some(-12128)	284336	raw=Some(12)
+QUALITY_TRIAL	Some(3345)	family + direct substitution	SharedGlobalWithLocal	Some(-6391)	Some(-6349)	278557	raw=Some(12)
+QUALITY_TRIAL	Some(4669)	family + direct substitution	AllGlobal	Some(-8)	Some(11)	272197	raw=Some(12)
+QUALITY_TRIAL	Some(4669)	family + direct substitution	SharedGlobal	Some(-12109)	Some(-12137)	284334	raw=Some(12)
+QUALITY_TRIAL	Some(4669)	family + direct substitution	SharedGlobalWithLocal	Some(-6349)	Some(-6400)	278597	raw=Some(12)
+QUALITY_TRIAL	Some(5006)	family + direct substitution	AllGlobal	Some(-8)	Some(-109)	272306	raw=Some(12)
+QUALITY_TRIAL	Some(5006)	family + direct substitution	SharedGlobal	Some(-12128)	Some(-12103)	284300	raw=Some(12)
+QUALITY_TRIAL	Some(5006)	family + direct substitution	SharedGlobalWithLocal	Some(-6391)	Some(-6399)	278596	raw=Some(12)
+QUALITY_TRIAL	Some(0)	generic residual	AllGlobal	None	Some(8)	272189	raw=None
+QUALITY_TRIAL	Some(0)	generic residual	SharedGlobal	None	Some(-12145)	284334	raw=None
+QUALITY_TRIAL	Some(0)	generic residual	SharedGlobalWithLocal	None	Some(-6466)	278655	raw=None
+QUALITY_TRIAL	Some(18126)	generic residual	AllGlobal	None	Some(-127)	272316	raw=None
+QUALITY_TRIAL	Some(18126)	generic residual	SharedGlobal	None	Some(-12145)	284334	raw=None
+QUALITY_TRIAL	Some(18126)	generic residual	SharedGlobalWithLocal	None	Some(-6543)	278732	raw=None
+QUALITY_TRIAL	Some(17564)	generic residual	AllGlobal	None	Some(-49)	272238	raw=None
+QUALITY_TRIAL	Some(17564)	generic residual	SharedGlobal	None	Some(-12145)	284334	raw=None
+QUALITY_TRIAL	Some(17564)	generic residual	SharedGlobalWithLocal	None	Some(-6526)	278715	raw=None
+QUALITY_TRIAL	Some(18534)	generic residual	AllGlobal	None	Some(-69)	272258	raw=None
+QUALITY_TRIAL	Some(18534)	generic residual	SharedGlobal	None	Some(-12145)	284334	raw=None
+QUALITY_TRIAL	Some(18534)	generic residual	SharedGlobalWithLocal	None	Some(-6547)	278736	raw=None
+QUALITY_TRIAL	Some(16981)	generic residual	AllGlobal	None	Some(-130)	272319	raw=None
+QUALITY_TRIAL	Some(16981)	generic residual	SharedGlobal	None	Some(-12145)	284334	raw=None
+QUALITY_TRIAL	Some(16981)	generic residual	SharedGlobalWithLocal	None	Some(-6610)	278799	raw=None
+QUALITY_TRIAL	Some(18645)	generic residual	AllGlobal	None	Some(-67)	272256	raw=None
+QUALITY_TRIAL	Some(18645)	generic residual	SharedGlobal	None	Some(-12145)	284334	raw=None
+QUALITY_TRIAL	Some(18645)	generic residual	SharedGlobalWithLocal	None	Some(-6548)	278737	raw=None
+QUALITY_TRIAL	Some(16950)	generic residual	AllGlobal	None	Some(-76)	272265	raw=None
+QUALITY_TRIAL	Some(16950)	generic residual	SharedGlobal	None	Some(-12145)	284334	raw=None
+QUALITY_TRIAL	Some(16950)	generic residual	SharedGlobalWithLocal	None	Some(-6574)	278763	raw=None
+QUALITY_TRIAL	Some(16964)	reference + refinement	AllGlobal	Some(1557)	Some(-47)	272236	raw=Some(1557)
+QUALITY_TRIAL	Some(16964)	reference + refinement	SharedGlobal	Some(1557)	Some(-12145)	284334	raw=Some(1557)
+QUALITY_TRIAL	Some(16964)	reference + refinement	SharedGlobalWithLocal	Some(1557)	Some(-6527)	278716	raw=Some(1557)
+QUALITY_TRIAL	Some(16964)	generic residual	AllGlobal	None	Some(-89)	272278	raw=None
+QUALITY_TRIAL	Some(16964)	generic residual	SharedGlobal	None	Some(-12145)	284334	raw=None
+QUALITY_TRIAL	Some(16964)	generic residual	SharedGlobalWithLocal	None	Some(-6606)	278795	raw=None
+QUALITY_TRIAL	Some(16963)	generic residual	AllGlobal	None	Some(-114)	272303	raw=None
+QUALITY_TRIAL	Some(16963)	generic residual	SharedGlobal	None	Some(-12145)	284334	raw=None
+QUALITY_TRIAL	Some(16963)	generic residual	SharedGlobalWithLocal	None	Some(-6605)	278794	raw=None
+QUALITY_TRIAL	Some(16962)	generic residual	AllGlobal	None	Some(-117)	272306	raw=None
+QUALITY_TRIAL	Some(16962)	generic residual	SharedGlobal	None	Some(-12145)	284334	raw=None
+QUALITY_TRIAL	Some(16962)	generic residual	SharedGlobalWithLocal	None	Some(-6624)	278813	raw=None
+QUALITY_TRIAL	Some(18189)	generic residual	AllGlobal	None	Some(-10)	272199	raw=None
+QUALITY_TRIAL	Some(18189)	generic residual	SharedGlobal	None	Some(-12145)	284334	raw=None
+QUALITY_TRIAL	Some(18189)	generic residual	SharedGlobalWithLocal	None	Some(-6514)	278703	raw=None
+QUALITY_TRIAL	Some(18620)	generic residual	AllGlobal	None	Some(-58)	272247	raw=None
+QUALITY_TRIAL	Some(18620)	generic residual	SharedGlobal	None	Some(-12145)	284334	raw=None
+QUALITY_TRIAL	Some(18620)	generic residual	SharedGlobalWithLocal	None	Some(-6538)	278727	raw=None
+QUALITY_TRIAL	Some(18412)	generic residual	AllGlobal	None	Some(-38)	272227	raw=None
+QUALITY_TRIAL	Some(18412)	generic residual	SharedGlobal	None	Some(-12145)	284334	raw=None
+QUALITY_TRIAL	Some(18412)	generic residual	SharedGlobalWithLocal	None	Some(-6525)	278714	raw=None
+QUALITY_TRIAL	None	whole-page generic control	AllGlobal	None	Some(-108884)	381073	raw=None
+QUALITY_OPTIMIZATION	trials=64	comparisons=137569	baseline=272245	generic=381073	selected=272189	exact_instances=40974	refined_instances=0	generic_instances=1	substituted_instances=20
+QUALITY_STAGES	cc=0.050096257	match=0.018905894	cluster=0.000000000	plan=15.219289901	dict=0.000000000	text=0.000000000	generic=0.000000000
+QUALITY_PDF_DIAGNOSTICS	0	PDFTOPPM	trailing_bytes=0
+QUALITY_PDF	0	PDFTOPPM	pass
+QUALITY_PDF_DIAGNOSTICS	0	PDFIUM_PYTHON	trailing_bytes=0
+QUALITY_PDF	0	PDFIUM_PYTHON	pass
+QUALITY_PAGE	0	2041	0	0.052327421	0.010706783	0
+QUALITY_PDF_DIAGNOSTICS	1	PDFTOPPM	trailing_bytes=0
+QUALITY_PDF	1	PDFTOPPM	pass
+QUALITY_PDF_DIAGNOSTICS	1	PDFIUM_PYTHON	trailing_bytes=0
+QUALITY_PDF	1	PDFIUM_PYTHON	pass
+QUALITY_PAGE	1	226	0	0.049008581	0.000645682	0
+QUALITY_PDF_DIAGNOSTICS	2	PDFTOPPM	trailing_bytes=0
+QUALITY_PDF	2	PDFTOPPM	pass
+QUALITY_PDF_DIAGNOSTICS	2	PDFIUM_PYTHON	trailing_bytes=0
+QUALITY_PDF	2	PDFIUM_PYTHON	pass
+QUALITY_PAGE	2	5443	0	0.050644031	0.001488205	0
+QUALITY_PDF_DIAGNOSTICS	3	PDFTOPPM	trailing_bytes=0
+QUALITY_PDF	3	PDFTOPPM	pass
+QUALITY_PDF_DIAGNOSTICS	3	PDFIUM_PYTHON	trailing_bytes=0
+QUALITY_PDF	3	PDFIUM_PYTHON	pass
+QUALITY_PAGE	3	7350	0	0.040979904	0.001308513	0
+QUALITY_PDF_DIAGNOSTICS	4	PDFTOPPM	trailing_bytes=0
+QUALITY_PDF	4	PDFTOPPM	pass
+QUALITY_PDF_DIAGNOSTICS	4	PDFIUM_PYTHON	trailing_bytes=0
+QUALITY_PDF	4	PDFIUM_PYTHON	pass
+QUALITY_PAGE	4	5075	0	0.052936182	0.001449578	0
+QUALITY_PDF_DIAGNOSTICS	5	PDFTOPPM	trailing_bytes=0
+QUALITY_PDF	5	PDFTOPPM	pass
+QUALITY_PDF_DIAGNOSTICS	5	PDFIUM_PYTHON	trailing_bytes=0
+QUALITY_PDF	5	PDFIUM_PYTHON	pass
+QUALITY_PAGE	5	6719	7	0.048856252	0.001625302	7
+QUALITY_PDF_DIAGNOSTICS	6	PDFTOPPM	trailing_bytes=0
+QUALITY_PDF	6	PDFTOPPM	pass
+QUALITY_PDF_DIAGNOSTICS	6	PDFIUM_PYTHON	trailing_bytes=0
+QUALITY_PDF	6	PDFIUM_PYTHON	pass
+QUALITY_PAGE	6	8174	2	0.047057634	0.001613475	2
+QUALITY_PDF_DIAGNOSTICS	7	PDFTOPPM	trailing_bytes=0
+QUALITY_PDF	7	PDFTOPPM	pass
+QUALITY_PDF_DIAGNOSTICS	7	PDFIUM_PYTHON	trailing_bytes=0
+QUALITY_PDF	7	PDFIUM_PYTHON	pass
+QUALITY_PAGE	7	8141	3	0.043998337	0.001477013	3
+QUALITY_PDF_DIAGNOSTICS	8	PDFTOPPM	trailing_bytes=0
+QUALITY_PDF	8	PDFTOPPM	pass
+QUALITY_PDF_DIAGNOSTICS	8	PDFIUM_PYTHON	trailing_bytes=0
+QUALITY_PDF	8	PDFIUM_PYTHON	pass
+QUALITY_PAGE	8	5930	4	0.043839001	0.001304118	4
+QUALITY_PDF_DIAGNOSTICS	9	PDFTOPPM	trailing_bytes=0
+QUALITY_PDF	9	PDFTOPPM	pass
+QUALITY_PDF_DIAGNOSTICS	9	PDFIUM_PYTHON	trailing_bytes=0
+QUALITY_PDF	9	PDFIUM_PYTHON	pass
+QUALITY_PAGE	9	8943	3	0.049497557	0.001619436	3
+QUALITY_PDF_DIAGNOSTICS	10	PDFTOPPM	trailing_bytes=0
+QUALITY_PDF	10	PDFTOPPM	pass
+QUALITY_PDF_DIAGNOSTICS	10	PDFIUM_PYTHON	trailing_bytes=0
+QUALITY_PDF	10	PDFIUM_PYTHON	pass
+QUALITY_PAGE	10	8140	1	0.053726345	0.002051574	1
+QUALITY_PDF_DIAGNOSTICS	11	PDFTOPPM	trailing_bytes=0
+QUALITY_PDF	11	PDFTOPPM	pass
+QUALITY_PDF_DIAGNOSTICS	11	PDFIUM_PYTHON	trailing_bytes=0
+QUALITY_PDF	11	PDFIUM_PYTHON	pass
+QUALITY_PAGE	11	5339	0	0.043228440	0.001953975	0
+QUALITY_PDF_DIAGNOSTICS	12	PDFTOPPM	trailing_bytes=0
+QUALITY_PDF	12	PDFTOPPM	pass
+QUALITY_PDF_DIAGNOSTICS	12	PDFIUM_PYTHON	trailing_bytes=0
+QUALITY_PDF	12	PDFIUM_PYTHON	pass
+QUALITY_PAGE	12	5817	0	0.052307742	0.002055002	0
+QUALITY_PDF_DIAGNOSTICS	13	PDFTOPPM	trailing_bytes=0
+QUALITY_PDF	13	PDFTOPPM	pass
+QUALITY_PDF_DIAGNOSTICS	13	PDFIUM_PYTHON	trailing_bytes=0
+QUALITY_PDF	13	PDFIUM_PYTHON	pass
+QUALITY_PAGE	13	6335	0	0.046824683	0.001792498	0
+QUALITY_PDF_DIAGNOSTICS	14	PDFTOPPM	trailing_bytes=0
+QUALITY_PDF	14	PDFTOPPM	pass
+QUALITY_PDF_DIAGNOSTICS	14	PDFIUM_PYTHON	trailing_bytes=0
+QUALITY_PDF	14	PDFIUM_PYTHON	pass
+QUALITY_PAGE	14	6886	0	0.048936891	0.001702312	0
+QUALITY_PDF_DIAGNOSTICS	15	PDFTOPPM	trailing_bytes=0
+QUALITY_PDF	15	PDFTOPPM	pass
+QUALITY_PDF_DIAGNOSTICS	15	PDFIUM_PYTHON	trailing_bytes=0
+QUALITY_PDF	15	PDFIUM_PYTHON	pass
+QUALITY_PAGE	15	7229	0	0.052907424	0.002038531	0
+QUALITY_PDF_DIAGNOSTICS	16	PDFTOPPM	trailing_bytes=0
+QUALITY_PDF	16	PDFTOPPM	pass
+QUALITY_PDF_DIAGNOSTICS	16	PDFIUM_PYTHON	trailing_bytes=0
+QUALITY_PDF	16	PDFIUM_PYTHON	pass
+QUALITY_PAGE	16	2242	0	0.051794067	0.001241688	0
+QUALITY_RESULT	lossy_optimized	17	false	272189	172159	0	1780	15.320586187	20	0.828870492	0.036073685	1416336	0	21471	0	20
+test quality_corpus_worker ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 24.26s
+

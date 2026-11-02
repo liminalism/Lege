@@ -1,0 +1,16 @@
+{
+  "functional": {
+    "binaries": 37,
+    "passed": 261,
+    "ignored": 8,
+    "filtered": 2
+  },
+  "release": {
+    "binaries": 3,
+    "passed": 7,
+    "ignored": 1,
+    "filtered": 0
+  },
+  "arithmetic_source_restored_exactly": true,
+  "scope": "Independent jbig2dec0.20 configured; no new PDFium/Poppler claim. Two pre-existing template-one-prefix filters and intentional benchmark/legacy-fixture ignores retained. Candidate release hash/context tests and 17-page raw-byte/C equality pass, but neither performance candidate is retained. No system-load/governor changes, no publication."
+}

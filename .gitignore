@@ -86,6 +86,13 @@ sources/oracle-sweep-*/
 *.j2k
 *.jb2
 *.pbm
+!lege-codecs/jbig2enc-rust/tests/fixtures/original/blank.pbm
+!lege-codecs/jbig2enc-rust/tests/fixtures/original/marks.pbm
+!lege-codecs/jbig2enc-rust/tests/fixtures/original/symbols.pbm
+
+# Retained JBIG2 benchmark/validation evidence; private corpus stays in scratch.
+!lege-codecs/jbig2enc-rust/docs/benchmarks/**/*.log
+!lege-codecs/jbig2enc-rust/docs/validation/**/*.log
 
 # AKR: a rebuildable cache and disposable agent notes.
 .akr/cache/

@@ -1,0 +1,1752 @@
+[
+  {
+    "file": "0000-text.pbm",
+    "bytes": 10548,
+    "sha256": "8384ca9c44d6ae006dc8a5f663c47daa30f5a9252e262021515d0974e0e8600e"
+  },
+  {
+    "file": "0001-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "84abb0901ae1dd094f13b944a4136520b345b8b4fe7e82f66ee69ce55abf3423"
+  },
+  {
+    "file": "0002-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "ea005176e15e6a0ee07ab04d59cd6ee4b417ab7028bc173ed79ca1a074d8d445"
+  },
+  {
+    "file": "0003-math.pbm",
+    "bytes": 10548,
+    "sha256": "0b586eda437c81f3bcc2ab4af84a147ddb9558af0f97f151ac65d93f567318c5"
+  },
+  {
+    "file": "0004-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "09bc854e20754cf62077ab302e652e96b6baf0f831d630c42be0f43c7d244771"
+  },
+  {
+    "file": "0005-text.pbm",
+    "bytes": 10548,
+    "sha256": "094efb043349552be1e4c0e8361e3e9ff3115e0f4871a97b05c27ba13cc1b58c"
+  },
+  {
+    "file": "0006-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "fb03bbb5e120ee20076381663020474374dee70a67fa3e95cc1890e6cb755e3b"
+  },
+  {
+    "file": "0007-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "aac0a8e94c435fc2a91c18776a791efed06f3ee5f53a8e417d1e10fcbb19892c"
+  },
+  {
+    "file": "0008-math.pbm",
+    "bytes": 10548,
+    "sha256": "b19834bb4f0172f7b86a09d419cb791e62217adea754e7d31b90d61a6931cf35"
+  },
+  {
+    "file": "0009-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "5fd463a74464aa0482af5dd1dd9677da82b8c9aee35fc11ce2a28b677efc4f5c"
+  },
+  {
+    "file": "0010-text.pbm",
+    "bytes": 10548,
+    "sha256": "b0f907e6e6261f3152132a98d0ee91a8b8e6dceef198e0aae116028ac01dd650"
+  },
+  {
+    "file": "0011-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "a547a92013bceade7438decf65ea7dee89b36f51433a6885ad3e36b361165ab6"
+  },
+  {
+    "file": "0012-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "3495ca1ca214a92459044c6689512d32b3fa461eb71215d378864f54f2cf8cc8"
+  },
+  {
+    "file": "0013-math.pbm",
+    "bytes": 10548,
+    "sha256": "bb5f39c24ba67067e47abb8e882dcdbec184c62579339f3ff87378faa3eb7b67"
+  },
+  {
+    "file": "0014-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "5fd463a74464aa0482af5dd1dd9677da82b8c9aee35fc11ce2a28b677efc4f5c"
+  },
+  {
+    "file": "0015-text.pbm",
+    "bytes": 10548,
+    "sha256": "4101e5b1242409054e8f8ba3634365e985ac7a0bad67745008dbc9d68a406ca2"
+  },
+  {
+    "file": "0016-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "b2577f180d2ac3cac7cc7cd5fa77c8404466e2e926b2a9a016664ac4479f37e3"
+  },
+  {
+    "file": "0017-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "a785ab7386d39eaec5e61739ef9368177c2cd326b4afed27274fe1dad2210df5"
+  },
+  {
+    "file": "0018-math.pbm",
+    "bytes": 10548,
+    "sha256": "80770ffb55d625187ecea3f5a6284c0d7f37d40cbc8967fd2393035b9d05d0f1"
+  },
+  {
+    "file": "0019-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "09bc854e20754cf62077ab302e652e96b6baf0f831d630c42be0f43c7d244771"
+  },
+  {
+    "file": "0020-text.pbm",
+    "bytes": 10548,
+    "sha256": "738d688566ba89fe09e50fa67d2562825a6487b9e29c509be66ef07b2dc54f4f"
+  },
+  {
+    "file": "0021-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "0da777a4fa597585004ab113145ef0b7a9f08f682974f3aa24eb7954488516cf"
+  },
+  {
+    "file": "0022-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "e23994d47c57d23a3d60c8fef8d4eb32d9276bfe405c2d114dd9635420ff3185"
+  },
+  {
+    "file": "0023-math.pbm",
+    "bytes": 10548,
+    "sha256": "b60e4b76658c0bfaeed35749757dae230b1a548ddaf828d2c4f8eb566eef4db4"
+  },
+  {
+    "file": "0024-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "5fd463a74464aa0482af5dd1dd9677da82b8c9aee35fc11ce2a28b677efc4f5c"
+  },
+  {
+    "file": "0025-text.pbm",
+    "bytes": 10548,
+    "sha256": "281b1f241a218dbaf6fe5e4d6ff3c816a44dde6244df40d381ad23f6c600dc87"
+  },
+  {
+    "file": "0026-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "07de40110f0024051a7a20c319d486c4cd92692cf7ced9d0df3c0b6f3088d919"
+  },
+  {
+    "file": "0027-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "215a59eac77cb7333e4f91e284dfb6c76b176403410f0b0c53e2dace3de771be"
+  },
+  {
+    "file": "0028-math.pbm",
+    "bytes": 10548,
+    "sha256": "a9685c28b7ec793fdcaee4ad7cc27d56d0ac2e4b709aa8fb5b3ef6fbaf9cfaf9"
+  },
+  {
+    "file": "0029-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "543f450d5837476e7e4b24ba2369c107a8dbc2ffe0e457ea25845e43da9b6e76"
+  },
+  {
+    "file": "0030-text.pbm",
+    "bytes": 10548,
+    "sha256": "a1c1d51cef866be3b84954dfde7ec56b8bb9747a6207d2dd86c44987d68f0926"
+  },
+  {
+    "file": "0031-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "1db63f123021288ff28fbb704d15a13dd830a2e8cc6d0d90f73a7f30b40bb876"
+  },
+  {
+    "file": "0032-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "ecf0685c164930a084002adf9504a6899d20d60cf9573a3db8179f97513f2f71"
+  },
+  {
+    "file": "0033-math.pbm",
+    "bytes": 10548,
+    "sha256": "553f56af603384e760316d446e9677f76e41c3a805293e9926603233dbae5d34"
+  },
+  {
+    "file": "0034-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "0962ea55715c62c285f9e0cda657f237fe1f50eafb9958c499367ffa81048f94"
+  },
+  {
+    "file": "0035-text.pbm",
+    "bytes": 10548,
+    "sha256": "7ced0a89258f38ed2dafd1bb3233a078b252609c7fde4b9a08fc475f197b3e66"
+  },
+  {
+    "file": "0036-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "a70414ec205a52ca7da4798fe7ba453ef717246295849d0cc52f5bc78caf4937"
+  },
+  {
+    "file": "0037-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "a371eb7798603be7deaba08299e473d81f53b5d2de47b7d0efc7dd8e088aad0e"
+  },
+  {
+    "file": "0038-math.pbm",
+    "bytes": 10548,
+    "sha256": "01f2a2356a20bd6338accf764ea1d3274b8d438def6f1a7a244dd6f80e6d4f5c"
+  },
+  {
+    "file": "0039-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "5fd463a74464aa0482af5dd1dd9677da82b8c9aee35fc11ce2a28b677efc4f5c"
+  },
+  {
+    "file": "0040-text.pbm",
+    "bytes": 10548,
+    "sha256": "ad5f30a0d3cdb28f8179b6b063ab4fc54ea26e7ddae3a45662a2e2112f167a8a"
+  },
+  {
+    "file": "0041-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "86cc372097c12dc6136779b55397092216995a78c1ece47e27ca0c4f700e5731"
+  },
+  {
+    "file": "0042-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "a9e28646c73f3582dd461adc3ef78c064b5f3301fd7a832d4cf03d4225527590"
+  },
+  {
+    "file": "0043-math.pbm",
+    "bytes": 10548,
+    "sha256": "cb97c894e9d874d50e69a97e36f31cd67b22571e7bdccb60dd9f8512e53c4e44"
+  },
+  {
+    "file": "0044-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "09bc854e20754cf62077ab302e652e96b6baf0f831d630c42be0f43c7d244771"
+  },
+  {
+    "file": "0045-text.pbm",
+    "bytes": 10548,
+    "sha256": "8384ca9c44d6ae006dc8a5f663c47daa30f5a9252e262021515d0974e0e8600e"
+  },
+  {
+    "file": "0046-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "9f16b2d3725975e3a37df769c1837afd927027207ebbcc83471b9b210f158ad3"
+  },
+  {
+    "file": "0047-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "ea005176e15e6a0ee07ab04d59cd6ee4b417ab7028bc173ed79ca1a074d8d445"
+  },
+  {
+    "file": "0048-math.pbm",
+    "bytes": 10548,
+    "sha256": "0b586eda437c81f3bcc2ab4af84a147ddb9558af0f97f151ac65d93f567318c5"
+  },
+  {
+    "file": "0049-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "09bc854e20754cf62077ab302e652e96b6baf0f831d630c42be0f43c7d244771"
+  },
+  {
+    "file": "0050-text.pbm",
+    "bytes": 10548,
+    "sha256": "094efb043349552be1e4c0e8361e3e9ff3115e0f4871a97b05c27ba13cc1b58c"
+  },
+  {
+    "file": "0051-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "a56fd80e02d06b8497f6b570079f437b25d1b7b624b3e7aed762c71de012bd1b"
+  },
+  {
+    "file": "0052-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "3495ca1ca214a92459044c6689512d32b3fa461eb71215d378864f54f2cf8cc8"
+  },
+  {
+    "file": "0053-math.pbm",
+    "bytes": 10548,
+    "sha256": "bb5f39c24ba67067e47abb8e882dcdbec184c62579339f3ff87378faa3eb7b67"
+  },
+  {
+    "file": "0054-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "5fd463a74464aa0482af5dd1dd9677da82b8c9aee35fc11ce2a28b677efc4f5c"
+  },
+  {
+    "file": "0055-text.pbm",
+    "bytes": 10548,
+    "sha256": "4101e5b1242409054e8f8ba3634365e985ac7a0bad67745008dbc9d68a406ca2"
+  },
+  {
+    "file": "0056-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "62da59c5964c345536680665b66cbf0fe5aaed283c74515a163bbd1e759cdbcb"
+  },
+  {
+    "file": "0057-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "72a40363d18358bdecf5a9e3c0eae146ed11861fe296febd9b602c7fc176bd8d"
+  },
+  {
+    "file": "0058-math.pbm",
+    "bytes": 10548,
+    "sha256": "2fd3ec0ebc966d71e79ecae17f3db1cc32561e9f2af401d14577ffd5377244f0"
+  },
+  {
+    "file": "0059-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "09bc854e20754cf62077ab302e652e96b6baf0f831d630c42be0f43c7d244771"
+  },
+  {
+    "file": "0060-text.pbm",
+    "bytes": 10548,
+    "sha256": "4c36b600899682f3bae3667d8463ef641f0604b60d1603ba93a9d7127609d179"
+  },
+  {
+    "file": "0061-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "7d2bbab46fbfa1cb9a4de99f2b58de34bd58af167ad730452994b2db6f2ea9ac"
+  },
+  {
+    "file": "0062-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "a785ab7386d39eaec5e61739ef9368177c2cd326b4afed27274fe1dad2210df5"
+  },
+  {
+    "file": "0063-math.pbm",
+    "bytes": 10548,
+    "sha256": "80770ffb55d625187ecea3f5a6284c0d7f37d40cbc8967fd2393035b9d05d0f1"
+  },
+  {
+    "file": "0064-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "09bc854e20754cf62077ab302e652e96b6baf0f831d630c42be0f43c7d244771"
+  },
+  {
+    "file": "0065-text.pbm",
+    "bytes": 10548,
+    "sha256": "738d688566ba89fe09e50fa67d2562825a6487b9e29c509be66ef07b2dc54f4f"
+  },
+  {
+    "file": "0066-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "d8bd30cf40b96f1234c94480715b5bd8d1adcb3d8a925f33dba9f147a782f3ee"
+  },
+  {
+    "file": "0067-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "e23994d47c57d23a3d60c8fef8d4eb32d9276bfe405c2d114dd9635420ff3185"
+  },
+  {
+    "file": "0068-math.pbm",
+    "bytes": 10548,
+    "sha256": "a9685c28b7ec793fdcaee4ad7cc27d56d0ac2e4b709aa8fb5b3ef6fbaf9cfaf9"
+  },
+  {
+    "file": "0069-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "543f450d5837476e7e4b24ba2369c107a8dbc2ffe0e457ea25845e43da9b6e76"
+  },
+  {
+    "file": "0070-text.pbm",
+    "bytes": 10548,
+    "sha256": "a1c1d51cef866be3b84954dfde7ec56b8bb9747a6207d2dd86c44987d68f0926"
+  },
+  {
+    "file": "0071-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "585f336857b410722ab29ac07a270a32698ab956b8ed070e4e7587ef36cea92f"
+  },
+  {
+    "file": "0072-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "ecf0685c164930a084002adf9504a6899d20d60cf9573a3db8179f97513f2f71"
+  },
+  {
+    "file": "0073-math.pbm",
+    "bytes": 10548,
+    "sha256": "553f56af603384e760316d446e9677f76e41c3a805293e9926603233dbae5d34"
+  },
+  {
+    "file": "0074-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "09bc854e20754cf62077ab302e652e96b6baf0f831d630c42be0f43c7d244771"
+  },
+  {
+    "file": "0075-text.pbm",
+    "bytes": 10548,
+    "sha256": "d6bb57f62df5034c3aa9febd6a070379ec2c7cae4fd617f81f595ab6ceeb2515"
+  },
+  {
+    "file": "0076-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "8cbaba4f57e36364f72014ffb786b3c3d6c4398ea789a6dd9a67cb9f42f4a769"
+  },
+  {
+    "file": "0077-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "4a6128ced18c39f1a7a343e9b417ca218364a70f4d2e5ddf8d7bf0fc8db84064"
+  },
+  {
+    "file": "0078-math.pbm",
+    "bytes": 10548,
+    "sha256": "5e608f283de7f67a80860a084487af13eb55ae05b4943241f6a3d9e3a0049889"
+  },
+  {
+    "file": "0079-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "0962ea55715c62c285f9e0cda657f237fe1f50eafb9958c499367ffa81048f94"
+  },
+  {
+    "file": "0080-text.pbm",
+    "bytes": 10548,
+    "sha256": "7ced0a89258f38ed2dafd1bb3233a078b252609c7fde4b9a08fc475f197b3e66"
+  },
+  {
+    "file": "0081-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "83cc402c99adc95ca2601d2ae02756b8bfd28a43be8984433a8a06e6c5a2490e"
+  },
+  {
+    "file": "0082-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "a371eb7798603be7deaba08299e473d81f53b5d2de47b7d0efc7dd8e088aad0e"
+  },
+  {
+    "file": "0083-math.pbm",
+    "bytes": 10548,
+    "sha256": "01f2a2356a20bd6338accf764ea1d3274b8d438def6f1a7a244dd6f80e6d4f5c"
+  },
+  {
+    "file": "0084-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "5fd463a74464aa0482af5dd1dd9677da82b8c9aee35fc11ce2a28b677efc4f5c"
+  },
+  {
+    "file": "0085-text.pbm",
+    "bytes": 10548,
+    "sha256": "8384ca9c44d6ae006dc8a5f663c47daa30f5a9252e262021515d0974e0e8600e"
+  },
+  {
+    "file": "0086-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "84abb0901ae1dd094f13b944a4136520b345b8b4fe7e82f66ee69ce55abf3423"
+  },
+  {
+    "file": "0087-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "ea005176e15e6a0ee07ab04d59cd6ee4b417ab7028bc173ed79ca1a074d8d445"
+  },
+  {
+    "file": "0088-math.pbm",
+    "bytes": 10548,
+    "sha256": "0b586eda437c81f3bcc2ab4af84a147ddb9558af0f97f151ac65d93f567318c5"
+  },
+  {
+    "file": "0089-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "09bc854e20754cf62077ab302e652e96b6baf0f831d630c42be0f43c7d244771"
+  },
+  {
+    "file": "0090-text.pbm",
+    "bytes": 10548,
+    "sha256": "094efb043349552be1e4c0e8361e3e9ff3115e0f4871a97b05c27ba13cc1b58c"
+  },
+  {
+    "file": "0091-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "fb03bbb5e120ee20076381663020474374dee70a67fa3e95cc1890e6cb755e3b"
+  },
+  {
+    "file": "0092-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "aac0a8e94c435fc2a91c18776a791efed06f3ee5f53a8e417d1e10fcbb19892c"
+  },
+  {
+    "file": "0093-math.pbm",
+    "bytes": 10548,
+    "sha256": "b19834bb4f0172f7b86a09d419cb791e62217adea754e7d31b90d61a6931cf35"
+  },
+  {
+    "file": "0094-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "5fd463a74464aa0482af5dd1dd9677da82b8c9aee35fc11ce2a28b677efc4f5c"
+  },
+  {
+    "file": "0095-text.pbm",
+    "bytes": 10548,
+    "sha256": "b0f907e6e6261f3152132a98d0ee91a8b8e6dceef198e0aae116028ac01dd650"
+  },
+  {
+    "file": "0096-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "a547a92013bceade7438decf65ea7dee89b36f51433a6885ad3e36b361165ab6"
+  },
+  {
+    "file": "0097-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "3495ca1ca214a92459044c6689512d32b3fa461eb71215d378864f54f2cf8cc8"
+  },
+  {
+    "file": "0098-math.pbm",
+    "bytes": 10548,
+    "sha256": "bb5f39c24ba67067e47abb8e882dcdbec184c62579339f3ff87378faa3eb7b67"
+  },
+  {
+    "file": "0099-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "5fd463a74464aa0482af5dd1dd9677da82b8c9aee35fc11ce2a28b677efc4f5c"
+  },
+  {
+    "file": "0100-text.pbm",
+    "bytes": 10548,
+    "sha256": "4101e5b1242409054e8f8ba3634365e985ac7a0bad67745008dbc9d68a406ca2"
+  },
+  {
+    "file": "0101-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "b2577f180d2ac3cac7cc7cd5fa77c8404466e2e926b2a9a016664ac4479f37e3"
+  },
+  {
+    "file": "0102-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "a785ab7386d39eaec5e61739ef9368177c2cd326b4afed27274fe1dad2210df5"
+  },
+  {
+    "file": "0103-math.pbm",
+    "bytes": 10548,
+    "sha256": "80770ffb55d625187ecea3f5a6284c0d7f37d40cbc8967fd2393035b9d05d0f1"
+  },
+  {
+    "file": "0104-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "09bc854e20754cf62077ab302e652e96b6baf0f831d630c42be0f43c7d244771"
+  },
+  {
+    "file": "0105-text.pbm",
+    "bytes": 10548,
+    "sha256": "738d688566ba89fe09e50fa67d2562825a6487b9e29c509be66ef07b2dc54f4f"
+  },
+  {
+    "file": "0106-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "0da777a4fa597585004ab113145ef0b7a9f08f682974f3aa24eb7954488516cf"
+  },
+  {
+    "file": "0107-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "e23994d47c57d23a3d60c8fef8d4eb32d9276bfe405c2d114dd9635420ff3185"
+  },
+  {
+    "file": "0108-math.pbm",
+    "bytes": 10548,
+    "sha256": "b60e4b76658c0bfaeed35749757dae230b1a548ddaf828d2c4f8eb566eef4db4"
+  },
+  {
+    "file": "0109-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "5fd463a74464aa0482af5dd1dd9677da82b8c9aee35fc11ce2a28b677efc4f5c"
+  },
+  {
+    "file": "0110-text.pbm",
+    "bytes": 10548,
+    "sha256": "281b1f241a218dbaf6fe5e4d6ff3c816a44dde6244df40d381ad23f6c600dc87"
+  },
+  {
+    "file": "0111-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "07de40110f0024051a7a20c319d486c4cd92692cf7ced9d0df3c0b6f3088d919"
+  },
+  {
+    "file": "0112-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "215a59eac77cb7333e4f91e284dfb6c76b176403410f0b0c53e2dace3de771be"
+  },
+  {
+    "file": "0113-math.pbm",
+    "bytes": 10548,
+    "sha256": "a9685c28b7ec793fdcaee4ad7cc27d56d0ac2e4b709aa8fb5b3ef6fbaf9cfaf9"
+  },
+  {
+    "file": "0114-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "543f450d5837476e7e4b24ba2369c107a8dbc2ffe0e457ea25845e43da9b6e76"
+  },
+  {
+    "file": "0115-text.pbm",
+    "bytes": 10548,
+    "sha256": "a1c1d51cef866be3b84954dfde7ec56b8bb9747a6207d2dd86c44987d68f0926"
+  },
+  {
+    "file": "0116-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "1db63f123021288ff28fbb704d15a13dd830a2e8cc6d0d90f73a7f30b40bb876"
+  },
+  {
+    "file": "0117-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "ecf0685c164930a084002adf9504a6899d20d60cf9573a3db8179f97513f2f71"
+  },
+  {
+    "file": "0118-math.pbm",
+    "bytes": 10548,
+    "sha256": "553f56af603384e760316d446e9677f76e41c3a805293e9926603233dbae5d34"
+  },
+  {
+    "file": "0119-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "0962ea55715c62c285f9e0cda657f237fe1f50eafb9958c499367ffa81048f94"
+  },
+  {
+    "file": "0120-text.pbm",
+    "bytes": 10548,
+    "sha256": "7ced0a89258f38ed2dafd1bb3233a078b252609c7fde4b9a08fc475f197b3e66"
+  },
+  {
+    "file": "0121-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "a70414ec205a52ca7da4798fe7ba453ef717246295849d0cc52f5bc78caf4937"
+  },
+  {
+    "file": "0122-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "a371eb7798603be7deaba08299e473d81f53b5d2de47b7d0efc7dd8e088aad0e"
+  },
+  {
+    "file": "0123-math.pbm",
+    "bytes": 10548,
+    "sha256": "01f2a2356a20bd6338accf764ea1d3274b8d438def6f1a7a244dd6f80e6d4f5c"
+  },
+  {
+    "file": "0124-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "5fd463a74464aa0482af5dd1dd9677da82b8c9aee35fc11ce2a28b677efc4f5c"
+  },
+  {
+    "file": "0125-text.pbm",
+    "bytes": 10548,
+    "sha256": "ad5f30a0d3cdb28f8179b6b063ab4fc54ea26e7ddae3a45662a2e2112f167a8a"
+  },
+  {
+    "file": "0126-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "86cc372097c12dc6136779b55397092216995a78c1ece47e27ca0c4f700e5731"
+  },
+  {
+    "file": "0127-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "a9e28646c73f3582dd461adc3ef78c064b5f3301fd7a832d4cf03d4225527590"
+  },
+  {
+    "file": "0128-math.pbm",
+    "bytes": 10548,
+    "sha256": "cb97c894e9d874d50e69a97e36f31cd67b22571e7bdccb60dd9f8512e53c4e44"
+  },
+  {
+    "file": "0129-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "09bc854e20754cf62077ab302e652e96b6baf0f831d630c42be0f43c7d244771"
+  },
+  {
+    "file": "0130-text.pbm",
+    "bytes": 10548,
+    "sha256": "8384ca9c44d6ae006dc8a5f663c47daa30f5a9252e262021515d0974e0e8600e"
+  },
+  {
+    "file": "0131-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "9f16b2d3725975e3a37df769c1837afd927027207ebbcc83471b9b210f158ad3"
+  },
+  {
+    "file": "0132-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "ea005176e15e6a0ee07ab04d59cd6ee4b417ab7028bc173ed79ca1a074d8d445"
+  },
+  {
+    "file": "0133-math.pbm",
+    "bytes": 10548,
+    "sha256": "0b586eda437c81f3bcc2ab4af84a147ddb9558af0f97f151ac65d93f567318c5"
+  },
+  {
+    "file": "0134-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "09bc854e20754cf62077ab302e652e96b6baf0f831d630c42be0f43c7d244771"
+  },
+  {
+    "file": "0135-text.pbm",
+    "bytes": 10548,
+    "sha256": "094efb043349552be1e4c0e8361e3e9ff3115e0f4871a97b05c27ba13cc1b58c"
+  },
+  {
+    "file": "0136-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "a56fd80e02d06b8497f6b570079f437b25d1b7b624b3e7aed762c71de012bd1b"
+  },
+  {
+    "file": "0137-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "3495ca1ca214a92459044c6689512d32b3fa461eb71215d378864f54f2cf8cc8"
+  },
+  {
+    "file": "0138-math.pbm",
+    "bytes": 10548,
+    "sha256": "bb5f39c24ba67067e47abb8e882dcdbec184c62579339f3ff87378faa3eb7b67"
+  },
+  {
+    "file": "0139-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "5fd463a74464aa0482af5dd1dd9677da82b8c9aee35fc11ce2a28b677efc4f5c"
+  },
+  {
+    "file": "0140-text.pbm",
+    "bytes": 10548,
+    "sha256": "4101e5b1242409054e8f8ba3634365e985ac7a0bad67745008dbc9d68a406ca2"
+  },
+  {
+    "file": "0141-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "62da59c5964c345536680665b66cbf0fe5aaed283c74515a163bbd1e759cdbcb"
+  },
+  {
+    "file": "0142-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "72a40363d18358bdecf5a9e3c0eae146ed11861fe296febd9b602c7fc176bd8d"
+  },
+  {
+    "file": "0143-math.pbm",
+    "bytes": 10548,
+    "sha256": "2fd3ec0ebc966d71e79ecae17f3db1cc32561e9f2af401d14577ffd5377244f0"
+  },
+  {
+    "file": "0144-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "09bc854e20754cf62077ab302e652e96b6baf0f831d630c42be0f43c7d244771"
+  },
+  {
+    "file": "0145-text.pbm",
+    "bytes": 10548,
+    "sha256": "4c36b600899682f3bae3667d8463ef641f0604b60d1603ba93a9d7127609d179"
+  },
+  {
+    "file": "0146-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "7d2bbab46fbfa1cb9a4de99f2b58de34bd58af167ad730452994b2db6f2ea9ac"
+  },
+  {
+    "file": "0147-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "a785ab7386d39eaec5e61739ef9368177c2cd326b4afed27274fe1dad2210df5"
+  },
+  {
+    "file": "0148-math.pbm",
+    "bytes": 10548,
+    "sha256": "80770ffb55d625187ecea3f5a6284c0d7f37d40cbc8967fd2393035b9d05d0f1"
+  },
+  {
+    "file": "0149-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "09bc854e20754cf62077ab302e652e96b6baf0f831d630c42be0f43c7d244771"
+  },
+  {
+    "file": "0150-text.pbm",
+    "bytes": 10548,
+    "sha256": "738d688566ba89fe09e50fa67d2562825a6487b9e29c509be66ef07b2dc54f4f"
+  },
+  {
+    "file": "0151-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "d8bd30cf40b96f1234c94480715b5bd8d1adcb3d8a925f33dba9f147a782f3ee"
+  },
+  {
+    "file": "0152-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "e23994d47c57d23a3d60c8fef8d4eb32d9276bfe405c2d114dd9635420ff3185"
+  },
+  {
+    "file": "0153-math.pbm",
+    "bytes": 10548,
+    "sha256": "a9685c28b7ec793fdcaee4ad7cc27d56d0ac2e4b709aa8fb5b3ef6fbaf9cfaf9"
+  },
+  {
+    "file": "0154-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "543f450d5837476e7e4b24ba2369c107a8dbc2ffe0e457ea25845e43da9b6e76"
+  },
+  {
+    "file": "0155-text.pbm",
+    "bytes": 10548,
+    "sha256": "a1c1d51cef866be3b84954dfde7ec56b8bb9747a6207d2dd86c44987d68f0926"
+  },
+  {
+    "file": "0156-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "585f336857b410722ab29ac07a270a32698ab956b8ed070e4e7587ef36cea92f"
+  },
+  {
+    "file": "0157-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "ecf0685c164930a084002adf9504a6899d20d60cf9573a3db8179f97513f2f71"
+  },
+  {
+    "file": "0158-math.pbm",
+    "bytes": 10548,
+    "sha256": "553f56af603384e760316d446e9677f76e41c3a805293e9926603233dbae5d34"
+  },
+  {
+    "file": "0159-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "09bc854e20754cf62077ab302e652e96b6baf0f831d630c42be0f43c7d244771"
+  },
+  {
+    "file": "0160-text.pbm",
+    "bytes": 10548,
+    "sha256": "d6bb57f62df5034c3aa9febd6a070379ec2c7cae4fd617f81f595ab6ceeb2515"
+  },
+  {
+    "file": "0161-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "8cbaba4f57e36364f72014ffb786b3c3d6c4398ea789a6dd9a67cb9f42f4a769"
+  },
+  {
+    "file": "0162-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "4a6128ced18c39f1a7a343e9b417ca218364a70f4d2e5ddf8d7bf0fc8db84064"
+  },
+  {
+    "file": "0163-math.pbm",
+    "bytes": 10548,
+    "sha256": "5e608f283de7f67a80860a084487af13eb55ae05b4943241f6a3d9e3a0049889"
+  },
+  {
+    "file": "0164-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "0962ea55715c62c285f9e0cda657f237fe1f50eafb9958c499367ffa81048f94"
+  },
+  {
+    "file": "0165-text.pbm",
+    "bytes": 10548,
+    "sha256": "7ced0a89258f38ed2dafd1bb3233a078b252609c7fde4b9a08fc475f197b3e66"
+  },
+  {
+    "file": "0166-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "83cc402c99adc95ca2601d2ae02756b8bfd28a43be8984433a8a06e6c5a2490e"
+  },
+  {
+    "file": "0167-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "a371eb7798603be7deaba08299e473d81f53b5d2de47b7d0efc7dd8e088aad0e"
+  },
+  {
+    "file": "0168-math.pbm",
+    "bytes": 10548,
+    "sha256": "01f2a2356a20bd6338accf764ea1d3274b8d438def6f1a7a244dd6f80e6d4f5c"
+  },
+  {
+    "file": "0169-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "5fd463a74464aa0482af5dd1dd9677da82b8c9aee35fc11ce2a28b677efc4f5c"
+  },
+  {
+    "file": "0170-text.pbm",
+    "bytes": 10548,
+    "sha256": "8384ca9c44d6ae006dc8a5f663c47daa30f5a9252e262021515d0974e0e8600e"
+  },
+  {
+    "file": "0171-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "84abb0901ae1dd094f13b944a4136520b345b8b4fe7e82f66ee69ce55abf3423"
+  },
+  {
+    "file": "0172-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "ea005176e15e6a0ee07ab04d59cd6ee4b417ab7028bc173ed79ca1a074d8d445"
+  },
+  {
+    "file": "0173-math.pbm",
+    "bytes": 10548,
+    "sha256": "0b586eda437c81f3bcc2ab4af84a147ddb9558af0f97f151ac65d93f567318c5"
+  },
+  {
+    "file": "0174-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "09bc854e20754cf62077ab302e652e96b6baf0f831d630c42be0f43c7d244771"
+  },
+  {
+    "file": "0175-text.pbm",
+    "bytes": 10548,
+    "sha256": "094efb043349552be1e4c0e8361e3e9ff3115e0f4871a97b05c27ba13cc1b58c"
+  },
+  {
+    "file": "0176-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "fb03bbb5e120ee20076381663020474374dee70a67fa3e95cc1890e6cb755e3b"
+  },
+  {
+    "file": "0177-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "aac0a8e94c435fc2a91c18776a791efed06f3ee5f53a8e417d1e10fcbb19892c"
+  },
+  {
+    "file": "0178-math.pbm",
+    "bytes": 10548,
+    "sha256": "b19834bb4f0172f7b86a09d419cb791e62217adea754e7d31b90d61a6931cf35"
+  },
+  {
+    "file": "0179-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "5fd463a74464aa0482af5dd1dd9677da82b8c9aee35fc11ce2a28b677efc4f5c"
+  },
+  {
+    "file": "0180-text.pbm",
+    "bytes": 10548,
+    "sha256": "b0f907e6e6261f3152132a98d0ee91a8b8e6dceef198e0aae116028ac01dd650"
+  },
+  {
+    "file": "0181-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "a547a92013bceade7438decf65ea7dee89b36f51433a6885ad3e36b361165ab6"
+  },
+  {
+    "file": "0182-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "3495ca1ca214a92459044c6689512d32b3fa461eb71215d378864f54f2cf8cc8"
+  },
+  {
+    "file": "0183-math.pbm",
+    "bytes": 10548,
+    "sha256": "bb5f39c24ba67067e47abb8e882dcdbec184c62579339f3ff87378faa3eb7b67"
+  },
+  {
+    "file": "0184-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "5fd463a74464aa0482af5dd1dd9677da82b8c9aee35fc11ce2a28b677efc4f5c"
+  },
+  {
+    "file": "0185-text.pbm",
+    "bytes": 10548,
+    "sha256": "4101e5b1242409054e8f8ba3634365e985ac7a0bad67745008dbc9d68a406ca2"
+  },
+  {
+    "file": "0186-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "b2577f180d2ac3cac7cc7cd5fa77c8404466e2e926b2a9a016664ac4479f37e3"
+  },
+  {
+    "file": "0187-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "a785ab7386d39eaec5e61739ef9368177c2cd326b4afed27274fe1dad2210df5"
+  },
+  {
+    "file": "0188-math.pbm",
+    "bytes": 10548,
+    "sha256": "80770ffb55d625187ecea3f5a6284c0d7f37d40cbc8967fd2393035b9d05d0f1"
+  },
+  {
+    "file": "0189-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "09bc854e20754cf62077ab302e652e96b6baf0f831d630c42be0f43c7d244771"
+  },
+  {
+    "file": "0190-text.pbm",
+    "bytes": 10548,
+    "sha256": "738d688566ba89fe09e50fa67d2562825a6487b9e29c509be66ef07b2dc54f4f"
+  },
+  {
+    "file": "0191-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "0da777a4fa597585004ab113145ef0b7a9f08f682974f3aa24eb7954488516cf"
+  },
+  {
+    "file": "0192-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "e23994d47c57d23a3d60c8fef8d4eb32d9276bfe405c2d114dd9635420ff3185"
+  },
+  {
+    "file": "0193-math.pbm",
+    "bytes": 10548,
+    "sha256": "b60e4b76658c0bfaeed35749757dae230b1a548ddaf828d2c4f8eb566eef4db4"
+  },
+  {
+    "file": "0194-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "5fd463a74464aa0482af5dd1dd9677da82b8c9aee35fc11ce2a28b677efc4f5c"
+  },
+  {
+    "file": "0195-text.pbm",
+    "bytes": 10548,
+    "sha256": "281b1f241a218dbaf6fe5e4d6ff3c816a44dde6244df40d381ad23f6c600dc87"
+  },
+  {
+    "file": "0196-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "07de40110f0024051a7a20c319d486c4cd92692cf7ced9d0df3c0b6f3088d919"
+  },
+  {
+    "file": "0197-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "215a59eac77cb7333e4f91e284dfb6c76b176403410f0b0c53e2dace3de771be"
+  },
+  {
+    "file": "0198-math.pbm",
+    "bytes": 10548,
+    "sha256": "a9685c28b7ec793fdcaee4ad7cc27d56d0ac2e4b709aa8fb5b3ef6fbaf9cfaf9"
+  },
+  {
+    "file": "0199-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "543f450d5837476e7e4b24ba2369c107a8dbc2ffe0e457ea25845e43da9b6e76"
+  },
+  {
+    "file": "0200-text.pbm",
+    "bytes": 10548,
+    "sha256": "a1c1d51cef866be3b84954dfde7ec56b8bb9747a6207d2dd86c44987d68f0926"
+  },
+  {
+    "file": "0201-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "1db63f123021288ff28fbb704d15a13dd830a2e8cc6d0d90f73a7f30b40bb876"
+  },
+  {
+    "file": "0202-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "ecf0685c164930a084002adf9504a6899d20d60cf9573a3db8179f97513f2f71"
+  },
+  {
+    "file": "0203-math.pbm",
+    "bytes": 10548,
+    "sha256": "553f56af603384e760316d446e9677f76e41c3a805293e9926603233dbae5d34"
+  },
+  {
+    "file": "0204-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "0962ea55715c62c285f9e0cda657f237fe1f50eafb9958c499367ffa81048f94"
+  },
+  {
+    "file": "0205-text.pbm",
+    "bytes": 10548,
+    "sha256": "7ced0a89258f38ed2dafd1bb3233a078b252609c7fde4b9a08fc475f197b3e66"
+  },
+  {
+    "file": "0206-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "a70414ec205a52ca7da4798fe7ba453ef717246295849d0cc52f5bc78caf4937"
+  },
+  {
+    "file": "0207-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "a371eb7798603be7deaba08299e473d81f53b5d2de47b7d0efc7dd8e088aad0e"
+  },
+  {
+    "file": "0208-math.pbm",
+    "bytes": 10548,
+    "sha256": "01f2a2356a20bd6338accf764ea1d3274b8d438def6f1a7a244dd6f80e6d4f5c"
+  },
+  {
+    "file": "0209-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "5fd463a74464aa0482af5dd1dd9677da82b8c9aee35fc11ce2a28b677efc4f5c"
+  },
+  {
+    "file": "0210-text.pbm",
+    "bytes": 10548,
+    "sha256": "ad5f30a0d3cdb28f8179b6b063ab4fc54ea26e7ddae3a45662a2e2112f167a8a"
+  },
+  {
+    "file": "0211-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "86cc372097c12dc6136779b55397092216995a78c1ece47e27ca0c4f700e5731"
+  },
+  {
+    "file": "0212-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "a9e28646c73f3582dd461adc3ef78c064b5f3301fd7a832d4cf03d4225527590"
+  },
+  {
+    "file": "0213-math.pbm",
+    "bytes": 10548,
+    "sha256": "cb97c894e9d874d50e69a97e36f31cd67b22571e7bdccb60dd9f8512e53c4e44"
+  },
+  {
+    "file": "0214-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "09bc854e20754cf62077ab302e652e96b6baf0f831d630c42be0f43c7d244771"
+  },
+  {
+    "file": "0215-text.pbm",
+    "bytes": 10548,
+    "sha256": "8384ca9c44d6ae006dc8a5f663c47daa30f5a9252e262021515d0974e0e8600e"
+  },
+  {
+    "file": "0216-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "9f16b2d3725975e3a37df769c1837afd927027207ebbcc83471b9b210f158ad3"
+  },
+  {
+    "file": "0217-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "ea005176e15e6a0ee07ab04d59cd6ee4b417ab7028bc173ed79ca1a074d8d445"
+  },
+  {
+    "file": "0218-math.pbm",
+    "bytes": 10548,
+    "sha256": "0b586eda437c81f3bcc2ab4af84a147ddb9558af0f97f151ac65d93f567318c5"
+  },
+  {
+    "file": "0219-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "09bc854e20754cf62077ab302e652e96b6baf0f831d630c42be0f43c7d244771"
+  },
+  {
+    "file": "0220-text.pbm",
+    "bytes": 10548,
+    "sha256": "094efb043349552be1e4c0e8361e3e9ff3115e0f4871a97b05c27ba13cc1b58c"
+  },
+  {
+    "file": "0221-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "a56fd80e02d06b8497f6b570079f437b25d1b7b624b3e7aed762c71de012bd1b"
+  },
+  {
+    "file": "0222-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "3495ca1ca214a92459044c6689512d32b3fa461eb71215d378864f54f2cf8cc8"
+  },
+  {
+    "file": "0223-math.pbm",
+    "bytes": 10548,
+    "sha256": "bb5f39c24ba67067e47abb8e882dcdbec184c62579339f3ff87378faa3eb7b67"
+  },
+  {
+    "file": "0224-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "5fd463a74464aa0482af5dd1dd9677da82b8c9aee35fc11ce2a28b677efc4f5c"
+  },
+  {
+    "file": "0225-text.pbm",
+    "bytes": 10548,
+    "sha256": "4101e5b1242409054e8f8ba3634365e985ac7a0bad67745008dbc9d68a406ca2"
+  },
+  {
+    "file": "0226-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "62da59c5964c345536680665b66cbf0fe5aaed283c74515a163bbd1e759cdbcb"
+  },
+  {
+    "file": "0227-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "72a40363d18358bdecf5a9e3c0eae146ed11861fe296febd9b602c7fc176bd8d"
+  },
+  {
+    "file": "0228-math.pbm",
+    "bytes": 10548,
+    "sha256": "2fd3ec0ebc966d71e79ecae17f3db1cc32561e9f2af401d14577ffd5377244f0"
+  },
+  {
+    "file": "0229-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "09bc854e20754cf62077ab302e652e96b6baf0f831d630c42be0f43c7d244771"
+  },
+  {
+    "file": "0230-text.pbm",
+    "bytes": 10548,
+    "sha256": "4c36b600899682f3bae3667d8463ef641f0604b60d1603ba93a9d7127609d179"
+  },
+  {
+    "file": "0231-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "7d2bbab46fbfa1cb9a4de99f2b58de34bd58af167ad730452994b2db6f2ea9ac"
+  },
+  {
+    "file": "0232-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "a785ab7386d39eaec5e61739ef9368177c2cd326b4afed27274fe1dad2210df5"
+  },
+  {
+    "file": "0233-math.pbm",
+    "bytes": 10548,
+    "sha256": "80770ffb55d625187ecea3f5a6284c0d7f37d40cbc8967fd2393035b9d05d0f1"
+  },
+  {
+    "file": "0234-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "09bc854e20754cf62077ab302e652e96b6baf0f831d630c42be0f43c7d244771"
+  },
+  {
+    "file": "0235-text.pbm",
+    "bytes": 10548,
+    "sha256": "738d688566ba89fe09e50fa67d2562825a6487b9e29c509be66ef07b2dc54f4f"
+  },
+  {
+    "file": "0236-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "d8bd30cf40b96f1234c94480715b5bd8d1adcb3d8a925f33dba9f147a782f3ee"
+  },
+  {
+    "file": "0237-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "e23994d47c57d23a3d60c8fef8d4eb32d9276bfe405c2d114dd9635420ff3185"
+  },
+  {
+    "file": "0238-math.pbm",
+    "bytes": 10548,
+    "sha256": "a9685c28b7ec793fdcaee4ad7cc27d56d0ac2e4b709aa8fb5b3ef6fbaf9cfaf9"
+  },
+  {
+    "file": "0239-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "543f450d5837476e7e4b24ba2369c107a8dbc2ffe0e457ea25845e43da9b6e76"
+  },
+  {
+    "file": "0240-text.pbm",
+    "bytes": 10548,
+    "sha256": "a1c1d51cef866be3b84954dfde7ec56b8bb9747a6207d2dd86c44987d68f0926"
+  },
+  {
+    "file": "0241-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "585f336857b410722ab29ac07a270a32698ab956b8ed070e4e7587ef36cea92f"
+  },
+  {
+    "file": "0242-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "ecf0685c164930a084002adf9504a6899d20d60cf9573a3db8179f97513f2f71"
+  },
+  {
+    "file": "0243-math.pbm",
+    "bytes": 10548,
+    "sha256": "553f56af603384e760316d446e9677f76e41c3a805293e9926603233dbae5d34"
+  },
+  {
+    "file": "0244-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "09bc854e20754cf62077ab302e652e96b6baf0f831d630c42be0f43c7d244771"
+  },
+  {
+    "file": "0245-text.pbm",
+    "bytes": 10548,
+    "sha256": "d6bb57f62df5034c3aa9febd6a070379ec2c7cae4fd617f81f595ab6ceeb2515"
+  },
+  {
+    "file": "0246-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "8cbaba4f57e36364f72014ffb786b3c3d6c4398ea789a6dd9a67cb9f42f4a769"
+  },
+  {
+    "file": "0247-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "4a6128ced18c39f1a7a343e9b417ca218364a70f4d2e5ddf8d7bf0fc8db84064"
+  },
+  {
+    "file": "0248-math.pbm",
+    "bytes": 10548,
+    "sha256": "5e608f283de7f67a80860a084487af13eb55ae05b4943241f6a3d9e3a0049889"
+  },
+  {
+    "file": "0249-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "0962ea55715c62c285f9e0cda657f237fe1f50eafb9958c499367ffa81048f94"
+  },
+  {
+    "file": "0250-text.pbm",
+    "bytes": 10548,
+    "sha256": "7ced0a89258f38ed2dafd1bb3233a078b252609c7fde4b9a08fc475f197b3e66"
+  },
+  {
+    "file": "0251-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "83cc402c99adc95ca2601d2ae02756b8bfd28a43be8984433a8a06e6c5a2490e"
+  },
+  {
+    "file": "0252-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "a371eb7798603be7deaba08299e473d81f53b5d2de47b7d0efc7dd8e088aad0e"
+  },
+  {
+    "file": "0253-math.pbm",
+    "bytes": 10548,
+    "sha256": "01f2a2356a20bd6338accf764ea1d3274b8d438def6f1a7a244dd6f80e6d4f5c"
+  },
+  {
+    "file": "0254-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "5fd463a74464aa0482af5dd1dd9677da82b8c9aee35fc11ce2a28b677efc4f5c"
+  },
+  {
+    "file": "0255-text.pbm",
+    "bytes": 10548,
+    "sha256": "8384ca9c44d6ae006dc8a5f663c47daa30f5a9252e262021515d0974e0e8600e"
+  },
+  {
+    "file": "0256-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "84abb0901ae1dd094f13b944a4136520b345b8b4fe7e82f66ee69ce55abf3423"
+  },
+  {
+    "file": "0257-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "ea005176e15e6a0ee07ab04d59cd6ee4b417ab7028bc173ed79ca1a074d8d445"
+  },
+  {
+    "file": "0258-math.pbm",
+    "bytes": 10548,
+    "sha256": "0b586eda437c81f3bcc2ab4af84a147ddb9558af0f97f151ac65d93f567318c5"
+  },
+  {
+    "file": "0259-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "09bc854e20754cf62077ab302e652e96b6baf0f831d630c42be0f43c7d244771"
+  },
+  {
+    "file": "0260-text.pbm",
+    "bytes": 10548,
+    "sha256": "094efb043349552be1e4c0e8361e3e9ff3115e0f4871a97b05c27ba13cc1b58c"
+  },
+  {
+    "file": "0261-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "fb03bbb5e120ee20076381663020474374dee70a67fa3e95cc1890e6cb755e3b"
+  },
+  {
+    "file": "0262-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "aac0a8e94c435fc2a91c18776a791efed06f3ee5f53a8e417d1e10fcbb19892c"
+  },
+  {
+    "file": "0263-math.pbm",
+    "bytes": 10548,
+    "sha256": "b19834bb4f0172f7b86a09d419cb791e62217adea754e7d31b90d61a6931cf35"
+  },
+  {
+    "file": "0264-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "5fd463a74464aa0482af5dd1dd9677da82b8c9aee35fc11ce2a28b677efc4f5c"
+  },
+  {
+    "file": "0265-text.pbm",
+    "bytes": 10548,
+    "sha256": "b0f907e6e6261f3152132a98d0ee91a8b8e6dceef198e0aae116028ac01dd650"
+  },
+  {
+    "file": "0266-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "a547a92013bceade7438decf65ea7dee89b36f51433a6885ad3e36b361165ab6"
+  },
+  {
+    "file": "0267-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "3495ca1ca214a92459044c6689512d32b3fa461eb71215d378864f54f2cf8cc8"
+  },
+  {
+    "file": "0268-math.pbm",
+    "bytes": 10548,
+    "sha256": "bb5f39c24ba67067e47abb8e882dcdbec184c62579339f3ff87378faa3eb7b67"
+  },
+  {
+    "file": "0269-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "5fd463a74464aa0482af5dd1dd9677da82b8c9aee35fc11ce2a28b677efc4f5c"
+  },
+  {
+    "file": "0270-text.pbm",
+    "bytes": 10548,
+    "sha256": "4101e5b1242409054e8f8ba3634365e985ac7a0bad67745008dbc9d68a406ca2"
+  },
+  {
+    "file": "0271-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "b2577f180d2ac3cac7cc7cd5fa77c8404466e2e926b2a9a016664ac4479f37e3"
+  },
+  {
+    "file": "0272-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "a785ab7386d39eaec5e61739ef9368177c2cd326b4afed27274fe1dad2210df5"
+  },
+  {
+    "file": "0273-math.pbm",
+    "bytes": 10548,
+    "sha256": "80770ffb55d625187ecea3f5a6284c0d7f37d40cbc8967fd2393035b9d05d0f1"
+  },
+  {
+    "file": "0274-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "09bc854e20754cf62077ab302e652e96b6baf0f831d630c42be0f43c7d244771"
+  },
+  {
+    "file": "0275-text.pbm",
+    "bytes": 10548,
+    "sha256": "738d688566ba89fe09e50fa67d2562825a6487b9e29c509be66ef07b2dc54f4f"
+  },
+  {
+    "file": "0276-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "0da777a4fa597585004ab113145ef0b7a9f08f682974f3aa24eb7954488516cf"
+  },
+  {
+    "file": "0277-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "e23994d47c57d23a3d60c8fef8d4eb32d9276bfe405c2d114dd9635420ff3185"
+  },
+  {
+    "file": "0278-math.pbm",
+    "bytes": 10548,
+    "sha256": "b60e4b76658c0bfaeed35749757dae230b1a548ddaf828d2c4f8eb566eef4db4"
+  },
+  {
+    "file": "0279-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "5fd463a74464aa0482af5dd1dd9677da82b8c9aee35fc11ce2a28b677efc4f5c"
+  },
+  {
+    "file": "0280-text.pbm",
+    "bytes": 10548,
+    "sha256": "281b1f241a218dbaf6fe5e4d6ff3c816a44dde6244df40d381ad23f6c600dc87"
+  },
+  {
+    "file": "0281-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "07de40110f0024051a7a20c319d486c4cd92692cf7ced9d0df3c0b6f3088d919"
+  },
+  {
+    "file": "0282-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "215a59eac77cb7333e4f91e284dfb6c76b176403410f0b0c53e2dace3de771be"
+  },
+  {
+    "file": "0283-math.pbm",
+    "bytes": 10548,
+    "sha256": "a9685c28b7ec793fdcaee4ad7cc27d56d0ac2e4b709aa8fb5b3ef6fbaf9cfaf9"
+  },
+  {
+    "file": "0284-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "543f450d5837476e7e4b24ba2369c107a8dbc2ffe0e457ea25845e43da9b6e76"
+  },
+  {
+    "file": "0285-text.pbm",
+    "bytes": 10548,
+    "sha256": "a1c1d51cef866be3b84954dfde7ec56b8bb9747a6207d2dd86c44987d68f0926"
+  },
+  {
+    "file": "0286-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "1db63f123021288ff28fbb704d15a13dd830a2e8cc6d0d90f73a7f30b40bb876"
+  },
+  {
+    "file": "0287-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "ecf0685c164930a084002adf9504a6899d20d60cf9573a3db8179f97513f2f71"
+  },
+  {
+    "file": "0288-math.pbm",
+    "bytes": 10548,
+    "sha256": "553f56af603384e760316d446e9677f76e41c3a805293e9926603233dbae5d34"
+  },
+  {
+    "file": "0289-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "0962ea55715c62c285f9e0cda657f237fe1f50eafb9958c499367ffa81048f94"
+  },
+  {
+    "file": "0290-text.pbm",
+    "bytes": 10548,
+    "sha256": "7ced0a89258f38ed2dafd1bb3233a078b252609c7fde4b9a08fc475f197b3e66"
+  },
+  {
+    "file": "0291-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "a70414ec205a52ca7da4798fe7ba453ef717246295849d0cc52f5bc78caf4937"
+  },
+  {
+    "file": "0292-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "a371eb7798603be7deaba08299e473d81f53b5d2de47b7d0efc7dd8e088aad0e"
+  },
+  {
+    "file": "0293-math.pbm",
+    "bytes": 10548,
+    "sha256": "01f2a2356a20bd6338accf764ea1d3274b8d438def6f1a7a244dd6f80e6d4f5c"
+  },
+  {
+    "file": "0294-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "5fd463a74464aa0482af5dd1dd9677da82b8c9aee35fc11ce2a28b677efc4f5c"
+  },
+  {
+    "file": "0295-text.pbm",
+    "bytes": 10548,
+    "sha256": "ad5f30a0d3cdb28f8179b6b063ab4fc54ea26e7ddae3a45662a2e2112f167a8a"
+  },
+  {
+    "file": "0296-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "86cc372097c12dc6136779b55397092216995a78c1ece47e27ca0c4f700e5731"
+  },
+  {
+    "file": "0297-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "a9e28646c73f3582dd461adc3ef78c064b5f3301fd7a832d4cf03d4225527590"
+  },
+  {
+    "file": "0298-math.pbm",
+    "bytes": 10548,
+    "sha256": "cb97c894e9d874d50e69a97e36f31cd67b22571e7bdccb60dd9f8512e53c4e44"
+  },
+  {
+    "file": "0299-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "09bc854e20754cf62077ab302e652e96b6baf0f831d630c42be0f43c7d244771"
+  },
+  {
+    "file": "0300-text.pbm",
+    "bytes": 10548,
+    "sha256": "8384ca9c44d6ae006dc8a5f663c47daa30f5a9252e262021515d0974e0e8600e"
+  },
+  {
+    "file": "0301-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "9f16b2d3725975e3a37df769c1837afd927027207ebbcc83471b9b210f158ad3"
+  },
+  {
+    "file": "0302-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "ea005176e15e6a0ee07ab04d59cd6ee4b417ab7028bc173ed79ca1a074d8d445"
+  },
+  {
+    "file": "0303-math.pbm",
+    "bytes": 10548,
+    "sha256": "0b586eda437c81f3bcc2ab4af84a147ddb9558af0f97f151ac65d93f567318c5"
+  },
+  {
+    "file": "0304-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "09bc854e20754cf62077ab302e652e96b6baf0f831d630c42be0f43c7d244771"
+  },
+  {
+    "file": "0305-text.pbm",
+    "bytes": 10548,
+    "sha256": "094efb043349552be1e4c0e8361e3e9ff3115e0f4871a97b05c27ba13cc1b58c"
+  },
+  {
+    "file": "0306-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "a56fd80e02d06b8497f6b570079f437b25d1b7b624b3e7aed762c71de012bd1b"
+  },
+  {
+    "file": "0307-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "3495ca1ca214a92459044c6689512d32b3fa461eb71215d378864f54f2cf8cc8"
+  },
+  {
+    "file": "0308-math.pbm",
+    "bytes": 10548,
+    "sha256": "bb5f39c24ba67067e47abb8e882dcdbec184c62579339f3ff87378faa3eb7b67"
+  },
+  {
+    "file": "0309-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "5fd463a74464aa0482af5dd1dd9677da82b8c9aee35fc11ce2a28b677efc4f5c"
+  },
+  {
+    "file": "0310-text.pbm",
+    "bytes": 10548,
+    "sha256": "4101e5b1242409054e8f8ba3634365e985ac7a0bad67745008dbc9d68a406ca2"
+  },
+  {
+    "file": "0311-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "62da59c5964c345536680665b66cbf0fe5aaed283c74515a163bbd1e759cdbcb"
+  },
+  {
+    "file": "0312-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "72a40363d18358bdecf5a9e3c0eae146ed11861fe296febd9b602c7fc176bd8d"
+  },
+  {
+    "file": "0313-math.pbm",
+    "bytes": 10548,
+    "sha256": "2fd3ec0ebc966d71e79ecae17f3db1cc32561e9f2af401d14577ffd5377244f0"
+  },
+  {
+    "file": "0314-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "09bc854e20754cf62077ab302e652e96b6baf0f831d630c42be0f43c7d244771"
+  },
+  {
+    "file": "0315-text.pbm",
+    "bytes": 10548,
+    "sha256": "4c36b600899682f3bae3667d8463ef641f0604b60d1603ba93a9d7127609d179"
+  },
+  {
+    "file": "0316-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "7d2bbab46fbfa1cb9a4de99f2b58de34bd58af167ad730452994b2db6f2ea9ac"
+  },
+  {
+    "file": "0317-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "a785ab7386d39eaec5e61739ef9368177c2cd326b4afed27274fe1dad2210df5"
+  },
+  {
+    "file": "0318-math.pbm",
+    "bytes": 10548,
+    "sha256": "80770ffb55d625187ecea3f5a6284c0d7f37d40cbc8967fd2393035b9d05d0f1"
+  },
+  {
+    "file": "0319-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "09bc854e20754cf62077ab302e652e96b6baf0f831d630c42be0f43c7d244771"
+  },
+  {
+    "file": "0320-text.pbm",
+    "bytes": 10548,
+    "sha256": "738d688566ba89fe09e50fa67d2562825a6487b9e29c509be66ef07b2dc54f4f"
+  },
+  {
+    "file": "0321-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "d8bd30cf40b96f1234c94480715b5bd8d1adcb3d8a925f33dba9f147a782f3ee"
+  },
+  {
+    "file": "0322-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "e23994d47c57d23a3d60c8fef8d4eb32d9276bfe405c2d114dd9635420ff3185"
+  },
+  {
+    "file": "0323-math.pbm",
+    "bytes": 10548,
+    "sha256": "a9685c28b7ec793fdcaee4ad7cc27d56d0ac2e4b709aa8fb5b3ef6fbaf9cfaf9"
+  },
+  {
+    "file": "0324-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "543f450d5837476e7e4b24ba2369c107a8dbc2ffe0e457ea25845e43da9b6e76"
+  },
+  {
+    "file": "0325-text.pbm",
+    "bytes": 10548,
+    "sha256": "a1c1d51cef866be3b84954dfde7ec56b8bb9747a6207d2dd86c44987d68f0926"
+  },
+  {
+    "file": "0326-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "585f336857b410722ab29ac07a270a32698ab956b8ed070e4e7587ef36cea92f"
+  },
+  {
+    "file": "0327-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "ecf0685c164930a084002adf9504a6899d20d60cf9573a3db8179f97513f2f71"
+  },
+  {
+    "file": "0328-math.pbm",
+    "bytes": 10548,
+    "sha256": "553f56af603384e760316d446e9677f76e41c3a805293e9926603233dbae5d34"
+  },
+  {
+    "file": "0329-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "09bc854e20754cf62077ab302e652e96b6baf0f831d630c42be0f43c7d244771"
+  },
+  {
+    "file": "0330-text.pbm",
+    "bytes": 10548,
+    "sha256": "d6bb57f62df5034c3aa9febd6a070379ec2c7cae4fd617f81f595ab6ceeb2515"
+  },
+  {
+    "file": "0331-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "8cbaba4f57e36364f72014ffb786b3c3d6c4398ea789a6dd9a67cb9f42f4a769"
+  },
+  {
+    "file": "0332-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "4a6128ced18c39f1a7a343e9b417ca218364a70f4d2e5ddf8d7bf0fc8db84064"
+  },
+  {
+    "file": "0333-math.pbm",
+    "bytes": 10548,
+    "sha256": "5e608f283de7f67a80860a084487af13eb55ae05b4943241f6a3d9e3a0049889"
+  },
+  {
+    "file": "0334-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "0962ea55715c62c285f9e0cda657f237fe1f50eafb9958c499367ffa81048f94"
+  },
+  {
+    "file": "0335-text.pbm",
+    "bytes": 10548,
+    "sha256": "7ced0a89258f38ed2dafd1bb3233a078b252609c7fde4b9a08fc475f197b3e66"
+  },
+  {
+    "file": "0336-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "83cc402c99adc95ca2601d2ae02756b8bfd28a43be8984433a8a06e6c5a2490e"
+  },
+  {
+    "file": "0337-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "a371eb7798603be7deaba08299e473d81f53b5d2de47b7d0efc7dd8e088aad0e"
+  },
+  {
+    "file": "0338-math.pbm",
+    "bytes": 10548,
+    "sha256": "01f2a2356a20bd6338accf764ea1d3274b8d438def6f1a7a244dd6f80e6d4f5c"
+  },
+  {
+    "file": "0339-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "5fd463a74464aa0482af5dd1dd9677da82b8c9aee35fc11ce2a28b677efc4f5c"
+  },
+  {
+    "file": "0340-text.pbm",
+    "bytes": 10548,
+    "sha256": "8384ca9c44d6ae006dc8a5f663c47daa30f5a9252e262021515d0974e0e8600e"
+  },
+  {
+    "file": "0341-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "84abb0901ae1dd094f13b944a4136520b345b8b4fe7e82f66ee69ce55abf3423"
+  },
+  {
+    "file": "0342-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "ea005176e15e6a0ee07ab04d59cd6ee4b417ab7028bc173ed79ca1a074d8d445"
+  },
+  {
+    "file": "0343-math.pbm",
+    "bytes": 10548,
+    "sha256": "0b586eda437c81f3bcc2ab4af84a147ddb9558af0f97f151ac65d93f567318c5"
+  },
+  {
+    "file": "0344-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "09bc854e20754cf62077ab302e652e96b6baf0f831d630c42be0f43c7d244771"
+  },
+  {
+    "file": "0345-text.pbm",
+    "bytes": 10548,
+    "sha256": "094efb043349552be1e4c0e8361e3e9ff3115e0f4871a97b05c27ba13cc1b58c"
+  },
+  {
+    "file": "0346-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "fb03bbb5e120ee20076381663020474374dee70a67fa3e95cc1890e6cb755e3b"
+  },
+  {
+    "file": "0347-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "aac0a8e94c435fc2a91c18776a791efed06f3ee5f53a8e417d1e10fcbb19892c"
+  },
+  {
+    "file": "0348-math.pbm",
+    "bytes": 10548,
+    "sha256": "b19834bb4f0172f7b86a09d419cb791e62217adea754e7d31b90d61a6931cf35"
+  },
+  {
+    "file": "0349-sparse.pbm",
+    "bytes": 10548,
+    "sha256": "5fd463a74464aa0482af5dd1dd9677da82b8c9aee35fc11ce2a28b677efc4f5c"
+  }
+]

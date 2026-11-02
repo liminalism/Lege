@@ -3,11 +3,18 @@
 
 pub(crate) mod clustering;
 pub(crate) mod dictionary;
+#[cfg(feature = "symboldict")]
+pub(crate) mod exact;
 pub(crate) mod extraction;
+#[cfg(feature = "symboldict")]
+pub(crate) mod optimizer;
 pub(crate) mod planning;
+pub(crate) mod residual;
 pub(crate) mod serialize;
 pub(crate) mod text_region;
 pub(crate) mod text_region_refine;
+#[cfg(feature = "symboldict")]
+pub(crate) mod topology;
 pub(crate) mod types;
 pub(crate) mod unify_apply;
 pub(crate) mod unify_match;

@@ -1,0 +1,76 @@
+
+running 1 test
+QUALITY_TOPOLOGY	corrected_instances=0
+QUALITY_STAGES	cc=0.022194266	match=0.013971004	cluster=0.000000000	plan=0.018993664	dict=0.046301257	text=0.006418946	generic=0.000000423
+PDFTOPPM: Syntax Error (4225): 1 extraneous byte after segment
+Syntax Error (3526): 1 extraneous byte after segment
+
+QUALITY_PDF	0	PDFTOPPM	pass
+QUALITY_PDF	0	PDFIUM_PYTHON	pass
+QUALITY_PAGE	0	3054	0	0.013093299	0.012462558	0
+PDFTOPPM: Syntax Error (1661): 1 extraneous byte after segment
+Syntax Error (785): 1 extraneous byte after segment
+Syntax Error (962): 1 extraneous byte after segment
+
+QUALITY_PDF	1	PDFTOPPM	pass
+QUALITY_PDF	1	PDFIUM_PYTHON	pass
+QUALITY_PAGE	1	491	0	0.000451054	0.000318977	0
+PDFTOPPM: Syntax Error (7803): 1 extraneous byte after segment
+Syntax Error (1784): 1 extraneous byte after segment
+Syntax Error (7104): 1 extraneous byte after segment
+
+QUALITY_PDF	2	PDFTOPPM	pass
+QUALITY_PDF	2	PDFIUM_PYTHON	pass
+QUALITY_PAGE	2	6632	0	0.001140724	0.001486212	0
+PDFTOPPM: Syntax Error (25217): 1 extraneous byte after segment
+Syntax Error (17418): 1 extraneous byte after segment
+Syntax Error (24518): 1 extraneous byte after segment
+
+QUALITY_PDF	3	PDFTOPPM	pass
+QUALITY_PDF	3	PDFIUM_PYTHON	pass
+QUALITY_PAGE	3	24045	0	0.004708231	0.004672886	0
+PDFTOPPM: Syntax Error (18209): 1 extraneous byte after segment
+Syntax Error (12705): 1 extraneous byte after segment
+Syntax Error (17510): 1 extraneous byte after segment
+
+QUALITY_PDF	4	PDFTOPPM	pass
+QUALITY_PDF	4	PDFIUM_PYTHON	pass
+QUALITY_PAGE	4	17037	0	0.003121050	0.002861391	0
+PDFTOPPM: Syntax Error (31185): 1 extraneous byte after segment
+Syntax Error (30486): 1 extraneous byte after segment
+
+QUALITY_PDF	5	PDFTOPPM	pass
+QUALITY_PDF	5	PDFIUM_PYTHON	pass
+QUALITY_PAGE	5	30013	0	0.009487759	0.005768001	0
+PDFTOPPM: Syntax Error (32859): 1 extraneous byte after segment
+Syntax Error (24384): 1 extraneous byte after segment
+Syntax Error (32160): 1 extraneous byte after segment
+
+QUALITY_PDF	6	PDFTOPPM	pass
+QUALITY_PDF	6	PDFIUM_PYTHON	pass
+QUALITY_PAGE	6	31687	0	0.005352775	0.006364030	0
+PDFTOPPM: Syntax Error (31559): 1 extraneous byte after segment
+Syntax Error (23085): 1 extraneous byte after segment
+Syntax Error (30860): 1 extraneous byte after segment
+
+QUALITY_PDF	7	PDFTOPPM	pass
+QUALITY_PDF	7	PDFIUM_PYTHON	pass
+QUALITY_PAGE	7	30387	0	0.006089342	0.007370251	0
+PDFTOPPM: Syntax Error (30035): 1 extraneous byte after segment
+Syntax Error (29336): 1 extraneous byte after segment
+
+QUALITY_PDF	8	PDFTOPPM	pass
+QUALITY_PDF	8	PDFIUM_PYTHON	pass
+QUALITY_PAGE	8	28863	0	0.005483029	0.007247103	0
+PDFTOPPM: Syntax Error (36008): 1 extraneous byte after segment
+Syntax Error (26643): 1 extraneous byte after segment
+Syntax Error (35309): 1 extraneous byte after segment
+
+QUALITY_PDF	9	PDFTOPPM	pass
+QUALITY_PDF	9	PDFIUM_PYTHON	pass
+QUALITY_PAGE	9	34836	0	0.008432249	0.006719194	0
+QUALITY_RESULT	exact	10	false	207609	564	152845	0	0.124727641	0	0.057359512	0.055270603	5948	0	4512	0	0
+test quality_corpus_worker ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 3.32s
+

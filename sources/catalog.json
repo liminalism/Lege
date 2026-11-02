@@ -10,5 +10,17 @@
     "path": "sources/external/dedicated-ocr-plan-2026-08--d6b551f9.md",
     "scope": "lege-document-ocr/**",
     "title": "Dedicated OCR product plan"
+  },
+  {
+    "added_at": "2026-11-01",
+    "availability": "full",
+    "byte_len": 22287,
+    "content_hash": "sha256:445e885f71a43c81218fd2d9788b647fe2d4913545c4db9b85161e7399ab5124",
+    "id": "jbig2-070-user-roadmap",
+    "media_type": "text/markdown",
+    "origin": "external",
+    "path": "sources/external/jbig2-070-user-roadmap--445e885f.md",
+    "scope": "lege-codecs/jbig2enc-rust/**",
+    "title": "User-provided JBIG2 0.7 quality and provenance roadmap"
   }
 ]

@@ -1,0 +1,91 @@
+--- .agent/scratch/jbig2-06-headroom/baseline-arith.rs	2026-11-02 10:36:04.824367509 +0700
++++ .agent/scratch/jbig2-06-headroom/cache-arith.rs	2026-11-02 10:37:02.995669318 +0700
+@@ -193,7 +193,7 @@
+ 
+ pub struct Jbig2ArithCoder {
+     registers: ArithRegisters,
+-    context: Vec<usize>,
++    context: Vec<u32>, // Packed bitmap state: table index in high16, cached Qe in low16.
+     int_ctx: [[usize; 512]; 13], // Contexts for integer encoding, storing CTBL indices
+     iaid_ctx: Vec<usize>,        // Dynamically sized context tree for IAID symbols
+     refinement_contexts: Vec<usize>, // Contexts for refinement region (GRTEMPLATE=0: 8192 states)
+@@ -275,7 +275,7 @@
+     pub fn as_bytes(&self) -> &[u8] {
+         &self.registers.data
+     }
+-    const INITIAL_STATE: usize = 0;
++    const INITIAL_STATE: u32 = crate::shared::mq_table::MQ_STATES[0].qe as u32;
+ 
+     /// Creates a new arithmetic encoder with initial state.
+     pub fn new() -> Self {
+@@ -362,8 +362,7 @@
+     /// Encodes a single bit `d` in the given context `ctx`.
+     #[inline(always)]
+     pub fn encode_bit(&mut self, ctx: usize, d: bool) {
+-        let next_state = self.encode_bit_with_state_idx(self.context[ctx], d);
+-        self.context[ctx] = next_state;
++        self.registers.encode_bitmap_bit(&mut self.context[ctx], d);
+     }
+ 
+     /// Encodes an integer `v` of `bits` width using a specific context `ctx`.
+@@ -673,7 +672,7 @@
+         #[cfg(debug_assertions)]
+         let mut last_reported_progress = -1;
+ 
+-        let contexts: &mut [usize; JBIG2_MAX_CTX] = self.context.as_mut_slice().try_into().unwrap();
++        let contexts: &mut [u32; JBIG2_MAX_CTX] = self.context.as_mut_slice().try_into().unwrap();
+         let registers = &mut self.registers;
+         for y in 0..height {
+             #[cfg(debug_assertions)]
+@@ -751,7 +750,7 @@
+                 for _ in 0..count {
+                     let pixel = (pixels >> 31) as u16;
+                     let state = &mut contexts[context as usize];
+-                    *state = registers.encode_bit_with_state_idx(*state, pixel != 0);
++                    registers.encode_bitmap_bit(state, pixel != 0);
+                     #[cfg(debug_assertions)]
+                     {
+                         *context_distribution.entry(context as usize).or_insert(0) += 1;
+@@ -1053,16 +1052,30 @@
+         self.encode_bit_renormalized(state_idx, d)
+     }
+ 
++    #[inline(always)]
++    fn encode_bitmap_bit(&mut self, cached: &mut u32, d: bool) {
++        let state_idx = (*cached >> 16) as usize;
++        let qe = *cached & 0xffff;
++        self.a = self.a.wrapping_sub(qe) & 0xffff;
++        if d == (state_idx >= 47) && self.a >= 0x8000 {
++            self.c = self.c.wrapping_add(qe);
++            return;
++        }
++        let next = self.encode_bit_renormalized(state_idx, d);
++        *cached = ((next as u32) << 16)
++            | crate::shared::mq_table::MQ_STATES[next].qe as u32;
++    }
++
+     /// Encode a known run in context zero without changing its per-bit model.
+     #[inline]
+-    fn encode_zero_run(&mut self, state_idx: &mut usize, mut count: usize) {
++    fn encode_zero_run(&mut self, state_idx: &mut u32, mut count: usize) {
+         // Only the caller's single packed word is accepted: count * Qe and
+         // 0x8000 + count * Qe fit u32 even for the largest probability estimate.
+         debug_assert!(count <= 32);
+         debug_assert!(self.a >= 0x8000);
+         while count != 0 {
+-            let qe = crate::shared::mq_table::MQ_STATES[*state_idx].qe as u32;
+-            if *state_idx < 47 {
++            let qe = *state_idx & 0xffff;
++            if (*state_idx >> 16) < 47 {
+                 let decrement = qe * count as u32;
+                 // Every skipped MPS must leave A normalized. No context state
+                 // changes on this path; C advances by the same total interval.
+@@ -1076,7 +1089,7 @@
+                 self.c = self.c.wrapping_add(qe * normalized as u32);
+                 count -= normalized;
+             }
+-            *state_idx = self.encode_bit_with_state_idx(*state_idx, false);
++            self.encode_bitmap_bit(state_idx, false);
+             count -= 1;
+         }
+     }

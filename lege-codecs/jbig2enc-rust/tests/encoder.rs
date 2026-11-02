@@ -10,7 +10,8 @@ use jbig2::jbig2sym::{BitImage, Symbol};
 use jbig2enc_rust as jbig2;
 // Import the common test utilities
 mod common;
-use common::{TEST_IMAGE_PBM, TEST_IMAGE1_PBM, load_pbm, load_test_pbm};
+use common::fixtures::{test_blank_pbm, test_symbols_pbm};
+use common::{load_pbm, load_test_pbm};
 use jbig2::jbig2enc::{Jbig2Encoder, encode_page_with_symbol_dictionary, encode_symbol_dict};
 use jbig2::jbig2structs::Jbig2Config;
 use jbig2::jbig2sym::array_to_bitimage;
@@ -320,7 +321,7 @@ fn single_symbol_dict_outputs_nonempty() {
     let start = Instant::now();
     let cfg = Jbig2Config::default();
     // use the tiny 2×2 test image
-    let img = load_pbm("tests/fixtures/test_image.pbm");
+    let img = load_pbm(test_blank_pbm());
     let out = encode_symbol_dict(&[&img], &cfg, /* page_number: */ 1)
         .expect("single-symbol dict should encode");
     assert!(!out.is_empty(), "dictionary stream was empty");
@@ -336,7 +337,7 @@ fn duplicate_symbols_are_deduplicated() {
     let start = Instant::now();
     let cfg = Jbig2Config::default();
     // create two identical symbols
-    let img = load_pbm("tests/fixtures/test_image.pbm");
+    let img = load_pbm(test_blank_pbm());
     let dict = encode_symbol_dict(&[&img, &img], &cfg, /* page_number: */ 1)
         .expect("dict of two identical symbols should encode");
     // pick a heuristic: deduplicated dict should be smaller than twice single
@@ -360,7 +361,7 @@ fn full_page_with_symbol_dictionary_roundtrips() -> Result<(), Box<dyn Error>> {
     let cfg = Jbig2Config::default();
 
     // Load the test image
-    let page = load_pbm("tests/fixtures/test_image1.pbm");
+    let page = load_pbm(test_symbols_pbm());
 
     // Encode the page with symbol dictionary
     let result = encode_page_with_symbol_dictionary(&page, &cfg, /* next_segment_num: */ 1);
@@ -655,7 +656,7 @@ fn pbm_packing_row_major_msb_first() {
 
 #[test]
 fn test_encode_test_image_pbm() {
-    let img = load_pbm(TEST_IMAGE_PBM);
+    let img = load_pbm(test_blank_pbm());
     let config = Jbig2Config::default();
     let result = encode_page_with_symbol_dictionary(&img, &config, 0);
     assert!(result.is_ok());
@@ -671,7 +672,7 @@ fn test_encode_test_image_pbm() {
 
 #[test]
 fn test_encode_test_image1_pbm_full_page() {
-    let img = load_pbm(TEST_IMAGE1_PBM);
+    let img = load_pbm(test_symbols_pbm());
     let config = Jbig2Config::default();
     let result = encode_page_with_symbol_dictionary(&img, &config, 0);
     assert!(result.is_ok());

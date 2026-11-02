@@ -1,0 +1,14 @@
+{
+  "sha256": "60b045077a61d2a5f934882ecae5cba76820e880d0870732885dd74a4fbbec43",
+  "bytes": 1844152,
+  "files": 744,
+  "pbms": [
+    "jbig2enc-rust-0.6.0/tests/fixtures/original/blank.pbm",
+    "jbig2enc-rust-0.6.0/tests/fixtures/original/marks.pbm",
+    "jbig2enc-rust-0.6.0/tests/fixtures/original/symbols.pbm"
+  ],
+  "forbidden": [],
+  "verified_build": true,
+  "publication": false,
+  "note": "No raw benchmark corpus, PDF, external C source/oracle or perf.data packaged. Later validation and AKR edits are outside this archive digest."
+}

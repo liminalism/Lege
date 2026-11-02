@@ -6,14 +6,13 @@
 
 pub mod oracle;
 pub mod pbm;
+pub mod pdf;
 pub mod writer;
 
 use jbig2enc_rust::jbig2sym::BitImage;
 use std::io::{BufRead, BufReader, Read, Seek};
 
-// Define the PBM file constants
-pub const TEST_IMAGE_PBM: &str = "tests/fixtures/test_image.pbm";
-pub const TEST_IMAGE1_PBM: &str = "tests/fixtures/test_image1.pbm";
+pub mod fixtures;
 
 /// Load a PBM file and convert to BitImage
 pub fn load_pbm(path: &str) -> BitImage {

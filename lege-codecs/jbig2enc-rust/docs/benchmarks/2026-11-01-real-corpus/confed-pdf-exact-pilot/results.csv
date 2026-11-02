@@ -1,0 +1,3 @@
+mode,pages,auto_thresh,encoded_bytes,global_bytes,local_bytes,residual_bytes,encode_seconds,differing_pixels,cold_decode_seconds,warm_decode_seconds,decoded_global_bitmap_bytes,comparator_calls,exact_hits,refined_hits,jbig2dec_differing_pixels,worker_peak_rss_kib
+exact,10,false,207609,564,152845,0,0.124727641,0,0.057359512,0.055270603,5948,0,4512,0,0,73572
+exact_optimized,10,false,195093,0,0,194793,9.188008050,0,0.109997401,0.101490494,0,0,4512,0,0,75568

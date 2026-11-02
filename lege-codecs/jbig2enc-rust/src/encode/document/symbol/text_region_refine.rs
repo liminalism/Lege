@@ -224,7 +224,19 @@ pub fn encode_text_region_with_refinement(
                 // Per §6.4.11.3.2: GRDX = (RDWI/2) + RDXI, GRDY = (RDHI/2) + RDYI
                 // Use the pre-computed alignment offsets from clustering
                 let rdxi = orig_instance.refinement_dx;
-                let rdyi = orig_instance.refinement_dy;
+                let mut rdyi = orig_instance.refinement_dy;
+                // A reference may legally lie outside the target, but PDFium's
+                // optimized refinement decoder normalizes vertical offsets
+                // outside the reference height to zero. Choose that alignment
+                // explicitly and encode the target with the same alignment so
+                // every decoder reads identical contexts. Pixel content and
+                // placement are unchanged; only the reference predictor moves.
+                let requested_grdy = i64::from(rdhi.div_euclid(2)) + i64::from(rdyi);
+                if requested_grdy <= -(prototype.height as i64)
+                    || requested_grdy >= prototype.height as i64
+                {
+                    rdyi = -rdhi.div_euclid(2);
+                }
 
                 coder.encode_integer(IntProc::Iardx, rdxi)?;
                 coder.encode_integer(IntProc::Iardy, rdyi)?;
@@ -234,7 +246,10 @@ pub fn encode_text_region_with_refinement(
                 // truncates toward zero, which differs from floor for negative RDW
                 // (instance narrower/shorter than the prototype) and would shift the
                 // reference by one pixel vs the decoder. Use floor division.
-                let grdx = rdwi.div_euclid(2) + rdxi;
+                let grdx = rdwi
+                    .div_euclid(2)
+                    .checked_add(rdxi)
+                    .ok_or_else(|| anyhow!("refinement horizontal offset overflow"))?;
                 let grdy = rdhi.div_euclid(2) + rdyi;
 
                 // Encode the refinement region: pixel-by-pixel difference
@@ -263,7 +278,7 @@ pub fn encode_text_region_with_refinement(
         coder.encode_oob(IntProc::Iads)?;
     }
 
-    coder.flush(true);
+    coder.flush_with_termination(true, config.canonical_arithmetic_termination);
     payload.extend(coder.as_bytes());
 
     Ok(payload)

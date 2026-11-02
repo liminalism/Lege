@@ -1,0 +1,4 @@
+mode,pages,auto_thresh,encoded_bytes,global_bytes,local_bytes,residual_bytes,encode_seconds,differing_pixels,cold_decode_seconds,warm_decode_seconds,decoded_global_bitmap_bytes,comparator_calls,exact_hits,refined_hits,jbig2dec_differing_pixels,worker_peak_rss_kib
+symbol_shipping,350,true,68581,152,0,0,0.232317170,8891,0.048939818,0.037918499,872,140389,53246,17448,8891,76096
+symbol_shared,350,true,68581,152,0,0,0.246462815,8891,0.051782654,0.038656589,872,140389,53246,17448,8891,76544
+symbol_local,350,true,68581,152,0,0,0.247531922,8891,0.051682461,0.038415980,872,140389,53246,17448,8891,76340

@@ -1,3 +1,8 @@
+// SPDX-License-Identifier: Apache-2.0
+// Extracted from this crate's jbig2enc arithmetic-coder translation.
+// Upstream coder attribution: Copyright 2006 Google Inc.; Adam Langley.
+// The procedure identifiers are protocol data. See LICENSE-APACHE and NOTICE.
+
 //! Arithmetic integer-decoding procedure identifiers (T.88 Annex A / §6.8),
 //! shared by the encoder and decoder (jbig2decplan.md §11, §23).
 //!

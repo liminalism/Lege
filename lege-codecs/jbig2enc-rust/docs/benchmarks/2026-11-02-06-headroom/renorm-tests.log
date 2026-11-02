@@ -1,0 +1,18 @@
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.05s
+     Running tests/encode_byte_identical.rs (lege-codecs/jbig2enc-rust/target/release/deps/encode_byte_identical-baeea57ec64ed2cf)
+
+running 3 tests
+test encoder_output_is_byte_identical ... ignored, external legacy PBM rights unresolved; retain explicit unchanged-manifest regression gate
+test sha_selftest::sha256_known_vectors ... ok
+test original_fixture_encoder_output_is_byte_identical ... ok
+
+test result: ok. 2 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/generic_contexts.rs (lege-codecs/jbig2enc-rust/target/release/deps/generic_contexts-0e412356bad53b86)
+
+running 2 tests
+test packed_word_windows_match_scalar_template_zero_even_with_dirty_tail_padding ... ok
+test long_blank_runs_and_sparse_islands_match_per_pixel_arithmetic ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+

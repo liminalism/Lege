@@ -1,0 +1,94 @@
+{
+  "observed_date": "2026-11-01",
+  "user_provenance_statement": "The user identified https://github.com/thrasibule/doc_coder/tree/master/test as the test PBM source and confirmed that only the image, not C code, was used.",
+  "upstream": {
+    "repository": "https://github.com/thrasibule/doc_coder",
+    "commit": "ad14a6ffa20833f6c47d9f4a43690f4366f7584c",
+    "commit_date": "2011-09-29",
+    "path": "test/test.pbm",
+    "git_blob": "a6d8a3f8db20367461ba89185772d3f193d23379",
+    "sha256": "0efacad463a0cf7e91be15ce6936931fcb59d49df3771b66c5f3402ae05b3c79",
+    "bytes": 780583,
+    "dimensions": [
+      1956,
+      3186
+    ],
+    "url": "https://github.com/thrasibule/doc_coder/blob/ad14a6ffa20833f6c47d9f4a43690f4366f7584c/test/test.pbm"
+  },
+  "license_evidence": {
+    "path": "license",
+    "blob": "16a2e4d33281a3188af0244a766a90301aa2db62",
+    "url": "https://github.com/thrasibule/doc_coder/blob/ad14a6ffa20833f6c47d9f4a43690f4366f7584c/license",
+    "holder": "The Regents of the University of California, 2004",
+    "scope": "Wording addresses the JBIG2 codec, granting educational, research and nonprofit copying/modification/distribution with notices and directing commercial use to UC San Diego for permission. No distinct scan/image grant is supplied.",
+    "disposition": "Do not infer Apache-2.0 or unrestricted commercial redistribution for the fixture from the codec license."
+  },
+  "readme_evidence": {
+    "path": "README",
+    "blob": "5fab5a14659c2ad8a7d724f07c130770c859b6e2",
+    "url": "https://github.com/thrasibule/doc_coder/blob/ad14a6ffa20833f6c47d9f4a43690f4366f7584c/README",
+    "observation": "Credits Yan Ye and Pamela Cosman and an import from the UCSD jb2.zip download; documents test/test.pbm."
+  },
+  "local_fixtures": [
+    {
+      "path": "tests/fixtures/test_image1.pbm",
+      "dimensions": [
+        956,
+        1557
+      ],
+      "bytes": 186875,
+      "sha256": "7b0bcb00ec8ff154531aa31b112a7d8687529e02080b809b3cb3d8bd8c9d504d",
+      "observation": "Visual comparison confirms the same French prefatory page at a smaller resolution. IrfanView header; exact resampling settings and earlier scan edition/source unestablished. Not byte-identical to upstream.",
+      "rights_status": "Origin now identified; unrestricted redistribution rights not established.",
+      "included_in_cargo_package": false
+    },
+    {
+      "path": "tests/fixtures/test_image.pbm",
+      "dimensions": [
+        2,
+        2
+      ],
+      "bytes": 32,
+      "sha256": "7d566ee5079b029e8656b6043cce45efd8dd8e3824c5faba410adf979e74fc37",
+      "observation": "All-white 2x2 PBM with IrfanView header; no matching file at the supplied upstream path.",
+      "rights_status": "Generator provenance not separately recorded; trivial pixel content.",
+      "included_in_cargo_package": false
+    }
+  ],
+  "distribution": "The original two external inputs and encode_hashes.txt remain unchanged in the checkout. Both legacy PBMs are excluded from Cargo packaging; only three original geometric PBMs and their generator/inventory are distributed. Default tests use the original corpus. The retained legacy byte gate is explicitly ignored by default and must be run by name with --ignored; the optional JBIG2_LEGACY_FIXTURES=1 matrix fails if old inputs are missing rather than downloading or silently replacing them. Publishing remains disabled for other source-rights review; fixture uncertainty is removed from the crate package by exclusion, not by a new rights claim.",
+  "not_included": "The upstream PBM downloaded for visual comparison stays under /tmp and is not added to the package.",
+  "replacement_corpus": {
+    "files": [
+      {
+        "black_pixels": 0,
+        "bytes": 75,
+        "description": "Four white pixels; no external generator or image.",
+        "height": 2,
+        "path": "blank.pbm",
+        "sha256": "f5e420a23dc6133cd857cf1c9799931bd2a538fc0e92401d8b1c11b08d596ccd",
+        "width": 2
+      },
+      {
+        "black_pixels": 7110,
+        "bytes": 6446,
+        "description": "135 repeated geometric symbols, eight variants; odd width.",
+        "height": 193,
+        "path": "symbols.pbm",
+        "sha256": "decfde639ad6eedd3b1f6c8f7455049ceec2d5881a374657ac6f5bb94321304f",
+        "width": 257
+      },
+      {
+        "black_pixels": 629,
+        "bytes": 1725,
+        "description": "Rule, dense rectangle, isolated marks and diagonal contacts; odd width.",
+        "height": 97,
+        "path": "marks.pbm",
+        "sha256": "afaa5f96b0b3277024748b16f5e33a8c6c45e11a1de4210632751ad6eeb51a86",
+        "width": 131
+      }
+    ],
+    "generator_sha256": "41c668acb97f944c6f8f3fc98c72c9a6ec62973ff7a9ec13e28fdd6099e21998",
+    "license": "Apache-2.0",
+    "origin": "Original geometric rules in tools/generate_test_fixtures.py; no external image/font/scan"
+  }
+}

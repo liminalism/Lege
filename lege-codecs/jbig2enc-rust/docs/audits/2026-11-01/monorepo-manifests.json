@@ -1,0 +1,876 @@
+{
+  "packages": [
+    {
+      "declared_license": null,
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "63498ce880de59189d1f798caed213b7429423a88b45d2abe622ece57d9e0218",
+      "package": "examples",
+      "path": "freya-main/Cargo.toml",
+      "resolved_license": null
+    },
+    {
+      "declared_license": "MIT",
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "57872b4cb6f0df5fd3fddf00280272ef9388f72b8e149b9c7d9f613fc1481fb4",
+      "package": "freya-android",
+      "path": "freya-main/crates/freya-android/Cargo.toml",
+      "resolved_license": "MIT"
+    },
+    {
+      "declared_license": "MIT",
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "2ca6bb2b0f7e171cfe74c074064321a099988a36f1e50d30a73da38527eca240",
+      "package": "freya-animation",
+      "path": "freya-main/crates/freya-animation/Cargo.toml",
+      "resolved_license": "MIT"
+    },
+    {
+      "declared_license": "MIT",
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "f14f3d0070624c43d84427320849041e0beb4251c4766c57558095876cc10278",
+      "package": "freya-clipboard",
+      "path": "freya-main/crates/freya-clipboard/Cargo.toml",
+      "resolved_license": "MIT"
+    },
+    {
+      "declared_license": "MIT",
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "2e2c49f5b4054bca5801bf92540af02aed9375ae454abdcd18adcda21c01fb4c",
+      "package": "freya-code-editor",
+      "path": "freya-main/crates/freya-code-editor/Cargo.toml",
+      "resolved_license": "MIT"
+    },
+    {
+      "declared_license": "MIT",
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "519b80498c15fbc0f7da9332033238f66d632016121da99949846444882519d6",
+      "package": "freya-components",
+      "path": "freya-main/crates/freya-components/Cargo.toml",
+      "resolved_license": "MIT"
+    },
+    {
+      "declared_license": "MIT",
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "54331239fee18d3ffd9f05d14ec2e4abe6ec517e7c4e4a21aa32a7852d496034",
+      "package": "freya-core",
+      "path": "freya-main/crates/freya-core/Cargo.toml",
+      "resolved_license": "MIT"
+    },
+    {
+      "declared_license": "MIT",
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "cef910e129f0c138b1ef1dd576f99430e4b2f58034fb9062472930ee1696af48",
+      "package": "freya-devtools-app",
+      "path": "freya-main/crates/freya-devtools-app/Cargo.toml",
+      "resolved_license": "MIT"
+    },
+    {
+      "declared_license": "MIT",
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "93f229e5f48e634e80f14a36f06ccf25c1c3eda9e32feb6cab7564e721617ab2",
+      "package": "freya-devtools",
+      "path": "freya-main/crates/freya-devtools/Cargo.toml",
+      "resolved_license": "MIT"
+    },
+    {
+      "declared_license": "MIT",
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "c1c17a36aea5e5554e6864f91f1700b921fc1e01dc71512ddcbc6f5d045bc2e8",
+      "package": "freya-edit",
+      "path": "freya-main/crates/freya-edit/Cargo.toml",
+      "resolved_license": "MIT"
+    },
+    {
+      "declared_license": "MIT",
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "90bcf13e928895ff94ac630a36e22d9d29125dc8734f7a8851cb8dbc74e23afd",
+      "package": "freya-engine",
+      "path": "freya-main/crates/freya-engine/Cargo.toml",
+      "resolved_license": "MIT"
+    },
+    {
+      "declared_license": "MIT",
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "d41a8a7683c3979e8f3ffda69eb1bb13bc742800e7a51f2c904c72e7d933ac74",
+      "package": "freya-i18n",
+      "path": "freya-main/crates/freya-i18n/Cargo.toml",
+      "resolved_license": "MIT"
+    },
+    {
+      "declared_license": "MIT",
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "f9df91fbd19b3282624d73def280ad4bdc4cfc2aa79ab4448924099c2a8f1b09",
+      "package": "freya-icons",
+      "path": "freya-main/crates/freya-icons/Cargo.toml",
+      "resolved_license": "MIT"
+    },
+    {
+      "declared_license": "MIT",
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "e5f1aa4a5cdf55b68e0c8b31ca0773e43fec44652e6239ed01913ae680692be4",
+      "package": "freya-material-design",
+      "path": "freya-main/crates/freya-material-design/Cargo.toml",
+      "resolved_license": "MIT"
+    },
+    {
+      "declared_license": "MIT",
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "4869c75796397c88f368e804d0b0af231b9bc6f27907f34ce092a4cad32e7652",
+      "package": "freya-performance-plugin",
+      "path": "freya-main/crates/freya-performance-plugin/Cargo.toml",
+      "resolved_license": "MIT"
+    },
+    {
+      "declared_license": "MIT",
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "4b8209f931dce225f298e59dd0729e9b4e222996b1e3444202e2ffbd638bea36",
+      "package": "freya-plotters-backend",
+      "path": "freya-main/crates/freya-plotters-backend/Cargo.toml",
+      "resolved_license": "MIT"
+    },
+    {
+      "declared_license": "MIT",
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "e3fa81cdf306b6c994c139e52d1e4fcb24652e0aa3661dd874d873826cb73ac7",
+      "package": "freya-query",
+      "path": "freya-main/crates/freya-query/Cargo.toml",
+      "resolved_license": "MIT"
+    },
+    {
+      "declared_license": "MIT",
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "bf1c2797b7ac5dca18feaed74f87f7a3fcffa1896f3afe2f74c1fd8b1fb06081",
+      "package": "freya-radio",
+      "path": "freya-main/crates/freya-radio/Cargo.toml",
+      "resolved_license": "MIT"
+    },
+    {
+      "declared_license": "MIT",
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "40b1e0d22a2b30e5381b60dae5c406670be9eb2e293307e7b8e96a9403910b9d",
+      "package": "freya-render-api",
+      "path": "freya-main/crates/freya-render-api/Cargo.toml",
+      "resolved_license": "MIT"
+    },
+    {
+      "declared_license": "MIT",
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "346157c2c176a219aa0f0f83c3ece9386525636287549ac7d32958c5ea3b42d2",
+      "package": "freya-render-tiny-skia",
+      "path": "freya-main/crates/freya-render-tiny-skia/Cargo.toml",
+      "resolved_license": "MIT"
+    },
+    {
+      "declared_license": "MIT",
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "e87199e8211c986f1612ba3c7adc49236a5546252450e81eb683ef8e3834856c",
+      "package": "freya-router-macro",
+      "path": "freya-main/crates/freya-router-macro/Cargo.toml",
+      "resolved_license": "MIT"
+    },
+    {
+      "declared_license": "MIT",
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "af057abd75d7715435667dfa8221e78fda1cfd24cb21108941f39c0829526ec1",
+      "package": "freya-router",
+      "path": "freya-main/crates/freya-router/Cargo.toml",
+      "resolved_license": "MIT"
+    },
+    {
+      "declared_license": "MIT",
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "f94d4f3e109ee20f2c21e24af60c58571b88ed23ffb8fb117d22d2f02942ff40",
+      "package": "freya-sdk",
+      "path": "freya-main/crates/freya-sdk/Cargo.toml",
+      "resolved_license": "MIT"
+    },
+    {
+      "declared_license": "MIT",
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "29c61d0ed874d13c85737686e07a512eca7ce0da169e3e76d168fdc54183d59b",
+      "package": "freya-terminal",
+      "path": "freya-main/crates/freya-terminal/Cargo.toml",
+      "resolved_license": "MIT"
+    },
+    {
+      "declared_license": "MIT",
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "409c21be50799a30903e12c8fd03241201a66fdfa315157b67d299bb47e4191b",
+      "package": "freya-testing",
+      "path": "freya-main/crates/freya-testing/Cargo.toml",
+      "resolved_license": "MIT"
+    },
+    {
+      "declared_license": "MIT",
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "5e80b1e115afd4b7056767d688a05661ed3d2ca6274744e369fd51da6306157d",
+      "package": "freya-text-cosmic",
+      "path": "freya-main/crates/freya-text-cosmic/Cargo.toml",
+      "resolved_license": "MIT"
+    },
+    {
+      "declared_license": "MIT",
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "fb49bf8fe6986c0a028b04b1c73d36cad53605b78a9b64c348924a787767a03e",
+      "package": "freya-webview",
+      "path": "freya-main/crates/freya-webview/Cargo.toml",
+      "resolved_license": "MIT"
+    },
+    {
+      "declared_license": "MIT",
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "3ae9a33fe16d8d42cfb7b2e891e5c2822dbc9ffa1c996939d1765620f9c6a384",
+      "package": "freya-winit",
+      "path": "freya-main/crates/freya-winit/Cargo.toml",
+      "resolved_license": "MIT"
+    },
+    {
+      "declared_license": "MIT",
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "b9f50097fe7ef146d89ce296baf88202100e6a2ca7f0a575d640b2a8c23d0b48",
+      "package": "freya",
+      "path": "freya-main/crates/freya/Cargo.toml",
+      "resolved_license": "MIT"
+    },
+    {
+      "declared_license": "MIT",
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "3fea502d4bd31134312d2527480405cc5f1330f8164b26aebd92a3e0f339e0a6",
+      "package": "pathgraph",
+      "path": "freya-main/crates/pathgraph/Cargo.toml",
+      "resolved_license": "MIT"
+    },
+    {
+      "declared_license": "MIT",
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "f024284f9dd27deb8c74d057c21a276822ac12231cb5066694422f4a4437d699",
+      "package": "ragnarok",
+      "path": "freya-main/crates/ragnarok/Cargo.toml",
+      "resolved_license": "MIT"
+    },
+    {
+      "declared_license": "MIT",
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "a9c69e15dbcd207bbe2f3e4d153c19a56cc69452420e52793310e862f05f255b",
+      "package": "torin",
+      "path": "freya-main/crates/torin/Cargo.toml",
+      "resolved_license": "MIT"
+    },
+    {
+      "declared_license": "AGPL-3.0-only",
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "eacf10208d61e16fb409a37f9e8750ba53bf07281c4d139d283b9ab498c2d006",
+      "package": "lege-android",
+      "path": "lege-android/Cargo.toml",
+      "resolved_license": "AGPL-3.0-only"
+    },
+    {
+      "declared_license": "AGPL-3.0-only",
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "cd082746c7fdba9cefa15531069f22e13344b4cefd1e848a04ee2413f3da0454",
+      "package": "djvu_encoder",
+      "path": "lege-codecs/djvulibrust/Cargo.toml",
+      "resolved_license": "AGPL-3.0-only"
+    },
+    {
+      "declared_license": "Apache-2.0",
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "59e91c910f66da0674788608c84af659decee96513e6b796a18eabe80957060f",
+      "package": "jbig2enc-rust",
+      "path": "lege-codecs/jbig2enc-rust/Cargo.toml",
+      "resolved_license": "Apache-2.0"
+    },
+    {
+      "declared_license": null,
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "2120dda23803a403396b399132488c0859ca04eea5076a1446875992506cbfa6",
+      "package": "jbig2-decode-fuzz",
+      "path": "lege-codecs/jbig2enc-rust/fuzz/Cargo.toml",
+      "resolved_license": null
+    },
+    {
+      "declared_license": "MIT OR Apache-2.0",
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "c9a048fcd529fe76d4560d8f1bc94301d386b38244ece04816ad5a9b561caa28",
+      "package": "jp2lam",
+      "path": "lege-codecs/jp2lam/Cargo.toml",
+      "resolved_license": "MIT OR Apache-2.0"
+    },
+    {
+      "declared_license": null,
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "8cf76b6284cc33e1d7793f423c4fb42409c36133cee8bdb3d41a1c23ee5096ee",
+      "package": "jp2lam-fuzz",
+      "path": "lege-codecs/jp2lam/fuzz/Cargo.toml",
+      "resolved_license": null
+    },
+    {
+      "declared_license": {
+        "workspace": true
+      },
+      "inherited_from": "Cargo.toml",
+      "license_file": null,
+      "manifest_sha256": "769dd1a23dcd7132d14fe788d0a450dd16506bf9c4bc2a737d07eeaf59c2189d",
+      "package": "lege-document-ocr-cli",
+      "path": "lege-document-ocr/cli/Cargo.toml",
+      "resolved_license": "AGPL-3.0-only"
+    },
+    {
+      "declared_license": {
+        "workspace": true
+      },
+      "inherited_from": "Cargo.toml",
+      "license_file": null,
+      "manifest_sha256": "efcbad832b0773dcc9207a0cfc3ad682855c1699f49f04c28af9de5f20adf1e5",
+      "package": "lege-document-batch",
+      "path": "lege-document-ocr/crates/batch/Cargo.toml",
+      "resolved_license": "AGPL-3.0-only"
+    },
+    {
+      "declared_license": {
+        "workspace": true
+      },
+      "inherited_from": "Cargo.toml",
+      "license_file": null,
+      "manifest_sha256": "b2212e10c53f67b58f3cf4ce91d57ba5fb60f5fef264c125c8aa14503403c9e3",
+      "package": "lege-docir",
+      "path": "lege-document-ocr/crates/docir/Cargo.toml",
+      "resolved_license": "AGPL-3.0-only"
+    },
+    {
+      "declared_license": {
+        "workspace": true
+      },
+      "inherited_from": "Cargo.toml",
+      "license_file": null,
+      "manifest_sha256": "dcaa5d6cb9cf4c2cd9be706a920528e756e9d9d38609939ccfee267193f39dcb",
+      "package": "lege-document-export",
+      "path": "lege-document-ocr/crates/export/Cargo.toml",
+      "resolved_license": "AGPL-3.0-only"
+    },
+    {
+      "declared_license": {
+        "workspace": true
+      },
+      "inherited_from": "Cargo.toml",
+      "license_file": null,
+      "manifest_sha256": "a1c973aeb792c5846092a283aca27f6b4a3295fc8393f7826ec0ebd2fb14d11f",
+      "package": "lege-document-pipeline",
+      "path": "lege-document-ocr/crates/pipeline/Cargo.toml",
+      "resolved_license": "AGPL-3.0-only"
+    },
+    {
+      "declared_license": null,
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "072d27adc6d4bd3d9c89cfeff3a05aadf1ce5e862e69b31ba15ec6d1ba8ed4cd",
+      "package": "lege-document-ocr-installer-winsafe",
+      "path": "lege-document-ocr/installer-winsafe/Cargo.toml",
+      "resolved_license": null
+    },
+    {
+      "declared_license": null,
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "b8866c61770d10518a1c9fcdae16eb6e7783933922f235344c65940907592daa",
+      "package": "lege-gpu",
+      "path": "lege-gpu/Cargo.toml",
+      "resolved_license": null
+    },
+    {
+      "declared_license": "MIT OR Apache-2.0",
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "c553057cc51994067b67c20d1c75ab5bedf281e1a7f224e26b7c5f1c23f8cd61",
+      "package": "jbig2enc-py",
+      "path": "lege-misc/bindings/jbig2enc-py/Cargo.toml",
+      "resolved_license": "MIT OR Apache-2.0"
+    },
+    {
+      "declared_license": "AGPL-3.0-only",
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "ffa0731b9e4ef8df6d73fdf9b196535ca6b95086f5cbaf53f60af9b571acc88c",
+      "package": "lege-render-ffi",
+      "path": "lege-misc/bindings/lege-render-ffi/Cargo.toml",
+      "resolved_license": "AGPL-3.0-only"
+    },
+    {
+      "declared_license": null,
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "a61ae0ca542b5a32de96c8005e4429e890bc6eed0648a9039d5e867aaa646b76",
+      "package": "xtask",
+      "path": "lege-misc/xtask/Cargo.toml",
+      "resolved_license": null
+    },
+    {
+      "declared_license": null,
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "972b8ea11518ea99102f66cb0eb153affd560fcf34bddaf44a55329121a656db",
+      "package": "lege-ocr",
+      "path": "lege-ocr/Cargo.toml",
+      "resolved_license": null
+    },
+    {
+      "declared_license": {
+        "workspace": true
+      },
+      "inherited_from": "Cargo.toml",
+      "license_file": null,
+      "manifest_sha256": "7561c01b61528c3c1e99a1bc3b8d124a286870e379ca96ed633be61a63e9a73a",
+      "package": "lege-pdf-agent",
+      "path": "lege-pdf/agent/Cargo.toml",
+      "resolved_license": "AGPL-3.0-only"
+    },
+    {
+      "declared_license": {
+        "workspace": true
+      },
+      "inherited_from": "lege-pdf/pdf-integrity/Cargo.toml",
+      "license_file": null,
+      "manifest_sha256": "7135f117fc99e01d87f66843e30352eb55772c8f2b9d9041bc69e96d219c97df",
+      "package": "lege-pdf-audit",
+      "path": "lege-pdf/pdf-integrity/crates/lege-pdf-audit/Cargo.toml",
+      "resolved_license": "Apache-2.0"
+    },
+    {
+      "declared_license": {
+        "workspace": true
+      },
+      "inherited_from": "lege-pdf/pdf-integrity/Cargo.toml",
+      "license_file": null,
+      "manifest_sha256": "d184d43571fe9b8b6d7add464d7c9d452beb08c3f5225d95617f21567b4802aa",
+      "package": "pdf-forensics",
+      "path": "lege-pdf/pdf-integrity/crates/pdf-forensics/Cargo.toml",
+      "resolved_license": "Apache-2.0"
+    },
+    {
+      "declared_license": {
+        "workspace": true
+      },
+      "inherited_from": "Cargo.toml",
+      "license_file": null,
+      "manifest_sha256": "e6cfd4c01ab37e9664797a3047e3b14977bed9799c7ad4da2a16c866aeb5183b",
+      "package": "lege-pdf-print",
+      "path": "lege-pdf/print/Cargo.toml",
+      "resolved_license": "AGPL-3.0-only"
+    },
+    {
+      "declared_license": "Apache-2.0",
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "30074d80706aa209f8de5fdc4d40a06b2024abf4c7d18d49607267abac9f0550",
+      "package": "lege-pdf-read",
+      "path": "lege-pdf/read/Cargo.toml",
+      "resolved_license": "Apache-2.0"
+    },
+    {
+      "declared_license": {
+        "workspace": true
+      },
+      "inherited_from": "Cargo.toml",
+      "license_file": null,
+      "manifest_sha256": "90107a190d205fd79270fe6d1db1cf1a82e40cbf37658808faeacb2a3235871a",
+      "package": "pdf-chaos-tests",
+      "path": "lege-pdf/render/crates/pdf-chaos-tests/Cargo.toml",
+      "resolved_license": "AGPL-3.0-only"
+    },
+    {
+      "declared_license": {
+        "workspace": true
+      },
+      "inherited_from": "Cargo.toml",
+      "license_file": null,
+      "manifest_sha256": "870242e8817fa7544b80dc47f5de9207195d2896dda06fb02ebf3086cb23eb21",
+      "package": "pdf-cli",
+      "path": "lege-pdf/render/crates/pdf-cli/Cargo.toml",
+      "resolved_license": "AGPL-3.0-only"
+    },
+    {
+      "declared_license": {
+        "workspace": true
+      },
+      "inherited_from": "Cargo.toml",
+      "license_file": null,
+      "manifest_sha256": "b6b4f56a58cf52d8a00a9fffdd55fcc6d8aefcb89a4906b3ea668a8493fae47d",
+      "package": "pdf-color",
+      "path": "lege-pdf/render/crates/pdf-color/Cargo.toml",
+      "resolved_license": "AGPL-3.0-only"
+    },
+    {
+      "declared_license": {
+        "workspace": true
+      },
+      "inherited_from": "Cargo.toml",
+      "license_file": null,
+      "manifest_sha256": "eea15852b80b3b53b3ea932490d6973bb93884686d8f6307b95631094085752b",
+      "package": "pdf-content",
+      "path": "lege-pdf/render/crates/pdf-content/Cargo.toml",
+      "resolved_license": "AGPL-3.0-only"
+    },
+    {
+      "declared_license": {
+        "workspace": true
+      },
+      "inherited_from": "Cargo.toml",
+      "license_file": null,
+      "manifest_sha256": "dce389a2ad1d8c344d2193a701c6f82ac316d7601b3cea5fae11503aeae3f33a",
+      "package": "pdf-document",
+      "path": "lege-pdf/render/crates/pdf-document/Cargo.toml",
+      "resolved_license": "AGPL-3.0-only"
+    },
+    {
+      "declared_license": {
+        "workspace": true
+      },
+      "inherited_from": "Cargo.toml",
+      "license_file": null,
+      "manifest_sha256": "53c76069c8fb77f0e435fbdb9348c18403d93a97ca531e32cdc738abfcb85929",
+      "package": "pdf-font",
+      "path": "lege-pdf/render/crates/pdf-font/Cargo.toml",
+      "resolved_license": "AGPL-3.0-only"
+    },
+    {
+      "declared_license": {
+        "workspace": true
+      },
+      "inherited_from": "Cargo.toml",
+      "license_file": null,
+      "manifest_sha256": "d54197390c5ef064640f798ccd912a0b607e8c6174c69d344eda5ef225c6c06f",
+      "package": "pdf-function",
+      "path": "lege-pdf/render/crates/pdf-function/Cargo.toml",
+      "resolved_license": "AGPL-3.0-only"
+    },
+    {
+      "declared_license": {
+        "workspace": true
+      },
+      "inherited_from": "Cargo.toml",
+      "license_file": null,
+      "manifest_sha256": "b1a4a4ce9661ade6de2bbd77cb8796bcbd98b9ae6bc008c0d1876f5887abfb6c",
+      "package": "pdf-geom",
+      "path": "lege-pdf/render/crates/pdf-geom/Cargo.toml",
+      "resolved_license": "AGPL-3.0-only"
+    },
+    {
+      "declared_license": {
+        "workspace": true
+      },
+      "inherited_from": "Cargo.toml",
+      "license_file": null,
+      "manifest_sha256": "7b4c606e0510fb78987ccab676c698a7d886a6b111676dfbd544d80ed8bb4667",
+      "package": "pdf-image",
+      "path": "lege-pdf/render/crates/pdf-image/Cargo.toml",
+      "resolved_license": "AGPL-3.0-only"
+    },
+    {
+      "declared_license": {
+        "workspace": true
+      },
+      "inherited_from": "Cargo.toml",
+      "license_file": null,
+      "manifest_sha256": "280158bdf84b8659caa9cc51b9d797fc85d9a2210d61a6a15395d5b6627a3cc3",
+      "package": "pdf-object",
+      "path": "lege-pdf/render/crates/pdf-object/Cargo.toml",
+      "resolved_license": "AGPL-3.0-only"
+    },
+    {
+      "declared_license": {
+        "workspace": true
+      },
+      "inherited_from": "Cargo.toml",
+      "license_file": null,
+      "manifest_sha256": "5e8a01d8c5cc25aa63255fb26de69474ac17293047a6b98e144202ce7467e507",
+      "package": "pdf-page-ir",
+      "path": "lege-pdf/render/crates/pdf-page-ir/Cargo.toml",
+      "resolved_license": "AGPL-3.0-only"
+    },
+    {
+      "declared_license": {
+        "workspace": true
+      },
+      "inherited_from": "Cargo.toml",
+      "license_file": null,
+      "manifest_sha256": "78cc0c740e3131f6dbd682526296ebe06b30afe1c841691fc4f2a10b874b9ee4",
+      "package": "pdf-postprocess",
+      "path": "lege-pdf/render/crates/pdf-postprocess/Cargo.toml",
+      "resolved_license": "AGPL-3.0-only"
+    },
+    {
+      "declared_license": {
+        "workspace": true
+      },
+      "inherited_from": "Cargo.toml",
+      "license_file": null,
+      "manifest_sha256": "da915df56f88ac3877e810281035c89c4632762c008ab3066b29e53f6a3e05fd",
+      "package": "pdf-profiling",
+      "path": "lege-pdf/render/crates/pdf-profiling/Cargo.toml",
+      "resolved_license": "AGPL-3.0-only"
+    },
+    {
+      "declared_license": {
+        "workspace": true
+      },
+      "inherited_from": "Cargo.toml",
+      "license_file": null,
+      "manifest_sha256": "67c8ea224dd26cc983771538ac7594d61c9b59fe75dd52932a4ed63dd880a36d",
+      "package": "pdf-read",
+      "path": "lege-pdf/render/crates/pdf-read/Cargo.toml",
+      "resolved_license": "AGPL-3.0-only"
+    },
+    {
+      "declared_license": {
+        "workspace": true
+      },
+      "inherited_from": "Cargo.toml",
+      "license_file": null,
+      "manifest_sha256": "7f4e49ab9101f36d244f66142ab52f6b65479956d9dbecba4c4e4ca313dcde30",
+      "package": "pdf-render-api",
+      "path": "lege-pdf/render/crates/pdf-render-api/Cargo.toml",
+      "resolved_license": "AGPL-3.0-only"
+    },
+    {
+      "declared_license": {
+        "workspace": true
+      },
+      "inherited_from": "Cargo.toml",
+      "license_file": null,
+      "manifest_sha256": "76424f44c4720b209b18b0899386ec25ac898a94c1c9e6e08a109b0f2f2c967a",
+      "package": "pdf-render-cpu",
+      "path": "lege-pdf/render/crates/pdf-render-cpu/Cargo.toml",
+      "resolved_license": "AGPL-3.0-only"
+    },
+    {
+      "declared_license": {
+        "workspace": true
+      },
+      "inherited_from": "Cargo.toml",
+      "license_file": null,
+      "manifest_sha256": "88e6cbd4a6c15e3a3e8bc6c1348ceff461f8d5f8e0da77f855d12133bcd50757",
+      "package": "pdf-render-scheduler",
+      "path": "lege-pdf/render/crates/pdf-render-scheduler/Cargo.toml",
+      "resolved_license": "AGPL-3.0-only"
+    },
+    {
+      "declared_license": {
+        "workspace": true
+      },
+      "inherited_from": "Cargo.toml",
+      "license_file": null,
+      "manifest_sha256": "71897e2eae4ea900164c1deaf1908ce3947ec988953ce360bc912235610eb3e4",
+      "package": "pdf-render-wgpu",
+      "path": "lege-pdf/render/crates/pdf-render-wgpu/Cargo.toml",
+      "resolved_license": "AGPL-3.0-only"
+    },
+    {
+      "declared_license": {
+        "workspace": true
+      },
+      "inherited_from": "Cargo.toml",
+      "license_file": null,
+      "manifest_sha256": "6a3e8ad6bbe2e1ea8ab5143537bc67e0eff0265c1cb7f1ecad41456c6b1845f2",
+      "package": "pdf-security",
+      "path": "lege-pdf/render/crates/pdf-security/Cargo.toml",
+      "resolved_license": "AGPL-3.0-only"
+    },
+    {
+      "declared_license": {
+        "workspace": true
+      },
+      "inherited_from": "Cargo.toml",
+      "license_file": null,
+      "manifest_sha256": "727bbe60cda59b1eb8f2fca0adb896c01eca3622c8e3155dc223113709a7e83a",
+      "package": "pdf-source",
+      "path": "lege-pdf/render/crates/pdf-source/Cargo.toml",
+      "resolved_license": "AGPL-3.0-only"
+    },
+    {
+      "declared_license": {
+        "workspace": true
+      },
+      "inherited_from": "Cargo.toml",
+      "license_file": null,
+      "manifest_sha256": "16b51403fd981f8d2a8898163f25b2e2d6fc6d0e2604ae1acf06b38556cc4d12",
+      "package": "pdf-structure",
+      "path": "lege-pdf/render/crates/pdf-structure/Cargo.toml",
+      "resolved_license": "AGPL-3.0-only"
+    },
+    {
+      "declared_license": {
+        "workspace": true
+      },
+      "inherited_from": "Cargo.toml",
+      "license_file": null,
+      "manifest_sha256": "afa20f2b42c4fc086dccd4ddb94a495341492753b3d1a4c0b034b6236c6414b4",
+      "package": "pdf-syntax",
+      "path": "lege-pdf/render/crates/pdf-syntax/Cargo.toml",
+      "resolved_license": "AGPL-3.0-only"
+    },
+    {
+      "declared_license": {
+        "workspace": true
+      },
+      "inherited_from": "Cargo.toml",
+      "license_file": null,
+      "manifest_sha256": "fcacb9bf45f6517441c3d4ca54dbff3559e20e7ed5f576ea2972810a916524a3",
+      "package": "pdf-test-support",
+      "path": "lege-pdf/render/crates/pdf-test-support/Cargo.toml",
+      "resolved_license": "AGPL-3.0-only"
+    },
+    {
+      "declared_license": {
+        "workspace": true
+      },
+      "inherited_from": "Cargo.toml",
+      "license_file": null,
+      "manifest_sha256": "1be7fe4a6f4864abc7f47d7b95ebb32591f40282e1d4dd75c4cd4cc83ac89f1e",
+      "package": "pdf-text",
+      "path": "lege-pdf/render/crates/pdf-text/Cargo.toml",
+      "resolved_license": "AGPL-3.0-only"
+    },
+    {
+      "declared_license": null,
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "187529ea6e155667052631035d042b020dcb001c0bfbbd9df0fcd1f32a00af70",
+      "package": "pdf-renderer-fuzz",
+      "path": "lege-pdf/render/fuzz/Cargo.toml",
+      "resolved_license": null
+    },
+    {
+      "declared_license": null,
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "2d40ceed3bcfe430727f7e3921418313ccde71624775937e8325c08eeff11d78",
+      "package": "pdfium-diff",
+      "path": "lege-pdf/render/tools/pdfium-diff/Cargo.toml",
+      "resolved_license": null
+    },
+    {
+      "declared_license": null,
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "73bd91b43924db6aa4a920d3205b1e284bfac70014096b843555d8e8c7428897",
+      "package": "pdfium-text-diff",
+      "path": "lege-pdf/render/tools/pdfium-text-diff/Cargo.toml",
+      "resolved_license": null
+    },
+    {
+      "declared_license": null,
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "cb1e64f2417908d3f80f0858daf8c7e43fa57c43183e468a39953d66bf16d178",
+      "package": "lege-pdf-write",
+      "path": "lege-pdf/write/Cargo.toml",
+      "resolved_license": null
+    },
+    {
+      "declared_license": "AGPL-3.0-only",
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "fd7305d918bd0fdf51bf27cc4d1b708e21b1651e76e68b4f7a631c6fe0d0cee1",
+      "package": "lege",
+      "path": "lege-process/Cargo.toml",
+      "resolved_license": "AGPL-3.0-only"
+    },
+    {
+      "declared_license": {
+        "workspace": true
+      },
+      "inherited_from": "Cargo.toml",
+      "license_file": null,
+      "manifest_sha256": "cb73c2db05cfee31c17d463633e3315a8e3354cc84f890eb989a060bdcb6a454",
+      "package": "lege-gui-liminalui",
+      "path": "lege-process/GUI/liminalUI/Cargo.toml",
+      "resolved_license": "AGPL-3.0-only"
+    },
+    {
+      "declared_license": "MIT",
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "069e24f00892dbb116d51bd034c60bd040aaaaae4ba78abc303e6bf8365b649e",
+      "package": "rfd",
+      "path": "lege-process/GUI/rfd/Cargo.toml",
+      "resolved_license": "MIT"
+    },
+    {
+      "declared_license": null,
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "fe5dfa5b86f19da7efe8b5af4ca3b9de93ba268a8db700947c2279ea53bd4b3b",
+      "package": "message-custom-buttons",
+      "path": "lege-process/GUI/rfd/examples/message-custom-buttons/Cargo.toml",
+      "resolved_license": null
+    },
+    {
+      "declared_license": null,
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "f0959ba86c77a948397bd49a23b7300577dc302a135250c0a211fe7ce042abb9",
+      "package": "rfd-example-web-trunk",
+      "path": "lege-process/GUI/rfd/examples/web-trunk/Cargo.toml",
+      "resolved_license": null
+    },
+    {
+      "declared_license": null,
+      "inherited_from": null,
+      "license_file": null,
+      "manifest_sha256": "478c035cc75c82180104582494b6d89dbecff9baf4ceb0751d7dbdf34fe0972a",
+      "package": "winit-example",
+      "path": "lege-process/GUI/rfd/examples/winit-example/Cargo.toml",
+      "resolved_license": null
+    },
+    {
+      "declared_license": {
+        "workspace": true
+      },
+      "inherited_from": "Cargo.toml",
+      "license_file": null,
+      "manifest_sha256": "d59a7c6811761b68d5697954246ceb842b26ce2a6766c9814c15d96cbf22cbbf",
+      "package": "lege-ipc",
+      "path": "lege-process/lege-ipc/Cargo.toml",
+      "resolved_license": "AGPL-3.0-only"
+    }
+  ],
+  "scope": "Cargo package declarations only; not a file-level, models, npm, binary or transitive-license clearance"
+}

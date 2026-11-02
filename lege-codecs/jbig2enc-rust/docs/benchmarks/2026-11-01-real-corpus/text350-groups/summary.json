@@ -1,0 +1,305 @@
+{
+  "scope": "completed CSV rows only; worker RSS includes loading/verification; work and bitmap storage are explicit proxies, not device limits",
+  "modes": [
+    {
+      "csv": {
+        "mode": "generic_groupwhole",
+        "pages": "350",
+        "auto_thresh": "true",
+        "encoded_bytes": "9229165",
+        "global_bytes": "0",
+        "local_bytes": "0",
+        "residual_bytes": "9218665",
+        "encode_seconds": "4.894772783",
+        "differing_pixels": "0",
+        "cold_decode_seconds": "3.573913959",
+        "warm_decode_seconds": "3.545577235",
+        "decoded_global_bitmap_bytes": "0",
+        "comparator_calls": "0",
+        "exact_hits": "0",
+        "refined_hits": "0",
+        "jbig2dec_differing_pixels": "0",
+        "worker_peak_rss_kib": "114416"
+      },
+      "page_latency_seconds": {
+        "cold": {
+          "median": 0.010175470999999998,
+          "p95": 0.011944668,
+          "max": 0.016179343
+        },
+        "warm": {
+          "median": 0.010080386,
+          "p95": 0.01167878,
+          "max": 0.014180929
+        }
+      },
+      "selected_resources": {
+        "exact": 0,
+        "refined": 0,
+        "substituted": 0,
+        "generic_instances": 0,
+        "generic_region_pixels": 812713605,
+        "generic_ink": 67323708,
+        "page_pixels": 812713605,
+        "max_local_bitmap_bytes": 0,
+        "max_cold_work_pixels": 2508480
+      },
+      "comparisons": {
+        "input_components": 0,
+        "ingest_per_component": 0.0,
+        "measured_planner_per_component": 0.0,
+        "legacy_post_ingest": "unreported; do not interpret ingest counts as total comparisons"
+      }
+    },
+    {
+      "csv": {
+        "mode": "exact_groupwhole",
+        "pages": "350",
+        "auto_thresh": "false",
+        "encoded_bytes": "9715152",
+        "global_bytes": "31078",
+        "local_bytes": "7459380",
+        "residual_bytes": "0",
+        "encode_seconds": "4.667229998",
+        "differing_pixels": "0",
+        "cold_decode_seconds": "4.835901022",
+        "warm_decode_seconds": "2.024380743",
+        "decoded_global_bitmap_bytes": "467248",
+        "comparator_calls": "0",
+        "exact_hits": "142067",
+        "refined_hits": "0",
+        "jbig2dec_differing_pixels": "0",
+        "worker_peak_rss_kib": "541608"
+      },
+      "page_latency_seconds": {
+        "cold": {
+          "median": 0.013998680999999999,
+          "p95": 0.015528222,
+          "max": 0.020629107
+        },
+        "warm": {
+          "median": 0.0060443925,
+          "p95": 0.006898293,
+          "max": 0.011005926
+        }
+      },
+      "selected_resources": {
+        "exact": 832422,
+        "refined": 0,
+        "substituted": 0,
+        "generic_instances": 0,
+        "generic_region_pixels": 0,
+        "generic_ink": 0,
+        "page_pixels": 812713605,
+        "max_local_bitmap_bytes": 250572,
+        "max_cold_work_pixels": 3747847
+      },
+      "comparisons": {
+        "input_components": 832422,
+        "ingest_per_component": 0.0,
+        "measured_planner_per_component": 0.0,
+        "legacy_post_ingest": "unreported; do not interpret ingest counts as total comparisons"
+      }
+    },
+    {
+      "csv": {
+        "mode": "symbol_shipping_group32",
+        "pages": "350",
+        "auto_thresh": "true",
+        "encoded_bytes": "9284877",
+        "global_bytes": "4947831",
+        "local_bytes": "0",
+        "residual_bytes": "0",
+        "encode_seconds": "64.726932684",
+        "differing_pixels": "2458881",
+        "cold_decode_seconds": "35.324893785",
+        "warm_decode_seconds": "2.016632697",
+        "decoded_global_bitmap_bytes": "3027832",
+        "comparator_calls": "10162920",
+        "exact_hits": "30292",
+        "refined_hits": "226426",
+        "jbig2dec_differing_pixels": "2458881",
+        "worker_peak_rss_kib": "60000"
+      },
+      "page_latency_seconds": {
+        "cold": {
+          "median": 0.100053854,
+          "p95": 0.116149105,
+          "max": 0.234552864
+        },
+        "warm": {
+          "median": 0.005910076,
+          "p95": 0.007931721,
+          "max": 0.017428759
+        }
+      },
+      "selected_resources": {
+        "exact": 437690,
+        "refined": 362187,
+        "substituted": 0,
+        "generic_instances": 0,
+        "generic_region_pixels": 0,
+        "generic_ink": 0,
+        "page_pixels": 812713605,
+        "max_local_bitmap_bytes": 0,
+        "max_cold_work_pixels": 11279870
+      },
+      "comparisons": {
+        "input_components": 832422,
+        "ingest_per_component": 12.208855604489068,
+        "measured_planner_per_component": 0.0,
+        "legacy_post_ingest": "unreported; do not interpret ingest counts as total comparisons"
+      }
+    },
+    {
+      "csv": {
+        "mode": "symbol_fixed_group32",
+        "pages": "350",
+        "auto_thresh": "false",
+        "encoded_bytes": "8830119",
+        "global_bytes": "5671347",
+        "local_bytes": "0",
+        "residual_bytes": "0",
+        "encode_seconds": "17.551429404",
+        "differing_pixels": "2458881",
+        "cold_decode_seconds": "37.843529323",
+        "warm_decode_seconds": "1.470462201",
+        "decoded_global_bitmap_bytes": "3641012",
+        "comparator_calls": "10162920",
+        "exact_hits": "30292",
+        "refined_hits": "226426",
+        "jbig2dec_differing_pixels": "2458881",
+        "worker_peak_rss_kib": "56888"
+      },
+      "page_latency_seconds": {
+        "cold": {
+          "median": 0.1082192155,
+          "p95": 0.124389364,
+          "max": 0.162699637
+        },
+        "warm": {
+          "median": 0.0043365875,
+          "p95": 0.006269187,
+          "max": 0.010973248
+        }
+      },
+      "selected_resources": {
+        "exact": 573437,
+        "refined": 226440,
+        "substituted": 0,
+        "generic_instances": 0,
+        "generic_region_pixels": 0,
+        "generic_ink": 0,
+        "page_pixels": 812713605,
+        "max_local_bitmap_bytes": 0,
+        "max_cold_work_pixels": 12848510
+      },
+      "comparisons": {
+        "input_components": 832422,
+        "ingest_per_component": 12.208855604489068,
+        "measured_planner_per_component": 0.0,
+        "legacy_post_ingest": "unreported; do not interpret ingest counts as total comparisons"
+      }
+    },
+    {
+      "csv": {
+        "mode": "unify_shipping_group32",
+        "pages": "350",
+        "auto_thresh": "true",
+        "encoded_bytes": "8672011",
+        "global_bytes": "4887414",
+        "local_bytes": "0",
+        "residual_bytes": "0",
+        "encode_seconds": "134.621244351",
+        "differing_pixels": "3338923",
+        "cold_decode_seconds": "30.150278094",
+        "warm_decode_seconds": "1.400824040",
+        "decoded_global_bitmap_bytes": "2987484",
+        "comparator_calls": "9211801",
+        "exact_hits": "12101",
+        "refined_hits": "0",
+        "jbig2dec_differing_pixels": "3338923",
+        "worker_peak_rss_kib": "1470224"
+      },
+      "page_latency_seconds": {
+        "cold": {
+          "median": 0.084537128,
+          "p95": 0.101399352,
+          "max": 0.1051492
+        },
+        "warm": {
+          "median": 0.0041654015,
+          "p95": 0.005487439,
+          "max": 0.007039827
+        }
+      },
+      "selected_resources": {
+        "exact": 427546,
+        "refined": 280506,
+        "substituted": 91825,
+        "generic_instances": 0,
+        "generic_region_pixels": 0,
+        "generic_ink": 0,
+        "page_pixels": 812713605,
+        "max_local_bitmap_bytes": 0,
+        "max_cold_work_pixels": 11122189
+      },
+      "comparisons": {
+        "input_components": 832422,
+        "ingest_per_component": 11.066263265507159,
+        "measured_planner_per_component": 0.0,
+        "legacy_post_ingest": "unreported; do not interpret ingest counts as total comparisons"
+      }
+    },
+    {
+      "csv": {
+        "mode": "unify_fixed_group32",
+        "pages": "350",
+        "auto_thresh": "false",
+        "encoded_bytes": "7770457",
+        "global_bytes": "5501919",
+        "local_bytes": "0",
+        "residual_bytes": "0",
+        "encode_seconds": "87.891955626",
+        "differing_pixels": "4208324",
+        "cold_decode_seconds": "32.154143151",
+        "warm_decode_seconds": "0.501186477",
+        "decoded_global_bitmap_bytes": "3501384",
+        "comparator_calls": "9211801",
+        "exact_hits": "12101",
+        "refined_hits": "0",
+        "jbig2dec_differing_pixels": "4208324",
+        "worker_peak_rss_kib": "1472496"
+      },
+      "page_latency_seconds": {
+        "cold": {
+          "median": 0.09339299949999999,
+          "p95": 0.10650398,
+          "max": 0.114893091
+        },
+        "warm": {
+          "median": 0.0014527295,
+          "p95": 0.001740617,
+          "max": 0.002174242
+        }
+      },
+      "selected_resources": {
+        "exact": 543452,
+        "refined": 43,
+        "substituted": 256382,
+        "generic_instances": 0,
+        "generic_region_pixels": 0,
+        "generic_ink": 0,
+        "page_pixels": 812713605,
+        "max_local_bitmap_bytes": 0,
+        "max_cold_work_pixels": 12404829
+      },
+      "comparisons": {
+        "input_components": 832422,
+        "ingest_per_component": 11.066263265507159,
+        "measured_planner_per_component": 0.0,
+        "legacy_post_ingest": "unreported; do not interpret ingest counts as total comparisons"
+      }
+    }
+  ]
+}

@@ -1,0 +1,84 @@
+
+running 1 test
+QUALITY_TOPOLOGY	corrected_instances=0
+QUALITY_TRIAL	None	dictionary control	AllGlobal	None	None	201624
+QUALITY_TRIAL	None	dictionary control	SharedGlobal	None	None	195678
+QUALITY_TRIAL	None	dictionary control	SharedGlobalWithLocal	None	None	207609
+QUALITY_TRIAL	Some(5415)	family + refinement	AllGlobal	Some(1138)	Some(-6078)	201756
+QUALITY_TRIAL	Some(5415)	family + refinement	SharedGlobal	Some(1138)	Some(-190)	195868
+QUALITY_TRIAL	Some(5415)	family + refinement	SharedGlobalWithLocal	Some(1138)	Some(-12023)	207701
+QUALITY_TRIAL	Some(5167)	family + refinement	AllGlobal	Some(936)	Some(-6114)	201792
+QUALITY_TRIAL	Some(5167)	family + refinement	SharedGlobal	Some(936)	Some(-231)	195909
+QUALITY_TRIAL	Some(5167)	family + refinement	SharedGlobalWithLocal	Some(936)	Some(-12070)	207748
+QUALITY_TRIAL	Some(5109)	family + refinement	AllGlobal	Some(824)	Some(-6019)	201697
+QUALITY_TRIAL	Some(5109)	family + refinement	SharedGlobal	Some(824)	Some(-138)	195816
+QUALITY_TRIAL	Some(5109)	family + refinement	SharedGlobalWithLocal	Some(824)	Some(-12008)	207686
+QUALITY_TRIAL	Some(4894)	family + refinement	AllGlobal	Some(708)	Some(-6235)	201913
+QUALITY_TRIAL	Some(4894)	family + refinement	SharedGlobal	Some(708)	Some(-169)	195847
+QUALITY_TRIAL	Some(4894)	family + refinement	SharedGlobalWithLocal	Some(708)	Some(-12100)	207778
+QUALITY_TRIAL	Some(5808)	family + refinement	AllGlobal	Some(680)	Some(-6102)	201780
+QUALITY_TRIAL	Some(5808)	family + refinement	SharedGlobal	Some(680)	Some(-243)	195921
+QUALITY_TRIAL	Some(5808)	family + refinement	SharedGlobalWithLocal	Some(680)	Some(-12086)	207764
+QUALITY_TRIAL	Some(4886)	family + refinement	AllGlobal	Some(559)	Some(-6001)	201679
+QUALITY_TRIAL	Some(4886)	family + refinement	SharedGlobal	Some(559)	Some(-123)	195801
+QUALITY_TRIAL	Some(4886)	family + refinement	SharedGlobalWithLocal	Some(559)	Some(-11980)	207658
+QUALITY_TRIAL	Some(0)	generic residual	AllGlobal	None	Some(-5917)	201595
+QUALITY_TRIAL	Some(0)	generic residual	SharedGlobal	None	Some(0)	195678
+QUALITY_TRIAL	Some(0)	generic residual	SharedGlobalWithLocal	None	Some(-11982)	207660
+QUALITY_TRIAL	Some(20)	generic residual	AllGlobal	None	Some(-5985)	201663
+QUALITY_TRIAL	Some(20)	generic residual	SharedGlobal	None	Some(0)	195678
+QUALITY_TRIAL	Some(20)	generic residual	SharedGlobalWithLocal	None	Some(-11992)	207670
+QUALITY_TRIAL	Some(42)	reference + refinement	AllGlobal	Some(106)	Some(-5956)	201634
+QUALITY_TRIAL	Some(42)	reference + refinement	SharedGlobal	Some(106)	Some(0)	195678
+QUALITY_TRIAL	Some(42)	reference + refinement	SharedGlobalWithLocal	Some(106)	Some(-11956)	207634
+QUALITY_TRIAL	Some(42)	generic residual	AllGlobal	None	Some(-5996)	201674
+QUALITY_TRIAL	Some(42)	generic residual	SharedGlobal	None	Some(0)	195678
+QUALITY_TRIAL	Some(42)	generic residual	SharedGlobalWithLocal	None	Some(-11994)	207672
+QUALITY_TRIAL	Some(53)	reference + refinement	AllGlobal	Some(88)	Some(-5939)	201617
+QUALITY_TRIAL	Some(53)	reference + refinement	SharedGlobal	Some(88)	Some(0)	195678
+QUALITY_TRIAL	Some(53)	reference + refinement	SharedGlobalWithLocal	Some(88)	Some(-11957)	207635
+QUALITY_TRIAL	Some(53)	generic residual	AllGlobal	None	Some(-5978)	201656
+QUALITY_TRIAL	Some(53)	generic residual	SharedGlobal	None	Some(0)	195678
+QUALITY_TRIAL	Some(53)	generic residual	SharedGlobalWithLocal	None	Some(-11991)	207669
+QUALITY_TRIAL	Some(9)	generic residual	AllGlobal	None	Some(-5975)	201653
+QUALITY_TRIAL	Some(9)	generic residual	SharedGlobal	None	Some(0)	195678
+QUALITY_TRIAL	Some(9)	generic residual	SharedGlobalWithLocal	None	Some(-11985)	207663
+QUALITY_TRIAL	Some(35)	reference + refinement	AllGlobal	Some(44)	Some(-5963)	201641
+QUALITY_TRIAL	Some(35)	reference + refinement	SharedGlobal	Some(44)	Some(0)	195678
+QUALITY_TRIAL	Some(35)	reference + refinement	SharedGlobalWithLocal	Some(44)	Some(-11959)	207637
+QUALITY_TRIAL	Some(35)	generic residual	AllGlobal	None	Some(-5992)	201670
+QUALITY_TRIAL	Some(35)	generic residual	SharedGlobal	None	Some(0)	195678
+QUALITY_TRIAL	Some(35)	generic residual	SharedGlobalWithLocal	None	Some(-11988)	207666
+QUALITY_TRIAL	Some(73)	generic residual	AllGlobal	None	Some(-5995)	201673
+QUALITY_TRIAL	Some(73)	generic residual	SharedGlobal	None	Some(0)	195678
+QUALITY_TRIAL	Some(73)	generic residual	SharedGlobalWithLocal	None	Some(-11974)	207652
+QUALITY_TRIAL	Some(16)	generic residual	AllGlobal	None	Some(-6011)	201689
+QUALITY_TRIAL	Some(16)	generic residual	SharedGlobal	None	Some(0)	195678
+QUALITY_TRIAL	Some(16)	generic residual	SharedGlobalWithLocal	None	Some(-11987)	207665
+QUALITY_TRIAL	Some(47)	reference + refinement	AllGlobal	Some(100)	Some(-6001)	201679
+QUALITY_TRIAL	Some(47)	reference + refinement	SharedGlobal	Some(100)	Some(0)	195678
+QUALITY_TRIAL	Some(47)	reference + refinement	SharedGlobalWithLocal	Some(100)	Some(-11948)	207626
+QUALITY_TRIAL	Some(47)	reference + refinement	AllGlobal	Some(91)	Some(-6006)	201684
+QUALITY_TRIAL	Some(47)	reference + refinement	SharedGlobal	Some(91)	Some(0)	195678
+QUALITY_TRIAL	Some(47)	reference + refinement	SharedGlobalWithLocal	Some(91)	Some(-11953)	207631
+QUALITY_TRIAL	Some(47)	generic residual	AllGlobal	None	Some(-6039)	201717
+QUALITY_TRIAL	Some(47)	generic residual	SharedGlobal	None	Some(0)	195678
+QUALITY_TRIAL	Some(47)	generic residual	SharedGlobalWithLocal	None	Some(-11986)	207664
+QUALITY_TRIAL	None	whole-page generic control	AllGlobal	None	Some(585)	195093
+QUALITY_OPTIMIZATION	trials=64	comparisons=124011	baseline=195678	generic=195093	selected=195093	exact_instances=0	refined_instances=0	generic_instances=21382
+QUALITY_STAGES	cc=0.019029055	match=0.010785887	cluster=0.000000000	plan=9.151307669	dict=0.000000000	text=0.000000000	generic=0.000000000
+QUALITY_PAGE	0	3145	0	0.010431753	0.013380765	0
+QUALITY_PAGE	1	433	0	0.006520989	0.008824637	0
+QUALITY_PAGE	2	6492	0	0.007930202	0.008041536	0
+QUALITY_PAGE	3	22504	0	0.009655955	0.009923523	0
+QUALITY_PAGE	4	15840	0	0.010939739	0.009122816	0
+QUALITY_PAGE	5	28604	0	0.011290058	0.010420334	0
+QUALITY_PAGE	6	29828	0	0.010032240	0.010330826	0
+QUALITY_PAGE	7	27965	0	0.009239464	0.010254690	0
+QUALITY_PAGE	8	27440	0	0.009681033	0.010779096	0
+QUALITY_PAGE	9	32842	0	0.009747745	0.010959381	0
+QUALITY_RESULT	exact_optimized	10	false	195093	0	0	194793	9.195311790	0	0.095469178	0.102037604	0	0	4512	0	0
+test quality_corpus_worker ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 9.73s
+

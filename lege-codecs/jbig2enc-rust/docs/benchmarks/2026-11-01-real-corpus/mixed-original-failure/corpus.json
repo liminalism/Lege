@@ -1,0 +1,87 @@
+[
+  {
+    "file": "confed-0001.pbm",
+    "bytes": 348833,
+    "sha256": "fd87d4178330e6de44dd055eac5d4126144ad66cec2542b1a5b95b180c8b8f3c"
+  },
+  {
+    "file": "confed-0005.pbm",
+    "bytes": 313573,
+    "sha256": "3e81ec02acb98a9476657bafc4846a2e809ec182a1acfdb10960ba6401ae50ae"
+  },
+  {
+    "file": "confed-0010.pbm",
+    "bytes": 313573,
+    "sha256": "fd7072151bd0d0069765aed1e3aa9f9a249732dfcf47cde2eb1c7ad9df1f5509"
+  },
+  {
+    "file": "confed-0020.pbm",
+    "bytes": 313573,
+    "sha256": "f312fc233262e156545db88d99520ec617311f43cc76cced1f7e1fe8bbc85605"
+  },
+  {
+    "file": "confed-0030.pbm",
+    "bytes": 313573,
+    "sha256": "18d8454dd468e36beb3a49c0984427bc408362fc31a3035216e88daa5180fdc2"
+  },
+  {
+    "file": "confed-0050.pbm",
+    "bytes": 313573,
+    "sha256": "eb70211f676a719d36a4351344ea1504b6525eace87aeeb8db68e8cc40b7c6c4"
+  },
+  {
+    "file": "confed-0100.pbm",
+    "bytes": 283663,
+    "sha256": "8eb1b1e7a2986832f561100bc6c53165d9162d04fc4c5c85bc40bb6f05470395"
+  },
+  {
+    "file": "confed-0200.pbm",
+    "bytes": 283663,
+    "sha256": "0cb946660d34b6613cdaba705aecf18baef3603ad6d48142f7ba0c6c98476211"
+  },
+  {
+    "file": "confed-0400.pbm",
+    "bytes": 290303,
+    "sha256": "bfbe2cc904359e8deee44062731e23e1bf52464149e59022b4098486a755b579"
+  },
+  {
+    "file": "confed-0700.pbm",
+    "bytes": 290303,
+    "sha256": "582c386b0498699dc2c976962c31ed4b601936d50fef3515c4006946538bef27"
+  },
+  {
+    "file": "radar-math-0125.pbm",
+    "bytes": 673213,
+    "sha256": "a9bd09248714e72c65f87ff6b28c19c0abb7828c8c3d75201491b4bc1a2f0439"
+  },
+  {
+    "file": "radar-math-0150.pbm",
+    "bytes": 673213,
+    "sha256": "177f82ab2b9f64754f14ab0618ee91d8feaf3545cec92d321b0e4770c84905ff"
+  },
+  {
+    "file": "radar-math-0200.pbm",
+    "bytes": 673213,
+    "sha256": "5a0d93d51481dce60e113ae79c54c71ce5488f6965c8b81379ab516a6dddde96"
+  },
+  {
+    "file": "sinitic-0001.pbm",
+    "bytes": 409233,
+    "sha256": "17d78a60675b541db3ae1e507ca26020887f93b21aa5bb97b766ea7c2f530723"
+  },
+  {
+    "file": "sinitic-0002.pbm",
+    "bytes": 409233,
+    "sha256": "88591f6c51a5d56a6e67ea5b050c3e88ba8665be480ce525957d6eddf3c2bf76"
+  },
+  {
+    "file": "sinitic-0003.pbm",
+    "bytes": 409233,
+    "sha256": "1c206d9a50b8a8f3dc1100012555ec0bf5f51f1730354a547153844df3882232"
+  },
+  {
+    "file": "sinitic-0004.pbm",
+    "bytes": 409233,
+    "sha256": "389a8a37f0c2800cab035137e87bbddbab576ec4de7480133f564aa625a88c6f"
+  }
+]

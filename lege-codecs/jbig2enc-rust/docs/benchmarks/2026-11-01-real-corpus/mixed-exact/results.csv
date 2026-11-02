@@ -1,0 +1,4 @@
+mode,pages,auto_thresh,encoded_bytes,global_bytes,local_bytes,residual_bytes,encode_seconds,differing_pixels,cold_decode_seconds,warm_decode_seconds,decoded_global_bitmap_bytes,comparator_calls,exact_hits,refined_hits,jbig2dec_differing_pixels,worker_peak_rss_kib
+exact,17,false,278560,5817,177990,0,0.199195299,0,0.099997195,0.078786309,42132,0,21471,0,0,149988
+exact_optimized,17,false,272253,172233,0,1780,15.722737333,0,0.792538013,0.036628210,1416552,0,21471,0,0,147856
+lossy_optimized,17,false,272253,172233,0,1780,15.515374285,0,0.809162787,0.036378433,1416552,0,21471,0,0,147424

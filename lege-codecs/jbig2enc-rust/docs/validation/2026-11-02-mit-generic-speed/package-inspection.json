@@ -1,0 +1,18 @@
+{
+  "archive": "target/package/jbig2enc-rust-0.6.0.crate",
+  "sha256": "3d890cb543e9257bb90523590f1989438e166b4beefe1a3e822f969e0ec326f4",
+  "bytes": 1727730,
+  "files": 569,
+  "license": "MIT AND Apache-2.0",
+  "publish_disabled": false,
+  "pbms": [
+    "jbig2enc-rust-0.6.0/tests/fixtures/original/blank.pbm",
+    "jbig2enc-rust-0.6.0/tests/fixtures/original/marks.pbm",
+    "jbig2enc-rust-0.6.0/tests/fixtures/original/symbols.pbm"
+  ],
+  "c_cpp_files": [
+    "jbig2enc-rust-0.6.0/tools/generic_reference_runner.cc"
+  ],
+  "forbidden": [],
+  "note": "Original MIT benchmark harness only; external C reference/oracles/corpus excluded. Later validation reports and ledger changes are outside this archive hash."
+}

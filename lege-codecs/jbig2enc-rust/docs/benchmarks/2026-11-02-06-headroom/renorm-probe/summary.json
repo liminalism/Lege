@@ -1,0 +1,345 @@
+{
+  "method": "Partial system load unchanged. Same CPU0, fixed existing packed inputs, seed20261103 paired order. Wall timer covers kernel; perf counts whole process including one warm-up/load. All pairs retained. No concurrent agent build/benchmark.",
+  "baseline_sha256": "e86bc96e3474faacc0ec147081bff0b8ba914d7917a88e52deb8906e201189e8",
+  "candidate_sha256": "870de5e3b6b8548bbceb10d04ae2808d7324e4c74aaee8495969305b9369bdc8",
+  "runs": [
+    {
+      "corpus": "mixed17",
+      "pair": 0,
+      "role": "candidate",
+      "rounds": 32,
+      "kernel_seconds": 2.035832228,
+      "bytes": 11639104,
+      "cpu_core/cycles/u": 8924298527.0,
+      "cpu_core/instructions/u": 28878876638.0,
+      "task-clock": 2105.73
+    },
+    {
+      "corpus": "mixed17",
+      "pair": 0,
+      "role": "baseline",
+      "rounds": 32,
+      "kernel_seconds": 2.030586876,
+      "bytes": 11639104,
+      "cpu_core/cycles/u": 9092215821.0,
+      "cpu_core/instructions/u": 28083132894.0,
+      "task-clock": 2099.28
+    },
+    {
+      "corpus": "mixed17",
+      "pair": 1,
+      "role": "candidate",
+      "rounds": 32,
+      "kernel_seconds": 1.999979378,
+      "bytes": 11639104,
+      "cpu_core/cycles/u": 8927597026.0,
+      "cpu_core/instructions/u": 28878964294.0,
+      "task-clock": 2066.1
+    },
+    {
+      "corpus": "mixed17",
+      "pair": 1,
+      "role": "baseline",
+      "rounds": 32,
+      "kernel_seconds": 1.996940535,
+      "bytes": 11639104,
+      "cpu_core/cycles/u": 9078777116.0,
+      "cpu_core/instructions/u": 28079700611.0,
+      "task-clock": 2062.74
+    },
+    {
+      "corpus": "mixed17",
+      "pair": 2,
+      "role": "candidate",
+      "rounds": 32,
+      "kernel_seconds": 1.980192293,
+      "bytes": 11639104,
+      "cpu_core/cycles/u": 8925222463.0,
+      "cpu_core/instructions/u": 28872457703.0,
+      "task-clock": 2045.4
+    },
+    {
+      "corpus": "mixed17",
+      "pair": 2,
+      "role": "baseline",
+      "rounds": 32,
+      "kernel_seconds": 2.016088369,
+      "bytes": 11639104,
+      "cpu_core/cycles/u": 9096990391.0,
+      "cpu_core/instructions/u": 28082450162.0,
+      "task-clock": 2081.85
+    },
+    {
+      "corpus": "mixed17",
+      "pair": 3,
+      "role": "candidate",
+      "rounds": 32,
+      "kernel_seconds": 2.026488486,
+      "bytes": 11639104,
+      "cpu_core/cycles/u": 8934711864.0,
+      "cpu_core/instructions/u": 28878485865.0,
+      "task-clock": 2092.21
+    },
+    {
+      "corpus": "mixed17",
+      "pair": 3,
+      "role": "baseline",
+      "rounds": 32,
+      "kernel_seconds": 2.011429825,
+      "bytes": 11639104,
+      "cpu_core/cycles/u": 9106048264.0,
+      "cpu_core/instructions/u": 28082525751.0,
+      "task-clock": 2075.85
+    },
+    {
+      "corpus": "mixed17",
+      "pair": 4,
+      "role": "candidate",
+      "rounds": 32,
+      "kernel_seconds": 2.007736737,
+      "bytes": 11639104,
+      "cpu_core/cycles/u": 8929393249.0,
+      "cpu_core/instructions/u": 28878455428.0,
+      "task-clock": 2071.91
+    },
+    {
+      "corpus": "mixed17",
+      "pair": 4,
+      "role": "baseline",
+      "rounds": 32,
+      "kernel_seconds": 2.000911706,
+      "bytes": 11639104,
+      "cpu_core/cycles/u": 9084930150.0,
+      "cpu_core/instructions/u": 28082276518.0,
+      "task-clock": 2067.19
+    },
+    {
+      "corpus": "noise",
+      "pair": 0,
+      "role": "candidate",
+      "rounds": 32,
+      "kernel_seconds": 1.300917676,
+      "bytes": 13318016,
+      "cpu_core/cycles/u": 5982785217.0,
+      "cpu_core/instructions/u": 9418644694.0,
+      "task-clock": 1342.26
+    },
+    {
+      "corpus": "noise",
+      "pair": 0,
+      "role": "baseline",
+      "rounds": 32,
+      "kernel_seconds": 1.217397076,
+      "bytes": 13318016,
+      "cpu_core/cycles/u": 5771779347.0,
+      "cpu_core/instructions/u": 7965557978.0,
+      "task-clock": 1256.62
+    },
+    {
+      "corpus": "noise",
+      "pair": 1,
+      "role": "candidate",
+      "rounds": 32,
+      "kernel_seconds": 1.316688442,
+      "bytes": 13318016,
+      "cpu_core/cycles/u": 6000537279.0,
+      "cpu_core/instructions/u": 9418531723.0,
+      "task-clock": 1356.75
+    },
+    {
+      "corpus": "noise",
+      "pair": 1,
+      "role": "baseline",
+      "rounds": 32,
+      "kernel_seconds": 1.230605333,
+      "bytes": 13318016,
+      "cpu_core/cycles/u": 5777819481.0,
+      "cpu_core/instructions/u": 7965560235.0,
+      "task-clock": 1269.33
+    },
+    {
+      "corpus": "noise",
+      "pair": 2,
+      "role": "candidate",
+      "rounds": 32,
+      "kernel_seconds": 1.296443964,
+      "bytes": 13318016,
+      "cpu_core/cycles/u": 5996677761.0,
+      "cpu_core/instructions/u": 9418521523.0,
+      "task-clock": 1337.79
+    },
+    {
+      "corpus": "noise",
+      "pair": 2,
+      "role": "baseline",
+      "rounds": 32,
+      "kernel_seconds": 1.22011892,
+      "bytes": 13318016,
+      "cpu_core/cycles/u": 5740112851.0,
+      "cpu_core/instructions/u": 7965578559.0,
+      "task-clock": 1258.32
+    },
+    {
+      "corpus": "noise",
+      "pair": 3,
+      "role": "candidate",
+      "rounds": 32,
+      "kernel_seconds": 1.309955679,
+      "bytes": 13318016,
+      "cpu_core/cycles/u": 5997095538.0,
+      "cpu_core/instructions/u": 9418550816.0,
+      "task-clock": 1351.62
+    },
+    {
+      "corpus": "noise",
+      "pair": 3,
+      "role": "baseline",
+      "rounds": 32,
+      "kernel_seconds": 1.457295642,
+      "bytes": 13318016,
+      "cpu_core/cycles/u": 6292237349.0,
+      "cpu_core/instructions/u": 7964208465.0,
+      "task-clock": 1495.46
+    },
+    {
+      "corpus": "noise",
+      "pair": 4,
+      "role": "candidate",
+      "rounds": 32,
+      "kernel_seconds": 1.384075444,
+      "bytes": 13318016,
+      "cpu_core/cycles/u": 5982880167.0,
+      "cpu_core/instructions/u": 9418244479.0,
+      "task-clock": 1429.48
+    },
+    {
+      "corpus": "noise",
+      "pair": 4,
+      "role": "baseline",
+      "rounds": 32,
+      "kernel_seconds": 1.31931008,
+      "bytes": 13318016,
+      "cpu_core/cycles/u": 5743413723.0,
+      "cpu_core/instructions/u": 7962768811.0,
+      "task-clock": 1362.71
+    }
+  ],
+  "summary": {
+    "mixed17": {
+      "kernel_seconds": {
+        "ratios": [
+          1.0025831704429866,
+          1.0015217493694673,
+          0.9821951871991579,
+          1.0074865455472701,
+          1.003410960603376
+        ],
+        "median": 1.0025831704429866,
+        "range": [
+          0.9821951871991579,
+          1.0074865455472701
+        ]
+      },
+      "cpu_core/cycles/u": {
+        "ratios": [
+          0.9815317522916508,
+          0.9833479676757823,
+          0.9811181587956895,
+          0.981184329905502,
+          0.9828796811387702
+        ],
+        "median": 0.9815317522916508,
+        "range": [
+          0.9811181587956895,
+          0.9833479676757823
+        ]
+      },
+      "cpu_core/instructions/u": {
+        "ratios": [
+          1.0283352910447543,
+          1.0284641098590237,
+          1.0281317170133895,
+          1.0283436084438258,
+          1.028351651244858
+        ],
+        "median": 1.0283436084438258,
+        "range": [
+          1.0281317170133895,
+          1.0284641098590237
+        ]
+      },
+      "task-clock": {
+        "ratios": [
+          1.0030724819938264,
+          1.001628901364205,
+          0.9824915339721882,
+          1.0078811089433244,
+          1.0022832927790866
+        ],
+        "median": 1.0022832927790866,
+        "range": [
+          0.9824915339721882,
+          1.0078811089433244
+        ]
+      }
+    },
+    "noise": {
+      "kernel_seconds": {
+        "ratios": [
+          1.0686058818823714,
+          1.0699518413349831,
+          1.0625554138608064,
+          0.8988949402210591,
+          1.0490903275748489
+        ],
+        "median": 1.0625554138608064,
+        "range": [
+          0.8988949402210591,
+          1.0699518413349831
+        ]
+      },
+      "cpu_core/cycles/u": {
+        "ratios": [
+          1.036558201087447,
+          1.0385470329650128,
+          1.04469684075206,
+          0.9530942978419424,
+          1.041694096150698
+        ],
+        "median": 1.0385470329650128,
+        "range": [
+          0.9530942978419424,
+          1.04469684075206
+        ]
+      },
+      "cpu_core/instructions/u": {
+        "ratios": [
+          1.1824212089113237,
+          1.1824066914484892,
+          1.182402690933024,
+          1.1826097794139043,
+          1.1827851219276093
+        ],
+        "median": 1.1824212089113237,
+        "range": [
+          1.182402690933024,
+          1.1827851219276093
+        ]
+      },
+      "task-clock": {
+        "ratios": [
+          1.0681510719230953,
+          1.0688709791779916,
+          1.0631556360862102,
+          0.9038155483931365,
+          1.048997952609139
+        ],
+        "median": 1.0631556360862102,
+        "range": [
+          0.9038155483931365,
+          1.0688709791779916
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,5 @@
+mode,pages,auto_thresh,encoded_bytes,global_bytes,local_bytes,residual_bytes,encode_seconds,differing_pixels,cold_decode_seconds,warm_decode_seconds,decoded_global_bitmap_bytes,comparator_calls,exact_hits,refined_hits,jbig2dec_differing_pixels,worker_peak_rss_kib
+exact_group32,782,false,22135580,66243,16759239,71,9.767238737,0,5.742440010,5.006523820,81196,0,290681,0,0,79060
+exact_group64,782,false,22107587,68849,16707921,71,9.750433917,0,6.251562082,4.848325349,130752,0,313399,0,0,146352
+exact_group128,782,false,22083670,71635,16658413,71,9.806403460,0,7.426583901,4.769844063,260840,0,333970,0,0,277072
+exact_groupwhole,782,false,22020242,86327,16505528,71,19.854121537,0,23.084105499,4.880990160,1334224,0,387974,0,0,1239516

@@ -1,0 +1,32 @@
+{
+  "runs": [
+    {
+      "pair": 0,
+      "role": "c",
+      "seconds": 0.319443027,
+      "bytes_all_rounds": 363711
+    },
+    {
+      "pair": 0,
+      "role": "rust",
+      "seconds": 0.125032943,
+      "bytes_all_rounds": 363722
+    },
+    {
+      "pair": 0,
+      "role": "baseline",
+      "seconds": 0.122933385,
+      "bytes_all_rounds": 363722
+    }
+  ],
+  "rust_over_c_ratios": [
+    0.39140921050688643
+  ],
+  "median_rust_over_c": 0.39140921050688643,
+  "byte_equality": "all page payloads equal after removing the known legacy duplicate FF prefix",
+  "rust_over_baseline_ratios": [
+    1.0170788268784756
+  ],
+  "median_rust_over_baseline": 1.0170788268784756,
+  "raw_baseline_equality": "every page payload is byte-for-byte unchanged"
+}

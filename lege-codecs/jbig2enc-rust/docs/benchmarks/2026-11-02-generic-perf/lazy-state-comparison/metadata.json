@@ -1,0 +1,123 @@
+{
+  "corpus": [
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/mixed17/confed-0001.pbm",
+      "sha256": "7ef4ac46963b17a49eb77f27aa4c3f3b679b8f125d20d276b3530043d9026eb4",
+      "width": 1298,
+      "height": 2140
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/mixed17/confed-0005.pbm",
+      "sha256": "8802183bab0112fcfe0f2f6e8a8fa26a13dfd49aeeec4ba71d26976ffca73241",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/mixed17/confed-0010.pbm",
+      "sha256": "dfd23a5b15bca51b608f245689db0175cb016b125933fab5d8013417d762dcbd",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/mixed17/confed-0020.pbm",
+      "sha256": "3cefab7bc2b66ac718aa8011945582c73c6ee8ba5c10d5c100c9cbae4cae8a60",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/mixed17/confed-0030.pbm",
+      "sha256": "d0bae5791847632d674b8235d34bf97b194961de914941b3864d0907127d41e4",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/mixed17/confed-0050.pbm",
+      "sha256": "7b228e644a75483e83b1774a05be3a64196ad0f7b942309eae332d2fbf868a0b",
+      "width": 1248,
+      "height": 2009
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/mixed17/confed-0100.pbm",
+      "sha256": "a06abddc75b83caff3e1f71094a84c93776ce4ebf27ca74e5c85eb43cb705e38",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/mixed17/confed-0200.pbm",
+      "sha256": "49d3243c321a23e5e1ab2db2bac92796c144912f4d4ac796003f3f0c23f89018",
+      "width": 1194,
+      "height": 1890
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/mixed17/confed-0400.pbm",
+      "sha256": "4522ca8e3e554eb17938097656db7ba1e0be5928235589cba8f2433fb84cdef4",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/mixed17/confed-0700.pbm",
+      "sha256": "ee55d54c394b6ad00c3b17423e672f5f79583abb6d78601c01a55d4678081e81",
+      "width": 1229,
+      "height": 1884
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/mixed17/radar-math-0125.pbm",
+      "sha256": "d4edfb2da9b2eb665906a9b3ca73ceb9953ea6efbe3acb4658bce5611c339437",
+      "width": 2040,
+      "height": 2640
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/mixed17/radar-math-0150.pbm",
+      "sha256": "bd89200d3c758e4433e06099d2a7e04a91925f293da2abd288fbcb492112ef93",
+      "width": 2040,
+      "height": 2640
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/mixed17/radar-math-0200.pbm",
+      "sha256": "5599422a45f1ceb5c3f82c2eaffc969c36b4b476cd6708e946c15790fc180958",
+      "width": 2040,
+      "height": 2640
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/mixed17/sinitic-0001.pbm",
+      "sha256": "bdf938a905b3e6a1d7e911e312a6d7ff260466208fbae9ac1048d319fe58fbd1",
+      "width": 1474,
+      "height": 2211
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/mixed17/sinitic-0002.pbm",
+      "sha256": "62950e0f306f833a6d3eff505356b7663b4cd179d1e448da18c9073660767084",
+      "width": 1474,
+      "height": 2211
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/mixed17/sinitic-0003.pbm",
+      "sha256": "149abb13e4ee50c56447c6806800640e34c75231aed9ee69323ad2f769fd64d2",
+      "width": 1474,
+      "height": 2211
+    },
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/mixed17/sinitic-0004.pbm",
+      "sha256": "ac80a341dc1b63bacf25fa050bf3630997cffe580f8426875b361493c64022aa",
+      "width": 1474,
+      "height": 2211
+    }
+  ],
+  "packed_sha256": "a64ea0961b5f288cfc6db2f51157974045318c36db374d65eef170472044c1e2",
+  "cpu": 0,
+  "rounds": 8,
+  "pairs": 5,
+  "rust_worker": {
+    "path": "/home/dk/rust-projects/Lege-ecosystem/.agent/scratch/jbig2-perf-followup/lazy-state-worker",
+    "sha256": "cd04cef7356b608396d02fcbc01da54a0894569f48834fbd868af4c465b11cbe"
+  },
+  "c_reference": {
+    "path": "/home/dk/rust-projects/Lege-ecosystem/.agent/scratch/jbig2-perf-followup/reference/runner",
+    "sha256": "42551f62f5c3ca8742d9fd311b1f3cc017803b4527c233f168e3b9ac81aa61f8"
+  },
+  "c_source": {
+    "jbig2arith.cc": "832368d43012c3d5fc2ebca1c23e814c7cb851447a4edb570828ec2d88cffeb1",
+    "jbig2arith.h": "c1e33f5e7d6221d428542833dd78efe725f1013f60c67f536002674a558353cf"
+  },
+  "scope": "Matched, pinned-CPU C/Rust generic kernel runs on identical packed pages.\n\nSPDX-License-Identifier: MIT\nTimes context allocation, template-0 coding (TPGDON off), finalization, output\ncopy and destruction. Input preparation, file output and byte verification are\noutside each reported timer. This is a kernel comparison, not a C PDF pipeline.\n"
+}

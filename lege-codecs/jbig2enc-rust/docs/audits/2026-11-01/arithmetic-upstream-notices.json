@@ -1,0 +1,48 @@
+{
+  "observed_date": "2026-11-01",
+  "upstream_repository": "https://github.com/agl/jbig2enc",
+  "comparable_snapshot": "d2b0bf4647f193c10a599e36f1f9620fa5e4514a",
+  "snapshot_date": "2012-07-02",
+  "files": [
+    {
+      "path": "COPYING",
+      "encoding": "utf-8",
+      "sha": "5495e39868fb45d0188a9bf379ec63479c868fad",
+      "display_url": "https://github.com/agl/jbig2enc/blob/d2b0bf4647f193c10a599e36f1f9620fa5e4514a/COPYING",
+      "display_title": "COPYING"
+    },
+    {
+      "path": "src/jbig2arith.h",
+      "encoding": "utf-8",
+      "sha": "bf79e4c49e19a5c9a3ce39654de7682b61382916",
+      "display_url": "https://github.com/agl/jbig2enc/blob/d2b0bf4647f193c10a599e36f1f9620fa5e4514a/src/jbig2arith.h",
+      "display_title": "jbig2arith.h"
+    },
+    {
+      "path": "doc/PATENTS",
+      "encoding": "utf-8",
+      "sha": "674c97ab28111d69ea981f7b083680be40735786",
+      "display_url": "https://github.com/agl/jbig2enc/blob/d2b0bf4647f193c10a599e36f1f9620fa5e4514a/doc/PATENTS",
+      "display_title": "PATENTS"
+    },
+    {
+      "path": "src/jbig2arith.cc",
+      "sha": "1e7a346a7b7c7c4b42538db724c4bda15f10cb35",
+      "url": "https://github.com/agl/jbig2enc/blob/d2b0bf4647f193c10a599e36f1f9620fa5e4514a/src/jbig2arith.cc"
+    }
+  ],
+  "findings": [
+    "The .cc and .h headers expressly grant Apache-2.0 and identify Google Inc. and Adam Langley.",
+    "COPYING points to doc/PATENTS, which warns that processes may be patented, that licenses may be needed in some countries, and refers to Annex I of the JBIG2 specification.",
+    "This snapshot predates the Rust arithmetic file's 2026-01-15 archive upload. It is a comparable published source, not an established translation revision.",
+    "No patent status, expiration, freedom-to-operate opinion or rights clearance is inferred from this notice."
+  ],
+  "rust_introduction": {
+    "repository": "liminalism/jbig2enc-rust",
+    "commit": "3b743f3cd8a8762cafe77c78fb953a2b6b27a272",
+    "path": "src/jbig2arith.rs",
+    "blob": "dc976c5e726d14de5d936ebd915658c4cd0482d8",
+    "claim": "opening documentation identifies a jbig2arith.cc/.h port"
+  },
+  "scope": "Notice/header review and pinned source identity; not a line-by-line comparison of the entire arithmetic implementation"
+}

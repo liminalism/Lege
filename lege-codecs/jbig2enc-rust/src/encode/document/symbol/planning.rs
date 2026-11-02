@@ -9,6 +9,7 @@ use super::super::{
     Jbig2Encoder, SYM_UNIFY_STRONG_ANCHOR_MIN_PAGE_SPAN, SYM_UNIFY_STRONG_ANCHOR_MIN_USAGE,
 };
 use super::dictionary::{encode_symbol_dictionary_segments, plan_symbol_dictionary_layout};
+use super::residual::MAX_RESIDUAL_REGIONS;
 use super::text_region::encode_text_region_mapped;
 use super::text_region_refine::encode_text_region_with_refinement;
 use super::types::{
@@ -25,7 +26,9 @@ use crate::jbig2classify::{
     FamilyBucketKey, family_bucket_key_for_symbol, family_bucket_neighbors,
 };
 use crate::jbig2comparator::Comparator;
-use crate::jbig2structs::{FileHeader, LossySymbolMode, PageInfo, Segment, SegmentType};
+use crate::jbig2structs::{
+    FileHeader, LossySymbolMode, PageInfo, PdfDictionaryPolicy, Segment, SegmentType,
+};
 use crate::jbig2sym::BitImage;
 use anyhow::Result;
 #[cfg(feature = "parallel")]
@@ -36,11 +39,15 @@ use std::time::{Duration, Instant};
 
 impl<'a> Jbig2Encoder<'a> {
     pub(crate) fn plan_document(&mut self, include_header: bool) -> Result<PlannedDocument> {
+        #[cfg(feature = "symboldict")]
+        if self.config.optimize_exact_symbols || self.config.optimize_lossy_symbols {
+            return self.plan_optimized_exact_document(include_header);
+        }
         debug!("Symbol stats before encoding: {}", self.get_symbol_stats());
         let diagnostics_enabled = encoder_diagnostics_enabled();
         let planning_start = Instant::now();
 
-        if self.config.auto_thresh {
+        if self.config.auto_thresh && !self.config.is_lossless {
             let clustering_start = Instant::now();
             self.cluster_symbols()?;
             self.metrics.symbol_mode.clustering += clustering_start.elapsed();
@@ -50,17 +57,22 @@ impl<'a> Jbig2Encoder<'a> {
         self.alias_local_symbols_to_globals()?;
         self.validate_symbol_instance_indices()?;
 
-        // For PDF split mode, ALL symbols go in the global dictionary
-        // because page streams cannot have local dictionaries
-        let multi_page_candidates: Vec<usize> = if self.state.pdf_mode {
-            // PDF mode: include all symbols in global dictionary
+        // PDF permits page-associated symbol dictionaries. Keep the old policy
+        // explicit for existing presets; selective policies share only symbols
+        // with cross-page reuse and partition the remainder below.
+        let legacy_pdf = self.state.pdf_mode
+            && self.config.pdf_dictionary_policy == PdfDictionaryPolicy::AllGlobal;
+        let multi_page_candidates: Vec<usize> = if legacy_pdf {
             (0..self.global_symbols.len()).collect()
         } else {
             // Standalone mode: only multi-page symbols in global dict
             self.global_symbols
                 .iter()
                 .enumerate()
-                .filter(|(i, _)| self.symbol_page_count[*i] > 1 || self.pages.len() == 1)
+                .filter(|(i, _)| {
+                    self.symbol_page_count[*i] > 1
+                        || (!self.state.pdf_mode && self.pages.len() == 1)
+                })
                 .map(|(i, _)| i)
                 .collect()
         };
@@ -104,8 +116,7 @@ impl<'a> Jbig2Encoder<'a> {
             }
         }
 
-        // For PDF split mode, no local symbols - all are in global dictionary
-        let mut page_local_symbols: Vec<Vec<usize>> = if self.state.pdf_mode {
+        let mut page_local_symbols: Vec<Vec<usize>> = if legacy_pdf {
             vec![Vec::new(); self.pages.len()]
         } else {
             self.page_symbol_indices
@@ -120,6 +131,16 @@ impl<'a> Jbig2Encoder<'a> {
                 .collect()
         };
         let mut page_residual_symbols = vec![Vec::new(); self.pages.len()];
+        if self.state.pdf_mode
+            && self.config.pdf_dictionary_policy == PdfDictionaryPolicy::SharedGlobal
+        {
+            for (locals, residuals) in page_local_symbols
+                .iter_mut()
+                .zip(&mut page_residual_symbols)
+            {
+                residuals.append(locals);
+            }
+        }
         let mut page_residual_anchor_remaps: Vec<FxHashMap<usize, usize>> = (0..self.pages.len())
             .map(|_| FxHashMap::default())
             .collect();
@@ -159,9 +180,10 @@ impl<'a> Jbig2Encoder<'a> {
         let mut counterfactual_global_overlap_skip = CounterfactualProbeStats::default();
         let mut page_uses_generic_region = vec![false; self.pages.len()];
         for (page_num, page) in self.pages.iter().enumerate() {
-            if self.config.uses_lossy_symbol_dictionary()
-                || self.config.refine
-                || self.config.text_refine
+            if !self.config.is_lossless
+                && (self.config.uses_lossy_symbol_dictionary()
+                    || self.config.refine
+                    || self.config.text_refine)
             {
                 let mut local_use_counts = HashMap::new();
                 for instance in &page.symbol_instances {
@@ -1455,7 +1477,11 @@ impl<'a> Jbig2Encoder<'a> {
                 });
             let residual_region_segment_number = if has_residual_region {
                 let number = current_segment_number;
-                current_segment_number += 1;
+                current_segment_number += if self.config.pack_residuals {
+                    MAX_RESIDUAL_REGIONS as u32
+                } else {
+                    1
+                };
                 Some(number)
             } else {
                 None
@@ -1551,6 +1577,7 @@ impl<'a> Jbig2Encoder<'a> {
             self.metrics.symbol_mode.symbol_dict_encoding += built_page.symbol_dict_time;
             self.metrics.symbol_mode.text_region_encoding += built_page.text_region_time;
             self.metrics.symbol_mode.generic_region_encoding += built_page.generic_region_time;
+            self.metrics.symbol_stats.topology_refinements += built_page.topology_refinement_count;
             pages.push(built_page.page);
         }
 
@@ -1582,6 +1609,16 @@ impl<'a> Jbig2Encoder<'a> {
             pages,
             eof_segment,
             next_segment_number: current_segment_number,
+            global_bitmap_bytes: super::super::resources::dictionary_storage(
+                &self.global_symbols,
+                &global_sym_to_dict_pos,
+            )
+            .0,
+            global_dictionary_pixels: super::super::resources::dictionary_storage(
+                &self.global_symbols,
+                &global_sym_to_dict_pos,
+            )
+            .1,
         })
     }
 
@@ -1594,14 +1631,24 @@ impl<'a> Jbig2Encoder<'a> {
     ) -> Result<BuiltPage> {
         let page = &self.pages[layout.page_index];
         let mut page_segments = Vec::new();
+        let mut resources = super::super::PageResourceMetrics {
+            page_pixels: super::super::resources::pixels(&page.image),
+            ..Default::default()
+        };
         let mut symbol_dict_time = Duration::default();
         let mut text_region_time = Duration::default();
         let mut generic_region_time = Duration::default();
+        #[cfg(feature = "symboldict")]
+        let mut topology_refinement_count = 0;
+        #[cfg(not(feature = "symboldict"))]
+        let topology_refinement_count = 0;
 
         let page_info_payload = PageInfo {
             width: page.image.width as u32,
             height: page.image.height as u32,
             default_pixel: false,
+            // Keep the legacy generic API's page flags byte-identical.
+            is_lossless: self.config.is_lossless && self.config.symbol_mode,
             xres: self.config.generic.dpi,
             yres: self.config.generic.dpi,
             ..Default::default()
@@ -1623,14 +1670,9 @@ impl<'a> Jbig2Encoder<'a> {
             && !page.symbol_instances.is_empty()
             && !layout.use_generic_region
         {
-            // In PDF split mode, the global dictionary is in a separate PDF object.
-            // The text region segment must reference it as segment 1 in its referred_to field.
-            // The PDF /DecodeParms points to the actual global dict PDF object.
-            let mut referred_to_for_text_region = if self.state.pdf_mode {
-                vec![1u32] // Reference global dictionary as segment 1
-            } else {
-                self.global_dict_segment_numbers.clone()
-            };
+            // Refer to the actual dictionaries present, including when a PDF
+            // page has only a local dictionary and no /JBIG2Globals stream.
+            let mut referred_to_for_text_region = self.global_dict_segment_numbers.clone();
             let residual_set: HashSet<usize> = layout.residual_symbols.iter().copied().collect();
             let residual_anchor_remaps = &layout.residual_anchor_remaps;
 
@@ -1656,6 +1698,13 @@ impl<'a> Jbig2Encoder<'a> {
                         local_sym_to_dict_pos[gs_idx] = dict_pos;
                     }
                 }
+                (
+                    resources.local_dictionary_bitmap_bytes,
+                    resources.local_dictionary_pixels,
+                ) = super::super::resources::dictionary_storage(
+                    &self.global_symbols,
+                    &local_sym_to_dict_pos,
+                );
                 for (subset_index, refinement) in local_dict_layout.refinements.iter().enumerate() {
                     if let Some(refinement) = refinement {
                         let gs_idx = layout.local_symbols[subset_index];
@@ -1668,24 +1717,20 @@ impl<'a> Jbig2Encoder<'a> {
                     }
                 }
 
-                // For PDF split mode, skip local dictionary segments
-                // All symbols should be in the global dictionary for PDF embedding
-                if !self.state.pdf_mode {
-                    for segment_number in layout.local_dict_segment_numbers.iter().copied() {
-                        page_segments.push(Segment {
-                            number: segment_number,
-                            seg_type: SegmentType::SymbolDictionary,
-                            deferred_non_retain: false,
-                            retain_flags: 0,
-                            page_association_type: 0,
-                            referred_to: Vec::new(),
-                            page: Some(layout.page_number),
-                            payload: encoded_local_dict.payload.clone(),
-                        });
-                    }
-                    referred_to_for_text_region
-                        .extend(layout.local_dict_segment_numbers.iter().copied());
+                for segment_number in layout.local_dict_segment_numbers.iter().copied() {
+                    page_segments.push(Segment {
+                        number: segment_number,
+                        seg_type: SegmentType::SymbolDictionary,
+                        deferred_non_retain: false,
+                        retain_flags: 0,
+                        page_association_type: 0,
+                        referred_to: Vec::new(),
+                        page: Some(layout.page_number),
+                        payload: encoded_local_dict.payload.clone(),
+                    });
                 }
+                referred_to_for_text_region
+                    .extend(layout.local_dict_segment_numbers.iter().copied());
                 encoded_local_dict.exported_symbol_count
             } else {
                 0
@@ -1702,7 +1747,7 @@ impl<'a> Jbig2Encoder<'a> {
                     remapped.refinement_dy = 0;
                     planned_instances.push(remapped);
                 } else if residual_set.contains(&instance.symbol_index) {
-                    residual_instances.push(instance.clone());
+                    residual_instances.push(instance);
                 } else {
                     planned_instances.push(instance.clone());
                 }
@@ -1722,7 +1767,45 @@ impl<'a> Jbig2Encoder<'a> {
                     instance.refinement_dy = refinement.refinement_dy;
                     needs_family_refinement = true;
                 }
+                #[cfg(feature = "symboldict")]
+                if self.config.topology_safe_substitution
+                    && !instance.needs_refinement
+                    && !super::topology::substitution_preserves_topology(
+                        &instance.instance_bitmap,
+                        &self.global_symbols[instance.symbol_index],
+                    )
+                {
+                    // This guard runs after every remapping stage, including
+                    // clustering, unification and residual-anchor rescue.
+                    instance.needs_refinement = true;
+                    instance.refinement_dx = 0;
+                    instance.refinement_dy = 0;
+                    topology_refinement_count += 1;
+                }
             }
+
+            for instance in &planned_instances {
+                let source_area = super::super::resources::pixels(&instance.instance_bitmap);
+                resources.text_work_pixels = resources.text_work_pixels.saturating_add(source_area);
+                if instance.needs_refinement {
+                    resources.refined_instances += 1;
+                    resources.text_work_pixels =
+                        resources
+                            .text_work_pixels
+                            .saturating_add(super::super::resources::pixels(
+                                &self.global_symbols[instance.symbol_index],
+                            ));
+                } else if instance.instance_bitmap == self.global_symbols[instance.symbol_index] {
+                    resources.exact_instances += 1;
+                } else {
+                    resources.substituted_instances += 1;
+                }
+            }
+            resources.generic_instances = residual_instances.len();
+            resources.generic_source_ink_pixels = residual_instances
+                .iter()
+                .map(|instance| instance.instance_bitmap.count_ones() as u64)
+                .sum();
 
             // NOTE: PDF-embedded text regions previously stripped all per-instance
             // refinement here ("until global dictionary encoding is fixed"). That
@@ -1767,7 +1850,11 @@ impl<'a> Jbig2Encoder<'a> {
 
                 page_segments.push(Segment {
                     number: layout.region_segment_number,
-                    seg_type: SegmentType::ImmediateTextRegion,
+                    seg_type: if self.config.is_lossless && self.config.symbol_mode {
+                        SegmentType::ImmediateLosslessTextRegion
+                    } else {
+                        SegmentType::ImmediateTextRegion
+                    },
                     deferred_non_retain: false,
                     retain_flags: 0,
                     page_association_type: 0,
@@ -1777,30 +1864,25 @@ impl<'a> Jbig2Encoder<'a> {
                 });
             }
 
-            if let Some((residual_bitmap, residual_x, residual_y)) =
-                self.build_instance_residual_bitmap(&residual_instances)?
-            {
-                let generic_start = Instant::now();
-                let residual_payload = self.encode_generic_region_payload_at(
-                    &residual_bitmap,
-                    residual_x,
-                    residual_y,
-                )?;
-                generic_region_time += generic_start.elapsed();
-                page_segments.push(Segment {
-                    number: layout
+            let generic_start = Instant::now();
+            page_segments.extend(
+                self.encode_residual_regions(
+                    &residual_instances,
+                    layout
                         .residual_region_segment_number
                         .unwrap_or(layout.region_segment_number),
-                    seg_type: SegmentType::ImmediateGenericRegion,
-                    deferred_non_retain: false,
-                    retain_flags: 0,
-                    page_association_type: 0,
-                    referred_to: Vec::new(),
-                    page: Some(layout.page_number),
-                    payload: residual_payload,
-                });
-            }
+                    layout.page_number,
+                    if layout.residual_region_segment_number.is_some() {
+                        MAX_RESIDUAL_REGIONS
+                    } else {
+                        1
+                    },
+                )?,
+            );
+            generic_region_time += generic_start.elapsed();
         } else {
+            resources.generic_instances = page.symbol_instances.len();
+            resources.generic_source_ink_pixels = page.image.count_ones() as u64;
             let generic_start = Instant::now();
             let generic_region_payload =
                 self.encode_generic_region_payload_at(&page.image, 0, 0)?;
@@ -1808,7 +1890,11 @@ impl<'a> Jbig2Encoder<'a> {
 
             page_segments.push(Segment {
                 number: layout.region_segment_number,
-                seg_type: SegmentType::ImmediateGenericRegion,
+                seg_type: if self.config.is_lossless && self.config.symbol_mode {
+                    SegmentType::ImmediateLosslessGenericRegion
+                } else {
+                    SegmentType::ImmediateGenericRegion
+                },
                 deferred_non_retain: false,
                 retain_flags: 0,
                 page_association_type: 0,
@@ -1817,6 +1903,22 @@ impl<'a> Jbig2Encoder<'a> {
                 payload: generic_region_payload,
             });
         }
+
+        resources.generic_region_pixels = page_segments
+            .iter()
+            .filter(|segment| {
+                matches!(
+                    segment.seg_type,
+                    SegmentType::ImmediateGenericRegion
+                        | SegmentType::ImmediateLosslessGenericRegion
+                )
+            })
+            .map(|segment| {
+                let width = u32::from_be_bytes(segment.payload[0..4].try_into().unwrap()) as u64;
+                let height = u32::from_be_bytes(segment.payload[4..8].try_into().unwrap()) as u64;
+                width.saturating_mul(height)
+            })
+            .sum();
 
         // For PDF split mode, skip EndOfPage segment - not needed for PDF embedding
         if !self.state.pdf_mode {
@@ -1836,10 +1938,12 @@ impl<'a> Jbig2Encoder<'a> {
             page: PlannedPage {
                 page_number: layout.page_number,
                 segments: page_segments,
+                resources,
             },
             symbol_dict_time,
             text_region_time,
             generic_region_time,
+            topology_refinement_count,
         })
     }
 

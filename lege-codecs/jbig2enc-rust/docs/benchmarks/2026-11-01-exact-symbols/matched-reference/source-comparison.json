@@ -1,0 +1,10 @@
+{
+  "reference": "current source snapshot with historical cc.rs only, from HEAD; temporary benchmark-only GPL-derived reference retained outside package",
+  "reference_head": "95b571373a37c199ce92e0ce9c80d7c8a5ff6464",
+  "reference_cc_sha256": "ae2b246e43881ecb7d66febb006f85feeac26033f6de3a81742533a9260f092e",
+  "candidate_cc_sha256": "4e8a498cfbf7e6d9d7a0acae25d6718a680bb7870d4f758cc4dc26b43f359887",
+  "shared_manifest_sha256": "a0defd0ce725d8d1831bc3b3fd125991839baca5be43fc34eba571cd2415f903",
+  "shared_lock_sha256": "076e7ee6f66f6bcc8b58ed9d028db026a51148098058165c6d9c9cc874871929",
+  "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+  "profile": "release; same Cargo manifest/lock/default features; compilation excluded"
+}

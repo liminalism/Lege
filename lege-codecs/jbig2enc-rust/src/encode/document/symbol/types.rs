@@ -466,6 +466,7 @@ impl SymbolInstance {
 pub(crate) struct PlannedPage {
     pub(crate) page_number: u32,
     pub(crate) segments: Vec<Segment>,
+    pub(crate) resources: super::super::PageResourceMetrics,
 }
 
 #[derive(Debug)]
@@ -475,6 +476,8 @@ pub(crate) struct PlannedDocument {
     pub(crate) pages: Vec<PlannedPage>,
     pub(crate) eof_segment: Option<Segment>,
     pub(crate) next_segment_number: u32,
+    pub(crate) global_bitmap_bytes: usize,
+    pub(crate) global_dictionary_pixels: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -499,6 +502,7 @@ pub(crate) struct BuiltPage {
     pub(crate) symbol_dict_time: Duration,
     pub(crate) text_region_time: Duration,
     pub(crate) generic_region_time: Duration,
+    pub(crate) topology_refinement_count: usize,
 }
 
 #[derive(Debug, Clone, Default)]

@@ -1,0 +1,25 @@
+   Compiling jbig2enc-rust v0.6.0 (/home/dk/rust-projects/Lege-ecosystem/lege-codecs/jbig2enc-rust)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.68s
+     Running tests/connected_components.rs (lege-codecs/jbig2enc-rust/target/debug/deps/connected_components-377bd4af2b5a0e93)
+
+running 9 tests
+test maximal_runs_cover_each_row_without_crossing_white_pixels ... ok
+test sparse_staged_coordinates_do_not_allocate_by_page_height_or_label_id ... ok
+test staged_unsorted_runs_normalize_to_the_same_foreground_set ... ok
+test materialized_shapes_use_half_open_bounds_and_original_page_positions ... ok
+test diagonal_contacts_connect_but_a_white_gap_separates_components ... ok
+test optional_grid_regrouping_preserves_pixels_and_descriptor_offsets ... ok
+test cleanup_is_explicit_and_preserves_components_above_the_pixel_threshold ... ok
+test empty_solid_and_diagonal_inputs_are_preserved_without_cleanup ... ok
+test span_components_equal_pixel_graph_on_odd_widths_and_random_patterns ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+
+     Running tests/encode_byte_identical.rs (lege-codecs/jbig2enc-rust/target/debug/deps/encode_byte_identical-ef7094397da281d0)
+
+running 2 tests
+test sha_selftest::sha256_known_vectors ... ok
+test encoder_output_is_byte_identical ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.06s
+

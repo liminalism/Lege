@@ -1,0 +1,23 @@
+   Compiling jbig2enc-rust v0.6.0 (/tmp/jbig2-head-reference-complete-20261101)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.64s
+     Running tests/refinement_portability_repro.rs (/tmp/jbig2-cc-reference-20261101/target/debug/deps/refinement_portability_repro-0fbc8a1e34ac06b9)
+
+running 2 tests
+test common::tests::pbm_packing_row_major_msb_first ... ok
+PDFTOPPM: Syntax Error (488): 1 extraneous byte after segment
+Syntax Error (537): 1 extraneous byte after segment
+
+
+thread 'tiny_refinement_reference_offsets_are_portable_across_decoders' (386) panicked at tests/common/pbm.rs:144:9:
+PDFIUM_PYTHON: pixel mismatch at (4,2) expected=1 got=0 (dims exp 31x9 got 31x9)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test tiny_refinement_reference_offsets_are_portable_across_decoders ... FAILED
+
+failures:
+
+failures:
+    tiny_refinement_reference_offsets_are_portable_across_decoders
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s
+
+error: test failed, to rerun pass `--test refinement_portability_repro`

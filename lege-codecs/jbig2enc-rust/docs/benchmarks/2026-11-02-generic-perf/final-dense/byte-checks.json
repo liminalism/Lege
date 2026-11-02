@@ -1,0 +1,26 @@
+[
+  {
+    "index": 0,
+    "rust_sha256": "4a2edc3a22b0eca05f5b5b60b03fe4ca090ed076ebda32b2dfcb1aecef1e451c",
+    "c_sha256": "1d7cb88551ba4f1b16cb733060f5bb601b4e5e6b042a261076a8375833aa84d7",
+    "canonical_equal": true,
+    "baseline_sha256": "4a2edc3a22b0eca05f5b5b60b03fe4ca090ed076ebda32b2dfcb1aecef1e451c",
+    "raw_baseline_equal": true
+  },
+  {
+    "index": 1,
+    "rust_sha256": "e1f61a07b50e851481104f6b5a74be2114c500ebd9b3db693c300e2968c2ecf7",
+    "c_sha256": "3c7e562934c1d88dc51645b07804edb5d6b5f2593ff77949f0ecc56109cfd724",
+    "canonical_equal": true,
+    "baseline_sha256": "e1f61a07b50e851481104f6b5a74be2114c500ebd9b3db693c300e2968c2ecf7",
+    "raw_baseline_equal": true
+  },
+  {
+    "index": 2,
+    "rust_sha256": "8d0acc84235bf59a630b50a59c5c3ca1dca146a507bac680e369f7acca7b6e37",
+    "c_sha256": "0b2f1067e4ad415411663727a030159ba4bcb5698fbcfbf1687725f80531fc3a",
+    "canonical_equal": true,
+    "baseline_sha256": "8d0acc84235bf59a630b50a59c5c3ca1dca146a507bac680e369f7acca7b6e37",
+    "raw_baseline_equal": true
+  }
+]

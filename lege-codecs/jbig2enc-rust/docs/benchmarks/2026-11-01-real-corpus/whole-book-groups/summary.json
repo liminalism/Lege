@@ -1,0 +1,181 @@
+{
+  "scope": "completed CSV rows only; worker RSS includes loading/verification; work and bitmap storage are explicit proxies, not device limits",
+  "modes": [
+    {
+      "csv": {
+        "mode": "exact_group32",
+        "pages": "782",
+        "auto_thresh": "false",
+        "encoded_bytes": "22135580",
+        "global_bytes": "66243",
+        "local_bytes": "16759239",
+        "residual_bytes": "71",
+        "encode_seconds": "9.767238737",
+        "differing_pixels": "0",
+        "cold_decode_seconds": "5.742440010",
+        "warm_decode_seconds": "5.006523820",
+        "decoded_global_bitmap_bytes": "81196",
+        "comparator_calls": "0",
+        "exact_hits": "290681",
+        "refined_hits": "0",
+        "jbig2dec_differing_pixels": "0",
+        "worker_peak_rss_kib": "79060"
+      },
+      "page_latency_seconds": {
+        "cold": {
+          "median": 0.0069535965,
+          "p95": 0.012936248,
+          "max": 0.019187683
+        },
+        "warm": {
+          "median": 0.0064840295,
+          "p95": 0.008794136,
+          "max": 0.012360261
+        }
+      },
+      "selected_resources": {
+        "exact": 2016839,
+        "refined": 0,
+        "substituted": 0,
+        "generic_instances": 1,
+        "generic_region_pixels": 2316665,
+        "generic_ink": 2316663,
+        "page_pixels": 1819536575,
+        "max_local_bitmap_bytes": 356576,
+        "max_cold_work_pixels": 5639399
+      }
+    },
+    {
+      "csv": {
+        "mode": "exact_group64",
+        "pages": "782",
+        "auto_thresh": "false",
+        "encoded_bytes": "22107587",
+        "global_bytes": "68849",
+        "local_bytes": "16707921",
+        "residual_bytes": "71",
+        "encode_seconds": "9.750433917",
+        "differing_pixels": "0",
+        "cold_decode_seconds": "6.251562082",
+        "warm_decode_seconds": "4.848325349",
+        "decoded_global_bitmap_bytes": "130752",
+        "comparator_calls": "0",
+        "exact_hits": "313399",
+        "refined_hits": "0",
+        "jbig2dec_differing_pixels": "0",
+        "worker_peak_rss_kib": "146352"
+      },
+      "page_latency_seconds": {
+        "cold": {
+          "median": 0.007678570500000001,
+          "p95": 0.012777315,
+          "max": 0.01930256
+        },
+        "warm": {
+          "median": 0.006360221500000001,
+          "p95": 0.008120607,
+          "max": 0.012213402
+        }
+      },
+      "selected_resources": {
+        "exact": 2016839,
+        "refined": 0,
+        "substituted": 0,
+        "generic_instances": 1,
+        "generic_region_pixels": 2316665,
+        "generic_ink": 2316663,
+        "page_pixels": 1819536575,
+        "max_local_bitmap_bytes": 356576,
+        "max_cold_work_pixels": 5679690
+      }
+    },
+    {
+      "csv": {
+        "mode": "exact_group128",
+        "pages": "782",
+        "auto_thresh": "false",
+        "encoded_bytes": "22083670",
+        "global_bytes": "71635",
+        "local_bytes": "16658413",
+        "residual_bytes": "71",
+        "encode_seconds": "9.806403460",
+        "differing_pixels": "0",
+        "cold_decode_seconds": "7.426583901",
+        "warm_decode_seconds": "4.769844063",
+        "decoded_global_bitmap_bytes": "260840",
+        "comparator_calls": "0",
+        "exact_hits": "333970",
+        "refined_hits": "0",
+        "jbig2dec_differing_pixels": "0",
+        "worker_peak_rss_kib": "277072"
+      },
+      "page_latency_seconds": {
+        "cold": {
+          "median": 0.009415825999999999,
+          "p95": 0.013778818,
+          "max": 0.024879551
+        },
+        "warm": {
+          "median": 0.006359657,
+          "p95": 0.007765394,
+          "max": 0.01409203
+        }
+      },
+      "selected_resources": {
+        "exact": 2016839,
+        "refined": 0,
+        "substituted": 0,
+        "generic_instances": 1,
+        "generic_region_pixels": 2316665,
+        "generic_ink": 2316663,
+        "page_pixels": 1819536575,
+        "max_local_bitmap_bytes": 356576,
+        "max_cold_work_pixels": 5785055
+      }
+    },
+    {
+      "csv": {
+        "mode": "exact_groupwhole",
+        "pages": "782",
+        "auto_thresh": "false",
+        "encoded_bytes": "22020242",
+        "global_bytes": "86327",
+        "local_bytes": "16505528",
+        "residual_bytes": "71",
+        "encode_seconds": "19.854121537",
+        "differing_pixels": "0",
+        "cold_decode_seconds": "23.084105499",
+        "warm_decode_seconds": "4.880990160",
+        "decoded_global_bitmap_bytes": "1334224",
+        "comparator_calls": "0",
+        "exact_hits": "387974",
+        "refined_hits": "0",
+        "jbig2dec_differing_pixels": "0",
+        "worker_peak_rss_kib": "1239516"
+      },
+      "page_latency_seconds": {
+        "cold": {
+          "median": 0.0292931585,
+          "p95": 0.034144084,
+          "max": 0.043727192
+        },
+        "warm": {
+          "median": 0.006447925,
+          "p95": 0.008099539,
+          "max": 0.015722754
+        }
+      },
+      "selected_resources": {
+        "exact": 2016839,
+        "refined": 0,
+        "substituted": 0,
+        "generic_instances": 1,
+        "generic_region_pixels": 2316665,
+        "generic_ink": 2316663,
+        "page_pixels": 1819536575,
+        "max_local_bitmap_bytes": 356576,
+        "max_cold_work_pixels": 7693575
+      }
+    }
+  ]
+}

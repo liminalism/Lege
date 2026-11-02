@@ -1,0 +1,30 @@
+--- .agent/scratch/jbig2-06-headroom/baseline-arith.rs	2026-11-02 10:36:04.824367509 +0700
++++ .agent/scratch/jbig2-06-headroom/renorm-arith.rs	2026-11-02 10:38:07.166726645 +0700
+@@ -1101,16 +1101,20 @@
+             }
+             state.next_mps as usize
+         };
+-        loop {
+-            self.a = (self.a << 1) & 0xffff;
+-            self.c <<= 1;
+-            self.ct -= 1;
++        // A is a positive, denormalized 16-bit interval. Shift in chunks up
++        // to the next BYTEOUT boundary, preserving its exact call sequence.
++        debug_assert!(self.a > 0 && self.a < 0x8000);
++        debug_assert!(self.ct > 0);
++        let mut shifts = self.a.leading_zeros() - 16;
++        while shifts != 0 {
++            let step = shifts.min(self.ct as u32);
++            self.a = (self.a << step) & 0xffff;
++            self.c <<= step;
++            self.ct -= step as i8;
++            shifts -= step;
+             if self.ct == 0 {
+                 self.byte_out();
+             }
+-            if self.a >= 0x8000 {
+-                break;
+-            }
+         }
+         next_state
+     }

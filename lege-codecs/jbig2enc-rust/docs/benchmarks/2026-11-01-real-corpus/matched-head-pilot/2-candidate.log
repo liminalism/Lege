@@ -1,0 +1,31 @@
+
+running 1 test
+QUALITY_RESOURCES	globals_encoded=121349	globals_bitmap=772992	globals_pixels=2358155
+QUALITY_PAGE_RESOURCES	0	page_pixels=2777720	local_bitmap=0	exact=46	refined=2	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=2372542
+QUALITY_PAGE_RESOURCES	1	page_pixels=2508480	local_bitmap=0	exact=15	refined=23	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=2364392
+QUALITY_PAGE_RESOURCES	2	page_pixels=2508480	local_bitmap=0	exact=615	refined=1214	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=2377448
+QUALITY_PAGE_RESOURCES	3	page_pixels=2508480	local_bitmap=0	exact=1796	refined=807	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=2672504
+QUALITY_PAGE_RESOURCES	4	page_pixels=2508480	local_bitmap=0	exact=1190	refined=560	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=2585548
+QUALITY_PAGE_RESOURCES	5	page_pixels=2508480	local_bitmap=0	exact=1565	refined=825	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=2974321
+QUALITY_PAGE_RESOURCES	6	page_pixels=2259745	local_bitmap=0	exact=1886	refined=956	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=2918417
+QUALITY_PAGE_RESOURCES	7	page_pixels=2259745	local_bitmap=0	exact=1679	refined=1135	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=2934254
+QUALITY_PAGE_RESOURCES	8	page_pixels=2316665	local_bitmap=0	exact=1491	refined=581	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=2906289
+QUALITY_PAGE_RESOURCES	9	page_pixels=2316665	local_bitmap=0	exact=2410	refined=806	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=2900699
+QUALITY_MATCHING	components=21382	ingest_comparisons=64401	planner_comparisons=0	legacy_post_ingest_comparisons=unreported
+QUALITY_TOPOLOGY	corrected_instances=0
+QUALITY_STAGES	cc=0.018070855	match=0.126681173	cluster=0.226095624	plan=0.247254568	dict=0.019147934	text=0.021110784	generic=0.000000362
+QUALITY_PAGE	0	227	2719804	0.019674933	0.000202391	2719804
+QUALITY_PAGE	1	245	6	0.020222723	0.000400547	6
+QUALITY_PAGE	2	4625	1059	0.020710423	0.000988015	1059
+QUALITY_PAGE	3	9670	1699	0.021454374	0.001970613	1699
+QUALITY_PAGE	4	6952	149	0.021423429	0.001533002	149
+QUALITY_PAGE	5	11145	199	0.023100208	0.003624426	199
+QUALITY_PAGE	6	12326	370	0.022801484	0.003192277	370
+QUALITY_PAGE	7	13369	194	0.023205448	0.003699493	194
+QUALITY_PAGE	8	9290	149	0.022780515	0.002831144	149
+QUALITY_PAGE	9	12284	287	0.022784093	0.002796815	287
+QUALITY_RESULT	symbol_shipping	10	true	201482	121349	0	0	0.426706260	2723916	0.218157630	0.021238723	772992	64401	1644	3457	2723916
+test quality_corpus_worker ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 1.06s
+

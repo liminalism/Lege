@@ -1,0 +1,169 @@
+{
+  "scope": "completed CSV rows only; worker RSS includes loading/verification; work and bitmap storage are explicit proxies, not device limits",
+  "modes": [
+    {
+      "csv": {
+        "mode": "exact",
+        "pages": "17",
+        "auto_thresh": "false",
+        "encoded_bytes": "278560",
+        "global_bytes": "5817",
+        "local_bytes": "177990",
+        "residual_bytes": "0",
+        "encode_seconds": "0.199195299",
+        "differing_pixels": "0",
+        "cold_decode_seconds": "0.099997195",
+        "warm_decode_seconds": "0.078786309",
+        "decoded_global_bitmap_bytes": "42132",
+        "comparator_calls": "0",
+        "exact_hits": "21471",
+        "refined_hits": "0",
+        "jbig2dec_differing_pixels": "0",
+        "worker_peak_rss_kib": "149988"
+      },
+      "page_latency_seconds": {
+        "cold": {
+          "median": 0.007008919,
+          "p95": 0.012628955,
+          "max": 0.012628955
+        },
+        "warm": {
+          "median": 0.004978797,
+          "p95": 0.011739021,
+          "max": 0.011739021
+        }
+      },
+      "selected_resources": {
+        "exact": 40995,
+        "refined": 0,
+        "substituted": 0,
+        "generic_instances": 0,
+        "generic_region_pixels": 0,
+        "generic_ink": 0,
+        "page_pixels": 53671692,
+        "max_local_bitmap_bytes": 356576,
+        "max_cold_work_pixels": 5745853
+      },
+      "comparisons": {
+        "input_components": 40995,
+        "ingest_per_component": 0.0,
+        "measured_planner_per_component": 0.0,
+        "legacy_post_ingest": "unreported; do not interpret ingest counts as total comparisons"
+      }
+    },
+    {
+      "csv": {
+        "mode": "exact_optimized",
+        "pages": "17",
+        "auto_thresh": "false",
+        "encoded_bytes": "272253",
+        "global_bytes": "172233",
+        "local_bytes": "0",
+        "residual_bytes": "1780",
+        "encode_seconds": "15.722737333",
+        "differing_pixels": "0",
+        "cold_decode_seconds": "0.792538013",
+        "warm_decode_seconds": "0.036628210",
+        "decoded_global_bitmap_bytes": "1416552",
+        "comparator_calls": "0",
+        "exact_hits": "21471",
+        "refined_hits": "0",
+        "jbig2dec_differing_pixels": "0",
+        "worker_peak_rss_kib": "147856"
+      },
+      "page_latency_seconds": {
+        "cold": {
+          "median": 0.044743656,
+          "p95": 0.058869759,
+          "max": 0.058869759
+        },
+        "warm": {
+          "median": 0.001721018,
+          "p95": 0.011977948,
+          "max": 0.011977948
+        }
+      },
+      "selected_resources": {
+        "exact": 40994,
+        "refined": 0,
+        "substituted": 0,
+        "generic_instances": 1,
+        "generic_region_pixels": 2777720,
+        "generic_ink": 2704298,
+        "page_pixels": 53671692,
+        "max_local_bitmap_bytes": 0,
+        "max_cold_work_pixels": 8116225
+      },
+      "comparisons": {
+        "input_components": 40995,
+        "ingest_per_component": 0.0,
+        "measured_planner_per_component": 3.355750701305037,
+        "legacy_post_ingest": "unreported; do not interpret ingest counts as total comparisons"
+      },
+      "shortlist_estimate_calibration": {
+        "measured_trials": 21,
+        "mean_absolute_gain_error_bytes": 7191.380952380952,
+        "predicted_positive": 21,
+        "actual_positive_among_predicted_positive": 0,
+        "scope": "gain against the incumbent at trial time; contexts change, so this is diagnostic calibration, not an additive cost model"
+      }
+    },
+    {
+      "csv": {
+        "mode": "lossy_optimized",
+        "pages": "17",
+        "auto_thresh": "false",
+        "encoded_bytes": "272253",
+        "global_bytes": "172233",
+        "local_bytes": "0",
+        "residual_bytes": "1780",
+        "encode_seconds": "15.515374285",
+        "differing_pixels": "0",
+        "cold_decode_seconds": "0.809162787",
+        "warm_decode_seconds": "0.036378433",
+        "decoded_global_bitmap_bytes": "1416552",
+        "comparator_calls": "0",
+        "exact_hits": "21471",
+        "refined_hits": "0",
+        "jbig2dec_differing_pixels": "0",
+        "worker_peak_rss_kib": "147424"
+      },
+      "page_latency_seconds": {
+        "cold": {
+          "median": 0.049056037,
+          "p95": 0.054998438,
+          "max": 0.054998438
+        },
+        "warm": {
+          "median": 0.00152761,
+          "p95": 0.012325632,
+          "max": 0.012325632
+        }
+      },
+      "selected_resources": {
+        "exact": 40994,
+        "refined": 0,
+        "substituted": 0,
+        "generic_instances": 1,
+        "generic_region_pixels": 2777720,
+        "generic_ink": 2704298,
+        "page_pixels": 53671692,
+        "max_local_bitmap_bytes": 0,
+        "max_cold_work_pixels": 8116225
+      },
+      "comparisons": {
+        "input_components": 40995,
+        "ingest_per_component": 0.0,
+        "measured_planner_per_component": 3.355750701305037,
+        "legacy_post_ingest": "unreported; do not interpret ingest counts as total comparisons"
+      },
+      "shortlist_estimate_calibration": {
+        "measured_trials": 21,
+        "mean_absolute_gain_error_bytes": 7191.380952380952,
+        "predicted_positive": 21,
+        "actual_positive_among_predicted_positive": 0,
+        "scope": "gain against the incumbent at trial time; contexts change, so this is diagnostic calibration, not an additive cost model"
+      }
+    }
+  ]
+}

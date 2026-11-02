@@ -129,8 +129,16 @@ impl<'a> Jbig2Encoder<'a> {
         page_num: usize,
     ) -> usize {
         let idx = self.global_symbols.len();
-        self.symbol_signatures
-            .push(Self::compute_symbol_signature(&symbol));
+        // The exact hash/equality path does not consult fuzzy signatures. Avoid
+        // their hole scan for large retained marks and preserve this separation
+        // from future lossy matching/tolerance changes.
+        self.symbol_signatures.push(
+            if self.config.is_lossless || self.config.optimize_lossy_symbols {
+                Default::default()
+            } else {
+                Self::compute_symbol_signature(&symbol)
+            },
+        );
         self.symbol_pixel_counts.push(pixel_count);
         self.global_symbols.push(symbol);
         self.symbol_usage.push(1);
@@ -232,6 +240,9 @@ impl<'a> Jbig2Encoder<'a> {
     }
 
     pub(crate) fn alias_local_symbols_to_globals(&mut self) -> Result<()> {
+        if self.config.is_lossless {
+            return Ok(());
+        }
         if self.pages.len() <= 1 || self.global_symbols.is_empty() {
             return Ok(());
         }

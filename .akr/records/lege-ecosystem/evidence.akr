@@ -1049,6 +1049,451 @@ record lege-ecosystem.evidence.installer-ready-tensorrt-payload-20260815/2 : evi
     supersedes [ @lege-ecosystem.evidence.installer-ready-tensorrt-payload-20260815/1 ]
 }
 
+record lege-ecosystem.evidence.jbig2-06-headroom-disposition-20261102/1 : evidence {
+    title "One candidate per hypothesis, five paired CPU0 runs on mixed17 and noise, 32 timed rounds, unavoidable partial load unchanged. Packed Qe/index cache: mixed wall0.9881/cycles1.0064, noise wall1.0163/cycles1.0172. Chunked renormalization: mixed wall1.0026/cycles0.9815, noise wall1.0626/cycles1.0385. Ratios candidate/baseline, all pairs retained. Both rejected for 0.6; no further tuning/combination. Both pass release context/hash tests and mixed17 raw Rust/C equality. Final arith SHAa8fb90c2b0e3884d6f82190141765503dd9d619c766a4cc0d370fcae5514d4b6 equals starting source. Existing blank batching gains retained."
+    state verified
+    result pass
+    method command
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    command "python3 .agent/scratch/jbig2-06-headroom/probe.py --candidate .agent/scratch/jbig2-06-headroom/renorm-worker --output .agent/scratch/jbig2-06-headroom/renorm-probe"
+    artifact "lege-codecs/jbig2enc-rust/docs/GENERIC-06-HEADROOM.md"
+    summary """
+        One candidate per hypothesis, five paired CPU0 runs on mixed17 and noise, 32 timed rounds, unavoidable partial load unchanged. Packed Qe/index cache: mixed wall0.9881/cycles1.0064, noise wall1.0163/cycles1.0172. Chunked renormalization: mixed wall1.0026/cycles0.9815, noise wall1.0626/cycles1.0385. Ratios candidate/baseline, all pairs retained. Both rejected for 0.6; no further tuning/combination. Both pass release context/hash tests and mixed17 raw Rust/C equality. Final arith SHAa8fb90c2b0e3884d6f82190141765503dd9d619c766a4cc0d370fcae5514d4b6 equals starting source. Existing blank batching gains retained.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.jbig2-06-restored-validation-20261102/1 : evidence {
+    title "Restored production source: 261 functional pass across37binaries with8intentional ignores and2existing prefix filters; release7pass1ignore. Independent jbig2dec0.20 configured; no new PDFium/Poppler claim. fmt/Python AST/scoped diff checks pass. Cargo package/extracted build verifies854files1868522bytesSHAe06f982cbf9b26bc6e7b1da1899e1533db49d075833071f5210664c9c7b213b1; CHANGELOG included, arithmetic equals starting release candidate, only3originalPBMs and own C++harness, no raw corpus/external C/oracles/perf.data. Existing spin0.10 yanked warning remains; no publication. Later reports/ledger outside archive digest."
+    state verified
+    result pass
+    method command
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    command "JBIG2DEC=/tmp/jbig2-oracle-20261102/usr/bin/jbig2dec LD_LIBRARY_PATH=/tmp/jbig2-oracle-20261102/usr/lib/x86_64-linux-gnu cargo test --manifest-path lege-codecs/jbig2enc-rust/Cargo.toml --offline --features parallel --lib --tests -- --skip grtemplate1_tpgron"
+    artifact "lege-codecs/jbig2enc-rust/docs/validation/2026-11-02-06-headroom/summary.json"
+    summary """
+        Restored production source: 261 functional pass across37binaries with8intentional ignores and2existing prefix filters; release7pass1ignore. Independent jbig2dec0.20 configured; no new PDFium/Poppler claim. fmt/Python AST/scoped diff checks pass. Cargo package/extracted build verifies854files1868522bytesSHAe06f982cbf9b26bc6e7b1da1899e1533db49d075833071f5210664c9c7b213b1; CHANGELOG included, arithmetic equals starting release candidate, only3originalPBMs and own C++harness, no raw corpus/external C/oracles/perf.data. Existing spin0.10 yanked warning remains; no publication. Later reports/ledger outside archive digest.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.jbig2-070-archive-source-review-20261101/1 : evidence {
+    title "Recovered all58 archived production/build path histories through52 rename edges (110 distinct paths), classified exact normalized Rust overlaps against64 local DjVu files, and pinned pre-upload Apache arithmetic headers/COPYING/PATENTS. Source hashes, history and exposure boundaries are concrete; exact earlier translation origins and appropriate licensing clearance remain unestablished."
+    state verified
+    result inconclusive
+    method manual
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    artifact "lege-codecs/jbig2enc-rust/docs/audits/2026-11-01/SOURCE-REVIEW.md"
+    summary """
+        Recovered all58 archived production/build path histories through52 rename edges (110 distinct paths), classified exact normalized Rust overlaps against64 local DjVu files, and pinned pre-upload Apache arithmetic headers/COPYING/PATENTS. Source hashes, history and exposure boundaries are concrete; exact earlier translation origins and appropriate licensing clearance remain unestablished.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.jbig2-070-canonical-package-20261101/1 : evidence {
+    title "Final code package427files/1516422compressedbytes/SHA474db68d2b8cc8b1ae22a6a4d98557dc6f9445a0e21c80c130f2a0a2798f3c14 builds/verifies; fresh extraction hasonly3originalPBMs and botholdinputs absent. Generator and35functionalbinaries pass259 tests,7ignored,2known template1-prefixfilters; independent PDFium control separatelypasses. Decode-only59pass, encode-onlyall-targetcheck plus12generic/lossless baselineentriespass, CLI/parallel/profilingall-targetcompilationpasses. Fixture helper hasnodecoderdependency; full40streammanifestretained and reduced builds cannot overwrite it. Originallegacyhash separatelypasses. Source-rights clearance is still absent; package snapshot excludes later report edits."
+    state verified
+    result pass
+    method command
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    command "Post-canonical cargo package; fresh extraction; full parallel lib/integration filtered sweep; independent PDFium template-one control; reduced and optional checks"
+    artifact "lege-codecs/jbig2enc-rust/docs/validation/2026-11-01/canonical-termination/unpacked-tests.json"
+    summary """
+        Final code package427files/1516422compressedbytes/SHA474db68d2b8cc8b1ae22a6a4d98557dc6f9445a0e21c80c130f2a0a2798f3c14 builds/verifies; fresh extraction hasonly3originalPBMs and botholdinputs absent. Generator and35functionalbinaries pass259 tests,7ignored,2known template1-prefixfilters; independent PDFium control separatelypasses. Decode-only59pass, encode-onlyall-targetcheck plus12generic/lossless baselineentriespass, CLI/parallel/profilingall-targetcompilationpasses. Fixture helper hasnodecoderdependency; full40streammanifestretained and reduced builds cannot overwrite it. Originallegacyhash separatelypasses. Source-rights clearance is still absent; package snapshot excludes later report edits.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.jbig2-070-canonical-termination-20261101/1 : evidence {
+    title "An independent byte rewrite removes7 duplicated FF prefixes before FFAC in6 original corpus/mode cases; new encoder output equals that rewrite, retains all pixels in4decoders, and eliminates7Poppler diagnostics. Canonical option is enabled in new exact/measured/safe presets and threads generic,dictionary,text/refinement,arithmetic halftone payloads; legacy APIs/rawflush keepbytes and both hashmanifests unchanged. Mixed17 exact/measuredexact/lossy278536/272239/272189bytes with0/0/20differences;102PDF checks havezero trailing diagnostics. All782pages at32/64/128/whole groups retainzero jbig2dec differences:22134352/22106393/22082511/22019090bytes;isolated encoder83160/146160/275724/1240532KiB. Google/AdamLangley attribution retained in notices and arithmetic/shared source headers; noGPLrenderer code copied."
+    state verified
+    result pass
+    method command
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    command "Strict arithmetic_termination/old-hash/exact/policy/group/topology tests; mixed17 four-oracle benchmark; isolated encoder whole782 grouping verification"
+    artifact "lege-codecs/jbig2enc-rust/docs/ARITHMETIC-TERMINATION.md"
+    summary """
+        An independent byte rewrite removes7 duplicated FF prefixes before FFAC in6 original corpus/mode cases; new encoder output equals that rewrite, retains all pixels in4decoders, and eliminates7Poppler diagnostics. Canonical option is enabled in new exact/measured/safe presets and threads generic,dictionary,text/refinement,arithmetic halftone payloads; legacy APIs/rawflush keepbytes and both hashmanifests unchanged. Mixed17 exact/measuredexact/lossy278536/272239/272189bytes with0/0/20differences;102PDF checks havezero trailing diagnostics. All782pages at32/64/128/whole groups retainzero jbig2dec differences:22134352/22106393/22082511/22019090bytes;isolated encoder83160/146160/275724/1240532KiB. Google/AdamLangley attribution retained in notices and arithmetic/shared source headers; noGPLrenderer code copied.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.jbig2-070-dependency-text-scan-20261101/1 : evidence {
+    title "Scanned11457 UTF-8 text files/138893272 bytes across188 resolved dependency directories;2795 binaries counted/skipped, no non-UTF8 text encountered. All30 GNU marker lines classified:14 alternative r-efi grants,12 Apache LLVM-exception mentions,2 dualMIT/GPL nix kernel-test lines,2 LOGPALETTE identifier false positives. No additional mandatoryGPL grant identified within this text scope; optionalCDDL,15 missing downloaded license-text files and actual distribution notice obligations remain visible."
+    state verified
+    result pass
+    method command
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    command "python3 lege-codecs/jbig2enc-rust/tools/audit_provenance.py --metadata /tmp/jbig2-all-features-metadata-20261101.json --output lege-codecs/jbig2enc-rust/docs/audits/2026-11-01 --scan-license-markers"
+    artifact "lege-codecs/jbig2enc-rust/docs/audits/2026-11-01/dependency-license-markers.json"
+    summary """
+        Scanned11457 UTF-8 text files/138893272 bytes across188 resolved dependency directories;2795 binaries counted/skipped, no non-UTF8 text encountered. All30 GNU marker lines classified:14 alternative r-efi grants,12 Apache LLVM-exception mentions,2 dualMIT/GPL nix kernel-test lines,2 LOGPALETTE identifier false positives. No additional mandatoryGPL grant identified within this text scope; optionalCDDL,15 missing downloaded license-text files and actual distribution notice obligations remain visible.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.jbig2-070-dictionary-policies-20261101/1 : evidence {
+    title "Focused matrix passed 26 tests with one opt-in corpus worker ignored separately. PDF policies passed native, jbig2dec, PDFium 156.0.8076.0 via pypdfium2 5.14.0 and Poppler 26.01.0. Local dictionaries work with/without globals at odd widths; standalone policy bytes unchanged. Poppler rendered output compared to the same renderer's uncompressed-source control, with direct source equality also checked in PDFium. Existing Poppler trailing-byte warnings remain visible. Golden hashes were not regenerated."
+    state verified
+    result pass
+    method command
+    observed_at git:5ca4565f60b48a157bcbd9797c88aab7f805bacb
+    command "PYTHONPATH=/tmp/jbig2-pdfium-oracle-20261101 JBIG2DEC=/tmp/jbig2-oracles-20261101/unpacked/usr/bin/jbig2dec PDFTOPPM=/tmp/jbig2-oracles-20261101/unpacked/usr/bin/pdftoppm PDFIUM_PYTHON=/usr/bin/python3 JBIG2_REQUIRE_PDF_ORACLES=1 cargo test --manifest-path lege-codecs/jbig2enc-rust/Cargo.toml --offline --test pdf_dictionary_policy --test encode_byte_identical --test decode_roundtrip --test quality_benchmark --test refine_pdf_lossless"
+    artifact "lege-codecs/jbig2enc-rust/tests/pdf_dictionary_policy.rs"
+    summary """
+        Focused matrix passed 26 tests with one opt-in corpus worker ignored separately. PDF policies passed native, jbig2dec, PDFium 156.0.8076.0 via pypdfium2 5.14.0 and Poppler 26.01.0. Local dictionaries work with/without globals at odd widths; standalone policy bytes unchanged. Poppler rendered output compared to the same renderer's uncompressed-source control, with direct source equality also checked in PDFium. Existing Poppler trailing-byte warnings remain visible. Golden hashes were not regenerated.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.jbig2-070-estimator-calibration-20261101/1 : evidence {
+    title "Mixed-corpus shortlist diagnostics show 21 positive predicted gains and zero positive actual gains for the estimated proposals, with mean absolute gain error about 7191 bytes. Complete serialized cost remains the acceptance authority and selects 272253 exact bytes versus 278560 direct-exact bytes. Estimates are coarse; no calibrated global-optimality or representative 5-15 percent claim is made."
+    state verified
+    result inconclusive
+    method observation
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    artifact "lege-codecs/jbig2enc-rust/docs/benchmarks/2026-11-01-real-corpus/mixed-exact/summary.json"
+    summary """
+        Mixed-corpus shortlist diagnostics show 21 positive predicted gains and zero positive actual gains for the estimated proposals, with mean absolute gain error about 7191 bytes. Complete serialized cost remains the acceptance authority and selects 272253 exact bytes versus 278560 direct-exact bytes. Estimates are coarse; no calibrated global-optimality or representative 5-15 percent claim is made.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.jbig2-070-exact-components-20261101/1 : evidence {
+    title "Replacement span-graph component extraction agrees with an independent pixel flood-fill oracle on 216 generated images and staged/sparse edge cases. Explicit exact ingest retains all components. Focused strict-oracle tests pass, old golden hashes are unchanged, and real 782/350-page exact runs report zero source differences."
+    state verified
+    result pass
+    method observation
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    artifact "lege-codecs/jbig2enc-rust/docs/validation/2026-11-01/README.md"
+    summary """
+        Replacement span-graph component extraction agrees with an independent pixel flood-fill oracle on 216 generated images and staged/sparse edge cases. Explicit exact ingest retains all components. Focused strict-oracle tests pass, old golden hashes are unchanged, and real 782/350-page exact runs report zero source differences.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.jbig2-070-fixture-origin-20261101/1 : evidence {
+    title "User identified thrasibule/doc_coder/test as the French PBM source and confirmed only the image, no C codec, was used. Pinned upstream2011 image1956x3186 visually matches local956x1557 resized fixture; hashes differ as expected. Upstream codec license restricts commercial use and supplies no distinct unrestricted scan grant. Origin is narrowed; scan redistribution rights remain unresolved and the fixture is not declared Apache."
+    state verified
+    result inconclusive
+    method observation
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    artifact "lege-codecs/jbig2enc-rust/docs/audits/2026-11-01/fixture-provenance.json"
+    summary """
+        User identified thrasibule/doc_coder/test as the French PBM source and confirmed only the image, no C codec, was used. Pinned upstream2011 image1956x3186 visually matches local956x1557 resized fixture; hashes differ as expected. Upstream codec license restricts commercial use and supplies no distinct unrestricted scan grant. Origin is narrowed; scan redistribution rights remain unresolved and the fixture is not declared Apache.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.jbig2-070-group-resources-20261101/1 : evidence {
+    title "Owned-page PDF group/sink API carries group index, first-page offset and per-group globals, with page/source-bitmap caps and terminal sink-error behavior tested. Caller decoder-budget checks and feasible measured-plan selection pass. On all 782 pages, groups 32/64/128/whole encode 22135580/22107587/22083670/22020242 bytes with zero differences and worker peak RSS 79060/146352/277072/1239516 KiB. Work/bitmap proxies are explicit; no device budget is claimed."
+    state verified
+    result pass
+    method observation
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    artifact "lege-codecs/jbig2enc-rust/docs/benchmarks/2026-11-01-real-corpus/whole-book-groups/summary.json"
+    summary """
+        Owned-page PDF group/sink API carries group index, first-page offset and per-group globals, with page/source-bitmap caps and terminal sink-error behavior tested. Caller decoder-budget checks and feasible measured-plan selection pass. On all 782 pages, groups 32/64/128/whole encode 22135580/22107587/22083670/22020242 bytes with zero differences and worker peak RSS 79060/146352/277072/1239516 KiB. Work/bitmap proxies are explicit; no device budget is claimed.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.jbig2-070-head-pilot-guard-20261101/1 : evidence {
+    title "Three randomized/interleaved final-source versus complete historical HEAD worker pairs on the fixed ten-page confed pilot: median encode ratio0.98583, cold0.98207, warm0.99449, with identical native/jbig2dec source-difference counts. Reviewed predictor fix changes 201362 to201482 bytes. Build/lock/source/binary identities retained. This is a local pilot guard, not whole-book or reader-device acceptance."
+    state verified
+    result pass
+    method observation
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    artifact "lege-codecs/jbig2enc-rust/docs/benchmarks/2026-11-01-real-corpus/matched-head-pilot/summary.json"
+    summary """
+        Three randomized/interleaved final-source versus complete historical HEAD worker pairs on the fixed ten-page confed pilot: median encode ratio0.98583, cold0.98207, warm0.99449, with identical native/jbig2dec source-difference counts. Reviewed predictor fix changes 201362 to201482 bytes. Build/lock/source/binary identities retained. This is a local pilot guard, not whole-book or reader-device acceptance.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.jbig2-070-inherited-test-replacement-20261101/1 : evidence {
+    title "Replaced the four component tests shared verbatim with DjVu using newly written contract tests and independent inputs. Nine component integration tests and two byte-manifest test executions pass. The original encoder hash manifest and legacy fixture bytes are unchanged; six remaining normalized overlap blocks are interfaces/initialization/short comparator expressions and are explicitly classified without a clean-room claim."
+    state verified
+    result pass
+    method command
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    command "cargo test --manifest-path lege-codecs/jbig2enc-rust/Cargo.toml --test connected_components --test encode_byte_identical --offline"
+    artifact "lege-codecs/jbig2enc-rust/docs/validation/2026-11-01/provenance-contract-tests.log"
+    summary """
+        Replaced the four component tests shared verbatim with DjVu using newly written contract tests and independent inputs. Nine component integration tests and two byte-manifest test executions pass. The original encoder hash manifest and legacy fixture bytes are unchanged; six remaining normalized overlap blocks are interfaces/initialization/short comparator expressions and are explicitly classified without a clean-room claim.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.jbig2-070-isolated-encoder-memory-20261101/1 : evidence {
+    title "Encoding ran in a separate child with incremental PBM loading/grouping and file writes, with Linux wait4 peak RSS measured before any decoder verification. Encoder peaks for32/64/128/whole-book groups on782 confed pages are81056/146512/276336/1241324 KiB; output bytes match the prior group matrix. Parent jbig2dec/Pillow verification reports zero source differences for every page/group setting. Encoded-stream SHA manifests persist; source/output streams and decoder allocations are excluded from the retained report and encoder measurement respectively."
+    state verified
+    result pass
+    method observation
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    artifact "lege-codecs/jbig2enc-rust/docs/benchmarks/2026-11-01-real-corpus/isolated-encoder-memory/results.csv"
+    summary """
+        Encoding ran in a separate child with incremental PBM loading/grouping and file writes, with Linux wait4 peak RSS measured before any decoder verification. Encoder peaks for32/64/128/whole-book groups on782 confed pages are81056/146512/276336/1241324 KiB; output bytes match the prior group matrix. Parent jbig2dec/Pillow verification reports zero source differences for every page/group setting. Encoded-stream SHA manifests persist; source/output streams and decoder allocations are excluded from the retained report and encoder measurement respectively.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.jbig2-070-legacy-scaling-20261101/1 : evidence {
+    title "Unbounded 350-page legacy shipping worker logged 52542136 ingest comparisons, 41.37 s matching, 330.14 s clustering and 20633788 decoded-global bitmap bytes before explicit interruption during verification; no completed shipping row exists. Completed grouped-32 legacy unify rows still reach about1.4 GiB RSS due to unbounded legacy discovery/cache. Source-group caps are not a total RSS promise; these are retained scaling limits, not passes."
+    state verified
+    result inconclusive
+    method observation
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    artifact "lege-codecs/jbig2enc-rust/docs/benchmarks/2026-11-01-real-corpus/text350-unbounded-stopped/symbol_shipping.log"
+    summary """
+        Unbounded 350-page legacy shipping worker logged 52542136 ingest comparisons, 41.37 s matching, 330.14 s clustering and 20633788 decoded-global bitmap bytes before explicit interruption during verification; no completed shipping row exists. Completed grouped-32 legacy unify rows still reach about1.4 GiB RSS due to unbounded legacy discovery/cache. Source-group caps are not a total RSS promise; these are retained scaling limits, not passes.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.jbig2-070-license-inventory-20261101/1 : evidence {
+    title "The original archived Rust repository survives: 95 commits and selected pre-monorepo path histories retained. Earliest component upload already describes a DjVu port; arithmetic translation is present at the archive root, with exact C/C++ revision unestablished. Inventories cover 64 production/build Rust files, 189 all-feature unfiltered-target packages and 89 repository manifests (14 declaration gaps). Package declares Apache-2.0, retains attribution and publish=false; root/app/DjVu AGPL declarations remain. Independent rights review and legacy PBM origins are unresolved."
+    state verified
+    result inconclusive
+    method observation
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    artifact "lege-codecs/jbig2enc-rust/PROVENANCE.md"
+    summary """
+        The original archived Rust repository survives: 95 commits and selected pre-monorepo path histories retained. Earliest component upload already describes a DjVu port; arithmetic translation is present at the archive root, with exact C/C++ revision unestablished. Inventories cover 64 production/build Rust files, 189 all-feature unfiltered-target packages and 89 repository manifests (14 declaration gaps). Package declares Apache-2.0, retains attribution and publish=false; root/app/DjVu AGPL declarations remain. Independent rights review and legacy PBM origins are unresolved.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.jbig2-070-measured-planner-20261101/1 : evidence {
+    title "Bounded full-stream planner measures dictionary policies, exact reuse/new symbols, family/per-instance refinement, generic residuals and explicit topology-screened lossy substitution. Family fixture: 763-byte dictionary / 1552-byte generic controls, 492 exact bytes with 24 refined instances; explicit lossy result 438 bytes with 10 refined, 14 substituted and 14 differing source pixels. Trial/comparison limits and native/jbig2dec/PDFium/Poppler checks pass."
+    state verified
+    result pass
+    method observation
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    artifact "lege-codecs/jbig2enc-rust/docs/benchmarks/2026-11-01-exact-symbols/README.md"
+    summary """
+        Bounded full-stream planner measures dictionary policies, exact reuse/new symbols, family/per-instance refinement, generic residuals and explicit topology-screened lossy substitution. Family fixture: 763-byte dictionary / 1552-byte generic controls, 492 exact bytes with 24 refined instances; explicit lossy result 438 bytes with 10 refined, 14 substituted and 14 differing source pixels. Trial/comparison limits and native/jbig2dec/PDFium/Poppler checks pass.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.jbig2-070-measured-resource-cap-20261101/1 : evidence {
+    title "An explicit81196-byte global bitmap cap derived from the measured32-page confed group footprint selects42132 decoded-global bytes and278560 output bytes, with zero source differences in both measured presets on17 mixed pages. Native retained globals equal the planner's bitmap prediction; all three external oracles pass. Uncapped exact uses1416552 bitmap bytes and272253 output bytes. This is a desktop experiment, not an adopted reader capacity/default."
+    state verified
+    result pass
+    method observation
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    artifact "lege-codecs/jbig2enc-rust/docs/benchmarks/2026-11-01-real-corpus/mixed-constrained/summary.json"
+    summary """
+        An explicit81196-byte global bitmap cap derived from the measured32-page confed group footprint selects42132 decoded-global bytes and278560 output bytes, with zero source differences in both measured presets on17 mixed pages. Native retained globals equal the planner's bitmap prediction; all three external oracles pass. Uncapped exact uses1416552 bitmap bytes and272253 output bytes. This is a desktop experiment, not an adopted reader capacity/default.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.jbig2-070-online-calibration-20261101/1 : evidence {
+    title "The bounded planner now corrects raw estimates with median errors from earlier full-stream trials, separately by policy and family/single refinement/substitution, and uses corrected predictions to prioritize trials. Exact mixed-corpus MAE drops 7191 to2374 bytes, positive predictions21 to6, without changing272253 exact output bytes. Explicit lossy selects272204 bytes with20 substituted instances and20 differing source pixels. All17 pages pass native/jbig2dec/PDFium/Poppler; actual bytes/feasibility remain authoritative."
+    state verified
+    result pass
+    method observation
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    artifact "lege-codecs/jbig2enc-rust/docs/benchmarks/2026-11-01-real-corpus/mixed-calibrated/summary.json"
+    summary """
+        The bounded planner now corrects raw estimates with median errors from earlier full-stream trials, separately by policy and family/single refinement/substitution, and uses corrected predictions to prioritize trials. Exact mixed-corpus MAE drops 7191 to2374 bytes, positive predictions21 to6, without changing272253 exact output bytes. Explicit lossy selects272204 bytes with20 substituted instances and20 differing source pixels. All17 pages pass native/jbig2dec/PDFium/Poppler; actual bytes/feasibility remain authoritative.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.jbig2-070-original-distribution-fixtures-20261101/1 : evidence {
+    title "Distributed tests now use3 original Apache-2.0 geometric PBMs, fully reproduced by a font/scan-free generator and SHA inventory. A separate40-stream baseline captured with57 historical HEAD production files verified byte-for-byte against git matches current output. Legacy2PBMs and encode_hashes.txt are unchanged; explicit ignored legacy hash gate and JBIG2_LEGACY_FIXTURES matrix pass. Cargo positive allowlist excludes both uncertain external inputs and policy audit enforces only the3 original PBMs. This resolves the crate-package fixture issue by exclusion, not a license claim for the old scan."
+    state verified
+    result pass
+    method command
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    command "python3 tools/generate_test_fixtures.py --check; historical-reference capture; current original/explicit legacy hash tests; legacy round-trip matrix"
+    artifact "lege-codecs/jbig2enc-rust/tests/fixtures/README.md"
+    summary """
+        Distributed tests now use3 original Apache-2.0 geometric PBMs, fully reproduced by a font/scan-free generator and SHA inventory. A separate40-stream baseline captured with57 historical HEAD production files verified byte-for-byte against git matches current output. Legacy2PBMs and encode_hashes.txt are unchanged; explicit ignored legacy hash gate and JBIG2_LEGACY_FIXTURES matrix pass. Cargo positive allowlist excludes both uncertain external inputs and policy audit enforces only the3 original PBMs. This resolves the crate-package fixture issue by exclusion, not a license claim for the old scan.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.jbig2-070-policy-costs-20261101/1 : evidence {
+    title "Three-page synthetic costs were all-global 881 bytes/120 source differences, shared-global 1837/115, globals+locals 964/120. Separate 350-page run tied all policies at 68581 bytes/8891 differences. No policy compression improvement is claimed. Frequency-only candidate selection is insufficient; automatic measured selection remains required."
+    state verified
+    result pass
+    method command
+    observed_at git:5ca4565f60b48a157bcbd9797c88aab7f805bacb
+    command "JBIG2DEC=/tmp/jbig2-oracles-20261101/unpacked/usr/bin/jbig2dec python3 lege-codecs/jbig2enc-rust/tools/quality_benchmark.py --output /tmp/jbig2-quality-short-policies-20261101 --pages 3 --require-oracle --modes symbol_shipping symbol_shared symbol_local"
+    artifact "lege-codecs/jbig2enc-rust/docs/benchmarks/2026-11-01-dictionary-policies/README.md"
+    summary """
+        Three-page synthetic costs were all-global 881 bytes/120 source differences, shared-global 1837/115, globals+locals 964/120. Separate 350-page run tied all policies at 68581 bytes/8891 differences. No policy compression improvement is claimed. Frequency-only candidate selection is insufficient; automatic measured selection remains required.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.jbig2-070-provenance-open-20261101/1 : evidence {
+    title "User clarified non-GPL scope is jbig2enc-rust, with accurate audit of the rest. cc.rs still explicitly describes direct GPL DjVuLibre ports; it has not been replaced and non-GPL status is unproven. Publishing disabled; historical attribution preserved and jbig2enc Apache origin noted in NOTICE. Linux default resolved metadata lists 84 packages with no missing/GPL-family license field; full source/history, target/feature, license-text and appropriate licensing review remain open. Root/application/DjVu AGPL declarations retained."
+    state verified
+    result inconclusive
+    method observation
+    observed_at git:5ca4565f60b48a157bcbd9797c88aab7f805bacb
+    artifact "lege-codecs/jbig2enc-rust/PROVENANCE.md"
+    summary """
+        User clarified non-GPL scope is jbig2enc-rust, with accurate audit of the rest. cc.rs still explicitly describes direct GPL DjVuLibre ports; it has not been replaced and non-GPL status is unproven. Publishing disabled; historical attribution preserved and jbig2enc Apache origin noted in NOTICE. Linux default resolved metadata lists 84 packages with no missing/GPL-family license field; full source/history, target/feature, license-text and appropriate licensing review remain open. Root/application/DjVu AGPL declarations retained.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.jbig2-070-provenance-package-20261101/1 : evidence {
+    title "Post-review package builds/verifies:368 files,1302674 compressed bytes,SHA14d9ee2575df884c2071c0def63787316922ed8f299af7f2e65610a9216ecb78. Only the two legacy PBMs; noPDF/pyc/papers/scratch. Cargo's existing spin0.10.0-yanked warning retained. Fmt,9Python AST syntax and scoped diff checks pass. Packaging is not license clearance; later report changes are outside this snapshot."
+    state verified
+    result pass
+    method command
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    command "cargo package --manifest-path lege-codecs/jbig2enc-rust/Cargo.toml --allow-dirty --offline"
+    artifact "lege-codecs/jbig2enc-rust/docs/validation/2026-11-01/provenance-package-inspection.json"
+    summary """
+        Post-review package builds/verifies:368 files,1302674 compressed bytes,SHA14d9ee2575df884c2071c0def63787316922ed8f299af7f2e65610a9216ecb78. Only the two legacy PBMs; noPDF/pyc/papers/scratch. Cargo's existing spin0.10.0-yanked warning retained. Fmt,9Python AST syntax and scoped diff checks pass. Packaging is not license clearance; later report changes are outside this snapshot.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.jbig2-070-real-corpus-20261101/1 : evidence {
+    title "Pinned local PDF specifications and preparation hashes cover the user's 782-page confed scan, fixed pages 31-380 and a 17-page math/Chinese-Latin supplement (mixed/vector content accurately identified). Shipping/fixed-threshold grouped 350-page modes report bytes, time, RSS, actual differences and per-page cold/warm latency. Exact whole-book groups have zero native/jbig2dec differences; all mixed modes pass the three external oracles after the predictor fix."
+    state verified
+    result pass
+    method observation
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    artifact "lege-codecs/jbig2enc-rust/docs/benchmarks/2026-11-01-real-corpus/README.md"
+    summary """
+        Pinned local PDF specifications and preparation hashes cover the user's 782-page confed scan, fixed pages 31-380 and a 17-page math/Chinese-Latin supplement (mixed/vector content accurately identified). Shipping/fixed-threshold grouped 350-page modes report bytes, time, RSS, actual differences and per-page cold/warm latency. Exact whole-book groups have zero native/jbig2dec differences; all mixed modes pass the three external oracles after the predictor fix.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.jbig2-070-refinement-portability-20261101/1 : evidence {
+    title "The retained mixed-corpus failure had 9870 native/PDFium differences on one legacy symbol page. Explicitly normalizing out-of-reference-height vertical predictors while recoding the same target resolves the disagreement. Synthetic tiny-reference regression fails on historical HEAD and passes currently for both signs and i32 extremes; strict exact/lossy/golden tests pass without regenerating hashes."
+    state verified
+    result pass
+    method observation
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    artifact "lege-codecs/jbig2enc-rust/docs/validation/2026-11-01/offset-boundaries.log"
+    summary """
+        The retained mixed-corpus failure had 9870 native/PDFium differences on one legacy symbol page. Explicitly normalizing out-of-reference-height vertical predictors while recoding the same target resolves the disagreement. Synthetic tiny-reference regression fails on historical HEAD and passes currently for both signs and i32 extremes; strict exact/lossy/golden tests pass without regenerating hashes.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.jbig2-070-residual-packing-20261101/1 : evidence {
+    title "Five residual tests passed. Sparse 4097x4097 residuals shrank from 128 to 92 bytes including headers with native and jbig2dec pixel equality. Dense layouts stayed at 58 and 241 bytes, with trial CPU overhead. Empty/overlapping instances, 64-region cap, four-byte page association and page-builder segment order exercised. Packing remains explicit and off in legacy presets."
+    state verified
+    result pass
+    method command
+    observed_at git:5ca4565f60b48a157bcbd9797c88aab7f805bacb
+    command "JBIG2DEC=/tmp/jbig2-oracles-20261101/unpacked/usr/bin/jbig2dec cargo test --manifest-path lege-codecs/jbig2enc-rust/Cargo.toml --offline --release --lib residual::tests -- --nocapture"
+    artifact "lege-codecs/jbig2enc-rust/src/encode/document/symbol/residual.rs"
+    summary """
+        Five residual tests passed. Sparse 4097x4097 residuals shrank from 128 to 92 bytes including headers with native and jbig2dec pixel equality. Dense layouts stayed at 58 and 241 bytes, with trial CPU overhead. Empty/overlapping instances, 64-region cap, four-byte page association and page-builder segment order exercised. Packing remains explicit and off in legacy presets.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.jbig2-070-synthetic-baseline-20261101/1 : evidence {
+    title "Six release configurations encoded 350 synthetic pages. Native and jbig2dec 0.20 agreed on every decoded pixel. Generic lossless had zero source differences; shipping symbol had 8891, unify 26983 and refinement-enabled text 8891. Input/source hashes, timing and isolated-worker peak RSS retained; this is not representative scanned-book evidence."
+    state verified
+    result pass
+    method command
+    observed_at git:5ca4565f60b48a157bcbd9797c88aab7f805bacb
+    command "JBIG2DEC=/tmp/jbig2-oracles-20261101/unpacked/usr/bin/jbig2dec python3 lege-codecs/jbig2enc-rust/tools/quality_benchmark.py --output /tmp/jbig2-quality-final-baseline-20261101 --pages 350 --require-oracle"
+    artifact "lege-codecs/jbig2enc-rust/docs/benchmarks/2026-11-01-baseline/results.csv"
+    summary """
+        Six release configurations encoded 350 synthetic pages. Native and jbig2dec 0.20 agreed on every decoded pixel. Generic lossless had zero source differences; shipping symbol had 8891, unify 26983 and refinement-enabled text 8891. Input/source hashes, timing and isolated-worker peak RSS retained; this is not representative scanned-book evidence.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.jbig2-070-unpacked-distribution-tests-20261101/1 : evidence {
+    title "Fresh390-file Cargo archive SHA63ebe21b6a61bb6bb8dbf84676726fb0c828ef809097141b214d0301b02e08f4 builds/verifies and contains only3 originalPBMs, with both legacy inputs absent. Its generator check and34 functional binaries pass257 tests/7intentional ignores/2template1-prefix filters; same counts in checkout. The legacy hash gate was separately executed and passed. Original corpus generic/exact/measured-exact847/468/433bytes has zero source differences in native,jbig2dec,PDFium,Poppler. Existing Poppler warnings and old spin-yanked warning retained; no source-rights clearance or unqualified all-oracle claim."
+    state verified
+    result pass
+    method command
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    command "cargo package --allow-dirty --offline; fresh archive extraction; generator --check; cargo test --offline --features parallel --lib --tests -- --skip grtemplate1_tpgron (unpacked source)"
+    artifact "lege-codecs/jbig2enc-rust/docs/validation/2026-11-01/original-fixture-unpacked-tests.json"
+    summary """
+        Fresh390-file Cargo archive SHA63ebe21b6a61bb6bb8dbf84676726fb0c828ef809097141b214d0301b02e08f4 builds/verifies and contains only3 originalPBMs, with both legacy inputs absent. Its generator check and34 functional binaries pass257 tests/7intentional ignores/2template1-prefix filters; same counts in checkout. The legacy hash gate was separately executed and passed. Original corpus generic/exact/measured-exact847/468/433bytes has zero source differences in native,jbig2dec,PDFium,Poppler. Existing Poppler warnings and old spin-yanked warning retained; no source-rights clearance or unqualified all-oracle claim.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.jbig2-070-verification-20261101/1 : evidence {
+    title "Focused strict-oracle run: 30 passed, one benchmark ignored; subsequent offset boundary/exact/golden tests pass. Parallel lib/integration sweep: 256 passed, 5 ignored, 2 prefix-filtered names; known GRTEMPLATE1/TPGRON jbig2dec 0.20 disagreement reproduced on historical HEAD, with separate PDFium control passing. Decode-only:59 passed; encode-only and CLI/parallel/profiling checks, fmt, Python syntax and local package verification pass. Not an unqualified all-target/all-oracle pass."
+    state verified
+    result pass
+    method observation
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    artifact "lege-codecs/jbig2enc-rust/docs/validation/2026-11-01/README.md"
+    summary """
+        Focused strict-oracle run: 30 passed, one benchmark ignored; subsequent offset boundary/exact/golden tests pass. Parallel lib/integration sweep: 256 passed, 5 ignored, 2 prefix-filtered names; known GRTEMPLATE1/TPGRON jbig2dec 0.20 disagreement reproduced on historical HEAD, with separate PDFium control passing. Decode-only:59 passed; encode-only and CLI/parallel/profiling checks, fmt, Python syntax and local package verification pass. Not an unqualified all-target/all-oracle pass.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.jbig2-cloud-index-smoke-20261102/1 : evidence {
+    title "Staged-files-only standalone codec checkout passes261tests across37binaries,8intentional ignores/2knownprefixfilters with jbig2dec0.20; no ignored local corpus/legacyPBMs copied. Three original MIT PBMs and retained logs are explicitly unignored for cloud transfer. All reviewed project changes and exact-byte spec relocations staged; no raw PDF/oracle/build/scratch artifacts, credential marker scan clear. Portable AKR handoff exported; proposed cloud README/preflight work records capability-first presentation and conservative optimization policy. No push/publication."
+    state verified
+    result pass
+    method command
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    command "CARGO_TARGET_DIR=/home/dk/rust-projects/Lege-ecosystem/lege-codecs/jbig2enc-rust/target JBIG2DEC=/tmp/jbig2-oracle-20261102/usr/bin/jbig2dec LD_LIBRARY_PATH=/tmp/jbig2-oracle-20261102/usr/lib/x86_64-linux-gnu cargo test --manifest-path /tmp/lege-jbig2-cloud-check-3gg55i3g/lege-codecs/jbig2enc-rust/Cargo.toml --offline --features parallel --lib --tests -- --skip grtemplate1_tpgron"
+    artifact "lege-codecs/jbig2enc-rust/docs/validation/2026-11-02-cloud-handoff/summary.json"
+    summary """
+        Staged-files-only standalone codec checkout passes261tests across37binaries,8intentional ignores/2knownprefixfilters with jbig2dec0.20; no ignored local corpus/legacyPBMs copied. Three original MIT PBMs and retained logs are explicitly unignored for cloud transfer. All reviewed project changes and exact-byte spec relocations staged; no raw PDF/oracle/build/scratch artifacts, credential marker scan clear. Portable AKR handoff exported; proposed cloud README/preflight work records capability-first presentation and conservative optimization policy. No push/publication.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.jbig2-crates-release-notes-20261102/1 : evidence {
+    title "Checked Cargo's current publish metadata and README docs plus official registry index and RFC status: no dedicated per-version release-note/changelog field; RFC3779 changelog URL remains open/unmerged, predecessor2129 closed unmerged. README is uploaded/rendered by crates.io. Latest indexed jbig2enc-rust version observed0.5.4. Added explicitly unreleased0.6.0 CHANGELOG, concise README since0.5.4 summary and Cargo include entry; package confirms inclusion. Optional GitHub Release may reuse the text, but nothing was published/tagged/committed."
+    state verified
+    result pass
+    method observation
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    artifact "lege-codecs/jbig2enc-rust/docs/CRATES-IO-RELEASE-NOTES.md"
+    summary """
+        Checked Cargo's current publish metadata and README docs plus official registry index and RFC status: no dedicated per-version release-note/changelog field; RFC3779 changelog URL remains open/unmerged, predecessor2129 closed unmerged. README is uploaded/rendered by crates.io. Latest indexed jbig2enc-rust version observed0.5.4. Added explicitly unreleased0.6.0 CHANGELOG, concise README since0.5.4 summary and Cargo include entry; package confirms inclusion. Optional GitHub Release may reuse the text, but nothing was published/tagged/committed.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.jbig2-generic-blank-batching-20261102/1 : evidence {
+    title "Retained exact zero-word MPS batching plus delayed transition-field loads. Paired new/previous Rust medians: mixed17 0.499253, scanned text350 0.584108, noise 0.929699; new/C 0.466790, 0.561024, 1.068131. All 367 real payloads plus dense/noise controls are raw-byte unchanged and match pinned Apache C after only legacy FF padding normalization. Fresh Ghostscript rasters have new identities, original PDF selections/hashes unchanged; input preparation excluded, coding/init/finalize/copy/drop included. Powersave/unlocked frequency and all noisy pairs retained; dense aggregate inconclusive. Lazy-load ablation seven pairs median 0.987279 versus batching alone; no-store ablation negligible/noisy and reverted. No size, API, license, dependency or thread changes."
+    state verified
+    result pass
+    method command
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    command "python3 lege-codecs/jbig2enc-rust/tools/compare_generic_kernels.py --corpus .agent/scratch/jbig2-perf-followup/text350 --worker .agent/scratch/jbig2-perf-followup/final-worker --baseline-worker .agent/scratch/jbig2-perf-followup/baseline-worker --reference .agent/scratch/jbig2-perf-followup/reference/runner --output .agent/scratch/jbig2-perf-followup/final350 --rounds 2 --pairs 3"
+    artifact "lege-codecs/jbig2enc-rust/docs/benchmarks/2026-11-02-generic-perf/aggregate.json"
+    summary """
+        Retained exact zero-word MPS batching plus delayed transition-field loads. Paired new/previous Rust medians: mixed17 0.499253, scanned text350 0.584108, noise 0.929699; new/C 0.466790, 0.561024, 1.068131. All 367 real payloads plus dense/noise controls are raw-byte unchanged and match pinned Apache C after only legacy FF padding normalization. Fresh Ghostscript rasters have new identities, original PDF selections/hashes unchanged; input preparation excluded, coding/init/finalize/copy/drop included. Powersave/unlocked frequency and all noisy pairs retained; dense aggregate inconclusive. Lazy-load ablation seven pairs median 0.987279 versus batching alone; no-store ablation negligible/noisy and reverted. No size, API, license, dependency or thread changes.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.jbig2-generic-c-parity-20261102/1 : evidence {
+    title "Pinned single-CPU template0 packed generic kernel, TPGDON off: final median paired Rust/C time ratios0.943026 mixed17 and0.972651 text350; all367 raw Rust payloads unchanged from pre-speed worker and equal to C after only known legacy FF padding normalization. Mixed17 baseline ratio1.995465. Native-width16-bit-semantics range storage gives largest improvement; word windows/combined context, split registers and uncommon renorm path retained; sloweru8context reverted. File size unchanged. All timings/source/input/worker hashes and noisy baseline350 results retained; kernel parity, not whole PDF or reader claim."
+    state verified
+    result pass
+    method command
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    command "compare_generic_kernels.py --corpus <fixed mixed17/text350> --worker <pre-speed/final Rust worker> --reference <pinned C8673b046 worker> --rounds 6/2 --pairs 5"
+    artifact "lege-codecs/jbig2enc-rust/docs/GENERIC-SPEED.md"
+    summary """
+        Pinned single-CPU template0 packed generic kernel, TPGDON off: final median paired Rust/C time ratios0.943026 mixed17 and0.972651 text350; all367 raw Rust payloads unchanged from pre-speed worker and equal to C after only known legacy FF padding normalization. Mixed17 baseline ratio1.995465. Native-width16-bit-semantics range storage gives largest improvement; word windows/combined context, split registers and uncommon renorm path retained; sloweru8context reverted. File size unchanged. All timings/source/input/worker hashes and noisy baseline350 results retained; kernel parity, not whole PDF or reader claim.
+        """
+    author "dk"
+}
+
 record lege-ecosystem.evidence.jbig2-generic-default-costs-little-20260906/1 : evidence {
     title "Generic JBIG2 costs 0.6% over sym-unify on an 886-page scan"
     state verified
@@ -1069,6 +1514,20 @@ record lege-ecosystem.evidence.jbig2-generic-default-costs-little-20260906/1 : e
     author "GitHub Uploader"
 }
 
+record lege-ecosystem.evidence.jbig2-generic-followup-regression-20261102/1 : evidence {
+    title "261 tests pass across 37 binaries, eight intentional ignores and two existing template-one-prefix filters, independent jbig2dec 0.20 configured. No fresh PDFium/Poppler claim; decoder unchanged. New million-pixel blank/sparse oracle and odd-width/dirty padding cases pass; release context/40-stream hashes/termination seven pass, one ignore; explicit old hash gate one pass; encode-only four pass, one ignore. fmt, Python AST, scoped whitespace checks pass. Cargo package/extracted build verifies: 744 files, 1844152 bytes, SHA60b045077a61d2a5f934882ecae5cba76820e880d0870732885dd74a4fbbec43; only three original PBMs, no raw PDFs/rasters/external C/oracles/perf.data. Existing spin0.10 yanked warning remains. No publication. Later docs/ledger edits outside archive digest."
+    state verified
+    result pass
+    method command
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    command "JBIG2DEC=/tmp/jbig2-oracle-20261102/usr/bin/jbig2dec LD_LIBRARY_PATH=/tmp/jbig2-oracle-20261102/usr/lib/x86_64-linux-gnu cargo test --manifest-path lege-codecs/jbig2enc-rust/Cargo.toml --offline --features parallel --lib --tests -- --skip grtemplate1_tpgron"
+    artifact "lege-codecs/jbig2enc-rust/docs/validation/2026-11-02-generic-perf/summary.json"
+    summary """
+        261 tests pass across 37 binaries, eight intentional ignores and two existing template-one-prefix filters, independent jbig2dec 0.20 configured. No fresh PDFium/Poppler claim; decoder unchanged. New million-pixel blank/sparse oracle and odd-width/dirty padding cases pass; release context/40-stream hashes/termination seven pass, one ignore; explicit old hash gate one pass; encode-only four pass, one ignore. fmt, Python AST, scoped whitespace checks pass. Cargo package/extracted build verifies: 744 files, 1844152 bytes, SHA60b045077a61d2a5f934882ecae5cba76820e880d0870732885dd74a4fbbec43; only three original PBMs, no raw PDFs/rasters/external C/oracles/perf.data. Existing spin0.10 yanked warning remains. No publication. Later docs/ledger edits outside archive digest.
+        """
+    author "dk"
+}
+
 record lege-ecosystem.evidence.jbig2-generic-gernet-75p/1 : evidence {
     title "JBIG2 generic 75-page Gernet control run"
     state verified
@@ -1079,6 +1538,61 @@ record lege-ecosystem.evidence.jbig2-generic-gernet-75p/1 : evidence {
     summary """
         JBIG2 generic --no-symbol processed the same 75 pages successfully into a valid control PDF in 9.07 s wall time.
         """
+}
+
+record lege-ecosystem.evidence.jbig2-generic-hardware-profile-20261102/1 : evidence {
+    title "Hardware perf is available at paranoid=0. Fixed mixed17 whole-worker user cycles fall from 22.620B to 11.314B and instructions from 94.086B to 34.888B; counters include one warm-up/input loading. Separate 997Hz samples have zero lost samples: pixel-loop share 87.92% before, 73.75% after; transitions 10.40%/21.96%, byte output 1.52%/3.75%. Blank word eligibility covers 69.75% of mixed pixels. Noise three-repeat cycles improve 7.1% with <0.21% reported variation. Sampling is separate from timing, not exact instruction latency."
+    state verified
+    result pass
+    method command
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    command "env GENERIC_INPUT=/home/dk/rust-projects/Lege-ecosystem/.agent/scratch/jbig2-perf-followup/baseline-comparison/packed-input.bin GENERIC_ROUNDS=40 perf stat -e cpu_core/cycles/u,cpu_core/instructions/u,cpu_core/branches/u,cpu_core/branch-misses/u -o .agent/scratch/jbig2-perf-followup/final-perf-stat.txt -- taskset -c 0 .agent/scratch/jbig2-perf-followup/final-worker --ignored --exact generic_kernel_worker --nocapture"
+    artifact "lege-codecs/jbig2enc-rust/docs/GENERIC-PERF-FOLLOWUP.md"
+    summary """
+        Hardware perf is available at paranoid=0. Fixed mixed17 whole-worker user cycles fall from 22.620B to 11.314B and instructions from 94.086B to 34.888B; counters include one warm-up/input loading. Separate 997Hz samples have zero lost samples: pixel-loop share 87.92% before, 73.75% after; transitions 10.40%/21.96%, byte output 1.52%/3.75%. Blank word eligibility covers 69.75% of mixed pixels. Noise three-repeat cycles improve 7.1% with <0.21% reported variation. Sampling is separate from timing, not exact instruction latency.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.jbig2-mit-generic-verification-20261102/1 : evidence {
+    title "Checkout and verified unpacked archive each260passing/8intentionalignore/2knownprefixfiltered tests across37binaries with independentjbig2dec0.20. Release scalar context/unchanged original40-stream hashes/termination6pass1ignore; explicit oldhash gate1pass; encode-only3pass1ignore andcompilepass; decode-only59pass. Fixturegeneratorcheck,fmt,PythonAST,scopedwhitespace pass. Current PDFium/Poppler oracles unavailable after temporary-directory loss; no new all-PDF-oracle pass claimed. Existing template1/TPGRON jbig2dec disagreement retained, decoder unchanged."
+    state verified
+    result pass
+    method command
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    command "JBIG2DEC=<external0.20> cargo test --offline --features parallel --lib --tests -- --skip grtemplate1_tpgron; repeat on verified Cargo extraction; release scalar/hash/termination; explicit legacy hash; reduced feature checks"
+    artifact "lege-codecs/jbig2enc-rust/docs/validation/2026-11-02-mit-generic-speed/summary.json"
+    summary """
+        Checkout and verified unpacked archive each260passing/8intentionalignore/2knownprefixfiltered tests across37binaries with independentjbig2dec0.20. Release scalar context/unchanged original40-stream hashes/termination6pass1ignore; explicit oldhash gate1pass; encode-only3pass1ignore andcompilepass; decode-only59pass. Fixturegeneratorcheck,fmt,PythonAST,scopedwhitespace pass. Current PDFium/Poppler oracles unavailable after temporary-directory loss; no new all-PDF-oracle pass claimed. Existing template1/TPGRON jbig2dec disagreement retained, decoder unchanged.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.jbig2-mit-package-audit-20261102/1 : evidence {
+    title "User-directed MIT project/originalfixtures with retained Apache arithmetic notices; Cargo MIT AND Apache-2.0, publish=false removed; no publication. Verified569-file archive1727730bytes SHA3d890cb543e9257bb90523590f1989438e166b4beefe1a3e822f969e0ec326f4: only3originalPBMs, ownMIT C++benchmarkharness, noexternalCsource/PDF/oracle/papers. Refreshed130source,189dependency,89monorepomanifest inventory;30GNUmarkers classified0unclassified;14metadata gaps andoptionalCDDL remain disclosed; root/app/DjVuAGPL unchanged. Functional native/jbig2dec and legacy byte verification recorded separately; existing spin0.10 yanked warning retained. Later documentation/ledger edits outside archive digest."
+    state verified
+    result pass
+    method command
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    command "cargo metadata --offline --all-features --format-version1; audit_provenance.py --scan-license-markers; cargo package --offline --allow-dirty; inspect Cargo archive"
+    artifact "lege-codecs/jbig2enc-rust/docs/validation/2026-11-02-mit-generic-speed/package-inspection.json"
+    summary """
+        User-directed MIT project/originalfixtures with retained Apache arithmetic notices; Cargo MIT AND Apache-2.0, publish=false removed; no publication. Verified569-file archive1727730bytes SHA3d890cb543e9257bb90523590f1989438e166b4beefe1a3e822f969e0ec326f4: only3originalPBMs, ownMIT C++benchmarkharness, noexternalCsource/PDF/oracle/papers. Refreshed130source,189dependency,89monorepomanifest inventory;30GNUmarkers classified0unclassified;14metadata gaps andoptionalCDDL remain disclosed; root/app/DjVuAGPL unchanged. Functional native/jbig2dec and legacy byte verification recorded separately; existing spin0.10 yanked warning retained. Later documentation/ledger edits outside archive digest.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.jbig2-user-license-disposition-20261101/1 : evidence {
+    title "User explicitly accepted removal/replacement of DjVu-derived component bodies as resolving the GPL issue and directed MIT licensing and generic speed work. Manifest now MIT AND Apache-2.0, retains Apache arithmetic notices, removes publish=false; project/original fixtures MIT, root/application/DjVu AGPL unchanged. No publication occurred."
+    state verified
+    result pass
+    method observation
+    observed_at git:95b571373a37c199ce92e0ce9c80d7c8a5ff6464
+    artifact "lege-codecs/jbig2enc-rust/PROVENANCE.md"
+    summary """
+        User explicitly accepted removal/replacement of DjVu-derived component bodies as resolving the GPL issue and directed MIT licensing and generic speed work. Manifest now MIT AND Apache-2.0, retains Apache arithmetic notices, removes publish=false; project/original fixtures MIT, root/application/DjVu AGPL unchanged. No publication occurred.
+        """
+    author "dk"
 }
 
 record lege-ecosystem.evidence.jp2-native-dims-sniff-tests/1 : evidence {
@@ -2110,6 +2624,123 @@ record lege-ecosystem.evidence.rtx4060-vulkan-visibility/1 : evidence {
     summary """
         nvidia-smi saw the RTX 4060, while wgpu enumerated only Intel Iris Xe and llvmpipe. Vulkan loader diagnostics showed the NVIDIA ICD could not load libGLX_nvidia.so.0 because only an i386 library was installed.
         """
+}
+
+record lege-ecosystem.evidence.runtime-lifecycles-audit-20261101/1 : evidence {
+    title "Inspected the implemented owners/enums and call sites against all 17 review candidates and recorded each disposition, test coverage, preserved scheduler/modal designs, legacy settings compatibility, two Rust API changes and Linux-only verification limits in the implementation audit."
+    state verified
+    result pass
+    method observation
+    observed_at git:5ca4565f60b48a157bcbd9797c88aab7f805bacb
+    artifact "dev-notes/implicit-state-machines-implementation-20261101.md"
+    summary """
+        Inspected the implemented owners/enums and call sites against all 17 review candidates and recorded each disposition, test coverage, preserved scheduler/modal designs, legacy settings compatibility, two Rust API changes and Linux-only verification limits in the implementation audit.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.runtime-lifecycles-check-20261101/1 : evidence {
+    title "All-target checking completed successfully for the processor, GUI and renderer FFI consumer in the current working tree."
+    state verified
+    result pass
+    method command
+    observed_at git:5ca4565f60b48a157bcbd9797c88aab7f805bacb
+    command "CARGO_TARGET_DIR=/tmp/lege-lifecycle-target CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 CARGO_INCREMENTAL=0 cargo check -p lege -p lege-gui-liminalui -p lege-render-ffi --all-targets --offline"
+    artifact "dev-notes/implicit-state-machines-implementation-20261101.md"
+    summary """
+        All-target checking completed successfully for the processor, GUI and renderer FFI consumer in the current working tree.
+        Capture "/tmp/lege-lifecycle-check.log": 962 bytes; sha256:e88974b1528daa2279e1a2675e401f911c8706ac4ae8b7dba63e924e708e90f9 (identity only; raw capture is not a retained artifact).
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.runtime-lifecycles-format-20261101/1 : evidence {
+    title "Rustfmt checking passed for all 21 changed Rust source/test files, and scoped git diff --check reported no whitespace errors."
+    state verified
+    result pass
+    method command
+    observed_at git:5ca4565f60b48a157bcbd9797c88aab7f805bacb
+    command "set -e\nrustfmt --check --edition 2024 lege-pdf/render/crates/pdf-content/src/interpret.rs lege-pdf/render/crates/pdf-content/src/state.rs lege-pdf/render/crates/pdf-content/tests/stream_scope_tests.rs lege-pdf/render/crates/pdf-render-api/src/lib.rs lege-pdf/render/crates/pdf-render-scheduler/src/lib.rs lege-pdf/render/crates/pdf-render-scheduler/tests/pipeline.rs lege-pdf/render/crates/pdf-render-wgpu/src/lib.rs lege-process/core/progress.rs lege-process/core/runtime_stats.rs lege-process/pipeline/helper_functions.rs lege-process/pipeline/inference.rs lege-process/pipeline/pdf_tokio_pipeline.rs lege-process/pipeline/djvu_pipeline.rs lege-process/pipeline/reflow_pipeline.rs lege-process/pipeline/epub_pipeline.rs lege-process/GUI/liminalUI/src/app.rs lege-process/GUI/liminalUI/src/models.rs lege-process/GUI/liminalUI/src/worker_process.rs lege-process/GUI/liminalUI/src/backend.rs lege-process/GUI/liminalUI/src/appearance.rs lege-process/GUI/liminalUI/src/gui_text.rs\ngit diff --check -- lege-pdf/render lege-process dev-notes/implicit-state-machines-implementation-20261101.md"
+    artifact "dev-notes/implicit-state-machines-implementation-20261101.md"
+    summary """
+        Rustfmt checking passed for all 21 changed Rust source/test files, and scoped git diff --check reported no whitespace errors.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.runtime-lifecycles-gui-de-20261101/1 : evidence {
+    title "The German GUI with debug logging reported 68 passed and 0 failed; localized schema/interaction/lifecycle tests ran, with the three explicit-input worker smoke tests run separately."
+    state verified
+    result pass
+    method command
+    observed_at git:5ca4565f60b48a157bcbd9797c88aab7f805bacb
+    command "cargo test -p lege-gui-liminalui --lib --features german,debug-logging --offline --target-dir /tmp/lege-lifecycle-target --config profile.dev.debug=0 --config profile.test.debug=0 --config profile.dev.incremental=false"
+    artifact "dev-notes/implicit-state-machines-implementation-20261101.md"
+    summary """
+        The German GUI with debug logging reported 68 passed and 0 failed; localized schema/interaction/lifecycle tests ran, with the three explicit-input worker smoke tests run separately.
+        Capture "/tmp/lege-gui-de-final-tests.log": 6382 bytes; sha256:dfd98118a67719b0a167bc78430e49edbea08ec3c43f3e9333a5d6a934739665 (identity only; raw capture is not a retained artifact).
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.runtime-lifecycles-gui-en-20261101/1 : evidence {
+    title "The English GUI with debug logging reported 68 passed and 0 failed, including native child lifecycle/probe fixtures, batch/input/editor/theme tests and 512 normalization/serialization combinations; its three explicit-input worker smoke tests were run separately."
+    state verified
+    result pass
+    method command
+    observed_at git:5ca4565f60b48a157bcbd9797c88aab7f805bacb
+    command "cargo test -p lege-gui-liminalui --lib --features debug-logging --offline --target-dir /tmp/lege-lifecycle-target --config profile.dev.debug=0 --config profile.test.debug=0 --config profile.dev.incremental=false"
+    artifact "dev-notes/implicit-state-machines-implementation-20261101.md"
+    summary """
+        The English GUI with debug logging reported 68 passed and 0 failed, including native child lifecycle/probe fixtures, batch/input/editor/theme tests and 512 normalization/serialization combinations; its three explicit-input worker smoke tests were run separately.
+        Capture "/tmp/lege-gui-en-final-tests.log": 6382 bytes; sha256:b5ddf6a729bf99c3bfa49a2fb26f7d8229d96725b82bef780736513aa7bea558 (identity only; raw capture is not a retained artifact).
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.runtime-lifecycles-processor-20261101/1 : evidence {
+    title "The current working-tree default-feature processor library reported 385 passed, 0 failed and 1 corpus-dependent ignored test; executed regressions include writer commit/cancel ordering, stage ownership and shutdown, inference leases, all six prepared-base variants and progress phases."
+    state verified
+    result pass
+    method command
+    observed_at git:5ca4565f60b48a157bcbd9797c88aab7f805bacb
+    command "CARGO_TARGET_DIR=/tmp/lege-lifecycle-target CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 CARGO_INCREMENTAL=0 cargo test -p lege --lib --offline"
+    artifact "dev-notes/implicit-state-machines-implementation-20261101.md"
+    summary """
+        The current working-tree default-feature processor library reported 385 passed, 0 failed and 1 corpus-dependent ignored test; executed regressions include writer commit/cancel ordering, stage ownership and shutdown, inference leases, all six prepared-base variants and progress phases.
+        Capture "/tmp/lege-process-default-tests.log": 33012 bytes; sha256:2778a89d5e730454d59dcb8a8e475d36ba162f7f7f8dc53a7e147f62abdafe72 (identity only; raw capture is not a retained artifact).
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.runtime-lifecycles-renderer-20261101/1 : evidence {
+    title "The current working-tree renderer/content/API/scheduler/CPU/WGPU/chaos suites reported 451 passed, 0 failed and 0 ignored; this includes six new nested-stream regressions, linked cancellation, ticket polling and GPU quarantine."
+    state verified
+    result pass
+    method command
+    observed_at git:5ca4565f60b48a157bcbd9797c88aab7f805bacb
+    command "CARGO_TARGET_DIR=/tmp/lege-lifecycle-target CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 CARGO_INCREMENTAL=0 cargo test -p pdf-content -p pdf-render-api -p pdf-render-scheduler -p pdf-render-cpu -p pdf-render-wgpu -p pdf-chaos-tests --offline"
+    artifact "dev-notes/implicit-state-machines-implementation-20261101.md"
+    summary """
+        The current working-tree renderer/content/API/scheduler/CPU/WGPU/chaos suites reported 451 passed, 0 failed and 0 ignored; this includes six new nested-stream regressions, linked cancellation, ticket polling and GPU quarantine.
+        Capture "/tmp/lege-render-final-tests.log": 38386 bytes; sha256:a5d2faebf5379fc8b199dd6581a12dc9591c57d02cb4c21eef77df2c47a507d7 (identity only; raw capture is not a retained artifact).
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.runtime-lifecycles-worker-smoke-20261101/1 : evidence {
+    title "Against the rebuilt default-feature CLI and a generated four-page PDF, preservation, immediate cancellation and two-file batch smoke tests all passed; successful output contained PDF/JPX/JBIG2 streams, queue states settled and application data was isolated under /tmp."
+    state verified
+    result pass
+    method command
+    observed_at git:5ca4565f60b48a157bcbd9797c88aab7f805bacb
+    command "CARGO_TARGET_DIR=/tmp/lege-lifecycle-target CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 CARGO_INCREMENTAL=0 XDG_DATA_HOME=/tmp/lege-lifecycle-smoke/appdata LEGE_GUI_SMOKE_INPUT=/tmp/lege-lifecycle-smoke/input.pdf LEGE_GUI_SMOKE_OUTPUT=/tmp/lege-lifecycle-smoke/output PATH=/tmp/lege-lifecycle-target/debug:$PATH cargo test -p lege-gui-liminalui --lib real_worker_smoke --offline -- --ignored --test-threads=1"
+    artifact "dev-notes/implicit-state-machines-implementation-20261101.md"
+    summary """
+        Against the rebuilt default-feature CLI and a generated four-page PDF, preservation, immediate cancellation and two-file batch smoke tests all passed; successful output contained PDF/JPX/JBIG2 streams, queue states settled and application data was isolated under /tmp.
+        Capture "/tmp/lege-real-worker-smoke.log": 539 bytes; sha256:5887d49e2a4be2721d4ff065475a703b8a5a0974645778af70f2fc14ce5adce1 (identity only; raw capture is not a retained artifact).
+        """
+    author "dk"
 }
 
 record lege-ecosystem.evidence.sdk-isolated-cold-tensorrt-package-smoke-20260815/1 : evidence {

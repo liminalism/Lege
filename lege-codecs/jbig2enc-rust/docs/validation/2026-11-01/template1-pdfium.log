@@ -1,0 +1,9 @@
+   Compiling jbig2enc-rust v0.6.0 (/home/dk/rust-projects/Lege-ecosystem/lege-codecs/jbig2enc-rust)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.33s
+     Running tests/decode_refine_templates.rs (target/debug/deps/decode_refine_templates-7aeba0d45d055ccc)
+
+running 1 test
+test grtemplate1_tpgron_pdfium_control ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.22s
+

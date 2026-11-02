@@ -1,0 +1,11 @@
+{
+  "scope": "One candidate per hypothesis, rejected; previous release-candidate arith.rs restored byte-for-byte. User says existing partial system load cannot be changed; no load/governor changes made.",
+  "loadavg_after_probes": "8.12 4.44 3.26 11/1588 3",
+  "governor": "powersave",
+  "source_sha256": {
+    "baseline": "a8fb90c2b0e3884d6f82190141765503dd9d619c766a4cc0d370fcae5514d4b6",
+    "cache": "a1761b4497f0601aa833e44c99112110c7429749c998cb792b0b866a1e753b6e",
+    "renorm": "a0c87367bd41725519ab6f70f17e77fc13939e3f71b6775408ce18420899e538"
+  },
+  "final_arith_sha256": "a8fb90c2b0e3884d6f82190141765503dd9d619c766a4cc0d370fcae5514d4b6"
+}

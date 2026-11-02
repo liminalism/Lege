@@ -1,0 +1,14 @@
+{
+  "command": "cargo test --offline --features parallel --lib --tests -- --skip grtemplate1_tpgron",
+  "source": "freshly extracted Cargo .crate, not checkout",
+  "counts": {
+    "passed": 257,
+    "ignored": 7,
+    "filtered": 2
+  },
+  "test_binaries": 34,
+  "legacy_pbms_absent": true,
+  "generated_fixture_check": "pass",
+  "oracles": "jbig2dec0.20, Poppler26.01.0 and PDFium156.0.8076.0 environment configured; strict PDF-oracle flag set",
+  "exception": "Two template1/TPGRON-prefixed names filtered as documented; independent PDFium control was tested separately at the earlier checkpoint. Legacy hash test explicitly ignored by default and separately run in the checkout. No unqualified all-oracle pass claimed."
+}

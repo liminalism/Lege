@@ -1,0 +1,8 @@
+
+running 1 test
+QUALITY_MEMORY_GROUP	0	first=0	pages=782	source_bitmap_bytes=230612012
+QUALITY_MEMORY_RESULT	exact_groupwhole	782	22020242
+test quality_encode_only_worker ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 17.61s
+

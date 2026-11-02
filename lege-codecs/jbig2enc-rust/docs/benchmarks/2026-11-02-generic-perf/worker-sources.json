@@ -1,0 +1,13 @@
+{
+  "head": "95b571373a37c199ce92e0ce9c80d7c8a5ff6464",
+  "baseline_arith_sha256": "6fa289ac7e80338228ffc730a63593caf19db162fdf3c2d54431e168e0ba9664",
+  "final_arith_sha256": "a8fb90c2b0e3884d6f82190141765503dd9d619c766a4cc0d370fcae5514d4b6",
+  "build": "CARGO_PROFILE_RELEASE_DEBUG=1 cargo test --offline --release --features profiling --test generic_speed --no-run; defaultCPU thinLTO codegen1",
+  "workers": {
+    "baseline-worker": "887af19d92ed53a8e0455309c1bd190c28782925ca5768df70a4987aebb70d92",
+    "zero-run-worker": "482aef8822cb6a3ef636f5a7f2d48768128b63ebb9d326ba1cd00dac65ee40d2",
+    "lazy-state-worker": "cd04cef7356b608396d02fcbc01da54a0894569f48834fbd868af4c465b11cbe",
+    "no-store-worker": "b081e96f71b3c3ff85e9a4f462cbd80b5829954a929b2f5aa1ee989d175b4060",
+    "final-worker": "e86bc96e3474faacc0ec147081bff0b8ba914d7917a88e52deb8906e201189e8"
+  }
+}

@@ -62,8 +62,12 @@ impl<'a> Jbig2Encoder<'a> {
                     let seg_len = page_out.len().saturating_sub(start_len);
                     match seg.seg_type {
                         SegmentType::SymbolDictionary => local_dict_bytes += seg_len,
-                        SegmentType::ImmediateTextRegion => text_region_bytes += seg_len,
-                        SegmentType::ImmediateGenericRegion => generic_region_bytes += seg_len,
+                        SegmentType::ImmediateTextRegion
+                        | SegmentType::ImmediateLosslessTextRegion => text_region_bytes += seg_len,
+                        SegmentType::ImmediateGenericRegion
+                        | SegmentType::ImmediateLosslessGenericRegion => {
+                            generic_region_bytes += seg_len
+                        }
                         _ => {}
                     }
                 }
@@ -92,8 +96,12 @@ impl<'a> Jbig2Encoder<'a> {
                     let seg_len = page_out.len().saturating_sub(start_len);
                     match seg.seg_type {
                         SegmentType::SymbolDictionary => local_dict_bytes += seg_len,
-                        SegmentType::ImmediateTextRegion => text_region_bytes += seg_len,
-                        SegmentType::ImmediateGenericRegion => generic_region_bytes += seg_len,
+                        SegmentType::ImmediateTextRegion
+                        | SegmentType::ImmediateLosslessTextRegion => text_region_bytes += seg_len,
+                        SegmentType::ImmediateGenericRegion
+                        | SegmentType::ImmediateLosslessGenericRegion => {
+                            generic_region_bytes += seg_len
+                        }
                         _ => {}
                     }
                 }
@@ -134,7 +142,7 @@ impl<'a> Jbig2Encoder<'a> {
 
     pub(crate) fn build_instance_residual_bitmap(
         &self,
-        instances: &[SymbolInstance],
+        instances: &[&SymbolInstance],
     ) -> Result<Option<(BitImage, u32, u32)>> {
         if instances.is_empty() {
             return Ok(None);
@@ -165,6 +173,9 @@ impl<'a> Jbig2Encoder<'a> {
         let height = max_y - min_y;
         let mut residual = BitImage::new(width, height).map_err(|e| anyhow!(e))?;
         for instance in instances {
+            if instance.instance_bitmap.count_ones() == 0 {
+                continue;
+            }
             let offset_x = (instance.position.x - min_x) as usize;
             let offset_y = (instance.position.y - min_y) as usize;
             for y in 0..instance.instance_bitmap.height {
@@ -201,7 +212,11 @@ impl<'a> Jbig2Encoder<'a> {
         gr_cfg.tpgdon = self.config.generic.tpgdon;
         gr_cfg.validate().map_err(|e: &'static str| anyhow!(e))?;
 
-        let coder_data = Jbig2ArithCoder::encode_generic_payload_cfg(image, &gr_cfg)?;
+        let coder_data = Jbig2ArithCoder::encode_generic_payload_cfg_with_termination(
+            image,
+            &gr_cfg,
+            self.config.canonical_arithmetic_termination,
+        )?;
         let params: GenericRegionParams = gr_cfg.clone().into();
         let mut payload = params.to_bytes();
         payload.extend_from_slice(&coder_data);

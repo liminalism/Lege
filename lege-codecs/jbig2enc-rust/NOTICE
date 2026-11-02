@@ -1,0 +1,38 @@
+jbig2enc-rust source provenance notices
+
+src/encode/arith.rs identifies itself as a Rust port of jbig2enc's arithmetic
+encoder. The upstream source headers and COPYING file identify:
+
+Copyright 2006 Google Inc. All Rights Reserved.
+Author: agl@imperialviolet.org (Adam Langley)
+
+Upstream license: Apache License, Version 2.0.
+Comparable source snapshot (predates the Rust upload):
+https://github.com/agl/jbig2enc/tree/d2b0bf4647f193c10a599e36f1f9620fa5e4514a
+The exact upstream revision used for the Rust translation is unestablished.
+The checked doc/PATENTS notice warns that described processes may be patented,
+that use may require licenses in some countries, and refers to Annex I of the
+JBIG2 specification. No patent-status or freedom-to-operate opinion is implied.
+The shared MQ table and integer identifiers were extracted from this coder;
+their move into shared modules does not remove the upstream attribution.
+
+Historical source at src/encode/cc.rs (before the 2026-11-01 replacement)
+identified itself as a port of DjVuLibre cjb2.cpp, with:
+Copyright (c) 2002 Leon Bottou and Yann Le Cun.
+That module described the original as GNU GPL v2 or later. Its production
+implementation has been replaced by span-graph traversal. This notice preserves
+the historical attribution; it does not relicense the old implementation or
+establish clean-room status for the replacement. See PROVENANCE.md and
+docs/COMPONENT-EXTRACTION.md for the replacement record. The user accepted
+that replacement as resolving the GPL issue; no additional licensing gate is
+being imposed. Project contributions are MIT; retained arithmetic files keep
+the Apache-2.0 terms stated above.
+
+The checkout's tests/fixtures/test_image1.pbm is a resized scan from:
+https://github.com/thrasibule/doc_coder/blob/ad14a6ffa20833f6c47d9f4a43690f4366f7584c/test/test.pbm
+Only the image was used, according to the user; no C codec code was imported.
+The upstream codec license restricts commercial use and supplies no separate
+unrestricted image grant. This fixture is not declared Apache-2.0. Its rights
+remain unresolved. Both legacy PBMs are excluded from the Cargo package.
+Distributed fixtures are original geometric constructions under MIT;
+see tests/fixtures/README.md, their generator and PROVENANCE.md.

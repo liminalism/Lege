@@ -1,0 +1,15 @@
+{
+  "archive_sha256": "474db68d2b8cc8b1ae22a6a4d98557dc6f9445a0e21c80c130f2a0a2798f3c14",
+  "archive_bytes": 1516422,
+  "files": 427,
+  "pbms": [
+    "tests/fixtures/original/blank.pbm",
+    "tests/fixtures/original/marks.pbm",
+    "tests/fixtures/original/symbols.pbm"
+  ],
+  "extracted_test_root": "/tmp/jbig2-canonical-package-20261101-2w17tyh1/jbig2enc-rust-0.6.0",
+  "legacy_inputs_absent": true,
+  "legacy_manifest_sha256": "2b03838284fe906a8f33cf15b7e87f563a423798387e052d45d9bcd5055f5b48",
+  "original_manifest_sha256": "df4853c1bd8c4734ca52cda445d449ef1be6ea0df3102d69ff47c8213d31e784",
+  "scope": "Post-canonical-termination Cargo package build and fresh extraction; no publication or source-rights clearance. Later report changes are outside this snapshot."
+}

@@ -1,0 +1,31 @@
+{
+  "corpus": [
+    {
+      "file": ".agent/scratch/jbig2-perf-followup/noise-only/noise50.pbm",
+      "sha256": "0eaed21b2e6b3d94eede6a4b64a87d10871c1a1b853e8cea65f27bbaa59b73f1",
+      "width": 2049,
+      "height": 1537
+    }
+  ],
+  "packed_sha256": "291cd7dc34afaa0af3c6230e63ae84559db06aebfc19c9fb5b53d531ba2f3302",
+  "cpu": 0,
+  "rounds": 12,
+  "pairs": 3,
+  "rust_worker": {
+    "path": "/home/dk/rust-projects/Lege-ecosystem/.agent/scratch/jbig2-perf-followup/final-worker",
+    "sha256": "e86bc96e3474faacc0ec147081bff0b8ba914d7917a88e52deb8906e201189e8"
+  },
+  "c_reference": {
+    "path": "/home/dk/rust-projects/Lege-ecosystem/.agent/scratch/jbig2-perf-followup/reference/runner",
+    "sha256": "42551f62f5c3ca8742d9fd311b1f3cc017803b4527c233f168e3b9ac81aa61f8"
+  },
+  "c_source": {
+    "jbig2arith.cc": "832368d43012c3d5fc2ebca1c23e814c7cb851447a4edb570828ec2d88cffeb1",
+    "jbig2arith.h": "c1e33f5e7d6221d428542833dd78efe725f1013f60c67f536002674a558353cf"
+  },
+  "scope": "Matched, pinned-CPU C/Rust generic kernel runs on identical packed pages.\n\nSPDX-License-Identifier: MIT\nTimes context allocation, template-0 coding (TPGDON off), finalization, output\ncopy and destruction. Input preparation, file output and byte verification are\noutside each reported timer. This is a kernel comparison, not a C PDF pipeline.\n",
+  "baseline_worker": {
+    "path": "/home/dk/rust-projects/Lege-ecosystem/.agent/scratch/jbig2-perf-followup/baseline-worker",
+    "sha256": "887af19d92ed53a8e0455309c1bd190c28782925ca5768df70a4987aebb70d92"
+  }
+}

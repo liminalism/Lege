@@ -1,0 +1,1787 @@
+{
+  "inventory": [
+    {
+      "binary_files": 0,
+      "name": "addr2line",
+      "non_utf8_files": 0,
+      "text_bytes": 175142,
+      "text_files": 17,
+      "version": "0.25.1"
+    },
+    {
+      "binary_files": 0,
+      "name": "adler2",
+      "non_utf8_files": 0,
+      "text_bytes": 38839,
+      "text_files": 14,
+      "version": "2.0.1"
+    },
+    {
+      "binary_files": 0,
+      "name": "ahash",
+      "non_utf8_files": 0,
+      "text_bytes": 180602,
+      "text_files": 25,
+      "version": "0.8.12"
+    },
+    {
+      "binary_files": 0,
+      "name": "aho-corasick",
+      "non_utf8_files": 0,
+      "text_bytes": 835212,
+      "text_files": 48,
+      "version": "1.1.4"
+    },
+    {
+      "binary_files": 0,
+      "name": "aligned-vec",
+      "non_utf8_files": 0,
+      "text_bytes": 60793,
+      "text_files": 10,
+      "version": "0.6.4"
+    },
+    {
+      "binary_files": 0,
+      "name": "anes",
+      "non_utf8_files": 0,
+      "text_bytes": 124317,
+      "text_files": 34,
+      "version": "0.1.6"
+    },
+    {
+      "binary_files": 0,
+      "name": "anstream",
+      "non_utf8_files": 0,
+      "text_bytes": 122999,
+      "text_files": 21,
+      "version": "1.0.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "anstyle",
+      "non_utf8_files": 0,
+      "text_bytes": 75182,
+      "text_files": 15,
+      "version": "1.0.14"
+    },
+    {
+      "binary_files": 0,
+      "name": "anstyle-parse",
+      "non_utf8_files": 0,
+      "text_bytes": 104626,
+      "text_files": 15,
+      "version": "1.0.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "anstyle-query",
+      "non_utf8_files": 0,
+      "text_bytes": 29450,
+      "text_files": 11,
+      "version": "1.1.5"
+    },
+    {
+      "binary_files": 0,
+      "name": "anstyle-wincon",
+      "non_utf8_files": 0,
+      "text_bytes": 44571,
+      "text_files": 14,
+      "version": "3.0.11"
+    },
+    {
+      "binary_files": 0,
+      "name": "anyhow",
+      "non_utf8_files": 0,
+      "text_bytes": 233253,
+      "text_files": 55,
+      "version": "1.0.102"
+    },
+    {
+      "binary_files": 0,
+      "name": "arrayvec",
+      "non_utf8_files": 0,
+      "text_bytes": 126486,
+      "text_files": 22,
+      "version": "0.7.6"
+    },
+    {
+      "binary_files": 0,
+      "name": "autocfg",
+      "non_utf8_files": 0,
+      "text_bytes": 61280,
+      "text_files": 25,
+      "version": "1.5.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "backtrace",
+      "non_utf8_files": 0,
+      "text_bytes": 335728,
+      "text_files": 61,
+      "version": "0.3.76"
+    },
+    {
+      "binary_files": 0,
+      "name": "bitflags",
+      "non_utf8_files": 0,
+      "text_bytes": 96177,
+      "text_files": 39,
+      "version": "1.3.2"
+    },
+    {
+      "binary_files": 0,
+      "name": "bitflags",
+      "non_utf8_files": 0,
+      "text_bytes": 244202,
+      "text_files": 65,
+      "version": "2.13.1"
+    },
+    {
+      "binary_files": 0,
+      "name": "bumpalo",
+      "non_utf8_files": 0,
+      "text_bytes": 422045,
+      "text_files": 20,
+      "version": "3.20.2"
+    },
+    {
+      "binary_files": 0,
+      "name": "bytemuck",
+      "non_utf8_files": 0,
+      "text_bytes": 228552,
+      "text_files": 39,
+      "version": "1.25.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "byteorder-lite",
+      "non_utf8_files": 0,
+      "text_bytes": 145175,
+      "text_files": 9,
+      "version": "0.1.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "cast",
+      "non_utf8_files": 0,
+      "text_bytes": 44322,
+      "text_files": 12,
+      "version": "0.3.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "cc",
+      "non_utf8_files": 0,
+      "text_bytes": 392689,
+      "text_files": 28,
+      "version": "1.2.57"
+    },
+    {
+      "binary_files": 0,
+      "name": "cfg-if",
+      "non_utf8_files": 0,
+      "text_bytes": 25728,
+      "text_files": 15,
+      "version": "1.0.4"
+    },
+    {
+      "binary_files": 0,
+      "name": "ciborium",
+      "non_utf8_files": 0,
+      "text_bytes": 195124,
+      "text_files": 26,
+      "version": "0.2.2"
+    },
+    {
+      "binary_files": 0,
+      "name": "ciborium-io",
+      "non_utf8_files": 0,
+      "text_bytes": 21554,
+      "text_files": 7,
+      "version": "0.2.2"
+    },
+    {
+      "binary_files": 0,
+      "name": "ciborium-ll",
+      "non_utf8_files": 0,
+      "text_bytes": 56628,
+      "text_files": 11,
+      "version": "0.2.2"
+    },
+    {
+      "binary_files": 0,
+      "name": "clap",
+      "non_utf8_files": 0,
+      "text_bytes": 265835,
+      "text_files": 147,
+      "version": "4.6.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "clap_builder",
+      "non_utf8_files": 0,
+      "text_bytes": 976107,
+      "text_files": 65,
+      "version": "4.6.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "clap_derive",
+      "non_utf8_files": 0,
+      "text_bytes": 179985,
+      "text_files": 24,
+      "version": "4.6.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "clap_lex",
+      "non_utf8_files": 0,
+      "text_bytes": 45604,
+      "text_files": 10,
+      "version": "1.1.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "colorchoice",
+      "non_utf8_files": 0,
+      "text_bytes": 22047,
+      "text_files": 9,
+      "version": "1.0.5"
+    },
+    {
+      "binary_files": 0,
+      "name": "cpp_demangle",
+      "non_utf8_files": 0,
+      "text_bytes": 536898,
+      "text_files": 23,
+      "version": "0.5.1"
+    },
+    {
+      "binary_files": 0,
+      "name": "crc32fast",
+      "non_utf8_files": 0,
+      "text_bytes": 104980,
+      "text_files": 19,
+      "version": "1.5.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "criterion",
+      "non_utf8_files": 0,
+      "text_bytes": 547260,
+      "text_files": 90,
+      "version": "0.7.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "criterion-plot",
+      "non_utf8_files": 0,
+      "text_bytes": 100313,
+      "text_files": 24,
+      "version": "0.6.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "crossbeam-deque",
+      "non_utf8_files": 0,
+      "text_bytes": 129464,
+      "text_files": 14,
+      "version": "0.8.6"
+    },
+    {
+      "binary_files": 0,
+      "name": "crossbeam-epoch",
+      "non_utf8_files": 0,
+      "text_bytes": 203304,
+      "text_files": 26,
+      "version": "0.9.18"
+    },
+    {
+      "binary_files": 0,
+      "name": "crossbeam-utils",
+      "non_utf8_files": 0,
+      "text_bytes": 189446,
+      "text_files": 32,
+      "version": "0.8.21"
+    },
+    {
+      "binary_files": 0,
+      "name": "crunchy",
+      "non_utf8_files": 0,
+      "text_bytes": 11952,
+      "text_files": 10,
+      "version": "0.2.4"
+    },
+    {
+      "binary_files": 0,
+      "name": "debugid",
+      "non_utf8_files": 0,
+      "text_bytes": 44526,
+      "text_files": 13,
+      "version": "0.8.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "either",
+      "non_utf8_files": 0,
+      "text_bytes": 82188,
+      "text_files": 16,
+      "version": "1.15.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "env_filter",
+      "non_utf8_files": 0,
+      "text_bytes": 65515,
+      "text_files": 14,
+      "version": "2.0.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "env_logger",
+      "non_utf8_files": 0,
+      "text_bytes": 132429,
+      "text_files": 24,
+      "version": "0.11.11"
+    },
+    {
+      "binary_files": 0,
+      "name": "equator",
+      "non_utf8_files": 0,
+      "text_bytes": 62930,
+      "text_files": 16,
+      "version": "0.4.2"
+    },
+    {
+      "binary_files": 0,
+      "name": "equator-macro",
+      "non_utf8_files": 0,
+      "text_bytes": 33868,
+      "text_files": 8,
+      "version": "0.4.2"
+    },
+    {
+      "binary_files": 0,
+      "name": "equivalent",
+      "non_utf8_files": 0,
+      "text_bytes": 19230,
+      "text_files": 11,
+      "version": "1.0.2"
+    },
+    {
+      "binary_files": 0,
+      "name": "errno",
+      "non_utf8_files": 0,
+      "text_bytes": 37659,
+      "text_files": 19,
+      "version": "0.3.14"
+    },
+    {
+      "binary_files": 0,
+      "name": "fastrand",
+      "non_utf8_files": 0,
+      "text_bytes": 52890,
+      "text_files": 13,
+      "version": "2.3.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "fax",
+      "non_utf8_files": 0,
+      "text_bytes": 129283,
+      "text_files": 23,
+      "version": "0.3.0"
+    },
+    {
+      "binary_files": 3,
+      "name": "fdeflate",
+      "non_utf8_files": 0,
+      "text_bytes": 107977,
+      "text_files": 14,
+      "version": "0.3.7"
+    },
+    {
+      "binary_files": 0,
+      "name": "find-msvc-tools",
+      "non_utf8_files": 0,
+      "text_bytes": 116373,
+      "text_files": 19,
+      "version": "0.1.9"
+    },
+    {
+      "binary_files": 0,
+      "name": "findshlibs",
+      "non_utf8_files": 0,
+      "text_bytes": 75510,
+      "text_files": 20,
+      "version": "0.10.2"
+    },
+    {
+      "binary_files": 4,
+      "name": "flate2",
+      "non_utf8_files": 0,
+      "text_bytes": 322755,
+      "text_files": 61,
+      "version": "1.1.9"
+    },
+    {
+      "binary_files": 0,
+      "name": "foldhash",
+      "non_utf8_files": 0,
+      "text_bytes": 80189,
+      "text_files": 13,
+      "version": "0.1.5"
+    },
+    {
+      "binary_files": 0,
+      "name": "getrandom",
+      "non_utf8_files": 0,
+      "text_bytes": 176219,
+      "text_files": 44,
+      "version": "0.3.4"
+    },
+    {
+      "binary_files": 0,
+      "name": "getrandom",
+      "non_utf8_files": 0,
+      "text_bytes": 190392,
+      "text_files": 49,
+      "version": "0.4.2"
+    },
+    {
+      "binary_files": 0,
+      "name": "gimli",
+      "non_utf8_files": 0,
+      "text_bytes": 1830740,
+      "text_files": 54,
+      "version": "0.32.3"
+    },
+    {
+      "binary_files": 0,
+      "name": "half",
+      "non_utf8_files": 0,
+      "text_bytes": 342703,
+      "text_files": 25,
+      "version": "2.7.1"
+    },
+    {
+      "binary_files": 0,
+      "name": "hashbrown",
+      "non_utf8_files": 0,
+      "text_bytes": 819662,
+      "text_files": 47,
+      "version": "0.15.5"
+    },
+    {
+      "binary_files": 0,
+      "name": "hashbrown",
+      "non_utf8_files": 0,
+      "text_bytes": 889655,
+      "text_files": 51,
+      "version": "0.17.1"
+    },
+    {
+      "binary_files": 0,
+      "name": "heck",
+      "non_utf8_files": 0,
+      "text_bytes": 43339,
+      "text_files": 17,
+      "version": "0.5.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "hermit-abi",
+      "non_utf8_files": 0,
+      "text_bytes": 56536,
+      "text_files": 10,
+      "version": "0.5.2"
+    },
+    {
+      "binary_files": 0,
+      "name": "hex-literal",
+      "non_utf8_files": 0,
+      "text_bytes": 23135,
+      "text_files": 11,
+      "version": "1.1.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "id-arena",
+      "non_utf8_files": 0,
+      "text_bytes": 46433,
+      "text_files": 16,
+      "version": "2.3.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "image",
+      "non_utf8_files": 0,
+      "text_bytes": 1412095,
+      "text_files": 87,
+      "version": "0.25.10"
+    },
+    {
+      "binary_files": 0,
+      "name": "indexmap",
+      "non_utf8_files": 0,
+      "text_bytes": 533236,
+      "text_files": 43,
+      "version": "2.14.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "inferno",
+      "non_utf8_files": 0,
+      "text_bytes": 411119,
+      "text_files": 53,
+      "version": "0.11.21"
+    },
+    {
+      "binary_files": 0,
+      "name": "is-terminal",
+      "non_utf8_files": 0,
+      "text_bytes": 23808,
+      "text_files": 9,
+      "version": "0.4.17"
+    },
+    {
+      "binary_files": 0,
+      "name": "is_terminal_polyfill",
+      "non_utf8_files": 0,
+      "text_bytes": 22225,
+      "text_files": 9,
+      "version": "1.70.2"
+    },
+    {
+      "binary_files": 0,
+      "name": "itertools",
+      "non_utf8_files": 0,
+      "text_bytes": 709429,
+      "text_files": 87,
+      "version": "0.13.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "itoa",
+      "non_utf8_files": 0,
+      "text_bytes": 50727,
+      "text_files": 15,
+      "version": "1.0.17"
+    },
+    {
+      "binary_files": 0,
+      "name": "jiff",
+      "non_utf8_files": 0,
+      "text_bytes": 3822463,
+      "text_files": 119,
+      "version": "0.2.23"
+    },
+    {
+      "binary_files": 0,
+      "name": "jiff-static",
+      "non_utf8_files": 0,
+      "text_bytes": 330828,
+      "text_files": 23,
+      "version": "0.2.23"
+    },
+    {
+      "binary_files": 0,
+      "name": "js-sys",
+      "non_utf8_files": 0,
+      "text_bytes": 779877,
+      "text_files": 10,
+      "version": "0.3.91"
+    },
+    {
+      "binary_files": 0,
+      "name": "lazy_static",
+      "non_utf8_files": 0,
+      "text_bytes": 43558,
+      "text_files": 22,
+      "version": "1.5.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "leb128fmt",
+      "non_utf8_files": 0,
+      "text_bytes": 73998,
+      "text_files": 9,
+      "version": "0.1.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "libc",
+      "non_utf8_files": 0,
+      "text_bytes": 4352324,
+      "text_files": 358,
+      "version": "0.2.183"
+    },
+    {
+      "binary_files": 0,
+      "name": "linux-raw-sys",
+      "non_utf8_files": 0,
+      "text_bytes": 16933586,
+      "text_files": 474,
+      "version": "0.12.1"
+    },
+    {
+      "binary_files": 0,
+      "name": "lock_api",
+      "non_utf8_files": 0,
+      "text_bytes": 207640,
+      "text_files": 11,
+      "version": "0.4.14"
+    },
+    {
+      "binary_files": 0,
+      "name": "log",
+      "non_utf8_files": 0,
+      "text_bytes": 241080,
+      "text_files": 24,
+      "version": "0.4.29"
+    },
+    {
+      "binary_files": 0,
+      "name": "matchers",
+      "non_utf8_files": 0,
+      "text_bytes": 27413,
+      "text_files": 11,
+      "version": "0.2.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "matrixmultiply",
+      "non_utf8_files": 0,
+      "text_bytes": 248449,
+      "text_files": 43,
+      "version": "0.3.10"
+    },
+    {
+      "binary_files": 0,
+      "name": "memchr",
+      "non_utf8_files": 0,
+      "text_bytes": 585053,
+      "text_files": 58,
+      "version": "2.8.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "memmap2",
+      "non_utf8_files": 0,
+      "text_bytes": 163321,
+      "text_files": 17,
+      "version": "0.9.10"
+    },
+    {
+      "binary_files": 0,
+      "name": "miniz_oxide",
+      "non_utf8_files": 0,
+      "text_bytes": 283470,
+      "text_files": 24,
+      "version": "0.8.9"
+    },
+    {
+      "binary_files": 0,
+      "name": "moxcms",
+      "non_utf8_files": 0,
+      "text_bytes": 1553186,
+      "text_files": 128,
+      "version": "0.8.1"
+    },
+    {
+      "binary_files": 0,
+      "name": "ndarray",
+      "non_utf8_files": 0,
+      "text_bytes": 1102615,
+      "text_files": 106,
+      "version": "0.17.2"
+    },
+    {
+      "binary_files": 0,
+      "name": "nix",
+      "non_utf8_files": 0,
+      "text_bytes": 1459826,
+      "text_files": 108,
+      "version": "0.26.4"
+    },
+    {
+      "binary_files": 0,
+      "name": "nu-ansi-term",
+      "non_utf8_files": 0,
+      "text_bytes": 125967,
+      "text_files": 29,
+      "version": "0.50.3"
+    },
+    {
+      "binary_files": 0,
+      "name": "num-complex",
+      "non_utf8_files": 0,
+      "text_bytes": 142527,
+      "text_files": 14,
+      "version": "0.4.6"
+    },
+    {
+      "binary_files": 0,
+      "name": "num-format",
+      "non_utf8_files": 0,
+      "text_bytes": 338736,
+      "text_files": 42,
+      "version": "0.4.4"
+    },
+    {
+      "binary_files": 0,
+      "name": "num-integer",
+      "non_utf8_files": 0,
+      "text_bytes": 109885,
+      "text_files": 17,
+      "version": "0.1.46"
+    },
+    {
+      "binary_files": 0,
+      "name": "num-traits",
+      "non_utf8_files": 0,
+      "text_bytes": 273988,
+      "text_files": 30,
+      "version": "0.2.19"
+    },
+    {
+      "binary_files": 0,
+      "name": "object",
+      "non_utf8_files": 0,
+      "text_bytes": 1934302,
+      "text_files": 107,
+      "version": "0.37.3"
+    },
+    {
+      "binary_files": 0,
+      "name": "once_cell",
+      "non_utf8_files": 0,
+      "text_bytes": 151149,
+      "text_files": 30,
+      "version": "1.21.4"
+    },
+    {
+      "binary_files": 0,
+      "name": "once_cell_polyfill",
+      "non_utf8_files": 0,
+      "text_bytes": 21970,
+      "text_files": 10,
+      "version": "1.70.2"
+    },
+    {
+      "binary_files": 0,
+      "name": "oorandom",
+      "non_utf8_files": 0,
+      "text_bytes": 123566,
+      "text_files": 7,
+      "version": "11.1.5"
+    },
+    {
+      "binary_files": 0,
+      "name": "pin-project-lite",
+      "non_utf8_files": 0,
+      "text_bytes": 238878,
+      "text_files": 82,
+      "version": "0.2.17"
+    },
+    {
+      "binary_files": 0,
+      "name": "plotters",
+      "non_utf8_files": 0,
+      "text_bytes": 699615,
+      "text_files": 115,
+      "version": "0.3.7"
+    },
+    {
+      "binary_files": 0,
+      "name": "plotters-backend",
+      "non_utf8_files": 0,
+      "text_bytes": 53450,
+      "text_files": 15,
+      "version": "0.3.7"
+    },
+    {
+      "binary_files": 0,
+      "name": "plotters-svg",
+      "non_utf8_files": 0,
+      "text_bytes": 27609,
+      "text_files": 8,
+      "version": "0.3.7"
+    },
+    {
+      "binary_files": 0,
+      "name": "png",
+      "non_utf8_files": 0,
+      "text_bytes": 565549,
+      "text_files": 40,
+      "version": "0.18.1"
+    },
+    {
+      "binary_files": 0,
+      "name": "portable-atomic",
+      "non_utf8_files": 0,
+      "text_bytes": 1272984,
+      "text_files": 68,
+      "version": "1.13.1"
+    },
+    {
+      "binary_files": 0,
+      "name": "portable-atomic-util",
+      "non_utf8_files": 0,
+      "text_bytes": 208773,
+      "text_files": 15,
+      "version": "0.2.6"
+    },
+    {
+      "binary_files": 0,
+      "name": "pprof",
+      "non_utf8_files": 0,
+      "text_bytes": 201331,
+      "text_files": 41,
+      "version": "0.15.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "prettyplease",
+      "non_utf8_files": 0,
+      "text_bytes": 416992,
+      "text_files": 42,
+      "version": "0.2.37"
+    },
+    {
+      "binary_files": 0,
+      "name": "proc-macro2",
+      "non_utf8_files": 0,
+      "text_bytes": 270859,
+      "text_files": 34,
+      "version": "1.0.106"
+    },
+    {
+      "binary_files": 0,
+      "name": "pxfm",
+      "non_utf8_files": 0,
+      "text_bytes": 3820327,
+      "text_files": 267,
+      "version": "0.1.28"
+    },
+    {
+      "binary_files": 0,
+      "name": "quick-xml",
+      "non_utf8_files": 0,
+      "text_bytes": 654226,
+      "text_files": 32,
+      "version": "0.26.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "quote",
+      "non_utf8_files": 0,
+      "text_bytes": 138075,
+      "text_files": 36,
+      "version": "1.0.45"
+    },
+    {
+      "binary_files": 0,
+      "name": "r-efi",
+      "non_utf8_files": 0,
+      "text_bytes": 288532,
+      "text_files": 70,
+      "version": "5.3.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "r-efi",
+      "non_utf8_files": 0,
+      "text_bytes": 293765,
+      "text_files": 70,
+      "version": "6.0.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "rawpointer",
+      "non_utf8_files": 0,
+      "text_bytes": 20987,
+      "text_files": 9,
+      "version": "0.2.1"
+    },
+    {
+      "binary_files": 0,
+      "name": "rayon",
+      "non_utf8_files": 0,
+      "text_bytes": 915877,
+      "text_files": 128,
+      "version": "1.12.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "rayon-core",
+      "non_utf8_files": 0,
+      "text_bytes": 286229,
+      "text_files": 43,
+      "version": "1.13.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "regex",
+      "non_utf8_files": 0,
+      "text_bytes": 718986,
+      "text_files": 56,
+      "version": "1.12.3"
+    },
+    {
+      "binary_files": 0,
+      "name": "regex-automata",
+      "non_utf8_files": 0,
+      "text_bytes": 2687277,
+      "text_files": 106,
+      "version": "0.4.14"
+    },
+    {
+      "binary_files": 0,
+      "name": "regex-syntax",
+      "non_utf8_files": 0,
+      "text_bytes": 1681113,
+      "text_files": 43,
+      "version": "0.8.10"
+    },
+    {
+      "binary_files": 0,
+      "name": "rgb",
+      "non_utf8_files": 0,
+      "text_bytes": 91694,
+      "text_files": 31,
+      "version": "0.8.53"
+    },
+    {
+      "binary_files": 0,
+      "name": "rustc-demangle",
+      "non_utf8_files": 0,
+      "text_bytes": 156224,
+      "text_files": 17,
+      "version": "0.1.27"
+    },
+    {
+      "binary_files": 0,
+      "name": "rustc-hash",
+      "non_utf8_files": 0,
+      "text_bytes": 43963,
+      "text_files": 15,
+      "version": "2.1.3"
+    },
+    {
+      "binary_files": 0,
+      "name": "rustix",
+      "non_utf8_files": 0,
+      "text_bytes": 2358517,
+      "text_files": 333,
+      "version": "1.1.4"
+    },
+    {
+      "binary_files": 0,
+      "name": "rustversion",
+      "non_utf8_files": 0,
+      "text_bytes": 74777,
+      "text_files": 40,
+      "version": "1.0.22"
+    },
+    {
+      "binary_files": 0,
+      "name": "safe_arch",
+      "non_utf8_files": 0,
+      "text_bytes": 556561,
+      "text_files": 55,
+      "version": "0.7.4"
+    },
+    {
+      "binary_files": 0,
+      "name": "same-file",
+      "non_utf8_files": 0,
+      "text_bytes": 34906,
+      "text_files": 17,
+      "version": "1.0.6"
+    },
+    {
+      "binary_files": 0,
+      "name": "scopeguard",
+      "non_utf8_files": 0,
+      "text_bytes": 35545,
+      "text_files": 12,
+      "version": "1.2.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "semver",
+      "non_utf8_files": 0,
+      "text_bytes": 120975,
+      "text_files": 26,
+      "version": "1.0.27"
+    },
+    {
+      "binary_files": 0,
+      "name": "serde",
+      "non_utf8_files": 0,
+      "text_bytes": 561558,
+      "text_files": 34,
+      "version": "1.0.228"
+    },
+    {
+      "binary_files": 0,
+      "name": "serde_core",
+      "non_utf8_files": 0,
+      "text_bytes": 392887,
+      "text_files": 28,
+      "version": "1.0.228"
+    },
+    {
+      "binary_files": 0,
+      "name": "serde_derive",
+      "non_utf8_files": 0,
+      "text_bytes": 333328,
+      "text_files": 37,
+      "version": "1.0.228"
+    },
+    {
+      "binary_files": 0,
+      "name": "serde_json",
+      "non_utf8_files": 0,
+      "text_bytes": 747244,
+      "text_files": 89,
+      "version": "1.0.149"
+    },
+    {
+      "binary_files": 0,
+      "name": "sharded-slab",
+      "non_utf8_files": 0,
+      "text_bytes": 269966,
+      "text_files": 38,
+      "version": "0.1.7"
+    },
+    {
+      "binary_files": 0,
+      "name": "shlex",
+      "non_utf8_files": 0,
+      "text_bytes": 58589,
+      "text_files": 13,
+      "version": "1.3.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "simd-adler32",
+      "non_utf8_files": 0,
+      "text_bytes": 77849,
+      "text_files": 23,
+      "version": "0.3.8"
+    },
+    {
+      "binary_files": 0,
+      "name": "smallvec",
+      "non_utf8_files": 0,
+      "text_bytes": 158697,
+      "text_files": 20,
+      "version": "1.15.1"
+    },
+    {
+      "binary_files": 0,
+      "name": "spin",
+      "non_utf8_files": 0,
+      "text_bytes": 187347,
+      "text_files": 25,
+      "version": "0.10.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "stable_deref_trait",
+      "non_utf8_files": 0,
+      "text_bytes": 24355,
+      "text_files": 10,
+      "version": "1.2.1"
+    },
+    {
+      "binary_files": 0,
+      "name": "str_stack",
+      "non_utf8_files": 0,
+      "text_bytes": 24111,
+      "text_files": 9,
+      "version": "0.1.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "strsim",
+      "non_utf8_files": 0,
+      "text_bytes": 54957,
+      "text_files": 14,
+      "version": "0.11.1"
+    },
+    {
+      "binary_files": 0,
+      "name": "symbolic-common",
+      "non_utf8_files": 0,
+      "text_bytes": 111503,
+      "text_files": 12,
+      "version": "12.17.2"
+    },
+    {
+      "binary_files": 0,
+      "name": "symbolic-demangle",
+      "non_utf8_files": 0,
+      "text_bytes": 967574,
+      "text_files": 64,
+      "version": "12.17.2"
+    },
+    {
+      "binary_files": 0,
+      "name": "syn",
+      "non_utf8_files": 0,
+      "text_bytes": 2293477,
+      "text_files": 106,
+      "version": "2.0.117"
+    },
+    {
+      "binary_files": 0,
+      "name": "tempfile",
+      "non_utf8_files": 0,
+      "text_bytes": 187854,
+      "text_files": 28,
+      "version": "3.27.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "thiserror",
+      "non_utf8_files": 0,
+      "text_bytes": 116836,
+      "text_files": 106,
+      "version": "2.0.18"
+    },
+    {
+      "binary_files": 0,
+      "name": "thiserror-impl",
+      "non_utf8_files": 0,
+      "text_bytes": 96188,
+      "text_files": 18,
+      "version": "2.0.18"
+    },
+    {
+      "binary_files": 0,
+      "name": "thread_local",
+      "non_utf8_files": 0,
+      "text_bytes": 69177,
+      "text_files": 17,
+      "version": "1.1.9"
+    },
+    {
+      "binary_files": 0,
+      "name": "tinytemplate",
+      "non_utf8_files": 0,
+      "text_bytes": 112112,
+      "text_files": 18,
+      "version": "1.2.1"
+    },
+    {
+      "binary_files": 0,
+      "name": "tracing",
+      "non_utf8_files": 0,
+      "text_bytes": 9818210,
+      "text_files": 94,
+      "version": "0.1.44"
+    },
+    {
+      "binary_files": 0,
+      "name": "tracing-attributes",
+      "non_utf8_files": 0,
+      "text_bytes": 181874,
+      "text_files": 31,
+      "version": "0.1.31"
+    },
+    {
+      "binary_files": 0,
+      "name": "tracing-core",
+      "non_utf8_files": 0,
+      "text_bytes": 255345,
+      "text_files": 29,
+      "version": "0.1.36"
+    },
+    {
+      "binary_files": 0,
+      "name": "tracing-log",
+      "non_utf8_files": 0,
+      "text_bytes": 66567,
+      "text_files": 13,
+      "version": "0.2.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "tracing-subscriber",
+      "non_utf8_files": 0,
+      "text_bytes": 1082727,
+      "text_files": 88,
+      "version": "0.3.23"
+    },
+    {
+      "binary_files": 2,
+      "name": "unicode-ident",
+      "non_utf8_files": 0,
+      "text_bytes": 193317,
+      "text_files": 25,
+      "version": "1.0.24"
+    },
+    {
+      "binary_files": 0,
+      "name": "unicode-xid",
+      "non_utf8_files": 0,
+      "text_bytes": 76879,
+      "text_files": 14,
+      "version": "0.2.6"
+    },
+    {
+      "binary_files": 0,
+      "name": "utf8parse",
+      "non_utf8_files": 0,
+      "text_bytes": 34585,
+      "text_files": 10,
+      "version": "0.2.2"
+    },
+    {
+      "binary_files": 0,
+      "name": "uuid",
+      "non_utf8_files": 0,
+      "text_bytes": 309888,
+      "text_files": 31,
+      "version": "1.22.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "valuable",
+      "non_utf8_files": 0,
+      "text_bytes": 154465,
+      "text_files": 24,
+      "version": "0.1.1"
+    },
+    {
+      "binary_files": 0,
+      "name": "version_check",
+      "non_utf8_files": 0,
+      "text_bytes": 60157,
+      "text_files": 14,
+      "version": "0.9.5"
+    },
+    {
+      "binary_files": 0,
+      "name": "walkdir",
+      "non_utf8_files": 0,
+      "text_bytes": 112755,
+      "text_files": 20,
+      "version": "2.5.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "wasip2",
+      "non_utf8_files": 0,
+      "text_bytes": 1189260,
+      "text_files": 26,
+      "version": "1.0.2+wasi-0.2.9"
+    },
+    {
+      "binary_files": 0,
+      "name": "wasip3",
+      "non_utf8_files": 0,
+      "text_bytes": 1148177,
+      "text_files": 23,
+      "version": "0.4.0+wasi-0.3.0-rc-2026-01-06"
+    },
+    {
+      "binary_files": 0,
+      "name": "wasm-bindgen",
+      "non_utf8_files": 0,
+      "text_bytes": 252578,
+      "text_files": 25,
+      "version": "0.2.114"
+    },
+    {
+      "binary_files": 0,
+      "name": "wasm-bindgen-macro",
+      "non_utf8_files": 0,
+      "text_bytes": 25860,
+      "text_files": 10,
+      "version": "0.2.114"
+    },
+    {
+      "binary_files": 0,
+      "name": "wasm-bindgen-macro-support",
+      "non_utf8_files": 0,
+      "text_bytes": 301988,
+      "text_files": 15,
+      "version": "0.2.114"
+    },
+    {
+      "binary_files": 0,
+      "name": "wasm-bindgen-shared",
+      "non_utf8_files": 0,
+      "text_bytes": 30410,
+      "text_files": 12,
+      "version": "0.2.114"
+    },
+    {
+      "binary_files": 0,
+      "name": "wasm-encoder",
+      "non_utf8_files": 0,
+      "text_bytes": 585307,
+      "text_files": 42,
+      "version": "0.244.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "wasm-metadata",
+      "non_utf8_files": 0,
+      "text_bytes": 118863,
+      "text_files": 28,
+      "version": "0.244.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "wasmparser",
+      "non_utf8_files": 0,
+      "text_bytes": 1487287,
+      "text_files": 68,
+      "version": "0.244.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "web-sys",
+      "non_utf8_files": 0,
+      "text_bytes": 11132589,
+      "text_files": 1712,
+      "version": "0.3.91"
+    },
+    {
+      "binary_files": 0,
+      "name": "which",
+      "non_utf8_files": 0,
+      "text_bytes": 115197,
+      "text_files": 21,
+      "version": "8.0.2"
+    },
+    {
+      "binary_files": 0,
+      "name": "wide",
+      "non_utf8_files": 0,
+      "text_bytes": 753650,
+      "text_files": 56,
+      "version": "0.7.33"
+    },
+    {
+      "binary_files": 0,
+      "name": "winapi",
+      "non_utf8_files": 0,
+      "text_bytes": 6942559,
+      "text_files": 412,
+      "version": "0.3.9"
+    },
+    {
+      "binary_files": 1376,
+      "name": "winapi-i686-pc-windows-gnu",
+      "non_utf8_files": 0,
+      "text_bytes": 55238,
+      "text_files": 16,
+      "version": "0.4.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "winapi-util",
+      "non_utf8_files": 0,
+      "text_bytes": 45518,
+      "text_files": 18,
+      "version": "0.1.11"
+    },
+    {
+      "binary_files": 1404,
+      "name": "winapi-x86_64-pc-windows-gnu",
+      "non_utf8_files": 0,
+      "text_bytes": 56193,
+      "text_files": 17,
+      "version": "0.4.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "windows-link",
+      "non_utf8_files": 0,
+      "text_bytes": 16203,
+      "text_files": 9,
+      "version": "0.2.1"
+    },
+    {
+      "binary_files": 0,
+      "name": "windows-sys",
+      "non_utf8_files": 0,
+      "text_bytes": 18183413,
+      "text_files": 258,
+      "version": "0.61.2"
+    },
+    {
+      "binary_files": 4,
+      "name": "wit-bindgen",
+      "non_utf8_files": 0,
+      "text_bytes": 245804,
+      "text_files": 35,
+      "version": "0.51.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "wit-bindgen-core",
+      "non_utf8_files": 0,
+      "text_bytes": 168732,
+      "text_files": 15,
+      "version": "0.51.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "wit-bindgen-rust",
+      "non_utf8_files": 0,
+      "text_bytes": 267900,
+      "text_files": 16,
+      "version": "0.51.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "wit-bindgen-rust-macro",
+      "non_utf8_files": 0,
+      "text_bytes": 58250,
+      "text_files": 10,
+      "version": "0.51.0"
+    },
+    {
+      "binary_files": 1,
+      "name": "wit-component",
+      "non_utf8_files": 0,
+      "text_bytes": 1524026,
+      "text_files": 776,
+      "version": "0.244.0"
+    },
+    {
+      "binary_files": 1,
+      "name": "wit-parser",
+      "non_utf8_files": 0,
+      "text_bytes": 846941,
+      "text_files": 517,
+      "version": "0.244.0"
+    },
+    {
+      "binary_files": 0,
+      "name": "zerocopy",
+      "non_utf8_files": 0,
+      "text_bytes": 1559884,
+      "text_files": 238,
+      "version": "0.8.42"
+    },
+    {
+      "binary_files": 0,
+      "name": "zerocopy-derive",
+      "non_utf8_files": 0,
+      "text_bytes": 967456,
+      "text_files": 134,
+      "version": "0.8.42"
+    },
+    {
+      "binary_files": 0,
+      "name": "zmij",
+      "non_utf8_files": 0,
+      "text_bytes": 92707,
+      "text_files": 19,
+      "version": "1.0.21"
+    },
+    {
+      "binary_files": 0,
+      "name": "zune-core",
+      "non_utf8_files": 0,
+      "text_bytes": 111803,
+      "text_files": 28,
+      "version": "0.5.1"
+    },
+    {
+      "binary_files": 0,
+      "name": "zune-jpeg",
+      "non_utf8_files": 0,
+      "text_bytes": 373082,
+      "text_files": 40,
+      "version": "0.5.13"
+    }
+  ],
+  "limitations": [
+    "Binary and non-UTF-8 files are counted but not interpreted.",
+    "A license marker is not an obligation analysis; absence of a marker does not establish source provenance.",
+    "Resolved dev/build/target packages need not be linked into a particular build."
+  ],
+  "matches": [
+    {
+      "classification": "GPL compatibility wording in Apache-2.0 LLVM exception",
+      "line": 213,
+      "name": "linux-raw-sys",
+      "path": "LICENSE-Apache-2.0_WITH_LLVM-exception",
+      "sha256": "268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5",
+      "text": "software that is licensed under the GPLv2 (\"Combined Software\") and if a",
+      "version": "0.12.1"
+    },
+    {
+      "classification": "GPL compatibility wording in Apache-2.0 LLVM exception",
+      "line": 216,
+      "name": "linux-raw-sys",
+      "path": "LICENSE-Apache-2.0_WITH_LLVM-exception",
+      "sha256": "268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5",
+      "text": "conflicts with the conditions of the GPLv2, you may retroactively and",
+      "version": "0.12.1"
+    },
+    {
+      "classification": "dual MIT/GPL kernel test asset; not library production source",
+      "line": 2,
+      "name": "nix",
+      "path": "test/test_kmod/hello_mod/hello.c",
+      "sha256": "bcac6b19c5bd807e1f3878c15e426acc85785a8ade9840c3bb4d068635c9188c",
+      "text": "*  SPDX-License-Identifier: GPL-2.0+ or MIT",
+      "version": "0.26.4"
+    },
+    {
+      "classification": "dual MIT/GPL kernel test asset; not library production source",
+      "line": 26,
+      "name": "nix",
+      "path": "test/test_kmod/hello_mod/hello.c",
+      "sha256": "bcac6b19c5bd807e1f3878c15e426acc85785a8ade9840c3bb4d068635c9188c",
+      "text": "MODULE_LICENSE(\"Dual MIT/GPL\");",
+      "version": "0.26.4"
+    },
+    {
+      "classification": "alternative license: manifest offers MIT OR Apache-2.0 OR LGPL-2.1-or-later",
+      "line": 3,
+      "name": "r-efi",
+      "path": "AUTHORS",
+      "sha256": "ff92bed461f50338dd703a9ba9aee496a425957873df1d91192776e4bdf5dda7",
+      "text": "License, Version 2.0, and the GNU Lesser General Public License,",
+      "version": "5.3.0"
+    },
+    {
+      "classification": "alternative license: manifest offers MIT OR Apache-2.0 OR LGPL-2.1-or-later",
+      "line": 39,
+      "name": "r-efi",
+      "path": "AUTHORS",
+      "sha256": "ff92bed461f50338dd703a9ba9aee496a425957873df1d91192776e4bdf5dda7",
+      "text": "AUTHORS-LGPL:",
+      "version": "5.3.0"
+    },
+    {
+      "classification": "alternative license: manifest offers MIT OR Apache-2.0 OR LGPL-2.1-or-later",
+      "line": 41,
+      "name": "r-efi",
+      "path": "AUTHORS",
+      "sha256": "ff92bed461f50338dd703a9ba9aee496a425957873df1d91192776e4bdf5dda7",
+      "text": "under the terms of the GNU Lesser General Public License as published",
+      "version": "5.3.0"
+    },
+    {
+      "classification": "alternative license: manifest offers MIT OR Apache-2.0 OR LGPL-2.1-or-later",
+      "line": 50,
+      "name": "r-efi",
+      "path": "AUTHORS",
+      "sha256": "ff92bed461f50338dd703a9ba9aee496a425957873df1d91192776e4bdf5dda7",
+      "text": "You should have received a copy of the GNU Lesser General Public License",
+      "version": "5.3.0"
+    },
+    {
+      "classification": "alternative license: manifest offers MIT OR Apache-2.0 OR LGPL-2.1-or-later",
+      "line": 39,
+      "name": "r-efi",
+      "path": "Cargo.toml",
+      "sha256": "dba000c0173b09b1e3b69afa42a715b5ab64355e6502ce6d9d1767c7845cf402",
+      "text": "license = \"MIT OR Apache-2.0 OR LGPL-2.1-or-later\"",
+      "version": "5.3.0"
+    },
+    {
+      "classification": "alternative license: manifest offers MIT OR Apache-2.0 OR LGPL-2.1-or-later",
+      "line": 21,
+      "name": "r-efi",
+      "path": "Cargo.toml.orig",
+      "sha256": "57b6d9b9a1b6524f6b4dcc1dd24970ac03e6959786a6cfedaec9ba52878b4d3e",
+      "text": "license = \"MIT OR Apache-2.0 OR LGPL-2.1-or-later\"",
+      "version": "5.3.0"
+    },
+    {
+      "classification": "alternative license: manifest offers MIT OR Apache-2.0 OR LGPL-2.1-or-later",
+      "line": 98,
+      "name": "r-efi",
+      "path": "README.md",
+      "sha256": "420f65fec3ba2e89d49da51b222d2881d26959037a7b7d3794143db4bd4627b1",
+      "text": "- **MIT** OR **Apache-2.0** OR **LGPL-2.1-or-later**",
+      "version": "5.3.0"
+    },
+    {
+      "classification": "alternative license: manifest offers MIT OR Apache-2.0 OR LGPL-2.1-or-later",
+      "line": 3,
+      "name": "r-efi",
+      "path": "AUTHORS",
+      "sha256": "d027e91dbc9cdbb2f1190068e498bd6b61cff022b6a032b191021ba658d96111",
+      "text": "License, Version 2.0, and the GNU Lesser General Public License,",
+      "version": "6.0.0"
+    },
+    {
+      "classification": "alternative license: manifest offers MIT OR Apache-2.0 OR LGPL-2.1-or-later",
+      "line": 39,
+      "name": "r-efi",
+      "path": "AUTHORS",
+      "sha256": "d027e91dbc9cdbb2f1190068e498bd6b61cff022b6a032b191021ba658d96111",
+      "text": "AUTHORS-LGPL:",
+      "version": "6.0.0"
+    },
+    {
+      "classification": "alternative license: manifest offers MIT OR Apache-2.0 OR LGPL-2.1-or-later",
+      "line": 41,
+      "name": "r-efi",
+      "path": "AUTHORS",
+      "sha256": "d027e91dbc9cdbb2f1190068e498bd6b61cff022b6a032b191021ba658d96111",
+      "text": "under the terms of the GNU Lesser General Public License as published",
+      "version": "6.0.0"
+    },
+    {
+      "classification": "alternative license: manifest offers MIT OR Apache-2.0 OR LGPL-2.1-or-later",
+      "line": 50,
+      "name": "r-efi",
+      "path": "AUTHORS",
+      "sha256": "d027e91dbc9cdbb2f1190068e498bd6b61cff022b6a032b191021ba658d96111",
+      "text": "You should have received a copy of the GNU Lesser General Public License",
+      "version": "6.0.0"
+    },
+    {
+      "classification": "alternative license: manifest offers MIT OR Apache-2.0 OR LGPL-2.1-or-later",
+      "line": 39,
+      "name": "r-efi",
+      "path": "Cargo.toml",
+      "sha256": "a021f9fb0645cc5de5770cf7f41594c1deff4b388eca933b289752aa52666829",
+      "text": "license = \"MIT OR Apache-2.0 OR LGPL-2.1-or-later\"",
+      "version": "6.0.0"
+    },
+    {
+      "classification": "alternative license: manifest offers MIT OR Apache-2.0 OR LGPL-2.1-or-later",
+      "line": 21,
+      "name": "r-efi",
+      "path": "Cargo.toml.orig",
+      "sha256": "b8e89c393831c2161b6d390bd40422910ac34f02903ad39edd85ec38d4513fef",
+      "text": "license = \"MIT OR Apache-2.0 OR LGPL-2.1-or-later\"",
+      "version": "6.0.0"
+    },
+    {
+      "classification": "alternative license: manifest offers MIT OR Apache-2.0 OR LGPL-2.1-or-later",
+      "line": 98,
+      "name": "r-efi",
+      "path": "README.md",
+      "sha256": "420f65fec3ba2e89d49da51b222d2881d26959037a7b7d3794143db4bd4627b1",
+      "text": "- **MIT** OR **Apache-2.0** OR **LGPL-2.1-or-later**",
+      "version": "6.0.0"
+    },
+    {
+      "classification": "GPL compatibility wording in Apache-2.0 LLVM exception",
+      "line": 213,
+      "name": "rustix",
+      "path": "LICENSE-Apache-2.0_WITH_LLVM-exception",
+      "sha256": "268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5",
+      "text": "software that is licensed under the GPLv2 (\"Combined Software\") and if a",
+      "version": "1.1.4"
+    },
+    {
+      "classification": "GPL compatibility wording in Apache-2.0 LLVM exception",
+      "line": 216,
+      "name": "rustix",
+      "path": "LICENSE-Apache-2.0_WITH_LLVM-exception",
+      "sha256": "268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5",
+      "text": "conflicts with the conditions of the GPLv2, you may retroactively and",
+      "version": "1.1.4"
+    },
+    {
+      "classification": "identifier named lgpl; not a license statement",
+      "line": 5191,
+      "name": "winapi",
+      "path": "src/um/wingdi.rs",
+      "sha256": "c8ef4d859a990e8758123b88b49a66db461529f444f373566a87eaec68d9a2c3",
+      "text": "lgpl: LOGPALETTE,",
+      "version": "0.3.9"
+    },
+    {
+      "classification": "identifier named lgpl; not a license statement",
+      "line": 1598,
+      "name": "windows-sys",
+      "path": "src/Windows/Win32/Graphics/Gdi/mod.rs",
+      "sha256": "badabfb0840e893a4a5755b3626d4529eb2101c3b398b274d0f7d26d237dc54f",
+      "text": "pub lgpl: LOGPALETTE,",
+      "version": "0.61.2"
+    },
+    {
+      "classification": "GPL compatibility wording in Apache-2.0 LLVM exception",
+      "line": 213,
+      "name": "wit-bindgen",
+      "path": "LICENSE-Apache-2.0_WITH_LLVM-exception",
+      "sha256": "268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5",
+      "text": "software that is licensed under the GPLv2 (\"Combined Software\") and if a",
+      "version": "0.51.0"
+    },
+    {
+      "classification": "GPL compatibility wording in Apache-2.0 LLVM exception",
+      "line": 216,
+      "name": "wit-bindgen",
+      "path": "LICENSE-Apache-2.0_WITH_LLVM-exception",
+      "sha256": "268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5",
+      "text": "conflicts with the conditions of the GPLv2, you may retroactively and",
+      "version": "0.51.0"
+    },
+    {
+      "classification": "GPL compatibility wording in Apache-2.0 LLVM exception",
+      "line": 213,
+      "name": "wit-bindgen-core",
+      "path": "LICENSE-Apache-2.0_WITH_LLVM-exception",
+      "sha256": "268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5",
+      "text": "software that is licensed under the GPLv2 (\"Combined Software\") and if a",
+      "version": "0.51.0"
+    },
+    {
+      "classification": "GPL compatibility wording in Apache-2.0 LLVM exception",
+      "line": 216,
+      "name": "wit-bindgen-core",
+      "path": "LICENSE-Apache-2.0_WITH_LLVM-exception",
+      "sha256": "268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5",
+      "text": "conflicts with the conditions of the GPLv2, you may retroactively and",
+      "version": "0.51.0"
+    },
+    {
+      "classification": "GPL compatibility wording in Apache-2.0 LLVM exception",
+      "line": 213,
+      "name": "wit-bindgen-rust",
+      "path": "LICENSE-Apache-2.0_WITH_LLVM-exception",
+      "sha256": "268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5",
+      "text": "software that is licensed under the GPLv2 (\"Combined Software\") and if a",
+      "version": "0.51.0"
+    },
+    {
+      "classification": "GPL compatibility wording in Apache-2.0 LLVM exception",
+      "line": 216,
+      "name": "wit-bindgen-rust",
+      "path": "LICENSE-Apache-2.0_WITH_LLVM-exception",
+      "sha256": "268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5",
+      "text": "conflicts with the conditions of the GPLv2, you may retroactively and",
+      "version": "0.51.0"
+    },
+    {
+      "classification": "GPL compatibility wording in Apache-2.0 LLVM exception",
+      "line": 213,
+      "name": "wit-bindgen-rust-macro",
+      "path": "LICENSE-Apache-2.0_WITH_LLVM-exception",
+      "sha256": "268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5",
+      "text": "software that is licensed under the GPLv2 (\"Combined Software\") and if a",
+      "version": "0.51.0"
+    },
+    {
+      "classification": "GPL compatibility wording in Apache-2.0 LLVM exception",
+      "line": 216,
+      "name": "wit-bindgen-rust-macro",
+      "path": "LICENSE-Apache-2.0_WITH_LLVM-exception",
+      "sha256": "268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5",
+      "text": "conflicts with the conditions of the GPLv2, you may retroactively and",
+      "version": "0.51.0"
+    }
+  ],
+  "method": "GNU license marker regex in all UTF-8 text dependency files, including tests, documentation and license texts; no filename glob filter",
+  "pattern": "\\b(?:AGPL|LGPL|GPL)(?:v\\d+)?\\b|\\bGNU (?:General|Lesser|Affero)"
+}

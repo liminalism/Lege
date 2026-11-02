@@ -1,0 +1,17 @@
+[
+  {
+    "file": "blank.pbm",
+    "bytes": 75,
+    "sha256": "f5e420a23dc6133cd857cf1c9799931bd2a538fc0e92401d8b1c11b08d596ccd"
+  },
+  {
+    "file": "marks.pbm",
+    "bytes": 1725,
+    "sha256": "afaa5f96b0b3277024748b16f5e33a8c6c45e11a1de4210632751ad6eeb51a86"
+  },
+  {
+    "file": "symbols.pbm",
+    "bytes": 6446,
+    "sha256": "decfde639ad6eedd3b1f6c8f7455049ceec2d5881a374657ac6f5bb94321304f"
+  }
+]

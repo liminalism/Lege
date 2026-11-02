@@ -1,0 +1,191 @@
+
+running 1 test
+QUALITY_RESOURCES	globals_encoded=172233	globals_bitmap=1416552	globals_pixels=5307393
+QUALITY_PAGE_RESOURCES	0	page_pixels=2777720	local_bitmap=0	exact=64	refined=0	substituted=0	generic_instances=1	generic_region_pixels=2777720	generic_ink=2704298	cold_work=8116225
+QUALITY_PAGE_RESOURCES	1	page_pixels=2508480	local_bitmap=0	exact=44	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=5313590
+QUALITY_PAGE_RESOURCES	2	page_pixels=2508480	local_bitmap=0	exact=2877	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=5325270
+QUALITY_PAGE_RESOURCES	3	page_pixels=2508480	local_bitmap=0	exact=2709	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=5594465
+QUALITY_PAGE_RESOURCES	4	page_pixels=2508480	local_bitmap=0	exact=1841	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=5511356
+QUALITY_PAGE_RESOURCES	5	page_pixels=2508480	local_bitmap=0	exact=2482	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=5807867
+QUALITY_PAGE_RESOURCES	6	page_pixels=2259745	local_bitmap=0	exact=2965	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=5782462
+QUALITY_PAGE_RESOURCES	7	page_pixels=2259745	local_bitmap=0	exact=2931	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=5772263
+QUALITY_PAGE_RESOURCES	8	page_pixels=2316665	local_bitmap=0	exact=2150	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=5772737
+QUALITY_PAGE_RESOURCES	9	page_pixels=2316665	local_bitmap=0	exact=3318	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=5787816
+QUALITY_PAGE_RESOURCES	10	page_pixels=5385600	local_bitmap=0	exact=3465	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=6285630
+QUALITY_PAGE_RESOURCES	11	page_pixels=5385600	local_bitmap=0	exact=2513	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=6953178
+QUALITY_PAGE_RESOURCES	12	page_pixels=5385600	local_bitmap=0	exact=2774	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=6245265
+QUALITY_PAGE_RESOURCES	13	page_pixels=3260488	local_bitmap=0	exact=2973	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=5947072
+QUALITY_PAGE_RESOURCES	14	page_pixels=3260488	local_bitmap=0	exact=3418	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=6051104
+QUALITY_PAGE_RESOURCES	15	page_pixels=3260488	local_bitmap=0	exact=3415	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=6048558
+QUALITY_PAGE_RESOURCES	16	page_pixels=3260488	local_bitmap=0	exact=1055	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=5543149
+QUALITY_MATCHING	components=40995	ingest_comparisons=0	planner_comparisons=137569	legacy_post_ingest_comparisons=unreported
+QUALITY_TOPOLOGY	corrected_instances=0
+QUALITY_TRIAL	None	dictionary control	AllGlobal	None	None	272258
+QUALITY_TRIAL	None	dictionary control	SharedGlobal	None	None	284355
+QUALITY_TRIAL	None	dictionary control	SharedGlobalWithLocal	None	None	278560
+QUALITY_TRIAL	Some(5415)	family + refinement	AllGlobal	Some(1179)	Some(-184)	272442
+QUALITY_TRIAL	Some(5415)	family + refinement	SharedGlobal	Some(1179)	Some(-12207)	284465
+QUALITY_TRIAL	Some(5415)	family + refinement	SharedGlobalWithLocal	Some(1179)	Some(-6354)	278612
+QUALITY_TRIAL	Some(5167)	family + refinement	AllGlobal	Some(994)	Some(-221)	272479
+QUALITY_TRIAL	Some(5167)	family + refinement	SharedGlobal	Some(994)	Some(-12245)	284503
+QUALITY_TRIAL	Some(5167)	family + refinement	SharedGlobalWithLocal	Some(994)	Some(-6459)	278717
+QUALITY_TRIAL	Some(5109)	family + refinement	AllGlobal	Some(850)	Some(-203)	272461
+QUALITY_TRIAL	Some(5109)	family + refinement	SharedGlobal	Some(850)	Some(-12234)	284492
+QUALITY_TRIAL	Some(5109)	family + refinement	SharedGlobalWithLocal	Some(850)	Some(-6401)	278659
+QUALITY_TRIAL	Some(4894)	family + refinement	AllGlobal	Some(710)	Some(-275)	272533
+QUALITY_TRIAL	Some(4894)	family + refinement	SharedGlobal	Some(710)	Some(-12250)	284508
+QUALITY_TRIAL	Some(4894)	family + refinement	SharedGlobalWithLocal	Some(710)	Some(-6501)	278759
+QUALITY_TRIAL	Some(5068)	family + refinement	AllGlobal	Some(564)	Some(-197)	272455
+QUALITY_TRIAL	Some(5068)	family + refinement	SharedGlobal	Some(564)	Some(-12224)	284482
+QUALITY_TRIAL	Some(5068)	family + refinement	SharedGlobalWithLocal	Some(564)	Some(-6421)	278679
+QUALITY_TRIAL	Some(4886)	family + refinement	AllGlobal	Some(559)	Some(-250)	272508
+QUALITY_TRIAL	Some(4886)	family + refinement	SharedGlobal	Some(559)	Some(-12194)	284452
+QUALITY_TRIAL	Some(4886)	family + refinement	SharedGlobalWithLocal	Some(559)	Some(-6359)	278617
+QUALITY_TRIAL	Some(0)	generic residual	AllGlobal	None	Some(5)	272253
+QUALITY_TRIAL	Some(0)	generic residual	SharedGlobal	None	Some(-12102)	284355
+QUALITY_TRIAL	Some(0)	generic residual	SharedGlobalWithLocal	None	Some(-6365)	278618
+QUALITY_TRIAL	Some(18126)	generic residual	AllGlobal	None	Some(-134)	272387
+QUALITY_TRIAL	Some(18126)	generic residual	SharedGlobal	None	Some(-12102)	284355
+QUALITY_TRIAL	Some(18126)	generic residual	SharedGlobalWithLocal	None	Some(-6450)	278703
+QUALITY_TRIAL	Some(17564)	generic residual	AllGlobal	None	Some(-69)	272322
+QUALITY_TRIAL	Some(17564)	generic residual	SharedGlobal	None	Some(-12102)	284355
+QUALITY_TRIAL	Some(17564)	generic residual	SharedGlobalWithLocal	None	Some(-6413)	278666
+QUALITY_TRIAL	Some(18534)	generic residual	AllGlobal	None	Some(-73)	272326
+QUALITY_TRIAL	Some(18534)	generic residual	SharedGlobal	None	Some(-12102)	284355
+QUALITY_TRIAL	Some(18534)	generic residual	SharedGlobalWithLocal	None	Some(-6449)	278702
+QUALITY_TRIAL	Some(16981)	generic residual	AllGlobal	None	Some(-149)	272402
+QUALITY_TRIAL	Some(16981)	generic residual	SharedGlobal	None	Some(-12102)	284355
+QUALITY_TRIAL	Some(16981)	generic residual	SharedGlobalWithLocal	None	Some(-6504)	278757
+QUALITY_TRIAL	Some(18645)	generic residual	AllGlobal	None	Some(-97)	272350
+QUALITY_TRIAL	Some(18645)	generic residual	SharedGlobal	None	Some(-12102)	284355
+QUALITY_TRIAL	Some(18645)	generic residual	SharedGlobalWithLocal	None	Some(-6463)	278716
+QUALITY_TRIAL	Some(16950)	generic residual	AllGlobal	None	Some(-107)	272360
+QUALITY_TRIAL	Some(16950)	generic residual	SharedGlobal	None	Some(-12102)	284355
+QUALITY_TRIAL	Some(16950)	generic residual	SharedGlobalWithLocal	None	Some(-6452)	278705
+QUALITY_TRIAL	Some(16964)	reference + refinement	AllGlobal	Some(1557)	Some(-68)	272321
+QUALITY_TRIAL	Some(16964)	reference + refinement	SharedGlobal	Some(1557)	Some(-12102)	284355
+QUALITY_TRIAL	Some(16964)	reference + refinement	SharedGlobalWithLocal	Some(1557)	Some(-6431)	278684
+QUALITY_TRIAL	Some(16964)	generic residual	AllGlobal	None	Some(-145)	272398
+QUALITY_TRIAL	Some(16964)	generic residual	SharedGlobal	None	Some(-12102)	284355
+QUALITY_TRIAL	Some(16964)	generic residual	SharedGlobalWithLocal	None	Some(-6484)	278737
+QUALITY_TRIAL	Some(16963)	generic residual	AllGlobal	None	Some(-133)	272386
+QUALITY_TRIAL	Some(16963)	generic residual	SharedGlobal	None	Some(-12102)	284355
+QUALITY_TRIAL	Some(16963)	generic residual	SharedGlobalWithLocal	None	Some(-6475)	278728
+QUALITY_TRIAL	Some(16962)	generic residual	AllGlobal	None	Some(-167)	272420
+QUALITY_TRIAL	Some(16962)	generic residual	SharedGlobal	None	Some(-12102)	284355
+QUALITY_TRIAL	Some(16962)	generic residual	SharedGlobalWithLocal	None	Some(-6510)	278763
+QUALITY_TRIAL	Some(18189)	generic residual	AllGlobal	None	Some(-42)	272295
+QUALITY_TRIAL	Some(18189)	generic residual	SharedGlobal	None	Some(-12102)	284355
+QUALITY_TRIAL	Some(18189)	generic residual	SharedGlobalWithLocal	None	Some(-6417)	278670
+QUALITY_TRIAL	Some(18620)	generic residual	AllGlobal	None	Some(-96)	272349
+QUALITY_TRIAL	Some(18620)	generic residual	SharedGlobal	None	Some(-12102)	284355
+QUALITY_TRIAL	Some(18620)	generic residual	SharedGlobalWithLocal	None	Some(-6452)	278705
+QUALITY_TRIAL	Some(18412)	generic residual	AllGlobal	None	Some(-87)	272340
+QUALITY_TRIAL	Some(18412)	generic residual	SharedGlobal	None	Some(-12102)	284355
+QUALITY_TRIAL	Some(18412)	generic residual	SharedGlobalWithLocal	None	Some(-6442)	278695
+QUALITY_TRIAL	None	whole-page generic control	AllGlobal	None	Some(-108829)	381082
+QUALITY_OPTIMIZATION	trials=64	comparisons=137569	baseline=272258	generic=381082	selected=272253	exact_instances=40994	refined_instances=0	generic_instances=1	substituted_instances=0
+QUALITY_STAGES	cc=0.049607198	match=0.018079723	cluster=0.000000000	plan=15.415825427	dict=0.000000000	text=0.000000000	generic=0.000000000
+PDFTOPPM: Syntax Error (174885): 1 extraneous byte after segment
+Syntax Error (734): 1 extraneous byte after segment
+
+QUALITY_PDF	0	PDFTOPPM	pass
+QUALITY_PDF	0	PDFIUM_PYTHON	pass
+QUALITY_PAGE	0	2042	0	0.054998438	0.012325632	0
+PDFTOPPM: Syntax Error (173069): 1 extraneous byte after segment
+Syntax Error (698): 1 extraneous byte after segment
+
+QUALITY_PDF	1	PDFTOPPM	pass
+QUALITY_PDF	1	PDFIUM_PYTHON	pass
+QUALITY_PAGE	1	227	0	0.048345897	0.000543845	0
+PDFTOPPM: Syntax Error (178287): 1 extraneous byte after segment
+
+QUALITY_PDF	2	PDFTOPPM	pass
+QUALITY_PDF	2	PDFIUM_PYTHON	pass
+QUALITY_PAGE	2	5444	0	0.051498915	0.001176497	0
+PDFTOPPM: Syntax Error (180188): 1 extraneous byte after segment
+Syntax Error (7817): 1 extraneous byte after segment
+
+QUALITY_PDF	3	PDFTOPPM	pass
+QUALITY_PDF	3	PDFIUM_PYTHON	pass
+QUALITY_PAGE	3	7345	0	0.042954386	0.001349864	0
+PDFTOPPM: Syntax Error (177921): 1 extraneous byte after segment
+Syntax Error (5550): 1 extraneous byte after segment
+
+QUALITY_PDF	4	PDFTOPPM	pass
+QUALITY_PDF	4	PDFIUM_PYTHON	pass
+QUALITY_PAGE	4	5078	0	0.051609051	0.001151480	0
+PDFTOPPM: Syntax Error (179577): 1 extraneous byte after segment
+
+QUALITY_PDF	5	PDFTOPPM	pass
+QUALITY_PDF	5	PDFIUM_PYTHON	pass
+QUALITY_PAGE	5	6734	0	0.053216113	0.001400646	0
+PDFTOPPM: Syntax Error (180998): 1 extraneous byte after segment
+Syntax Error (8627): 1 extraneous byte after segment
+
+QUALITY_PDF	6	PDFTOPPM	pass
+QUALITY_PDF	6	PDFIUM_PYTHON	pass
+QUALITY_PAGE	6	8155	0	0.046556833	0.001632205	0
+PDFTOPPM: Syntax Error (181000): 1 extraneous byte after segment
+Syntax Error (8629): 1 extraneous byte after segment
+
+QUALITY_PDF	7	PDFTOPPM	pass
+QUALITY_PDF	7	PDFIUM_PYTHON	pass
+QUALITY_PAGE	7	8157	0	0.041794057	0.001476007	0
+PDFTOPPM: Syntax Error (178769): 1 extraneous byte after segment
+Syntax Error (6398): 1 extraneous byte after segment
+
+QUALITY_PDF	8	PDFTOPPM	pass
+QUALITY_PDF	8	PDFIUM_PYTHON	pass
+QUALITY_PAGE	8	5926	0	0.037618329	0.001053548	0
+PDFTOPPM: Syntax Error (181786): 1 extraneous byte after segment
+Syntax Error (9415): 1 extraneous byte after segment
+
+QUALITY_PDF	9	PDFTOPPM	pass
+QUALITY_PDF	9	PDFIUM_PYTHON	pass
+QUALITY_PAGE	9	8943	0	0.043469127	0.001527610	0
+PDFTOPPM: Syntax Error (180973): 1 extraneous byte after segment
+
+QUALITY_PDF	10	PDFTOPPM	pass
+QUALITY_PDF	10	PDFIUM_PYTHON	pass
+QUALITY_PAGE	10	8130	0	0.049724047	0.002222618	0
+PDFTOPPM: Syntax Error (178175): 1 extraneous byte after segment
+Syntax Error (5804): 1 extraneous byte after segment
+
+QUALITY_PDF	11	PDFTOPPM	pass
+QUALITY_PDF	11	PDFIUM_PYTHON	pass
+QUALITY_PAGE	11	5332	0	0.049207271	0.001848247	0
+PDFTOPPM: Syntax Error (178651): 1 extraneous byte after segment
+Syntax Error (6280): 1 extraneous byte after segment
+
+QUALITY_PDF	12	PDFTOPPM	pass
+QUALITY_PDF	12	PDFIUM_PYTHON	pass
+QUALITY_PAGE	12	5808	0	0.050058264	0.002124284	0
+PDFTOPPM: Syntax Error (179186): 1 extraneous byte after segment
+Syntax Error (6815): 1 extraneous byte after segment
+
+QUALITY_PDF	13	PDFTOPPM	pass
+QUALITY_PDF	13	PDFIUM_PYTHON	pass
+QUALITY_PAGE	13	6343	0	0.045170601	0.001797009	0
+PDFTOPPM: Syntax Error (179719): 1 extraneous byte after segment
+Syntax Error (7348): 1 extraneous byte after segment
+
+QUALITY_PDF	14	PDFTOPPM	pass
+QUALITY_PDF	14	PDFIUM_PYTHON	pass
+QUALITY_PAGE	14	6876	0	0.051446731	0.001967813	0
+PDFTOPPM: Syntax Error (180080): 1 extraneous byte after segment
+
+QUALITY_PDF	15	PDFTOPPM	pass
+QUALITY_PDF	15	PDFIUM_PYTHON	pass
+QUALITY_PAGE	15	7237	0	0.049056037	0.001847677	0
+PDFTOPPM: Syntax Error (175086): 1 extraneous byte after segment
+Syntax Error (2715): 1 extraneous byte after segment
+
+QUALITY_PDF	16	PDFTOPPM	pass
+QUALITY_PDF	16	PDFIUM_PYTHON	pass
+QUALITY_PAGE	16	2243	0	0.042438690	0.000933451	0
+QUALITY_RESULT	lossy_optimized	17	false	272253	172233	0	1780	15.515374285	0	0.809162787	0.036378433	1416552	0	21471	0	0
+test quality_corpus_worker ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 24.28s
+

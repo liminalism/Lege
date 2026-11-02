@@ -1,6 +1,6 @@
 //! Phase 1 decoder round-trip matrix (jbig2decplan.md §21.2/§21.3, Gap C/E).
 //!
-//! For both PBM fixtures × {generic, lossless} × {standalone, embedded}, assert
+//! For original PBM fixtures × {generic, lossless} × {standalone, embedded}, assert
 //! that `native_decode(encode(img))` is pixel-exact to the original AND, when
 //! `jbig2dec` is available, that native output matches `jbig2dec` on the same
 //! stream. Plus the odd-width property corpus.
@@ -112,13 +112,18 @@ fn check_embedded(mode: Mode, img: &Pbm, label: &str) {
 }
 
 fn fixtures() -> Vec<(&'static str, Pbm)> {
-    vec![
-        ("test_image", load_fixture("tests/fixtures/test_image.pbm")),
-        (
-            "test_image1",
-            load_fixture("tests/fixtures/test_image1.pbm"),
-        ),
-    ]
+    common::fixtures::fixture_paths()
+        .into_iter()
+        .enumerate()
+        .map(|(index, path)| {
+            let name = match index {
+                0 => "blank",
+                1 => "symbols",
+                _ => "marks",
+            };
+            (name, load_fixture(path))
+        })
+        .collect()
 }
 
 #[test]
@@ -264,7 +269,7 @@ fn symbol_modes_embedded_globals_vs_jbig2dec() {
 fn embedded_without_globals_is_typed_error() {
     let (_n, img) = fixtures()
         .into_iter()
-        .find(|(n, _)| *n == "test_image1")
+        .find(|(n, _)| *n == "symbols")
         .unwrap();
     let out = encode_single_image_with_config(
         &img.pixels,
@@ -289,7 +294,7 @@ fn embedded_without_globals_is_typed_error() {
 fn symbol_truncations_never_panic() {
     let (_n, img) = fixtures()
         .into_iter()
-        .find(|(n, _)| *n == "test_image1")
+        .find(|(n, _)| *n == "symbols")
         .unwrap();
     let out = encode_single_image_with_config(
         &img.pixels,
@@ -328,10 +333,7 @@ fn load_fixture_array(path: &str) -> Array2<u8> {
 
 #[test]
 fn multipage_shared_globals_vs_jbig2dec() {
-    let paths = [
-        "tests/fixtures/test_image.pbm",
-        "tests/fixtures/test_image1.pbm",
-    ];
+    let paths = common::fixtures::fixture_paths();
     let pages: Vec<Array2<u8>> = paths.iter().map(|p| load_fixture_array(p)).collect();
     let split = encode_document_pdf_split(&pages, &Jbig2Config::text())
         .expect("multipage pdf_split encode");
@@ -365,10 +367,7 @@ fn multipage_deterministic_across_thread_counts() {
     use std::sync::Arc;
     use std::thread;
 
-    let paths = [
-        "tests/fixtures/test_image.pbm",
-        "tests/fixtures/test_image1.pbm",
-    ];
+    let paths = common::fixtures::fixture_paths();
     let pages: Vec<Array2<u8>> = paths.iter().map(|p| load_fixture_array(p)).collect();
     let split = encode_document_pdf_split(&pages, &Jbig2Config::text())
         .expect("multipage pdf_split encode");
@@ -422,7 +421,7 @@ fn dictionary_export_count_mismatch_is_typed_error() {
 
     let (_n, img) = fixtures()
         .into_iter()
-        .find(|(n, _)| *n == "test_image1")
+        .find(|(n, _)| *n == "symbols")
         .unwrap();
     let out = encode_single_image_with_config(
         &img.pixels,

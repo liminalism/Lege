@@ -1,0 +1,107 @@
+
+running 1 test
+QUALITY_RESOURCES	globals_encoded=154112	globals_bitmap=1044728	globals_pixels=3310832
+QUALITY_PAGE_RESOURCES	0	page_pixels=2777720	local_bitmap=0	exact=48	refined=0	substituted=0	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=3325215
+QUALITY_PAGE_RESOURCES	1	page_pixels=2508480	local_bitmap=0	exact=36	refined=0	substituted=2	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=3317023
+QUALITY_PAGE_RESOURCES	2	page_pixels=2508480	local_bitmap=0	exact=1379	refined=0	substituted=450	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=3327650
+QUALITY_PAGE_RESOURCES	3	page_pixels=2508480	local_bitmap=0	exact=2121	refined=0	substituted=482	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=3596143
+QUALITY_PAGE_RESOURCES	4	page_pixels=2508480	local_bitmap=0	exact=1409	refined=0	substituted=341	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=3514643
+QUALITY_PAGE_RESOURCES	5	page_pixels=2508480	local_bitmap=0	exact=1981	refined=0	substituted=409	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=3811102
+QUALITY_PAGE_RESOURCES	6	page_pixels=2259745	local_bitmap=0	exact=2258	refined=0	substituted=584	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=3785522
+QUALITY_PAGE_RESOURCES	7	page_pixels=2259745	local_bitmap=0	exact=2089	refined=0	substituted=725	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=3775506
+QUALITY_PAGE_RESOURCES	8	page_pixels=2316665	local_bitmap=0	exact=1622	refined=0	substituted=450	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=3776024
+QUALITY_PAGE_RESOURCES	9	page_pixels=2316665	local_bitmap=0	exact=2659	refined=0	substituted=557	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=3790959
+QUALITY_PAGE_RESOURCES	10	page_pixels=5385600	local_bitmap=0	exact=2078	refined=0	substituted=1090	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=3986451
+QUALITY_PAGE_RESOURCES	11	page_pixels=5385600	local_bitmap=0	exact=1776	refined=0	substituted=627	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=3883219
+QUALITY_PAGE_RESOURCES	12	page_pixels=5385600	local_bitmap=0	exact=2031	refined=0	substituted=674	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=4022695
+QUALITY_PAGE_RESOURCES	13	page_pixels=3260488	local_bitmap=0	exact=2041	refined=0	substituted=911	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=3947762
+QUALITY_PAGE_RESOURCES	14	page_pixels=3260488	local_bitmap=0	exact=2312	refined=0	substituted=1090	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=4054107
+QUALITY_PAGE_RESOURCES	15	page_pixels=3260488	local_bitmap=0	exact=2355	refined=0	substituted=1042	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=4051514
+QUALITY_PAGE_RESOURCES	16	page_pixels=3260488	local_bitmap=0	exact=695	refined=0	substituted=356	generic_instances=0	generic_region_pixels=0	generic_ink=0	cold_work=3546289
+QUALITY_MATCHING	components=40995	ingest_comparisons=87207	planner_comparisons=0	legacy_post_ingest_comparisons=unreported
+QUALITY_TOPOLOGY	corrected_instances=0
+QUALITY_STAGES	cc=0.049186840	match=0.346106627	cluster=0.000000000	plan=0.115372203	dict=0.033566852	text=0.011556103	generic=0.000000688
+QUALITY_PDF	0	PDFTOPPM	pass
+QUALITY_PDF	0	PDFIUM_PYTHON	pass
+QUALITY_PAGE	0	213	2719804	0.032145325	0.000287117	2719804
+PDFTOPPM: Syntax Error (676): 1 extraneous byte after segment
+
+QUALITY_PDF	1	PDFTOPPM	pass
+QUALITY_PDF	1	PDFIUM_PYTHON	pass
+QUALITY_PAGE	1	205	10	0.034246990	0.000562500	10
+PDFTOPPM: Syntax Error (4270): 1 extraneous byte after segment
+
+QUALITY_PDF	2	PDFTOPPM	pass
+QUALITY_PDF	2	PDFIUM_PYTHON	pass
+QUALITY_PAGE	2	3798	1898	0.040464655	0.000945915	1898
+PDFTOPPM: Syntax Error (7399): 1 extraneous byte after segment
+
+QUALITY_PDF	3	PDFTOPPM	pass
+QUALITY_PDF	3	PDFIUM_PYTHON	pass
+QUALITY_PAGE	3	6927	3009	0.034821081	0.001331124	3009
+PDFTOPPM: Syntax Error (5310): 1 extraneous byte after segment
+
+QUALITY_PDF	4	PDFTOPPM	pass
+QUALITY_PDF	4	PDFIUM_PYTHON	pass
+QUALITY_PAGE	4	4838	1381	0.033475803	0.001080795	1381
+QUALITY_PDF	5	PDFTOPPM	pass
+QUALITY_PDF	5	PDFIUM_PYTHON	pass
+QUALITY_PAGE	5	6402	2558	0.040214661	0.001329269	2558
+PDFTOPPM: Syntax Error (8281): 1 extraneous byte after segment
+
+QUALITY_PDF	6	PDFTOPPM	pass
+QUALITY_PDF	6	PDFIUM_PYTHON	pass
+QUALITY_PAGE	6	7809	3117	0.036240279	0.001591042	3117
+PDFTOPPM: Syntax Error (8324): 1 extraneous byte after segment
+
+QUALITY_PDF	7	PDFTOPPM	pass
+QUALITY_PDF	7	PDFIUM_PYTHON	pass
+QUALITY_PAGE	7	7852	3906	0.041106134	0.001525064	3906
+PDFTOPPM: Syntax Error (6212): 1 extraneous byte after segment
+
+QUALITY_PDF	8	PDFTOPPM	pass
+QUALITY_PDF	8	PDFIUM_PYTHON	pass
+QUALITY_PAGE	8	5740	3191	0.033964335	0.001355416	3191
+PDFTOPPM: Syntax Error (9005): 1 extraneous byte after segment
+
+QUALITY_PDF	9	PDFTOPPM	pass
+QUALITY_PDF	9	PDFIUM_PYTHON	pass
+QUALITY_PAGE	9	8533	2639	0.031143807	0.001487972	2639
+PDFTOPPM: Syntax Error (7754): 1 extraneous byte after segment
+
+QUALITY_PDF	10	PDFTOPPM	pass
+QUALITY_PDF	10	PDFIUM_PYTHON	pass
+QUALITY_PAGE	10	7282	52066	0.034516619	0.001978133	52066
+PDFTOPPM: Syntax Error (5374): 1 extraneous byte after segment
+
+QUALITY_PDF	11	PDFTOPPM	pass
+QUALITY_PDF	11	PDFIUM_PYTHON	pass
+QUALITY_PAGE	11	4902	74373	0.034966510	0.001556711	74373
+PDFTOPPM: Syntax Error (5940): 1 extraneous byte after segment
+
+QUALITY_PDF	12	PDFTOPPM	pass
+QUALITY_PDF	12	PDFIUM_PYTHON	pass
+QUALITY_PAGE	12	5468	22626	0.031521430	0.001547128	22626
+PDFTOPPM: Syntax Error (6558): 1 extraneous byte after segment
+
+QUALITY_PDF	13	PDFTOPPM	pass
+QUALITY_PDF	13	PDFIUM_PYTHON	pass
+QUALITY_PAGE	13	6086	8935	0.034590778	0.001541497	8935
+QUALITY_PDF	14	PDFTOPPM	pass
+QUALITY_PDF	14	PDFIUM_PYTHON	pass
+QUALITY_PAGE	14	6622	7731	0.034928333	0.001473141	7731
+PDFTOPPM: Syntax Error (7427): 1 extraneous byte after segment
+
+QUALITY_PDF	15	PDFTOPPM	pass
+QUALITY_PDF	15	PDFIUM_PYTHON	pass
+QUALITY_PAGE	15	6955	7477	0.034924392	0.001733414	7477
+PDFTOPPM: Syntax Error (2629): 1 extraneous byte after segment
+
+QUALITY_PDF	16	PDFTOPPM	pass
+QUALITY_PDF	16	PDFIUM_PYTHON	pass
+QUALITY_PAGE	16	2157	2781	0.034803678	0.000851612	2781
+QUALITY_RESULT	unify_fixed	17	false	245901	154112	0	0	1.042545912	2917502	0.598074810	0.022177850	1044728	87207	8878	0	2917502
+test quality_corpus_worker ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 9.22s
+

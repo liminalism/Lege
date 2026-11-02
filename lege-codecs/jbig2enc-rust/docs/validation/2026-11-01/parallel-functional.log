@@ -1,0 +1,467 @@
+   Compiling jbig2enc-rust v0.6.0 (/home/dk/rust-projects/Lege-ecosystem/lege-codecs/jbig2enc-rust)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.16s
+     Running unittests src/lib.rs (target/debug/deps/jbig2enc_rust-4636f707887db7ea)
+
+running 112 tests
+test api_validation_tests::unpacked_input_length_must_match_exactly ... ok
+test decode::arith::tests::empty_input_does_not_panic ... ok
+test api_validation_tests::zero_sized_images_are_rejected ... ok
+test api_validation_tests::invalid_direct_encoder_config_is_fallible_not_panicking ... ok
+test decode::context::tests::default_options_are_strict ... ok
+test decode::file::tests::auto_detects_organisation ... ok
+test decode::file::tests::embedded_sequence_without_header ... ok
+test decode::file::tests::declared_page_count_respects_strictness ... ok
+test decode::file::tests::parses_sequential_file ... ok
+test decode::file::tests::random_access_parses_headers_then_data ... ok
+test decode::file::tests::random_access_without_eof_is_malformed ... ok
+test decode::arith::tests::single_context_alternating ... ok
+test decode::file::tests::referred_segment_limit_is_checked_before_long_form_allocation ... ok
+test decode::file::tests::rejects_bad_magic ... ok
+test decode::file::tests::reserved_file_flags_respect_strictness ... ok
+test decode::file::tests::truncated_payload_is_error ... ok
+test decode::halftone_region::tests::hbpp_matches_spec ... ok
+test decode::huffman::tests::custom_table_roundtrip_via_b1_encoding ... ok
+test decode::huffman::tests::table_b1_decode_mid_value ... ok
+test decode::huffman::tests::all_standard_tables_build ... ok
+test decode::arith::tests::stuffing_around_0xff ... ok
+test decode::huffman::tests::table_b2_oob ... ok
+test decode::huffman::tests::table_b1_decode_small_value ... ok
+test decode::huffman::tests::table_b14_symmetric ... ok
+test decode::huffman::tests::table_b1_codes_match_spec_example ... ok
+test decode::mmr::tests::malformed_data_is_typed_error_not_panic ... ok
+test decode::mmr::tests::block_without_trailing_eofb_decodes_every_row ... ok
+test decode::refinement::grat2_tests::context_gr0_reads_the_custom_grat2_reference_pixel ... ok
+test decode::arith::tests::many_contexts ... ok
+test decode::mmr::tests::roundtrip_solid_and_empty ... ok
+test decode::page::tests::default_pixel_bit_sets_black_page ... ok
+test decode::context::tests::generic_contexts_are_zeroed_and_sized ... ok
+test decode::segment::tests::deferred_non_retain_flag ... ok
+test decode::iaid::tests::zero_bits_reads_nothing ... ok
+test decode::arith::tests::lps_heavy_pseudorandom ... ok
+test decode::page::tests::parse_page_info_matches_encoder ... ok
+test decode::segment::tests::five_references_long_form ... ok
+test decode::segment::tests::four_byte_page_association ... ok
+test decode::segment::tests::four_byte_references_at_65537 ... ok
+test decode::segment::tests::four_references_short_form ... ok
+test decode::iaid::tests::encoder_rejects_ids_that_do_not_fit_code_length ... ok
+test decode::segment::tests::referred_size_boundaries ... ok
+test decode::segment::tests::reserved_short_form_counts_are_rejected ... ok
+test decode::segment::tests::truncated_header_is_error ... ok
+test decode::segment::tests::two_byte_references_at_257 ... ok
+test decode::segment::tests::unknown_length_flagged ... ok
+test decode::segment::tests::zero_references ... ok
+test decode::arith::tests::long_mps_run ... ok
+test decode::store::limit_tests::aggregate_retained_bytes_and_dependency_depth_are_enforced ... ok
+test decode::text_region::tests::log2_ceil_matches_encoder ... ok
+test decode::integer::tests::reset_clears_state ... ok
+test encode::cc::tests::test_cc_analysis_finds_two_components ... ok
+test encode::cc::tests::test_full_pipeline ... ok
+test encode::cc::tests::test_run_extraction ... ok
+test encode::cc::tests::test_tiny_cc_removal ... ok
+test encode::cost::tests::entry_bytes_round_to_32_bit_words ... ok
+test encode::cost::tests::total_bytes_sum_entries ... ok
+test encode::document::symbol::residual::tests::empty_residuals_emit_no_segment ... ok
+test decode::integer::tests::interleaved_procedures ... ok
+test decode::refinement::tests::refinement_roundtrip ... ok
+test decode::generic::tests::nominal_and_general_paths_agree ... ok
+test encode::document::symbol::topology::tests::component_and_thin_endpoint_changes_are_rejected ... ok
+test encode::simd::tests::shift_xor_popcnt_matches_scalar ... ok
+test encode::simd::tests::shift_xor_popcnt_matches_scalar_tail_width ... ok
+test encode::simd::tests::xor_popcnt_matches_scalar_noshift ... ok
+test decode::iaid::tests::interleaved_ids_single_stream ... ok
+test encode::document::symbol::topology::tests::one_pixel_counter_changes_are_rejected_even_in_small_glyphs ... ok
+test encode::simd::tests::xor_popcnt_matches_scalar_with_negative_offset ... ok
+test encode::simd::tests::xor_popcnt_preserves_early_exit ... ok
+test encode::document::symbol::topology::tests::counters_use_complementary_background_connectivity ... ok
+test encode::structs::generic_region_config_tests::unsupported_payload_modes_fail_validation ... ok
+test encode::sym::tests::binary_pixels_reject_zero_dimensions ... ok
+test encode::sym::tests::binary_pixels_match_array_conversion ... ok
+test encode::sym::tests::fallible_bitmap_apis_reject_bad_geometry_without_panicking ... ok
+test decode::arith::tests::truncated_input_does_not_panic ... ok
+test shared::bitmap::tests::as_msb_bytes_matches_pixels ... ok
+test encode::sym::tests::p4_loader_discards_each_rows_padding_bits ... ok
+test encode::sym::tests::p4_loader_accepts_split_tokens_and_comments_without_eating_raster_whitespace ... ok
+test shared::bitmap::tests::bit_image_roundtrip ... ok
+test shared::bitmap::tests::combine_preserves_destination_padding ... ok
+test shared::bitmap::tests::fill_black_sets_only_in_width_and_zeroes_padding ... ok
+test shared::bitmap::tests::get_set_roundtrip_and_out_of_range_is_safe ... ok
+test shared::bitmap::tests::new_rejects_oversized_dimensions ... ok
+test shared::error::tests::checked_conversion ... ok
+test shared::bitmap::tests::new_zeroes_and_dimensions ... ok
+test shared::error::tests::display_is_populated ... ok
+test shared::error::tests::from_conversions ... ok
+test shared::int_proc::tests::discriminants_are_contiguous ... ok
+test shared::limits::tests::default_is_internally_consistent ... ok
+test shared::mq_table::tests::context_defaults_to_state_zero ... ok
+test shared::mq_table::tests::known_anchor_states ... ok
+test shared::mq_table::tests::lower_and_upper_halves_share_qe ... ok
+test shared::mq_table::tests::table_has_no_out_of_range_transitions ... ok
+test shared::reader::tests::big_endian_widths ... ok
+test shared::reader::tests::oversized_take_reports_eof_not_overflow ... ok
+test shared::reader::tests::peek_does_not_advance ... ok
+test shared::reader::tests::sequential_reads_advance_position ... ok
+test shared::reader::tests::take_zero_is_ok_at_end ... ok
+test shared::reader::tests::subreader_is_bounded_and_independent ... ok
+test shared::reader::tests::truncation_is_a_typed_error ... ok
+test shared::segment::tests::known_codes_round_trip ... ok
+test shared::segment::tests::unassigned_codes_rejected ... ok
+test decode::mmr::tests::roundtrip_odd_widths ... ok
+test decode::integer::tests::roundtrip_boundary_values_every_proc ... ok
+test encode::api::tests::legacy_pdf_api_matches_canonical_single_pass_api ... ok
+test encode::document::symbol::residual::tests::dense_overlapping_residuals_do_not_lose_pixels_or_pay_extra_headers ... ok
+test decode::iaid::tests::roundtrip_all_bit_widths_and_boundaries ... ok
+test decode::generic::tests::roundtrip_odd_widths ... ok
+test encode::document::symbol::residual::tests::candidate_limits_cover_many_marks_and_multiple_row_bands ... ok
+test shared::bitmap::tests::combine_all_operators_widths_and_offsets ... ok
+test encode::document::symbol::residual::tests::packed_regions_stay_before_end_of_page_in_standalone_page_builder ... ok
+test encode::document::symbol::residual::tests::sparse_residual_layout_wins_and_preserves_every_pixel ... ok
+
+test result: ok. 112 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.26s
+
+     Running tests/comparator.rs (target/debug/deps/comparator-7c78062cf3826ba8)
+
+running 4 tests
+test distance_none_for_too_different ... ok
+test distance_is_symmetric_for_simple_cases ... ok
+test identical_images_have_zero_distance ... ok
+test fast_and_slow_distance_match ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/connected_components.rs (target/debug/deps/connected_components-acb1ae286e9d04af)
+
+running 5 tests
+test optional_grid_regrouping_preserves_pixels_and_descriptor_offsets ... ok
+test staged_unsorted_runs_normalize_to_the_same_foreground_set ... ok
+test sparse_staged_coordinates_do_not_allocate_by_page_height_or_label_id ... ok
+test empty_solid_and_diagonal_inputs_are_preserved_without_cleanup ... ok
+test span_components_equal_pixel_graph_on_odd_widths_and_random_patterns ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running tests/decode_alloc.rs (target/debug/deps/decode_alloc-cf710f5e0ad443e4)
+
+running 2 tests
+test common::tests::pbm_packing_row_major_msb_first ... ok
+test steady_state_allocations_are_stable ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/decode_chaos.rs (target/debug/deps/decode_chaos-a091bdb28bdbb6d5)
+
+running 4 tests
+test truncations_never_panic ... ok
+test single_byte_mutations_never_panic ... ok
+test symbol_stream_single_byte_mutations_never_panic ... ok
+test xorshift_multibyte_mutations_never_panic ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 15.54s
+
+     Running tests/decode_generic_templates.rs (target/debug/deps/decode_generic_templates-1286600f56946c5d)
+
+running 6 tests
+test common::tests::pbm_packing_row_major_msb_first ... ok
+test tpgdon_all_duplicate_rows ... ok
+test all_templates_tpgdon ... ok
+test all_templates_random ... ok
+test custom_at_deep_rows ... ok
+test odd_widths_all_templates ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.27s
+
+     Running tests/decode_halftone.rs (target/debug/deps/decode_halftone-a498f34b522909cb)
+
+running 7 tests
+test common::tests::pbm_packing_row_major_msb_first ... ok
+test pattern_dict_graymax_overflow_is_typed_error ... ok
+test halftone_missing_pattern_dict_is_typed_error ... ok
+test halftone_truncations_never_panic ... ok
+test halftone_embedded_globals_vs_jbig2dec ... ok
+test generic_mmr_region_roundtrip_and_jbig2dec ... ok
+test halftone_modes_standalone_vs_jbig2dec ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/decode_halftone_skip.rs (target/debug/deps/decode_halftone_skip-473d03fc6393e51a)
+
+running 2 tests
+test common::tests::pbm_packing_row_major_msb_first ... ok
+test halftone_enable_skip ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/decode_huffman.rs (target/debug/deps/decode_huffman-772f00c187b0bf12)
+
+running 6 tests
+test common::tests::pbm_packing_row_major_msb_first ... ok
+test repeated_symbol_ids ... ok
+test several_glyphs_varied_widths ... ok
+test many_symbols_wide_id_codes ... ok
+test transposed_vertical_text ... ok
+test two_glyphs_side_by_side ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/decode_huffman_refagg.rs (target/debug/deps/decode_huffman_refagg-c94d0302bec9c648)
+
+running 3 tests
+test common::tests::pbm_packing_row_major_msb_first ... ok
+test huffman_aggregate_dictionary ... ok
+test huffman_refinement_dictionary ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/decode_huffman_refine.rs (target/debug/deps/decode_huffman_refine-0365641228075526)
+
+running 2 tests
+test common::tests::pbm_packing_row_major_msb_first ... ok
+test huffman_text_with_refinement ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/decode_intermediate.rs (target/debug/deps/decode_intermediate-5425a4f5063267e7)
+
+running 2 tests
+test common::tests::pbm_packing_row_major_msb_first ... ok
+test intermediate_region_then_refinement ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/decode_organisation.rs (target/debug/deps/decode_organisation-d01795ee0b0cb9fe)
+
+running 2 tests
+test common::tests::pbm_packing_row_major_msb_first ... ok
+test random_access_generic_page ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/decode_recovery.rs (target/debug/deps/decode_recovery-f8bf82973b12a016)
+
+running 3 tests
+test common::tests::pbm_packing_row_major_msb_first ... ok
+test clean_stream_records_no_recovery ... ok
+test trailing_garbage_strict_vs_compatible ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/decode_refagg.rs (target/debug/deps/decode_refagg-82c7f7ebd3a4e55d)
+
+running 3 tests
+test common::tests::pbm_packing_row_major_msb_first ... ok
+test refagg_aggregate_symbol ... ok
+test refagg_refined_symbols ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/decode_refine.rs (target/debug/deps/decode_refine-e2a6621510462c66)
+
+running 5 tests
+test common::tests::pbm_packing_row_major_msb_first ... ok
+test standalone_refinement_region_page_window_offset ... ok
+test two_refinement_regions_get_fresh_contexts ... ok
+test standalone_refinement_region_vs_jbig2dec ... ok
+test refine_mode_rdw_lossless_vs_jbig2dec_and_source ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/decode_refine_templates.rs (target/debug/deps/decode_refine_templates-9a18cbeaceb9e7b6)
+
+running 5 tests
+test common::tests::pbm_packing_row_major_msb_first ... ok
+test grtemplate1_no_tpgron ... ok
+test grtemplate0_no_tpgron_still_works ... ok
+test grtemplate0_tpgron ... ok
+test identity_refinements ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.01s
+
+     Running tests/decode_retained_ctx.rs (target/debug/deps/decode_retained_ctx-276113eb10481c17)
+
+running 3 tests
+test common::tests::pbm_packing_row_major_msb_first ... ok
+test dict_a_and_b_symbols_differ ... ok
+test retained_contexts_second_dict ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/decode_roundtrip.rs (target/debug/deps/decode_roundtrip-47bfb471721c6ac5)
+
+running 15 tests
+test decoded_globals_is_send_sync ... ok
+test common::tests::pbm_packing_row_major_msb_first ... ok
+test property_odd_widths_jbig2dec_agreement ... ok
+test property_odd_widths_native_roundtrip ... ok
+test embedded_without_globals_is_typed_error ... ok
+test dictionary_export_count_mismatch_is_typed_error ... ok
+test symbol_truncations_never_panic ... ok
+test fixtures_generic_embedded ... ok
+test fixtures_generic_standalone ... ok
+test multipage_shared_globals_vs_jbig2dec ... ok
+test fixtures_lossless_standalone ... ok
+test multipage_deterministic_across_thread_counts ... ok
+test fixtures_lossless_embedded ... ok
+test symbol_modes_embedded_globals_vs_jbig2dec ... ok
+test symbol_modes_standalone_vs_jbig2dec ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.91s
+
+     Running tests/decode_striped.rs (target/debug/deps/decode_striped-88577e0aa3662ace)
+
+running 3 tests
+test common::tests::pbm_packing_row_major_msb_first ... ok
+test striped_unknown_height ... ok
+test unknown_length_generic ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/encode_byte_identical.rs (target/debug/deps/encode_byte_identical-e32c210cdcd489ba)
+
+running 2 tests
+test sha_selftest::sha256_known_vectors ... ok
+test encoder_output_is_byte_identical ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.15s
+
+     Running tests/encoder.rs (target/debug/deps/encoder-1c2172e7e5f626c7)
+
+running 17 tests
+test common::tests::pbm_packing_row_major_msb_first ... ok
+test empty_symbol_list_returns_error ... ok
+test test_arithmetic_coder_base_table ... ok
+test generic_region_roundtrip_with_jbig2dec ... ok
+test pbm_packing_row_major_msb_first ... ok
+test test_encode_symbol_dict_empty_fails ... ok
+test test_encode_test_image_pbm ... ok
+test test_symbol_sorting ... ok
+test test_glyph_creation ... ok
+test single_symbol_dict_outputs_nonempty ... ok
+test test_encode_symbol_dict_single ... ok
+test duplicate_symbols_are_deduplicated ... ok
+test test_arithmetic_coder_annex_h2 ... ok
+test test_generic_region_default_gbat_fallback ... ok
+test test_encode_page_with_symbol_dictionary ... ok
+test test_encode_test_image1_pbm_full_page ... ok
+test full_page_with_symbol_dictionary_roundtrips ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.32s
+
+     Running tests/exact_symbols.rs (target/debug/deps/exact_symbols-8b8e4785185e1549)
+
+running 7 tests
+test common::tests::pbm_packing_row_major_msb_first ... ok
+test conflicting_exact_fidelity_settings_fail_before_ingest ... ok
+test exact_symbols_preserve_sparse_odd_widths_blank_and_solid_pages ... ok
+test exact_text_strip_sizes_and_signed_offsets_preserve_source_pixels ... ok
+test optimized_exact_streams_measure_real_costs_with_a_hard_trial_budget ... ok
+test measured_refinement_is_selected_when_it_reduces_complete_stream_cost ... ok
+test exact_symbols_preserve_all_components_in_pdf_and_standalone ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.75s
+
+     Running tests/halftone_tone_roundtrip.rs (target/debug/deps/halftone_tone_roundtrip-2c0939b1c37d7184)
+
+running 4 tests
+test restricted_tonal_range_round_trips ... ok
+test constant_tones_round_trip ... ok
+test tone_ramp_is_unbiased ... ok
+test solid_black_survives_every_edge_residue ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.29s
+
+     Running tests/headsup_c_vs_rust.rs (target/debug/deps/headsup_c_vs_rust-052792ae4f9c50f2)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/lossy_topology_guard.rs (target/debug/deps/lossy_topology_guard-7471df4c68b66b0a)
+
+running 4 tests
+test common::tests::pbm_packing_row_major_msb_first ... ok
+test final_guard_corrects_one_pixel_hole_closures_after_lossy_unification ... ok
+test tiny_refinement_reference_offsets_are_portable_across_decoders ... ok
+test bounded_measured_lossy_planner_distinguishes_substitution_and_refinement ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.58s
+
+     Running tests/mode_comparison.rs (target/debug/deps/mode_comparison-fdaf022126060d14)
+
+running 8 tests
+test common::tests::pbm_packing_row_major_msb_first ... ok
+test test_specified_image_only ... ok
+test test_small_patterns ... ok
+test test_lossless_only ... ok
+test test_medium_patterns ... ok
+test test_symbol_only ... ok
+test test_comprehensive_comparison ... ok
+test test_real_images ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.87s
+
+     Running tests/multi_page_benchmark.rs (target/debug/deps/multi_page_benchmark-7feb09571c33a65f)
+
+running 1 test
+test multi_page_compression_benchmark ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/pdf_dictionary_policy.rs (target/debug/deps/pdf_dictionary_policy-419090392bb91d58)
+
+running 5 tests
+test common::tests::pbm_packing_row_major_msb_first ... ok
+test pdf_policy_settings_preserve_standalone_behavior ... ok
+test pdf_renderer_generic_control ... ok
+test pdf_local_dictionaries_work_without_any_globals_stream ... ok
+test pdf_shared_globals_and_local_dictionaries_preserve_odd_width_pages ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.64s
+
+     Running tests/pdf_groups.rs (target/debug/deps/pdf_groups-0d6863767a89e8e1)
+
+running 4 tests
+test common::tests::pbm_packing_row_major_msb_first ... ok
+test group_error_contract_and_empty_input ... ok
+test constraints_choose_an_exact_feasible_candidate_or_return_error ... ok
+test bounded_groups_have_explicit_globals_associations_and_exact_pages ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.25s
+
+     Running tests/perf_smoke.rs (target/debug/deps/perf_smoke-1b5d3720ffddfc39)
+
+running 4 tests
+test comparator_distance_perf_smoke ... ignored
+test packed_words_perf_smoke ... ignored
+test symbol_dict_encoding_perf_smoke ... ignored
+test text_region_encoding_perf_smoke ... ignored
+
+test result: ok. 0 passed; 0 failed; 4 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/quality_benchmark.rs (target/debug/deps/quality_benchmark-de594261a998a2a5)
+
+running 4 tests
+test quality_corpus_worker ... ignored, run with tools/quality_benchmark.py; requires an explicit corpus and mode
+test common::tests::pbm_packing_row_major_msb_first ... ok
+test shipping_and_fixed_threshold_controls_are_distinct ... ok
+test lossless_api_preserves_isolated_marks_at_odd_widths ... ok
+
+test result: ok. 3 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/refine_pdf_lossless.rs (target/debug/deps/refine_pdf_lossless-6e82de299c6d5b1a)
+
+running 1 test
+test pdf_refinement_lossless_roundtrip ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/roundtrip_after_fix.rs (target/debug/deps/roundtrip_after_fix-d4a1a098073e3437)
+
+running 6 tests
+test pdf_fragment_roundtrip_default_config ... ok
+test standalone_roundtrip_default_config ... ok
+test pdf_fragment_roundtrip_lossless_config ... ok
+test pdf_fragment_roundtrip_wide_bitmap ... ok
+test pdf_fragment_roundtrip_symbol_mode_repeated_glyph ... ok
+test pdf_split_multi_page_shares_global_dictionary ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+

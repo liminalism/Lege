@@ -1,0 +1,11 @@
+{
+  "archive_sha256": "14d9ee2575df884c2071c0def63787316922ed8f299af7f2e65610a9216ecb78",
+  "archive_bytes": 1302674,
+  "files": 368,
+  "pbms": [
+    "jbig2enc-rust-0.6.0/tests/fixtures/test_image.pbm",
+    "jbig2enc-rust-0.6.0/tests/fixtures/test_image1.pbm"
+  ],
+  "forbidden": [],
+  "scope": "Post-source-review local package build/verification; no publication or license clearance. Inventory/report updates after packaging are not part of this digest."
+}

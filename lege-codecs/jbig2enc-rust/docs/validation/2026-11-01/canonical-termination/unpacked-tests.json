@@ -1,0 +1,13 @@
+{
+  "source": "Fresh Cargo archive extraction; both legacy PBMs absent",
+  "command": "cargo test --offline --features parallel --lib --tests -- --skip grtemplate1_tpgron",
+  "test_binaries": 35,
+  "counts": {
+    "passed": 259,
+    "ignored": 7,
+    "filtered": 2
+  },
+  "independent_filtered_control": "grtemplate1_tpgron_pdfium_control separately passes on this unpacked source",
+  "source_rights_clearance": false,
+  "scope": "Default feature functional sweep plus original fixture generator check; explicit known decoder-oracle exception remains. Not an all-target/all-oracle claim."
+}

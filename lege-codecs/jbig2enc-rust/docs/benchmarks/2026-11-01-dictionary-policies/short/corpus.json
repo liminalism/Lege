@@ -1,0 +1,17 @@
+[
+  {
+    "file": "0000-text.pbm",
+    "bytes": 10548,
+    "sha256": "8384ca9c44d6ae006dc8a5f663c47daa30f5a9252e262021515d0974e0e8600e"
+  },
+  {
+    "file": "0001-noisy.pbm",
+    "bytes": 10548,
+    "sha256": "84abb0901ae1dd094f13b944a4136520b345b8b4fe7e82f66ee69ce55abf3423"
+  },
+  {
+    "file": "0002-symbol_diversity.pbm",
+    "bytes": 10548,
+    "sha256": "ea005176e15e6a0ee07ab04d59cd6ee4b417ab7028bc173ed79ca1a074d8d445"
+  }
+]

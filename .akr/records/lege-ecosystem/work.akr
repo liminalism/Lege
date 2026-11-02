@@ -1438,6 +1438,118 @@ record lege-ecosystem.work.evidence-broker-ocr-provider/1 : work {
     author "GitHub Uploader"
 }
 
+record lege-ecosystem.work.explicit-runtime-lifecycles/1 : work {
+    title "Make renderer and processor runtime lifecycles explicit and cancellation safe"
+    state superseded
+    scope [ path "lege-pdf/render/**", path "lege-process/**" ]
+    intent """
+        Implement all worthwhile changes from the implicit state-machine review: renderer nested execution and text/path state; worker subprocess, GUI batch and input flows; pipeline shutdown and writer publication; GPU backend lifecycle; inference leases; typed page preparation and GUI processing choices; serialized progress; smaller editor/theme/ticket fixes. Preserve compatible settings and rendering behavior, prefer enums/ownership to unnecessary statecharts, and verify each change with meaningful regression coverage.
+        """
+    note """
+        Review candidates 1–12 plus input probing, resolution editing, theme persistence, render tickets, path builder. Do not replace the scheduler channel/RAII design. Existing unrelated GUI migration work must be preserved.
+        """
+    acceptance {
+        check gui {
+            statement """
+                Batch/document states, progress phases, input probing, resolution editing and theme persistence have deterministic lifecycle handling and targeted tests.
+                """
+            method command
+        }
+        check integration {
+            statement """
+                Affected renderer, processor and GUI checks pass, formatting is clean on changed files, and all review candidates have an evidence-backed disposition.
+                """
+            method command
+        }
+        check renderer {
+            statement """
+                Nested forms, masks and glyphs isolate and restore caller state; text/path recovery, cancellation composition and ticket consumption have targeted regression coverage.
+                """
+            method command
+        }
+        check representations {
+            statement """
+                GPU lifecycle and page preparation use explicit variants; GUI mode combinations have typed effective choices and settings compatibility coverage.
+                """
+            method command
+        }
+        check runtime {
+            statement """
+                Worker completion is synchronized with exit and stream drainage, pipeline failures clean up owned tasks, writer publication has an explicit cancellation boundary, and inference permits outlive blocking execution.
+                """
+            method command
+        }
+    }
+    author "dk"
+}
+
+record lege-ecosystem.work.explicit-runtime-lifecycles/2 : work {
+    title "Make renderer and processor runtime lifecycles explicit and cancellation safe"
+    state completed
+    scope [ path "lege-pdf/render/**", path "lege-process/**" ]
+    intent """
+        Implement all worthwhile changes from the implicit state-machine review: renderer nested execution and text/path state; worker subprocess, GUI batch and input flows; pipeline shutdown and writer publication; GPU backend lifecycle; inference leases; typed page preparation and GUI processing choices; serialized progress; smaller editor/theme/ticket fixes. Preserve compatible settings and rendering behavior, prefer enums/ownership to unnecessary statecharts, and verify each change with meaningful regression coverage.
+        """
+    note """
+        Review candidates 1–12 plus input probing, resolution editing, theme persistence, render tickets, path builder. Do not replace the scheduler channel/RAII design. Existing unrelated GUI migration work must be preserved.
+        """
+    acceptance {
+        check gui {
+            statement """
+                Batch/document states, progress phases, input probing, resolution editing and theme persistence have deterministic lifecycle handling and targeted tests.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.runtime-lifecycles-gui-de-20261101/1,
+                @lege-ecosystem.evidence.runtime-lifecycles-gui-en-20261101/1,
+                @lege-ecosystem.evidence.runtime-lifecycles-worker-smoke-20261101/1
+            ]
+        }
+        check integration {
+            statement """
+                Affected renderer, processor and GUI checks pass, formatting is clean on changed files, and all review candidates have an evidence-backed disposition.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.runtime-lifecycles-audit-20261101/1,
+                @lege-ecosystem.evidence.runtime-lifecycles-check-20261101/1,
+                @lege-ecosystem.evidence.runtime-lifecycles-format-20261101/1
+            ]
+        }
+        check renderer {
+            statement """
+                Nested forms, masks and glyphs isolate and restore caller state; text/path recovery, cancellation composition and ticket consumption have targeted regression coverage.
+                """
+            method command
+            verified_by [ @lege-ecosystem.evidence.runtime-lifecycles-renderer-20261101/1 ]
+        }
+        check representations {
+            statement """
+                GPU lifecycle and page preparation use explicit variants; GUI mode combinations have typed effective choices and settings compatibility coverage.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.runtime-lifecycles-gui-en-20261101/1,
+                @lege-ecosystem.evidence.runtime-lifecycles-processor-20261101/1,
+                @lege-ecosystem.evidence.runtime-lifecycles-renderer-20261101/1
+            ]
+        }
+        check runtime {
+            statement """
+                Worker completion is synchronized with exit and stream drainage, pipeline failures clean up owned tasks, writer publication has an explicit cancellation boundary, and inference permits outlive blocking execution.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.runtime-lifecycles-gui-en-20261101/1,
+                @lege-ecosystem.evidence.runtime-lifecycles-processor-20261101/1,
+                @lege-ecosystem.evidence.runtime-lifecycles-worker-smoke-20261101/1
+            ]
+        }
+    }
+    supersedes [ @lege-ecosystem.work.explicit-runtime-lifecycles/1 ]
+    author "dk"
+}
+
 record lege-ecosystem.work.fixed-point-9-7-is-a-later-experiment/1 : work {
     title "19. Fixed-point 9/7 is a later experiment"
     state abandoned
@@ -1728,6 +1840,1091 @@ record lege-ecosystem.work.initial-target-results/1 : work {
             Use the current measured values as the first scoreboard:
             """
     }
+}
+
+record lege-ecosystem.work.jbig2-06-bounded-headroom-pass/1 : work {
+    title "Bounded 0.6-release generic headroom tests and release-note guidance"
+    state superseded
+    scope [ path "lege-codecs/jbig2enc-rust/**" ]
+    intent """
+        Test the two remaining hypotheses once each: cached probability data for nonblank context processing, and batched renormalization shifts. Partial system load cannot be changed. Retain only unambiguous, byte-identical improvements; do not push optimization aggressively for the 0.6 release. Investigate crates.io release-note support without publishing.
+        """
+    note """
+        Keep the prior verified blank batching and delayed transition loads as the baseline. Use existing fixed mixed17/dense inputs and paired hardware counters to temper wall-time noise. No CPU governor, load, or global system changes. Revert ambiguous/regressing candidates and report a conservative disposition.
+        """
+    acceptance {
+        check hypotheses {
+            statement """
+                Test one focused candidate for each stated hypothesis under existing system load; retain only clear repeatable improvements with unchanged bytes and record rejected/ambiguous results.
+                """
+            method command
+        }
+        check release-notes {
+            statement """
+                Verify current crates.io release-note/changelog support from primary sources and provide a concrete low-friction way to describe changes since the prior release, without publishing.
+                """
+            method observation
+        }
+        check verification {
+            statement """
+                Run appropriate regression, byte-compatibility and package checks for final retained code; keep 0.6 scope bounded.
+                """
+            method command
+        }
+    }
+    after [ @lege-ecosystem.work.jbig2-generic-perf-followup/2 ]
+    acknowledged true
+    author "dk"
+}
+
+record lege-ecosystem.work.jbig2-06-bounded-headroom-pass/2 : work {
+    title "Bounded 0.6-release generic headroom tests and release-note guidance"
+    state completed
+    scope [ path "lege-codecs/jbig2enc-rust/**" ]
+    intent """
+        Bounded 0.6 pass on cached probability data for nonblank contexts and batched renormalization. Partial system load cannot be changed; retain only unambiguous byte-identical gains. Investigate crates.io release notes without publishing.
+        """
+    note """
+        2026-11-02: Both candidates tested once, five paired CPU0 runs on mixed17/noise with hardware cycles/instructions/task-clock and internal wall time, all pairs retained. Cache mixed wall -1.2% but cycles +0.6%, noise +1.6% wall/+1.7% cycles; renorm mixed neutral wall/-1.85% cycles but noise +6.3% wall/+3.85% cycles. Both rejected, no aggressive tuning or combination. arith.rs restored exactly to starting SHAa8fb90c2b0e3884d6f82190141765503dd9d619c766a4cc0d370fcae5514d4b6. Candidate hash/context tests and mixed17 raw before/after/C checks pass. Final261functionalpass8ignore2existingfilters; release7pass1ignore; package verifies854files with draft CHANGELOG and unchanged coder, no raw corpus/reference/oracles. No new PDFium/Poppler claim; prior decoder exception remains. Current Cargo metadata/README docs, unmerged open RFC3779 and official index support release-note finding: no dedicated per-version field, README renders; 0.5.4 latest published. Added draft0.6 CHANGELOG, README quick summary, include entry and primary-source guidance. No publish/tag/commit or system load/governor changes. Kept scratch jbig2-06-headroom holds rejected implementations/raw probes; durable docs contain reports/counter CSV/patches only. Final work remaining is ledger validation.
+        """
+    acceptance {
+        check hypotheses {
+            statement """
+                Test one focused candidate for each stated hypothesis under existing system load; retain only clear repeatable improvements with unchanged bytes and record rejected/ambiguous results.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-06-headroom-disposition-20261102,
+                @lege-ecosystem.evidence.jbig2-06-headroom-disposition-20261102/1
+            ]
+        }
+        check release-notes {
+            statement """
+                Verify current crates.io release-note/changelog support from primary sources and provide a concrete low-friction way to describe changes since the prior release, without publishing.
+                """
+            method observation
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-crates-release-notes-20261102,
+                @lege-ecosystem.evidence.jbig2-crates-release-notes-20261102/1
+            ]
+        }
+        check verification {
+            statement """
+                Run appropriate regression, byte-compatibility and package checks for final retained code; keep 0.6 scope bounded.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-06-restored-validation-20261102,
+                @lege-ecosystem.evidence.jbig2-06-restored-validation-20261102/1
+            ]
+        }
+    }
+    after [ @lege-ecosystem.work.jbig2-generic-perf-followup/2 ]
+    supersedes [ @lege-ecosystem.work.jbig2-06-bounded-headroom-pass/1 ]
+    acknowledged true
+    author "dk"
+}
+
+record lege-ecosystem.work.jbig2-06-cloud-readme-and-preflight/1 : work {
+    title "Prepare the JBIG2 0.6 README and conservative cloud preflight"
+    state proposed
+    scope [ path "lege-codecs/jbig2enc-rust/**" ]
+    intent """
+        Continue in the user's unloaded cloud environment. Rewrite the 0.6 README around use cases, APIs, explicit fidelity/lossy behavior, feature flags, compatibility and licensing; de-emphasize competitive timing and link detailed measurements instead. Optionally recheck the two rejected headroom hypotheses under controlled cloud conditions, retaining only unambiguous byte-identical improvements without pushing optimization hard for 0.6.
+        """
+    note """
+        Current generic coder includes the verified word-window/native-register/blank-batching/delayed-load improvements. Packed Qe/index cache and chunked renormalization were tested under partial local load and rejected; patches and all paired counters are committed in docs/benchmarks/2026-11-02-06-headroom. Production arithmetic was restored exactly. No need to recreate the original roadmap or reopen the resolved licensing gate. Corpus PDFs/derived pages, external C/oracles and local scratch binaries will not be available in a fresh cloud clone. Three original MIT fixtures are committed for default correctness tests. Configure external oracles explicitly and disclose any new benchmark corpus and CPU. Draft 0.6 CHANGELOG/readme summary exists; no publish is authorized.
+        """
+    acceptance {
+        check preflight {
+            statement """
+                Run cloud-appropriate correctness/package checks; treat known oracle exception and absent private corpus accurately. If any optimization is retained, require clear repeated evidence and unchanged bytes; leaving the current coder unchanged is acceptable.
+                """
+            method command
+        }
+        check readme {
+            statement """
+                README describes 0.6 capabilities, examples, fidelity contracts, features, compatibility and licensing clearly, with competitive timings relegated to linked detailed reports.
+                """
+            method manual
+        }
+        check release-notes {
+            statement """
+                Review unreleased 0.6 notes against final implementation and retain README/CHANGELOG-based release notes; do not publish without a separate request.
+                """
+            method manual
+        }
+    }
+    after [ @lege-ecosystem.work.jbig2-06-bounded-headroom-pass/2 ]
+    author "dk"
+}
+
+record lege-ecosystem.work.jbig2-070-quality-and-provenance/1 : work {
+    title "Implement the JBIG2 0.7 quality, exact fidelity, resource and provenance roadmap"
+    state superseded
+    scope [ path "lege-codecs/jbig2enc-rust/**" ]
+    intent """
+        Implement the full user-provided roadmap in /home/dk/.codex/attachments/15a452e7-dfdc-4023-b026-a89be0c492a5/pasted-text-1.txt, phases A-G. Preserve APIs and unchanged-mode byte regressions. Honest non-GPL source is required; no clean-room claim for translated GPL code, no notice stripping, no release readiness claim without provenance and appropriate licensing review. Optional H is deferred pending profiles. Percentage targets require measurements.
+        """
+    note """
+        Initial audit: existing worktree corrects refinement documentation and withdraws clean-room claim in cc.rs; functionality and release gates remain incomplete.
+        """
+    acceptance {
+        check a-contracts-corpus {
+            statement """
+                Reproducible fixed corpus covers text, aged/noisy, multilingual, math, sparse and hundreds-page inputs; immutable input identities, shipping auto_thresh on/off, bytes, time, peak RSS, differing pixels, cold/warm decode latency reported. Refinement documented accurately.
+                """
+            method command
+        }
+        check b-residual {
+            statement """
+                Residual packer compares individual, clustered, row-band and bounding rectangle actual bytes including headers, uses measured wins, reports CPU and bytes, preserves pixels and order.
+                """
+            method command
+        }
+        check c-dictionaries {
+            statement """
+                PDF local dictionaries and selective globals work; full-global, selective-global and selective-global-plus-local comparisons pass native, jbig2dec, PDFium and Poppler, standalone/PDF odd widths and shared globals.
+                """
+            method command
+        }
+        check d-planner {
+            statement """
+                Bounded candidate discovery and actual-stream-calibrated planner jointly compare exact reuse, refinement, new dictionary, generic residual and explicit lossy substitution; lossy topology safeguards.
+                """
+            method command
+        }
+        check e-exact-symbol {
+            statement """
+                Explicit text_lossless preset preserves every input pixel including isolated marks, disables input-changing cleanup/substitution, passes decoded equality. Existing encode_single_image_lossless and text APIs retain behavior.
+                """
+            method command
+        }
+        check f-resources {
+            statement """
+                Bounded dictionary/group API associates each page with globals, experiments 32/64/128/whole-book; reports dictionary bytes/memory, peak encoder memory, instance types, residual coverage, comparisons/component; constraints use measured limits.
+                """
+            method command
+        }
+        check g-release {
+            statement """
+                Source and dependency provenance plus appropriate licensing review establish honest non-GPL distribution; independently replace adapted code if needed and retain historical attribution; interoperability and API audits pass.
+                """
+            method observation
+        }
+    }
+    author "dk"
+}
+
+record lege-ecosystem.work.jbig2-070-quality-and-provenance/2 : work {
+    title "Implement the JBIG2 0.7 quality, exact fidelity, resource and provenance roadmap"
+    state superseded
+    scope [ path "lege-codecs/jbig2enc-rust/**" ]
+    intent """
+        Implement the full user-provided jbig2enc-rust 0.7 roadmap, phases A-G, registered source jbig2-070-user-roadmap. User clarified non-GPL scope is jbig2enc-rust; audit and accurately document the rest of the monorepo without relicensing AGPL components. Preserve existing APIs and unchanged-mode byte baselines. No translated-GPL clean-room claims or notice stripping. Optional H remains deferred pending profiles.
+        """
+    note """
+        2026-11-01 checkpoint: reproducible shipping/fixed-threshold 350-page synthetic baseline and strict external decoder/renderer harness added; opt-in measured residual packing and explicit PDF dictionary comparison policies implemented. Sparse residual microcase improves 128 to 92 bytes. Policy benchmarks show locals can cost more; automatic cost selection is not implemented. Native/jbig2dec/PDFium/Poppler policy checks pass; Poppler monochrome sampling uses uncompressed render control and trailing-byte warnings remain open. Existing hashes preserved; 109 parallel library tests, 59 decode-only tests and encode-only all-target checks pass. A still needs representative fixed scans and richer reports; D joint planner/candidate/topology work, E exact-symbol preset and isolated mark preservation, F grouping/resource bounds, and G independent cc replacement/full provenance+licensing audit remain required. Crate publish=false pending G. PROVENANCE.md and docs/QUALITY.md distinguish evidence from unfulfilled gates. External tools staged under /tmp/jbig2-oracles-20261101 and /tmp/jbig2-pdfium-oracle-20261101; revalidate before reuse.
+        """
+    acceptance {
+        check a-contracts-corpus {
+            statement """
+                Reproducible fixed corpus covers text, aged/noisy, multilingual, math, sparse and hundreds-page inputs; immutable input identities, shipping auto_thresh on/off, bytes, time, peak RSS, differing pixels, cold/warm decode latency reported. Refinement documented accurately.
+                """
+            method command
+        }
+        check b-residual {
+            statement """
+                Residual packer compares individual, clustered, row-band and bounding rectangle actual bytes including headers, uses measured wins, reports CPU and bytes, preserves pixels and order.
+                """
+            method command
+        }
+        check c-dictionaries {
+            statement """
+                PDF local dictionaries and selective globals work; full-global, selective-global and selective-global-plus-local comparisons pass native, jbig2dec, PDFium and Poppler, standalone/PDF odd widths and shared globals.
+                """
+            method command
+        }
+        check d-planner {
+            statement """
+                Bounded candidate discovery and actual-stream-calibrated planner jointly compare exact reuse, refinement, new dictionary, generic residual and explicit lossy substitution; lossy topology safeguards.
+                """
+            method command
+        }
+        check e-exact-symbol {
+            statement """
+                Explicit text_lossless preset preserves every input pixel including isolated marks, disables input-changing cleanup/substitution, passes decoded equality. Existing encode_single_image_lossless and text APIs retain behavior.
+                """
+            method command
+        }
+        check f-resources {
+            statement """
+                Bounded dictionary/group API associates each page with globals, experiments 32/64/128/whole-book; reports dictionary bytes/memory, peak encoder memory, instance types, residual coverage, comparisons/component; constraints use measured limits.
+                """
+            method command
+        }
+        check g-release {
+            statement """
+                Source and dependency provenance plus appropriate licensing review establish honest non-GPL distribution; independently replace adapted code if needed and retain historical attribution; interoperability and API audits pass.
+                """
+            method observation
+        }
+    }
+    supersedes [ @lege-ecosystem.work.jbig2-070-quality-and-provenance/1 ]
+    author "dk"
+    source {
+        kind external
+        role origin
+        document "jbig2-070-user-roadmap"
+        use """
+            User explicitly requested implementing the attached roadmap; clarified non-GPL scope to jbig2enc-rust during the task.
+            """
+    }
+}
+
+record lege-ecosystem.work.jbig2-070-quality-and-provenance/3 : work {
+    title "Implement the JBIG2 0.7 quality, exact fidelity, resource and provenance roadmap"
+    state superseded
+    scope [
+        path "NOTICE",
+        path "docs/LICENSING-AUDIT.md",
+        path "lege-codecs/jbig2enc-rust/**",
+        path "lege-misc/docs/licenses.html"
+    ]
+    intent """
+        Implement the full user-provided jbig2enc-rust 0.7 roadmap, phases A-G, registered source jbig2-070-user-roadmap. User clarified non-GPL scope is jbig2enc-rust; audit and accurately document the rest of the monorepo without relicensing AGPL components. Preserve existing APIs and unchanged-mode byte baselines. No translated-GPL clean-room claims or notice stripping. Optional H remains deferred pending profiles.
+        """
+    note """
+        2026-11-01 checkpoint: residual packing and all three PDF dictionary policies remain opt-in/explicit, with original hashes retained. Production cc.rs replaced by span-graph traversal; author exposure and historical attribution disclosed. Exact symbol ingest retains every component; measured exact/lossy planners jointly encode dictionary/refinement/generic/substitution candidates with bounded discovery/trials, topology guards, resource feasibility and online empirical estimate correction. Real corpus: user PDF /run/media/dk/Second/to-sort/risefallofconfed01daviuoft.pdf, SHA b4426498d43666c576c54937f75abc42d4740c66000d9216345fb54e993d9d3e; fixed 240-DPI/threshold128 PBMs, whole782, fixed350 and mixed17 (math and Chinese/Latin supplements explicitly mixed/vector). All782 exact grouping settings have zero native/jbig2dec differences, and isolated encoder-child peaks32/64/128/whole are81056/146512/276336/1241324 KiB, with parent jbig2dec zero-difference verification and stream hashes. Group sink associates pages/globals and releases sources; byte cap bounds one group plus possible incoming-page transient, not total RSS. Measured81196-byte decoder-global cap on mixed17 selects42132 global bitmap bytes and278560 exact output bytes versus1416552/272253 uncapped. Online correction reduces exact estimate MAE7191 to2374; calibrated explicit lossy selects272204 bytes with20 source differences, all external oracles agree. Short-reference predictor portability fix resolves PDFium real-case disagreement and tiny-offset tests including i32 boundaries; original goldens unchanged. Three interleaved pilot pairs versus complete historical HEAD give encode0.98583/cold0.98207, with reviewed+120 bytes; not whole-book/device acceptance. Broad functional checkpoint256 passed with known decoder-only template1/TPGRON jbig2dec disagreement filtered (reproduced on HEAD; independent PDFium control passes), plus59 decode-only, focused strict tests, optional feature checks and local package verification. Legacy350 unbounded symbol run interrupted after330s clustering/52.5M ingest comparisons; grouped legacy unify can still use~1.4GiB. No whole-book shipping performance or device budget is claimed. User recovered archived https://github.com/liminalism/jbig2enc-rust,95 commits, pinned e7a46300882d8c59ef014eb63e13378be134d8b3. Earliest CC upload already ported from DjVu; arithmetic translation already at archive root; exact upstream C/C++ revisions/rights not established. Package now declares Apache-2.0, retains original contribution texts/attribution and publish=false. Root/app/DjVu AGPL unchanged;89-package manifest audit has14 declaration gaps;189 dependency metadata packages include optional CDDL and non-GPL alternatives for r-efi. G remains open: substantive source-origin/licensing review, legacy PBM rights, distribution notice review and intended-reader/full release guardrails. Continue with detailed original-history/source comparison; no public release or legal clearance has occurred. Retained reports under docs/benchmarks/2026-11-01-real-corpus, docs/validation/2026-11-01 and docs/audits/2026-11-01. Original pre-existing deleted spec/plan files and untracked papers were not modified by this work.
+        """
+    acceptance {
+        check a-contracts-corpus {
+            statement """
+                Reproducible fixed corpus covers text, aged/noisy, multilingual, math, sparse and hundreds-page inputs; immutable input identities, shipping auto_thresh on/off, bytes, time, peak RSS, differing pixels, cold/warm decode latency reported. Refinement documented accurately.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-real-corpus-20261101,
+                @lege-ecosystem.evidence.jbig2-070-verification-20261101
+            ]
+        }
+        check b-residual {
+            statement """
+                Residual packer compares individual, clustered, row-band and bounding rectangle actual bytes including headers, uses measured wins, reports CPU and bytes, preserves pixels and order.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-residual-packing-20261101,
+                @lege-ecosystem.evidence.jbig2-070-verification-20261101
+            ]
+        }
+        check c-dictionaries {
+            statement """
+                PDF local dictionaries and selective globals work; full-global, selective-global and selective-global-plus-local comparisons pass native, jbig2dec, PDFium and Poppler, standalone/PDF odd widths and shared globals.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-dictionary-policies-20261101,
+                @lege-ecosystem.evidence.jbig2-070-verification-20261101
+            ]
+        }
+        check d-planner {
+            statement """
+                Bounded candidate discovery and actual-stream-calibrated planner jointly compare exact reuse, refinement, new dictionary, generic residual and explicit lossy substitution; lossy topology safeguards.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-measured-planner-20261101,
+                @lege-ecosystem.evidence.jbig2-070-online-calibration-20261101,
+                @lege-ecosystem.evidence.jbig2-070-refinement-portability-20261101
+            ]
+        }
+        check e-exact-symbol {
+            statement """
+                Explicit text_lossless preset preserves every input pixel including isolated marks, disables input-changing cleanup/substitution, passes decoded equality. Existing encode_single_image_lossless and text APIs retain behavior.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-exact-components-20261101,
+                @lege-ecosystem.evidence.jbig2-070-real-corpus-20261101,
+                @lege-ecosystem.evidence.jbig2-070-verification-20261101
+            ]
+        }
+        check f-resources {
+            statement """
+                Bounded dictionary/group API associates each page with globals, experiments 32/64/128/whole-book; reports dictionary bytes/memory, peak encoder memory, instance types, residual coverage, comparisons/component; constraints use measured limits.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-group-resources-20261101,
+                @lege-ecosystem.evidence.jbig2-070-isolated-encoder-memory-20261101,
+                @lege-ecosystem.evidence.jbig2-070-measured-resource-cap-20261101
+            ]
+        }
+        check g-release {
+            statement """
+                Source and dependency provenance plus appropriate licensing review establish honest non-GPL distribution; independently replace adapted code if needed and retain historical attribution; interoperability and API audits pass.
+                """
+            method observation
+        }
+    }
+    supersedes [ @lege-ecosystem.work.jbig2-070-quality-and-provenance/2 ]
+    acknowledged true
+    author "dk"
+    source {
+        kind external
+        role origin
+        document "jbig2-070-user-roadmap"
+        use """
+            User explicitly requested implementing the attached roadmap; clarified non-GPL scope to jbig2enc-rust during the task.
+            """
+    }
+}
+
+record lege-ecosystem.work.jbig2-070-quality-and-provenance/4 : work {
+    title "Implement the JBIG2 0.7 quality, exact fidelity, resource and provenance roadmap"
+    state superseded
+    scope [
+        path "NOTICE",
+        path "docs/LICENSING-AUDIT.md",
+        path "lege-codecs/jbig2enc-rust/**",
+        path "lege-misc/docs/licenses.html"
+    ]
+    intent """
+        Implement the full user-provided jbig2enc-rust 0.7 roadmap, phases A-G, registered source jbig2-070-user-roadmap. User clarified non-GPL scope is jbig2enc-rust; audit and accurately document the rest of the monorepo without relicensing AGPL components. Preserve existing APIs and unchanged-mode byte baselines. No translated-GPL clean-room claims or notice stripping. Optional H remains deferred pending profiles.
+        """
+    note """
+        2026-11-01 checkpoint: residual packing and all three PDF dictionary policies remain opt-in/explicit, with original hashes retained. Production cc.rs replaced by span-graph traversal; author exposure and historical attribution disclosed. Exact symbol ingest retains every component; measured exact/lossy planners jointly encode dictionary/refinement/generic/substitution candidates with bounded discovery/trials, topology guards, resource feasibility and online empirical estimate correction. Real corpus: user PDF /run/media/dk/Second/to-sort/risefallofconfed01daviuoft.pdf, SHA b4426498d43666c576c54937f75abc42d4740c66000d9216345fb54e993d9d3e; fixed 240-DPI/threshold128 PBMs, whole782, fixed350 and mixed17 (math and Chinese/Latin supplements explicitly mixed/vector). All782 exact grouping settings have zero native/jbig2dec differences, and isolated encoder-child peaks32/64/128/whole are81056/146512/276336/1241324 KiB, with parent jbig2dec zero-difference verification and stream hashes. Group sink associates pages/globals and releases sources; byte cap bounds one group plus possible incoming-page transient, not total RSS. Measured81196-byte decoder-global cap on mixed17 selects42132 global bitmap bytes and278560 exact output bytes versus1416552/272253 uncapped. Online correction reduces exact estimate MAE7191 to2374; calibrated explicit lossy selects272204 bytes with20 source differences, all external oracles agree. Short-reference predictor portability fix resolves PDFium real-case disagreement and tiny-offset tests including i32 boundaries; original goldens unchanged. Three interleaved pilot pairs versus complete historical HEAD give encode0.98583/cold0.98207, with reviewed+120 bytes; not whole-book/device acceptance. Broad functional checkpoint256 passed with known decoder-only template1/TPGRON jbig2dec disagreement filtered (reproduced on HEAD; independent PDFium control passes), plus59 decode-only, focused strict tests, optional feature checks and local package verification. Legacy350 unbounded symbol run interrupted after330s clustering/52.5M ingest comparisons; grouped legacy unify can still use~1.4GiB. No whole-book shipping performance or device budget is claimed. User recovered archived https://github.com/liminalism/jbig2enc-rust,95 commits, pinned e7a46300882d8c59ef014eb63e13378be134d8b3. Earliest CC upload already ported from DjVu; arithmetic translation already at archive root; exact upstream C/C++ revisions/rights not established. Package now declares Apache-2.0, retains original contribution texts/attribution and publish=false. Root/app/DjVu AGPL unchanged;89-package manifest audit has14 declaration gaps;189 dependency metadata packages include optional CDDL and non-GPL alternatives for r-efi. G remains open: substantive source-origin/licensing review, legacy PBM rights, distribution notice review and intended-reader/full release guardrails. No public release or legal clearance has occurred. Retained reports under docs/benchmarks/2026-11-01-real-corpus, docs/validation/2026-11-01 and docs/audits/2026-11-01. Original pre-existing deleted spec/plan files and untracked papers were not modified by this work. Follow-up provenance checkpoint: all58 archived production/build paths traced through52 explicit rename edges (110 histories); local inventory123 production/support sources. Exact normalized Rust overlap comparison against64 local DjVu files identified44 meaningful inherited test lines. Those four test bodies were replaced with newly written contract tests;9 component integration+2 byte-manifest executions pass, original fixture/hash bytes unchanged. Six remaining blocks classified as compatible public fields/signatures, initialization and short comparator expressions; no clean-room or rights certification inferred. Apache arithmetic snapshot d2b0bf4647f193c10a599e36f1f9620fa5e4514a predates Rust upload; both source headers,COPYING and doc/PATENTS pinned/reviewed with attribution retained, actual translation revision unestablished. All-feature dependency text scan:11457 UTF-8 files/138893272 bytes,2795 binary files skipped,30 GNU markers all classified (r-efi alternative grants,nix dualMIT/GPL test,LLVM exception wording,LOGPALETTE names); no additional mandatoryGPL grant identified within this scan. OptionalCDDL and15 missing downloaded license-text files remain visible. User identified thrasibule/doc_coder/test and confirmed only the PBM image,no C code,was used; upstream pinned ad14a6ffa20833f6c47d9f4a43690f4366f7584c. Same French page resized1956x3186 to956x1557; codec license restricts commercial use with no distinct unrestricted scan grant. Fixture origin narrowed but distribution rights remain open; package declaration does not relicense it. Technical review packet at docs/audits/2026-11-01/SOURCE-REVIEW.md, before/after overlap reports and fixture-provenance.json. Post-review package build/verification368files/1302674compressedbytes,SHA14d9ee2575df884c2071c0def63787316922ed8f299af7f2e65610a9216ecb78; nonewcorpus/oracle/papers/pyc/scratch,legacy2PBMsstillincluded,publishfalse. Existing spin0.10.0-yanked warning retained. Fmt,9Python AST tools,scoped diff checks pass. G stays unsatisfied with inconclusive provenance/fixture evidence: appropriate licensing review and remaining earlier-origin/scan-distribution decisions are not replaced by the technical inventory.
+        """
+    acceptance {
+        check a-contracts-corpus {
+            statement """
+                Reproducible fixed corpus covers text, aged/noisy, multilingual, math, sparse and hundreds-page inputs; immutable input identities, shipping auto_thresh on/off, bytes, time, peak RSS, differing pixels, cold/warm decode latency reported. Refinement documented accurately.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-real-corpus-20261101,
+                @lege-ecosystem.evidence.jbig2-070-verification-20261101
+            ]
+        }
+        check b-residual {
+            statement """
+                Residual packer compares individual, clustered, row-band and bounding rectangle actual bytes including headers, uses measured wins, reports CPU and bytes, preserves pixels and order.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-residual-packing-20261101,
+                @lege-ecosystem.evidence.jbig2-070-verification-20261101
+            ]
+        }
+        check c-dictionaries {
+            statement """
+                PDF local dictionaries and selective globals work; full-global, selective-global and selective-global-plus-local comparisons pass native, jbig2dec, PDFium and Poppler, standalone/PDF odd widths and shared globals.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-dictionary-policies-20261101,
+                @lege-ecosystem.evidence.jbig2-070-verification-20261101
+            ]
+        }
+        check d-planner {
+            statement """
+                Bounded candidate discovery and actual-stream-calibrated planner jointly compare exact reuse, refinement, new dictionary, generic residual and explicit lossy substitution; lossy topology safeguards.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-measured-planner-20261101,
+                @lege-ecosystem.evidence.jbig2-070-online-calibration-20261101,
+                @lege-ecosystem.evidence.jbig2-070-refinement-portability-20261101
+            ]
+        }
+        check e-exact-symbol {
+            statement """
+                Explicit text_lossless preset preserves every input pixel including isolated marks, disables input-changing cleanup/substitution, passes decoded equality. Existing encode_single_image_lossless and text APIs retain behavior.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-exact-components-20261101,
+                @lege-ecosystem.evidence.jbig2-070-real-corpus-20261101,
+                @lege-ecosystem.evidence.jbig2-070-verification-20261101
+            ]
+        }
+        check f-resources {
+            statement """
+                Bounded dictionary/group API associates each page with globals, experiments 32/64/128/whole-book; reports dictionary bytes/memory, peak encoder memory, instance types, residual coverage, comparisons/component; constraints use measured limits.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-group-resources-20261101,
+                @lege-ecosystem.evidence.jbig2-070-isolated-encoder-memory-20261101,
+                @lege-ecosystem.evidence.jbig2-070-measured-resource-cap-20261101
+            ]
+        }
+        check g-release {
+            statement """
+                Source and dependency provenance plus appropriate licensing review establish honest non-GPL distribution; independently replace adapted code if needed and retain historical attribution; interoperability and API audits pass.
+                """
+            method observation
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-archive-source-review-20261101,
+                @lege-ecosystem.evidence.jbig2-070-fixture-origin-20261101
+            ]
+        }
+    }
+    supersedes [ @lege-ecosystem.work.jbig2-070-quality-and-provenance/3 ]
+    acknowledged true
+    author "dk"
+    source {
+        kind external
+        role origin
+        document "jbig2-070-user-roadmap"
+        use """
+            User explicitly requested implementing the attached roadmap; clarified non-GPL scope to jbig2enc-rust during the task.
+            """
+    }
+}
+
+record lege-ecosystem.work.jbig2-070-quality-and-provenance/5 : work {
+    title "Implement the JBIG2 0.7 quality, exact fidelity, resource and provenance roadmap"
+    state superseded
+    scope [
+        path "NOTICE",
+        path "docs/LICENSING-AUDIT.md",
+        path "lege-codecs/jbig2enc-rust/**",
+        path "lege-misc/docs/licenses.html"
+    ]
+    intent """
+        Implement the full user-provided jbig2enc-rust 0.7 roadmap, phases A-G, registered source jbig2-070-user-roadmap. User clarified non-GPL scope is jbig2enc-rust; audit and accurately document the rest of the monorepo without relicensing AGPL components. Preserve existing APIs and unchanged-mode byte baselines. No translated-GPL clean-room claims or notice stripping. Optional H remains deferred pending profiles.
+        """
+    note """
+        2026-11-01 checkpoint: residual packing and all three PDF dictionary policies remain opt-in/explicit, with original hashes retained. Production cc.rs replaced by span-graph traversal; author exposure and historical attribution disclosed. Exact symbol ingest retains every component; measured exact/lossy planners jointly encode dictionary/refinement/generic/substitution candidates with bounded discovery/trials, topology guards, resource feasibility and online empirical estimate correction. Real corpus: user PDF /run/media/dk/Second/to-sort/risefallofconfed01daviuoft.pdf, SHA b4426498d43666c576c54937f75abc42d4740c66000d9216345fb54e993d9d3e; fixed 240-DPI/threshold128 PBMs, whole782, fixed350 and mixed17 (math and Chinese/Latin supplements explicitly mixed/vector). All782 exact grouping settings have zero native/jbig2dec differences, and isolated encoder-child peaks32/64/128/whole are81056/146512/276336/1241324 KiB, with parent jbig2dec zero-difference verification and stream hashes. Group sink associates pages/globals and releases sources; byte cap bounds one group plus possible incoming-page transient, not total RSS. Measured81196-byte decoder-global cap on mixed17 selects42132 global bitmap bytes and278560 exact output bytes versus1416552/272253 uncapped. Online correction reduces exact estimate MAE7191 to2374; calibrated explicit lossy selects272204 bytes with20 source differences, all external oracles agree. Short-reference predictor portability fix resolves PDFium real-case disagreement and tiny-offset tests including i32 boundaries; original goldens unchanged. Three interleaved pilot pairs versus complete historical HEAD give encode0.98583/cold0.98207, with reviewed+120 bytes; not whole-book/device acceptance. Broad functional checkpoint256 passed with known decoder-only template1/TPGRON jbig2dec disagreement filtered (reproduced on HEAD; independent PDFium control passes), plus59 decode-only, focused strict tests, optional feature checks and local package verification. Legacy350 unbounded symbol run interrupted after330s clustering/52.5M ingest comparisons; grouped legacy unify can still use~1.4GiB. No whole-book shipping performance or device budget is claimed. User recovered archived https://github.com/liminalism/jbig2enc-rust,95 commits, pinned e7a46300882d8c59ef014eb63e13378be134d8b3. Earliest CC upload already ported from DjVu; arithmetic translation already at archive root; exact upstream C/C++ revisions/rights not established. Package now declares Apache-2.0, retains original contribution texts/attribution and publish=false. Root/app/DjVu AGPL unchanged;89-package manifest audit has14 declaration gaps;189 dependency metadata packages include optional CDDL and non-GPL alternatives for r-efi. G remains open: substantive source-origin/licensing review, legacy PBM rights, distribution notice review and intended-reader/full release guardrails. No public release or legal clearance has occurred. Retained reports under docs/benchmarks/2026-11-01-real-corpus, docs/validation/2026-11-01 and docs/audits/2026-11-01. Original pre-existing deleted spec/plan files and untracked papers were not modified by this work. Follow-up provenance checkpoint: all58 archived production/build paths traced through52 explicit rename edges (110 histories); local inventory123 production/support sources. Exact normalized Rust overlap comparison against64 local DjVu files identified44 meaningful inherited test lines. Those four test bodies were replaced with newly written contract tests;9 component integration+2 byte-manifest executions pass, original fixture/hash bytes unchanged. Six remaining blocks classified as compatible public fields/signatures, initialization and short comparator expressions; no clean-room or rights certification inferred. Apache arithmetic snapshot d2b0bf4647f193c10a599e36f1f9620fa5e4514a predates Rust upload; both source headers,COPYING and doc/PATENTS pinned/reviewed with attribution retained, actual translation revision unestablished. All-feature dependency text scan:11457 UTF-8 files/138893272 bytes,2795 binary files skipped,30 GNU markers all classified (r-efi alternative grants,nix dualMIT/GPL test,LLVM exception wording,LOGPALETTE names); no additional mandatoryGPL grant identified within this scan. OptionalCDDL and15 missing downloaded license-text files remain visible. User identified thrasibule/doc_coder/test and confirmed only the PBM image,no C code,was used; upstream pinned ad14a6ffa20833f6c47d9f4a43690f4366f7584c. Same French page resized1956x3186 to956x1557; codec license restricts commercial use with no distinct unrestricted scan grant. Fixture origin narrowed but distribution rights remain open; package declaration does not relicense it. Technical review packet at docs/audits/2026-11-01/SOURCE-REVIEW.md, before/after overlap reports and fixture-provenance.json. Post-review package build/verification368files/1302674compressedbytes,SHA14d9ee2575df884c2071c0def63787316922ed8f299af7f2e65610a9216ecb78; nonewcorpus/oracle/papers/pyc/scratch,legacy2PBMsstillincluded,publishfalse. Existing spin0.10.0-yanked warning retained. Fmt,9Python AST tools,scoped diff checks pass. G stays unsatisfied with inconclusive provenance/fixture evidence: appropriate licensing review and remaining earlier-origin/scan-distribution decisions are not replaced by the technical inventory. Fixture-distribution follow-up: Cargo positive include rules now exclude both old PBMs. They and encode_hashes.txt remain unchanged in the checkout. Default encoder/round-trip/byte tests use3 original font-free geometric Apache-2.0 PBMs plus generator/SHA manifest;40 new stream hashes were captured with historical HEAD source verified byte-for-byte across57 production files, then matched currently with a separate update switch/manifest. Original legacy hash gate remains explicit and ignored by default; its named --ignored run and JBIG2_LEGACY_FIXTURES=1 encoder/round-trip matrix both pass and fail if old inputs are missing rather than downloading/substituting. Thus scan uncertainty no longer blocks crate-package assets; no rights grant for that external scan is claimed. Actual Cargo archive390files/1297617bytes/SHA63ebe21b6a61bb6bb8dbf84676726fb0c828ef809097141b214d0301b02e08f4 builds/verifies; fresh extraction has only3originalPBMs and nolegacyinputs. Generator check and functional34binaries in BOTH checkout and unpacked archive pass257/7ignored/2template1-prefixfiltered; explicit legacy hash gate separately passes. Original corpus generic/exact/measured-exact has847/468/433bytes,zero differences acrossnative/jbig2dec/PDFium/Poppler; syntheticregressiononly. Reports under docs/validation/2026-11-01/original-fixture*. Currentlocalinventory124sources/189dependencies/89manifests; packagingpolicy rejectsunexpectedPBMs andPDF/pyc/exe/papers. Existing Poppler trailing-byte warnings andspin0.10-yankedwarning retained. G verified_by now retains only inconclusive source-review evidence because the fixture-distribution issue has been resolved by exclusion. Remaining source-rights review is not complete; publish=false/rootAGPLunchanged. A fresh original-corpus reproduction exposes the existing Poppler warning on generic/exact output. Default Poppler source snapshot shows the warning compares declared segment length with decoder-consumed bytes; exact26.01 tag retrieval failed, so no exact-version implementation equivalence or conformance ruling is claimed. This interoperability investigation can continue without changing old byte hashes or copying external decoder code.
+        """
+    acceptance {
+        check a-contracts-corpus {
+            statement """
+                Reproducible fixed corpus covers text, aged/noisy, multilingual, math, sparse and hundreds-page inputs; immutable input identities, shipping auto_thresh on/off, bytes, time, peak RSS, differing pixels, cold/warm decode latency reported. Refinement documented accurately.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-real-corpus-20261101,
+                @lege-ecosystem.evidence.jbig2-070-verification-20261101
+            ]
+        }
+        check b-residual {
+            statement """
+                Residual packer compares individual, clustered, row-band and bounding rectangle actual bytes including headers, uses measured wins, reports CPU and bytes, preserves pixels and order.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-residual-packing-20261101,
+                @lege-ecosystem.evidence.jbig2-070-verification-20261101
+            ]
+        }
+        check c-dictionaries {
+            statement """
+                PDF local dictionaries and selective globals work; full-global, selective-global and selective-global-plus-local comparisons pass native, jbig2dec, PDFium and Poppler, standalone/PDF odd widths and shared globals.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-dictionary-policies-20261101,
+                @lege-ecosystem.evidence.jbig2-070-verification-20261101
+            ]
+        }
+        check d-planner {
+            statement """
+                Bounded candidate discovery and actual-stream-calibrated planner jointly compare exact reuse, refinement, new dictionary, generic residual and explicit lossy substitution; lossy topology safeguards.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-measured-planner-20261101,
+                @lege-ecosystem.evidence.jbig2-070-online-calibration-20261101,
+                @lege-ecosystem.evidence.jbig2-070-refinement-portability-20261101
+            ]
+        }
+        check e-exact-symbol {
+            statement """
+                Explicit text_lossless preset preserves every input pixel including isolated marks, disables input-changing cleanup/substitution, passes decoded equality. Existing encode_single_image_lossless and text APIs retain behavior.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-exact-components-20261101,
+                @lege-ecosystem.evidence.jbig2-070-real-corpus-20261101,
+                @lege-ecosystem.evidence.jbig2-070-verification-20261101
+            ]
+        }
+        check f-resources {
+            statement """
+                Bounded dictionary/group API associates each page with globals, experiments 32/64/128/whole-book; reports dictionary bytes/memory, peak encoder memory, instance types, residual coverage, comparisons/component; constraints use measured limits.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-group-resources-20261101,
+                @lege-ecosystem.evidence.jbig2-070-isolated-encoder-memory-20261101,
+                @lege-ecosystem.evidence.jbig2-070-measured-resource-cap-20261101
+            ]
+        }
+        check g-release {
+            statement """
+                Source and dependency provenance plus appropriate licensing review establish honest non-GPL distribution; independently replace adapted code if needed and retain historical attribution; interoperability and API audits pass.
+                """
+            method observation
+            verified_by [ @lege-ecosystem.evidence.jbig2-070-archive-source-review-20261101 ]
+        }
+    }
+    supersedes [ @lege-ecosystem.work.jbig2-070-quality-and-provenance/4 ]
+    acknowledged true
+    author "dk"
+    source {
+        kind external
+        role origin
+        document "jbig2-070-user-roadmap"
+        use """
+            User explicitly requested implementing the attached roadmap; clarified non-GPL scope to jbig2enc-rust during the task.
+            """
+    }
+}
+
+record lege-ecosystem.work.jbig2-070-quality-and-provenance/6 : work {
+    title "Implement the JBIG2 0.7 quality, exact fidelity, resource and provenance roadmap"
+    state superseded
+    scope [
+        path "NOTICE",
+        path "docs/LICENSING-AUDIT.md",
+        path "lege-codecs/jbig2enc-rust/**",
+        path "lege-misc/docs/licenses.html"
+    ]
+    intent """
+        Implement the full user-provided jbig2enc-rust 0.7 roadmap, phases A-G, registered source jbig2-070-user-roadmap. User clarified non-GPL scope is jbig2enc-rust; audit and accurately document the rest of the monorepo without relicensing AGPL components. Preserve existing APIs and unchanged-mode byte baselines. No translated-GPL clean-room claims or notice stripping. Optional H remains deferred pending profiles.
+        """
+    note """
+        2026-11-01 checkpoint: residual packing and all three PDF dictionary policies remain opt-in/explicit, with original hashes retained. Production cc.rs replaced by span-graph traversal; author exposure and historical attribution disclosed. Exact symbol ingest retains every component; measured exact/lossy planners jointly encode dictionary/refinement/generic/substitution candidates with bounded discovery/trials, topology guards, resource feasibility and online empirical estimate correction. Real corpus: user PDF /run/media/dk/Second/to-sort/risefallofconfed01daviuoft.pdf, SHA b4426498d43666c576c54937f75abc42d4740c66000d9216345fb54e993d9d3e; fixed 240-DPI/threshold128 PBMs, whole782, fixed350 and mixed17 (math and Chinese/Latin supplements explicitly mixed/vector). All782 exact grouping settings have zero native/jbig2dec differences, and isolated encoder-child peaks32/64/128/whole are81056/146512/276336/1241324 KiB, with parent jbig2dec zero-difference verification and stream hashes. Group sink associates pages/globals and releases sources; byte cap bounds one group plus possible incoming-page transient, not total RSS. Measured81196-byte decoder-global cap on mixed17 selects42132 global bitmap bytes and278560 exact output bytes versus1416552/272253 uncapped. Online correction reduces exact estimate MAE7191 to2374; calibrated explicit lossy selects272204 bytes with20 source differences, all external oracles agree. Short-reference predictor portability fix resolves PDFium real-case disagreement and tiny-offset tests including i32 boundaries; original goldens unchanged. Three interleaved pilot pairs versus complete historical HEAD give encode0.98583/cold0.98207, with reviewed+120 bytes; not whole-book/device acceptance. Broad functional checkpoint256 passed with known decoder-only template1/TPGRON jbig2dec disagreement filtered (reproduced on HEAD; independent PDFium control passes), plus59 decode-only, focused strict tests, optional feature checks and local package verification. Legacy350 unbounded symbol run interrupted after330s clustering/52.5M ingest comparisons; grouped legacy unify can still use~1.4GiB. No whole-book shipping performance or device budget is claimed. User recovered archived https://github.com/liminalism/jbig2enc-rust,95 commits, pinned e7a46300882d8c59ef014eb63e13378be134d8b3. Earliest CC upload already ported from DjVu; arithmetic translation already at archive root; exact upstream C/C++ revisions/rights not established. Package now declares Apache-2.0, retains original contribution texts/attribution and publish=false. Root/app/DjVu AGPL unchanged;89-package manifest audit has14 declaration gaps;189 dependency metadata packages include optional CDDL and non-GPL alternatives for r-efi. G remains open: substantive source-origin/licensing review, legacy PBM rights, distribution notice review and intended-reader/full release guardrails. No public release or legal clearance has occurred. Retained reports under docs/benchmarks/2026-11-01-real-corpus, docs/validation/2026-11-01 and docs/audits/2026-11-01. Original pre-existing deleted spec/plan files and untracked papers were not modified by this work. Follow-up provenance checkpoint: all58 archived production/build paths traced through52 explicit rename edges (110 histories); local inventory123 production/support sources. Exact normalized Rust overlap comparison against64 local DjVu files identified44 meaningful inherited test lines. Those four test bodies were replaced with newly written contract tests;9 component integration+2 byte-manifest executions pass, original fixture/hash bytes unchanged. Six remaining blocks classified as compatible public fields/signatures, initialization and short comparator expressions; no clean-room or rights certification inferred. Apache arithmetic snapshot d2b0bf4647f193c10a599e36f1f9620fa5e4514a predates Rust upload; both source headers,COPYING and doc/PATENTS pinned/reviewed with attribution retained, actual translation revision unestablished. All-feature dependency text scan:11457 UTF-8 files/138893272 bytes,2795 binary files skipped,30 GNU markers all classified (r-efi alternative grants,nix dualMIT/GPL test,LLVM exception wording,LOGPALETTE names); no additional mandatoryGPL grant identified within this scan. OptionalCDDL and15 missing downloaded license-text files remain visible. User identified thrasibule/doc_coder/test and confirmed only the PBM image,no C code,was used; upstream pinned ad14a6ffa20833f6c47d9f4a43690f4366f7584c. Same French page resized1956x3186 to956x1557; codec license restricts commercial use with no distinct unrestricted scan grant. Fixture origin narrowed but distribution rights remain open; package declaration does not relicense it. Technical review packet at docs/audits/2026-11-01/SOURCE-REVIEW.md, before/after overlap reports and fixture-provenance.json. Post-review package build/verification368files/1302674compressedbytes,SHA14d9ee2575df884c2071c0def63787316922ed8f299af7f2e65610a9216ecb78; nonewcorpus/oracle/papers/pyc/scratch,legacy2PBMsstillincluded,publishfalse. Existing spin0.10.0-yanked warning retained. Fmt,9Python AST tools,scoped diff checks pass. G stays unsatisfied with inconclusive provenance/fixture evidence: appropriate licensing review and remaining earlier-origin/scan-distribution decisions are not replaced by the technical inventory. Fixture-distribution follow-up: Cargo positive include rules now exclude both old PBMs. They and encode_hashes.txt remain unchanged in the checkout. Default encoder/round-trip/byte tests use3 original font-free geometric Apache-2.0 PBMs plus generator/SHA manifest;40 new stream hashes were captured with historical HEAD source verified byte-for-byte across57 production files, then matched currently with a separate update switch/manifest. Original legacy hash gate remains explicit and ignored by default; its named --ignored run and JBIG2_LEGACY_FIXTURES=1 encoder/round-trip matrix both pass and fail if old inputs are missing rather than downloading/substituting. Thus scan uncertainty no longer blocks crate-package assets; no rights grant for that external scan is claimed. Actual Cargo archive390files/1297617bytes/SHA63ebe21b6a61bb6bb8dbf84676726fb0c828ef809097141b214d0301b02e08f4 builds/verifies; fresh extraction has only3originalPBMs and nolegacyinputs. Generator check and functional34binaries in BOTH checkout and unpacked archive pass257/7ignored/2template1-prefixfiltered; explicit legacy hash gate separately passes. Original corpus generic/exact/measured-exact has847/468/433bytes,zero differences acrossnative/jbig2dec/PDFium/Poppler; syntheticregressiononly. Reports under docs/validation/2026-11-01/original-fixture*. Currentlocalinventory124sources/189dependencies/89manifests; packagingpolicy rejectsunexpectedPBMs andPDF/pyc/exe/papers. Existing Poppler trailing-byte warnings andspin0.10-yankedwarning retained. G verified_by now retains only inconclusive source-review evidence because the fixture-distribution issue has been resolved by exclusion. Remaining source-rights review is not complete; publish=false/rootAGPLunchanged. A fresh original-corpus reproduction exposes the existing Poppler warning on generic/exact output. Default Poppler source snapshot shows the warning compares declared segment length with decoder-consumed bytes; exact26.01 tag retrieval failed, so no exact-version implementation equivalence or conformance ruling is claimed. This interoperability investigation can continue without changing old byte hashes or copying external decoder code. Final technical checkpoint: independent byte-level probe proves the old FF FF AC stop-prefix duplication caused7Poppler warnings across6generated cases; removingoneFF preserves allpixels, and canonicalencoderoutput equals the independent rewritten streams. New canonical_arithmetic_termination option is enabled for newexact/measured/safe presets, remainsfalseforlegacyconstructors andlowlevelflush, and is threaded throughgeneric,dictionary,plain/refinedtext,arithmetic-halftone streams. Botholdhashmanifestsunchangedpass; encode-only hashchecks12supportedgeneric/losslessentries and preventsreducedbuildmanifestupdates. Fixturepathhelpersnowindependentofdecoder; unusedreexportsremoved. Mixed17 exact/measuredexact/lossy278536/272239/272189bytes with0/0/20source differences;all102PDFbackendchecks havenotrailingdiagnostics. Whole782/32,64,128,whole exactgroups22134352/22106393/22082511/22019090bytes,0jbig2decdifferences;isolatedencoder83160/146160/275724/1240532KiB. OriginalupstreamApachefinalizerpinnedatd2b0bf4 alsoavoidsduplicateprefix;sourcecopyright/Apacheattribution restoredexplicitly inarith/shared table/identifier headers whilekeepingNOTICE. Latestcodearchive427files/1516422bytes/SHA474db68d2b8cc8b1ae22a6a4d98557dc6f9445a0e21c80c130f2a0a2798f3c14 builds/verifies;freshunpackedgenerator+35functionalbinaries259pass/7ignore/2knownprefixfilters,independentPDFiumtemplate1controlseparatelypasses. Decodeonly59pass;encodeonlyalltargetcheckandbaselinepass;CLIparallelprofilingalltargetcheckpass;fmt/PythonAST/scopeddiffclean. No unconditionalalloracleclaim; oldtemplate1/jbig2dec disagreement andlegacy-modepaddingremainexplicit. Currentlicensinginventory189dependencies/126production-supportsources/89manifests,sixclassifiedDjVuoverlaps;legacyPBMsexcludedfromcrate. RevisedoldAKRobservations toscopelegacy-lossyandconfig-invarianceclaims instead ofcontradictingthenewexact/plannerpaths. Docs/ARITHMETIC-TERMINATION.md andcanonical-mixed/canonical-encoder-memoryreportspreserveupdatedevidencewithoutrewritingearliercheckpoints. Completionaudit: A-FsoftwareandtechnicalGinteroperability/API/packageworkareimplementedandverifiedatthescopesabove;optionalHremainsdeferredandstretch/deviceclaimsarenotinvented. Gsource-rightsassessmentremainsunsatisfied: thearchivealreadycontainsports/uploadsanddoesnotestablishallpriorrights;theexposed-sourcecomponentreplacementandretainedcompatibilitysurface stillneedtheappropriatelicensingassessmentexplicitlyrequiredbytheroadmap. Thisisthesameunresolvedconditionnotedthroughatleastthelastthreegoalturns;independentsoftware/fixture/interoperabilityworkhasnowbeencompletedandcannotitselfsupplythatassessment. DonotmarkGorthegoalcomplete,remove publish=false,relicenseAGPL,orclaimclean-roomstatus. NextrequiredstepisexternalappropriatelicensingreviewofPROVENANCE.md/SOURCE-REVIEW.mdandthecurrentreplacement,thenapplyanyresultinggrant/replacement/noticerequirements.
+        """
+    acceptance {
+        check a-contracts-corpus {
+            statement """
+                Reproducible fixed corpus covers text, aged/noisy, multilingual, math, sparse and hundreds-page inputs; immutable input identities, shipping auto_thresh on/off, bytes, time, peak RSS, differing pixels, cold/warm decode latency reported. Refinement documented accurately.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-real-corpus-20261101,
+                @lege-ecosystem.evidence.jbig2-070-verification-20261101
+            ]
+        }
+        check b-residual {
+            statement """
+                Residual packer compares individual, clustered, row-band and bounding rectangle actual bytes including headers, uses measured wins, reports CPU and bytes, preserves pixels and order.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-residual-packing-20261101,
+                @lege-ecosystem.evidence.jbig2-070-verification-20261101
+            ]
+        }
+        check c-dictionaries {
+            statement """
+                PDF local dictionaries and selective globals work; full-global, selective-global and selective-global-plus-local comparisons pass native, jbig2dec, PDFium and Poppler, standalone/PDF odd widths and shared globals.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-canonical-termination-20261101,
+                @lege-ecosystem.evidence.jbig2-070-dictionary-policies-20261101,
+                @lege-ecosystem.evidence.jbig2-070-verification-20261101
+            ]
+        }
+        check d-planner {
+            statement """
+                Bounded candidate discovery and actual-stream-calibrated planner jointly compare exact reuse, refinement, new dictionary, generic residual and explicit lossy substitution; lossy topology safeguards.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-canonical-termination-20261101,
+                @lege-ecosystem.evidence.jbig2-070-measured-planner-20261101,
+                @lege-ecosystem.evidence.jbig2-070-online-calibration-20261101,
+                @lege-ecosystem.evidence.jbig2-070-refinement-portability-20261101
+            ]
+        }
+        check e-exact-symbol {
+            statement """
+                Explicit text_lossless preset preserves every input pixel including isolated marks, disables input-changing cleanup/substitution, passes decoded equality. Existing encode_single_image_lossless and text APIs retain behavior.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-canonical-termination-20261101,
+                @lege-ecosystem.evidence.jbig2-070-exact-components-20261101,
+                @lege-ecosystem.evidence.jbig2-070-real-corpus-20261101,
+                @lege-ecosystem.evidence.jbig2-070-verification-20261101
+            ]
+        }
+        check f-resources {
+            statement """
+                Bounded dictionary/group API associates each page with globals, experiments 32/64/128/whole-book; reports dictionary bytes/memory, peak encoder memory, instance types, residual coverage, comparisons/component; constraints use measured limits.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-canonical-termination-20261101,
+                @lege-ecosystem.evidence.jbig2-070-group-resources-20261101,
+                @lege-ecosystem.evidence.jbig2-070-isolated-encoder-memory-20261101,
+                @lege-ecosystem.evidence.jbig2-070-measured-resource-cap-20261101
+            ]
+        }
+        check g-release {
+            statement """
+                Source and dependency provenance plus appropriate licensing review establish honest non-GPL distribution; independently replace adapted code if needed and retain historical attribution; interoperability and API audits pass.
+                """
+            method observation
+            verified_by [ @lege-ecosystem.evidence.jbig2-070-archive-source-review-20261101 ]
+        }
+    }
+    supersedes [ @lege-ecosystem.work.jbig2-070-quality-and-provenance/5 ]
+    acknowledged true
+    author "dk"
+    source {
+        kind external
+        role origin
+        document "jbig2-070-user-roadmap"
+        use """
+            User explicitly requested implementing the attached roadmap; clarified non-GPL scope to jbig2enc-rust during the task.
+            """
+    }
+}
+
+record lege-ecosystem.work.jbig2-070-quality-and-provenance/7 : work {
+    title "Implement the JBIG2 0.7 quality, exact fidelity, resource and provenance roadmap"
+    state superseded
+    scope [
+        path "NOTICE",
+        path "docs/LICENSING-AUDIT.md",
+        path "lege-codecs/jbig2enc-rust/**",
+        path "lege-misc/docs/licenses.html"
+    ]
+    intent """
+        Implement the full user-provided jbig2enc-rust 0.7 roadmap, phases A-G, registered source jbig2-070-user-roadmap. User clarified non-GPL scope is jbig2enc-rust; audit and accurately document the rest of the monorepo without relicensing AGPL components. Preserve existing APIs and unchanged-mode byte baselines. No translated-GPL clean-room claims or notice stripping. Optional H remains deferred pending profiles.
+        """
+    note """
+        Current checkpoint, 2026-11-01: implement the full registered A-G roadmap. The user limited the non-GPL objective to jbig2enc-rust; root/application/DjVu AGPL declarations are unchanged. Optional H remains deferred. No public release, independent licensing clearance or clean-room claim has occurred.
+
+        A-F implementation is present: explicit residual packing; all-global/selective-global/selective-plus-local PDF dictionaries; bounded measured exact/lossy joint planning with topology guards, actual-stream cost calibration and resource feasibility; exact symbol ingest that retains every supplied pixel; page/source-bitmap bounded group/sink API and detailed resource/latency/memory metrics. Existing text/generic/lossless entry points and legacy byte manifests remain. New configuration fields require constructors or updated exhaustive struct literals, as documented in docs/API-COMPATIBILITY.md. Legacy unbounded unify search remains disclosed; the measured presets provide bounded discovery/trials. Group source caps do not promise total process RSS, and caller sinks must not accumulate outputs. Decoder bitmap/work proxies are explicit and have no invented reader defaults.
+
+        Corpus: /run/media/dk/Second/to-sort/risefallofconfed01daviuoft.pdf, SHA b4426498d43666c576c54937f75abc42d4740c66000d9216345fb54e993d9d3e. Fixed 240-DPI grayscale/threshold-128 PBMs cover all 782 pages and fixed text pages 31-380. Mixed17 adds math and Chinese/Latin material honestly described as mixed/vector supplements. Earlier shipping auto-threshold on/off, grouped350, synthetic/family/topology, resource-cap and matched historical pilot reports remain retained with their original source identities. The three-pair normal-shipping pilot had encode/cold median ratios 0.98583/0.98207 with a reviewed +120-byte predictor fix; this is not whole-book or reader-device acceptance. Optional stretch goals and device capacities are not claimed.
+
+        The short-reference predictor fix resolves the real PDFium mismatch and signed-offset extremes while preserving target pixels. The later canonical-termination option removes a duplicated FF before FF AC. An independent byte rewrite removes seven bytes and seven Poppler diagnostics in six generated corpus/mode cases; new output equals that rewrite and retains pixels through native/jbig2dec/PDFium/Poppler. New exact/measured/safe presets enable canonical termination; legacy constructors and raw flush keep byte-compatible padding and can opt in explicitly. Generic, dictionary, plain/refined text and arithmetic halftone streams honor the option. The Apache upstream finalizer comparison and Google/Adam Langley source/NOTICE attribution are recorded in docs/ARITHMETIC-TERMINATION.md.
+
+        Updated mixed17 results: exact 278536 bytes/0 differences, measured exact 272239/0, measured lossy 272189/20. All 102 PDF page/backend checks have zero trailing-byte diagnostics and native/jbig2dec agree. Updated whole782 exact groups32/64/128/whole: 22134352/22106393/22082511/22019090 bytes, all zero jbig2dec source differences; isolated encoder peaks 83160/146160/275724/1240532 KiB. External verification occurs after the encoder child exits. Reports: docs/benchmarks/2026-11-01-real-corpus/canonical-mixed and canonical-encoder-memory. Earlier checkpoints are not rewritten as if measured on later source.
+
+        Source/provenance: production CC bodies were replaced by span-graph traversal and the four inherited test bodies were replaced with independent contract tests. Public compatibility types/thresholds and author exposure are disclosed. All 58 archived production/build paths are traced through 52 rename edges (110 path histories) at original repo head e7a46300882d8c59ef014eb63e13378be134d8b3; the archive has 95 commits. Its earliest CC upload already describes a DjVu port, and the arithmetic translation is already present at the root upload. Actual earlier translation revisions and ownership are not established by those timestamps. Current inventory covers 126 production/support source files and 189 resolved all-feature/unfiltered-target dependencies. Exact normalized Rust overlap triage against the local DjVu source has six classified interface/initialization/short comparator blocks. The 30 GNU text markers are classified alternatives, a dual-license test asset, LLVM exception wording or identifier false positives; no additional mandatory GPL grant was identified within that bounded scan. Optional CDDL and 15 missing downloaded license-text files remain visible. The 89-package monorepo manifest audit records 14 declaration gaps without assigning rights or relicensing AGPL. This is not a full models/fonts/npm/binary rights clearance.
+
+        The user identified doc_coder/test as the French PBM source and confirmed only the image, no C code, was used. Both legacy PBMs and encode_hashes.txt remain unchanged in the checkout; both PBMs are excluded from Cargo distribution. Three original Apache geometric PBMs, a font/scan-free generator and a separate 40-stream historical-encoder baseline support default tests. The explicit old ignored hash gate and legacy round-trip matrix pass; missing old inputs fail rather than download/substitute. Encode-only builds compare the same manifest's 12 generic/lossless entries and cannot overwrite full manifests. Fixture selection has no decoder dependency.
+
+        Latest code archive: 427 files, 1516422 compressed bytes, SHA474db68d2b8cc8b1ae22a6a4d98557dc6f9445a0e21c80c130f2a0a2798f3c14. Fresh extraction has only the three original PBMs, passes generator reproduction and 259 tests across 35 functional binaries, with seven intentional ignores and two documented template-one-prefix filters. The independent PDFium control separately passes on that unpacked source. The pre-existing jbig2dec0.20 template1/TPGRON disagreement is retained and was reproduced on historical HEAD; no unqualified all-oracle pass is claimed. Decode-only59, encode-only checks/baseline, CLI/parallel/profiling compilation, fmt, Python AST and scoped diff checks pass. Package warnings retain the existing yanked spin0.10.0. Later report/ledger edits are outside the archive digest. Validation is under docs/validation/2026-11-01/canonical-termination. Old AKR blanket claims about symbol losslessness and inert config fields were revised to describe the new exact/planner paths accurately.
+
+        Completion audit: six A-F checks are satisfied; technical G interoperability/API/package work is verified at the scopes above. G source-rights assessment remains unsatisfied. The same licensing condition has remained open through at least the last three goal turns while the independent fixture and interoperability work was completed. The recovered uploads cannot supply the appropriate licensing assessment of the exposed-source CC replacement, retained compatibility surface and unestablished earlier origins. Further codec tests or manifest edits cannot establish those rights. The next required step is that assessment of PROVENANCE.md, docs/audits/2026-11-01/SOURCE-REVIEW.md and the replacement, followed by any required grant/replacement/notice work. Keep publish=false and do not mark the work or goal complete. Pre-existing deleted spec/plan files and untracked papers were not modified by this work.
+        """
+    acceptance {
+        check a-contracts-corpus {
+            statement """
+                Reproducible fixed corpus covers text, aged/noisy, multilingual, math, sparse and hundreds-page inputs; immutable input identities, shipping auto_thresh on/off, bytes, time, peak RSS, differing pixels, cold/warm decode latency reported. Refinement documented accurately.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-real-corpus-20261101,
+                @lege-ecosystem.evidence.jbig2-070-verification-20261101
+            ]
+        }
+        check b-residual {
+            statement """
+                Residual packer compares individual, clustered, row-band and bounding rectangle actual bytes including headers, uses measured wins, reports CPU and bytes, preserves pixels and order.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-residual-packing-20261101,
+                @lege-ecosystem.evidence.jbig2-070-verification-20261101
+            ]
+        }
+        check c-dictionaries {
+            statement """
+                PDF local dictionaries and selective globals work; full-global, selective-global and selective-global-plus-local comparisons pass native, jbig2dec, PDFium and Poppler, standalone/PDF odd widths and shared globals.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-canonical-termination-20261101,
+                @lege-ecosystem.evidence.jbig2-070-dictionary-policies-20261101,
+                @lege-ecosystem.evidence.jbig2-070-verification-20261101
+            ]
+        }
+        check d-planner {
+            statement """
+                Bounded candidate discovery and actual-stream-calibrated planner jointly compare exact reuse, refinement, new dictionary, generic residual and explicit lossy substitution; lossy topology safeguards.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-canonical-termination-20261101,
+                @lege-ecosystem.evidence.jbig2-070-measured-planner-20261101,
+                @lege-ecosystem.evidence.jbig2-070-online-calibration-20261101,
+                @lege-ecosystem.evidence.jbig2-070-refinement-portability-20261101
+            ]
+        }
+        check e-exact-symbol {
+            statement """
+                Explicit text_lossless preset preserves every input pixel including isolated marks, disables input-changing cleanup/substitution, passes decoded equality. Existing encode_single_image_lossless and text APIs retain behavior.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-canonical-termination-20261101,
+                @lege-ecosystem.evidence.jbig2-070-exact-components-20261101,
+                @lege-ecosystem.evidence.jbig2-070-real-corpus-20261101,
+                @lege-ecosystem.evidence.jbig2-070-verification-20261101
+            ]
+        }
+        check f-resources {
+            statement """
+                Bounded dictionary/group API associates each page with globals, experiments 32/64/128/whole-book; reports dictionary bytes/memory, peak encoder memory, instance types, residual coverage, comparisons/component; constraints use measured limits.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-canonical-termination-20261101,
+                @lege-ecosystem.evidence.jbig2-070-group-resources-20261101,
+                @lege-ecosystem.evidence.jbig2-070-isolated-encoder-memory-20261101,
+                @lege-ecosystem.evidence.jbig2-070-measured-resource-cap-20261101
+            ]
+        }
+        check g-release {
+            statement """
+                Source and dependency provenance plus appropriate licensing review establish honest non-GPL distribution; independently replace adapted code if needed and retain historical attribution; interoperability and API audits pass.
+                """
+            method observation
+            verified_by [ @lege-ecosystem.evidence.jbig2-070-archive-source-review-20261101 ]
+        }
+    }
+    supersedes [ @lege-ecosystem.work.jbig2-070-quality-and-provenance/6 ]
+    acknowledged true
+    author "dk"
+    source {
+        kind external
+        role origin
+        document "jbig2-070-user-roadmap"
+        use """
+            User explicitly requested implementing the attached roadmap; clarified non-GPL scope to jbig2enc-rust during the task.
+            """
+    }
+}
+
+record lege-ecosystem.work.jbig2-070-quality-and-provenance/8 : work {
+    title "Implement the JBIG2 0.7 quality, exact fidelity, resource and provenance roadmap"
+    state superseded
+    scope [
+        path "NOTICE",
+        path "docs/LICENSING-AUDIT.md",
+        path "lege-codecs/jbig2enc-rust/**",
+        path "lege-misc/docs/licenses.html"
+    ]
+    intent """
+        Implement the full user-provided jbig2enc-rust 0.7 roadmap, phases A-G, registered source jbig2-070-user-roadmap. User clarified non-GPL scope is jbig2enc-rust; audit and accurately document the rest of the monorepo without relicensing AGPL components. Preserve existing APIs and unchanged-mode byte baselines. No translated-GPL clean-room claims or notice stripping. User now requires generic-region optimization toward C speed parity, with file size secondary.
+        """
+    note """
+        2026-11-01 user steering supersedes the prior external licensing gate. The user accepts the removed DjVu-derived implementation as resolving GPL and requests MIT licensing, then further generic speed optimization. MIT project/original fixtures plus retained Apache arithmetic notices are applied; manifest MIT AND Apache-2.0, publish=false removed, other monorepo AGPL retained. No public release or clean-room authorship claim. A-F and interoperability/API evidence remain as previously recorded. Historical audit limitations remain factual records, not further release blockers. Generic optimization is now required: matched fixed packed-input template-0 kernel benchmark, TPGDON off, original encoded bytes retained, isolated single-CPU paired runs. Initial mixed17 Rust/C median 1.9955; word-window scan 1.8587. Byte context experiment was slower and reverted. Arithmetic fast-path work in progress. Full C pipeline/reader-device parity is not inferred from kernel timings. Pre-existing deleted spec/plan files and untracked papers remain outside this work.
+        """
+    acceptance {
+        check a-contracts-corpus {
+            statement """
+                Reproducible fixed corpus covers text, aged/noisy, multilingual, math, sparse and hundreds-page inputs; immutable input identities, shipping auto_thresh on/off, bytes, time, peak RSS, differing pixels, cold/warm decode latency reported. Refinement documented accurately.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-real-corpus-20261101,
+                @lege-ecosystem.evidence.jbig2-070-verification-20261101
+            ]
+        }
+        check b-residual {
+            statement """
+                Residual packer compares individual, clustered, row-band and bounding rectangle actual bytes including headers, uses measured wins, reports CPU and bytes, preserves pixels and order.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-residual-packing-20261101,
+                @lege-ecosystem.evidence.jbig2-070-verification-20261101
+            ]
+        }
+        check c-dictionaries {
+            statement """
+                PDF local dictionaries and selective globals work; full-global, selective-global and selective-global-plus-local comparisons pass native, jbig2dec, PDFium and Poppler, standalone/PDF odd widths and shared globals.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-canonical-termination-20261101,
+                @lege-ecosystem.evidence.jbig2-070-dictionary-policies-20261101,
+                @lege-ecosystem.evidence.jbig2-070-verification-20261101
+            ]
+        }
+        check d-planner {
+            statement """
+                Bounded candidate discovery and actual-stream-calibrated planner jointly compare exact reuse, refinement, new dictionary, generic residual and explicit lossy substitution; lossy topology safeguards.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-canonical-termination-20261101,
+                @lege-ecosystem.evidence.jbig2-070-measured-planner-20261101,
+                @lege-ecosystem.evidence.jbig2-070-online-calibration-20261101,
+                @lege-ecosystem.evidence.jbig2-070-refinement-portability-20261101
+            ]
+        }
+        check e-exact-symbol {
+            statement """
+                Explicit text_lossless preset preserves every input pixel including isolated marks, disables input-changing cleanup/substitution, passes decoded equality. Existing encode_single_image_lossless and text APIs retain behavior.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-canonical-termination-20261101,
+                @lege-ecosystem.evidence.jbig2-070-exact-components-20261101,
+                @lege-ecosystem.evidence.jbig2-070-real-corpus-20261101,
+                @lege-ecosystem.evidence.jbig2-070-verification-20261101
+            ]
+        }
+        check f-resources {
+            statement """
+                Bounded dictionary/group API associates each page with globals, experiments 32/64/128/whole-book; reports dictionary bytes/memory, peak encoder memory, instance types, residual coverage, comparisons/component; constraints use measured limits.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-canonical-termination-20261101,
+                @lege-ecosystem.evidence.jbig2-070-group-resources-20261101,
+                @lege-ecosystem.evidence.jbig2-070-isolated-encoder-memory-20261101,
+                @lege-ecosystem.evidence.jbig2-070-measured-resource-cap-20261101
+            ]
+        }
+        check g-release {
+            statement """
+                Apply the user's accepted removal/replacement disposition: MIT project code, retained Apache arithmetic notices, accurate non-GPL crate metadata and monorepo audit; preserve existing interoperability/API verification. No additional external licensing gate or publication-disable flag.
+                """
+            method observation
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-canonical-termination-20261101,
+                @lege-ecosystem.evidence.jbig2-user-license-disposition-20261101
+            ]
+        }
+        check h-generic-speed {
+            statement """
+                Profile and optimize template-0 generic-region speed toward matched C parity, prioritize speed over size, retain exact arithmetic bytes and independent decoding; report paired representative-corpus measurements and any remaining gap accurately.
+                """
+            method command
+        }
+    }
+    supersedes [ @lege-ecosystem.work.jbig2-070-quality-and-provenance/7 ]
+    acknowledged true
+    author "dk"
+    source {
+        kind external
+        role origin
+        document "jbig2-070-user-roadmap"
+        use """
+            User explicitly requested implementing the attached roadmap; clarified non-GPL scope to jbig2enc-rust during the task.
+            """
+    }
+}
+
+record lege-ecosystem.work.jbig2-070-quality-and-provenance/9 : work {
+    title "Implement the JBIG2 0.7 quality, exact fidelity, resource and provenance roadmap"
+    state completed
+    scope [
+        path "NOTICE",
+        path "docs/LICENSING-AUDIT.md",
+        path "lege-codecs/jbig2enc-rust/**",
+        path "lege-misc/docs/licenses.html"
+    ]
+    intent """
+        Implement the full user-provided jbig2enc-rust 0.7 roadmap, phases A-G, registered source jbig2-070-user-roadmap. User clarified non-GPL scope is jbig2enc-rust; audit and accurately document the rest of the monorepo without relicensing AGPL components. Preserve existing APIs and unchanged-mode byte baselines. No translated-GPL clean-room claims or notice stripping. User now requires generic-region optimization toward C speed parity, with file size secondary.
+        """
+    note """
+        2026-11-02 completion checkpoint. User-directed MIT project/original fixtures with retained Apache arithmetic notices, manifest MIT AND Apache-2.0, publication-disable flag removed; no publication. GPL-derived component/test bodies already replaced. No additional external licensing gate. Other monorepo AGPL declarations retained; refreshed130source/189dependency/89manifest inventory and classified30GNUmarkers,14metadata gaps/optionalCDDL disclosed. Generic template0 kernel now at C parity: mixed17 median pairedRust/C0.943026 andfixedtext3500.972651; all367 rawRustpayloads unchanged from pre-speed worker, C matches after knownlegacyFFpaddingnormalization. Largest gain: native-widthA storage preserving16bitsemantics, plus packedwordwindows/combinedcontext/disjointstatistics+registers/uncommonrenorm path. u8context experiment rejected as slower. File size unchanged. SameCPU seeded paired5runs, pinnedC8673b046, defaultCPU targets;350range0.945–1.070 andnoisybaseline retained. Kernel comparison only, not fullC/RustPDFpipeline orreaderdevice. Checkout and freshverifiedCargoextraction each260pass8intentionalignore2knownprefixfilters; independentjbig2dec configured, currentPDFium/Poppler unavailableaftertmp loss so no newallPDForacle claim. Release scalar/hash/termination6pass1ignore, explicitoldhash1pass,encode-only3pass1ignore,decode-only59pass;fmt/generator/Python/whitespace pass. Archive569files1727730bytesSHA3d890cb543e9257bb90523590f1989438e166b4beefe1a3e822f969e0ec326f4, excludesexternallegacyPBMs/Csource/oracles/PDFs/papers. Later report/ledger edits outside digest. A-F prior implementation/evidence unchanged. Pre-existing deleted specs/plans and untrackedpapers not modified. Generic report docs/GENERIC-SPEED.md, new validation docs/validation/2026-11-02-mit-generic-speed. No remaining task work; evidence now supports all acceptance checks.
+        """
+    acceptance {
+        check a-contracts-corpus {
+            statement """
+                Reproducible fixed corpus covers text, aged/noisy, multilingual, math, sparse and hundreds-page inputs; immutable input identities, shipping auto_thresh on/off, bytes, time, peak RSS, differing pixels, cold/warm decode latency reported. Refinement documented accurately.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-real-corpus-20261101,
+                @lege-ecosystem.evidence.jbig2-070-real-corpus-20261101/1,
+                @lege-ecosystem.evidence.jbig2-070-verification-20261101
+            ]
+        }
+        check b-residual {
+            statement """
+                Residual packer compares individual, clustered, row-band and bounding rectangle actual bytes including headers, uses measured wins, reports CPU and bytes, preserves pixels and order.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-residual-packing-20261101,
+                @lege-ecosystem.evidence.jbig2-070-residual-packing-20261101/1,
+                @lege-ecosystem.evidence.jbig2-070-verification-20261101
+            ]
+        }
+        check c-dictionaries {
+            statement """
+                PDF local dictionaries and selective globals work; full-global, selective-global and selective-global-plus-local comparisons pass native, jbig2dec, PDFium and Poppler, standalone/PDF odd widths and shared globals.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-canonical-termination-20261101,
+                @lege-ecosystem.evidence.jbig2-070-canonical-termination-20261101/1,
+                @lege-ecosystem.evidence.jbig2-070-dictionary-policies-20261101,
+                @lege-ecosystem.evidence.jbig2-070-verification-20261101
+            ]
+        }
+        check d-planner {
+            statement """
+                Bounded candidate discovery and actual-stream-calibrated planner jointly compare exact reuse, refinement, new dictionary, generic residual and explicit lossy substitution; lossy topology safeguards.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-canonical-termination-20261101,
+                @lege-ecosystem.evidence.jbig2-070-canonical-termination-20261101/1,
+                @lege-ecosystem.evidence.jbig2-070-measured-planner-20261101,
+                @lege-ecosystem.evidence.jbig2-070-online-calibration-20261101,
+                @lege-ecosystem.evidence.jbig2-070-refinement-portability-20261101
+            ]
+        }
+        check e-exact-symbol {
+            statement """
+                Explicit text_lossless preset preserves every input pixel including isolated marks, disables input-changing cleanup/substitution, passes decoded equality. Existing encode_single_image_lossless and text APIs retain behavior.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-canonical-termination-20261101,
+                @lege-ecosystem.evidence.jbig2-070-canonical-termination-20261101/1,
+                @lege-ecosystem.evidence.jbig2-070-exact-components-20261101,
+                @lege-ecosystem.evidence.jbig2-070-real-corpus-20261101,
+                @lege-ecosystem.evidence.jbig2-070-verification-20261101
+            ]
+        }
+        check f-resources {
+            statement """
+                Bounded dictionary/group API associates each page with globals, experiments 32/64/128/whole-book; reports dictionary bytes/memory, peak encoder memory, instance types, residual coverage, comparisons/component; constraints use measured limits.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-070-canonical-termination-20261101,
+                @lege-ecosystem.evidence.jbig2-070-canonical-termination-20261101/1,
+                @lege-ecosystem.evidence.jbig2-070-group-resources-20261101,
+                @lege-ecosystem.evidence.jbig2-070-isolated-encoder-memory-20261101,
+                @lege-ecosystem.evidence.jbig2-070-measured-resource-cap-20261101
+            ]
+        }
+        check g-release {
+            statement """
+                Apply the user's accepted removal/replacement disposition: MIT project code, retained Apache arithmetic notices, accurate non-GPL crate metadata and monorepo audit; preserve existing interoperability/API verification. No additional external licensing gate or publication-disable flag.
+                """
+            method observation
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-mit-package-audit-20261102,
+                @lege-ecosystem.evidence.jbig2-mit-package-audit-20261102/1
+            ]
+        }
+        check h-generic-speed {
+            statement """
+                Profile and optimize template-0 generic-region speed toward matched C parity, prioritize speed over size, retain exact arithmetic bytes and independent decoding; report paired representative-corpus measurements and any remaining gap accurately.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-generic-c-parity-20261102,
+                @lege-ecosystem.evidence.jbig2-generic-c-parity-20261102/1,
+                @lege-ecosystem.evidence.jbig2-mit-generic-verification-20261102
+            ]
+        }
+    }
+    supersedes [ @lege-ecosystem.work.jbig2-070-quality-and-provenance/8 ]
+    acknowledged true
+    author "dk"
+    source {
+        kind external
+        role origin
+        document "jbig2-070-user-roadmap"
+        use """
+            User explicitly requested implementing the attached roadmap; clarified non-GPL scope to jbig2enc-rust during the task.
+            """
+    }
+}
+
+record lege-ecosystem.work.jbig2-generic-perf-followup/1 : work {
+    title "Profile and further optimize the byte-preserving generic encoder"
+    state superseded
+    scope [ path "lege-codecs/jbig2enc-rust/**" ]
+    intent """
+        Use newly enabled Linux hardware perf counters to locate remaining generic encoding costs, test focused optimizations against the current C-parity baseline, preserve exact encoded bytes and report measured results. Prioritize speed over secondary file-size improvements; no licensing changes or hidden parallelism.
+        """
+    note """
+        Continues after completed jbig2-070-quality-and-provenance. Existing MIT project / Apache arithmetic notices remain. Fixed real corpus and C reference methodology retained; prepare missing transient inputs again if necessary.
+        """
+    acceptance {
+        check optimization {
+            statement """
+                Measure focused candidates against the current Rust and fixed C reference on representative inputs; retain improvements only with accurate benefit/noise/limits and unchanged bytes.
+                """
+            method command
+        }
+        check profile {
+            statement """
+                Retain hardware-counter/sample measurements of the current generic kernel and explain remaining costs and measurement scope.
+                """
+            method command
+        }
+        check verification {
+            statement """
+                Run independent context and byte/fidelity regressions appropriate to retained changes; document package/API/feature effects and validate AKR.
+                """
+            method command
+        }
+    }
+    acknowledged true
+    author "dk"
+}
+
+record lege-ecosystem.work.jbig2-generic-perf-followup/2 : work {
+    title "Profile and further optimize the byte-preserving generic encoder"
+    state completed
+    scope [ path "lege-codecs/jbig2enc-rust/**" ]
+    intent """
+        Use enabled Linux hardware perf counters to locate remaining generic encoding costs, test focused optimizations against the prior C-parity baseline, preserve exact encoded bytes and report measured results. Prioritize speed; no licensing changes or hidden parallelism.
+        """
+    note """
+        2026-11-02 completed implementation and measurements. Hardware sampling identified the per-pixel loop as 87.92% of prior cycles; about 69.75% of mixed pixels occupy eligible all-zero words. Retained bounded word-span MPS batching preserves every model transition and exact bytes, plus delayed transition-field loads (seven-pair ablation median0.9873). Reverted negligible/noisy no-store attempt. New/previous median time: mixed17 0.4993, text350 0.5841, noise0.9297; new/C 0.4668/0.5610/1.0681. Fresh Ghostscript inputs have explicit new identities and unchanged original PDF hashes/selections. Same CPU0/default targets/pinned C8673b046; no frequency lock, every pair retained, text350 range0.520–0.637 and noisy dense aggregate disclosed. Hardware mixed cycles -50%, instructions -63%; noise cycles -7.1%. Raw Rust bytes unchanged on367 real pages plus stress controls and canonicalized C equality passes. 261 functional tests with eight ignores/two known prefix filters, release seven pass/one ignore, explicit old hash one pass, encode-only four pass/one ignore, package verification passes; no fresh PDFium/Poppler claim. API/dependencies/licenses/threading/output size unchanged. Reports docs/GENERIC-PERF-FOLLOWUP.md and docs/validation/2026-11-02-generic-perf. Raw corpus/workers/perf data retained in kept ignored scratch jbig2-perf-followup; durable evidence artifacts contain only hashes/timing/profiler text. No publication or commits; pre-existing dirty/deleted files preserved. No task work remains beyond ledger validation.
+        """
+    acceptance {
+        check optimization {
+            statement """
+                Measure focused candidates against the current Rust and fixed C reference on representative inputs; retain improvements only with accurate benefit/noise/limits and unchanged bytes.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-generic-blank-batching-20261102,
+                @lege-ecosystem.evidence.jbig2-generic-blank-batching-20261102/1
+            ]
+        }
+        check profile {
+            statement """
+                Retain hardware-counter/sample measurements of the current generic kernel and explain remaining costs and measurement scope.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-generic-hardware-profile-20261102,
+                @lege-ecosystem.evidence.jbig2-generic-hardware-profile-20261102/1
+            ]
+        }
+        check verification {
+            statement """
+                Run independent context and byte/fidelity regressions appropriate to retained changes; document package/API/feature effects and validate AKR.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.jbig2-generic-followup-regression-20261102,
+                @lege-ecosystem.evidence.jbig2-generic-followup-regression-20261102/1
+            ]
+        }
+    }
+    after [ @lege-ecosystem.work.jbig2-070-quality-and-provenance/9 ]
+    supersedes [ @lege-ecosystem.work.jbig2-generic-perf-followup/1 ]
+    acknowledged true
+    author "dk"
 }
 
 record lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan/1 : work {

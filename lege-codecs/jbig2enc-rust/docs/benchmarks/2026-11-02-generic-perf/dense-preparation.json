@@ -1,0 +1,24 @@
+{
+  "method": "Original procedural solid, checkerboard and Python Random(20261102).randbytes50% noise; unused row padding cleared. Not a scanned corpus.",
+  "license": "MIT",
+  "pages": [
+    {
+      "file": "noise50.pbm",
+      "sha256": "0eaed21b2e6b3d94eede6a4b64a87d10871c1a1b853e8cea65f27bbaa59b73f1",
+      "width": 2049,
+      "height": 1537
+    },
+    {
+      "file": "solid.pbm",
+      "sha256": "2107bc3dc423c9c41530dc2db42c51f430556150b3e901810a5dbb532c0816f4",
+      "width": 2049,
+      "height": 1537
+    },
+    {
+      "file": "checker.pbm",
+      "sha256": "2aad2cf01af808d3147e2b77083171618baf58f9512e7e8fb87143c32fe78436",
+      "width": 2049,
+      "height": 1537
+    }
+  ]
+}

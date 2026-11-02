@@ -126,6 +126,15 @@ pub fn compute_symbol_signature(img: &BitImage) -> SymbolSignature {
 }
 
 fn count_enclosed_white_components(img: &BitImage) -> usize {
+    count_white_components(img, true)
+}
+
+#[cfg(feature = "symboldict")]
+pub(crate) fn count_enclosed_white_components_4(img: &BitImage) -> usize {
+    count_white_components(img, false)
+}
+
+fn count_white_components(img: &BitImage, diagonals: bool) -> usize {
     if img.width < 3 || img.height < 3 {
         return 0;
     }
@@ -153,6 +162,9 @@ fn count_enclosed_white_components(img: &BitImage) -> usize {
 
                 for ny in y0..=y1 {
                     for nx in x0..=x1 {
+                        if !diagonals && nx != cx && ny != cy {
+                            continue;
+                        }
                         let nidx = ny * img.width + nx;
                         if visited[nidx] || img.get_usize(nx, ny) {
                             continue;

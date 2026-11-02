@@ -12,7 +12,8 @@ use std::time::Instant;
 
 // Import the common test utilities
 mod common;
-use common::{TEST_IMAGE_PBM, TEST_IMAGE1_PBM, load_pbm};
+use common::fixtures::{test_blank_pbm, test_symbols_pbm};
+use common::load_pbm;
 
 use jbig2::jbig2sym::BitImage;
 use jbig2::{Jbig2EncodeResult, encode_single_image, encode_single_image_lossless};
@@ -495,23 +496,23 @@ fn test_real_images() {
     println!("\n🧪 TESTING REAL IMAGES");
 
     // Test with actual PBM test images if available
-    if std::path::Path::new(TEST_IMAGE_PBM).exists() {
-        let test_img = load_pbm(TEST_IMAGE_PBM);
+    if std::path::Path::new(test_blank_pbm()).exists() {
+        let test_img = load_pbm(test_blank_pbm());
         run_encoding_test(&test_img, "Real PBM Test Image (Small)", TestMode::Both);
     } else {
         println!(
             "⚠️  Skipping real image test - {} not found",
-            TEST_IMAGE_PBM
+            test_blank_pbm()
         );
     }
 
-    if std::path::Path::new(TEST_IMAGE1_PBM).exists() {
-        let test_img1 = load_pbm(TEST_IMAGE1_PBM);
+    if std::path::Path::new(test_symbols_pbm()).exists() {
+        let test_img1 = load_pbm(test_symbols_pbm());
         run_encoding_test(&test_img1, "Real PBM Test Image (Large)", TestMode::Both);
     } else {
         println!(
             "⚠️  Skipping real image test - {} not found",
-            TEST_IMAGE1_PBM
+            test_symbols_pbm()
         );
     }
 

@@ -1,0 +1,63 @@
+{
+  "functional": {
+    "binaries": 37,
+    "passed": 260,
+    "ignored": 8,
+    "filtered": 2
+  },
+  "unpacked": {
+    "binaries": 37,
+    "passed": 260,
+    "ignored": 8,
+    "filtered": 2
+  },
+  "release": {
+    "binaries": 3,
+    "passed": 6,
+    "ignored": 1,
+    "filtered": 0
+  },
+  "legacy-hashes": {
+    "binaries": 1,
+    "passed": 1,
+    "ignored": 0,
+    "filtered": 2
+  },
+  "decode-only": {
+    "binaries": 2,
+    "passed": 59,
+    "ignored": 0,
+    "filtered": 0
+  },
+  "encode-only-tests": {
+    "binaries": 2,
+    "passed": 3,
+    "ignored": 1,
+    "filtered": 0
+  },
+  "scope": {
+    "functional_command": "JBIG2DEC=<external jbig2dec0.20> LD_LIBRARY_PATH=<matching external library> cargo test --offline --features parallel --lib --tests -- --skip grtemplate1_tpgron",
+    "unpacked": "Same command on Cargo verified extraction; legacy PBMs absent",
+    "oracles": "Independent jbig2dec0.20 configured; PDFium/Poppler temporary binaries unavailable on continuation. Earlier strict PDF results are retained separately; no fresh all-PDF-oracle pass is claimed.",
+    "known_filters": "Pre-existing GRTEMPLATE1/TPGRON jbig2dec disagreement and separately verified PDFium control share the prefix; both filtered here. Decoder behavior unchanged.",
+    "speed": "Fixed packed-input C/Rust comparison and exact raw before/after hashes on367pages retained under benchmarks/2026-11-01-generic-speed.",
+    "package": "cargo package --offline --allow-dirty verified; no publication",
+    "other_checks": [
+      "original fixture generator --check",
+      "cargo fmt --check",
+      "Python tool AST parse",
+      "encode-only cargo check",
+      "scoped git diff --check"
+    ]
+  },
+  "oracle_downloads": [
+    {
+      "url": "https://security.debian.org/pool/main/j/jbig2dec/jbig2dec_0.20-1+deb13u1_amd64.deb",
+      "sha256": "9b8d34002e024c40db7756d157a497e5960cdfdb97ca4fe9889f30561a719325"
+    },
+    {
+      "url": "https://security.debian.org/pool/main/j/jbig2dec/libjbig2dec0_0.20-1+deb13u1_amd64.deb",
+      "sha256": "7d3f9b4e62b8ec477dd781234be02b8649dc563f8e67f91bbc02691a7ea3d4e3"
+    }
+  ]
+}

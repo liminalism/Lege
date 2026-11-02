@@ -1,0 +1,6 @@
+{
+  "pixels": 53650928,
+  "pixels_in_eligible_blank_words": 37419624,
+  "fraction": 0.6974646179465899,
+  "method": "Geometric word/context eligibility only, no arithmetic simulation; input zero-tail words."
+}

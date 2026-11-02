@@ -1,0 +1,30 @@
+{
+  "workers": {
+    "reference": {
+      "path": "/tmp/jbig2-cc-reference-20261101/target/release/deps/quality_benchmark-8ed2c654a0f7439f",
+      "sha256": "b20963c0d1a0af05a30397189a2323f6ce7b20dc6f713494239d9380a72390cc"
+    },
+    "candidate": {
+      "path": "/home/dk/rust-projects/Lege-ecosystem/lege-codecs/jbig2enc-rust/target/release/deps/quality_benchmark-8ed2c654a0f7439f",
+      "sha256": "6fdc7217b272768e21accb74ccc5aec0481dcad6059054237d3fb256d1d64250"
+    }
+  },
+  "mode": "symbol_shipping",
+  "repetitions": 3,
+  "platform": "Linux-7.0.0-31-generic-x86_64-with-glibc2.43",
+  "corpus": "/tmp/pdfs/jbig2-confed-pilot-20261101",
+  "input_hashes": {
+    "confed-0001.pbm": "fd87d4178330e6de44dd055eac5d4126144ad66cec2542b1a5b95b180c8b8f3c",
+    "confed-0005.pbm": "3e81ec02acb98a9476657bafc4846a2e809ec182a1acfdb10960ba6401ae50ae",
+    "confed-0010.pbm": "fd7072151bd0d0069765aed1e3aa9f9a249732dfcf47cde2eb1c7ad9df1f5509",
+    "confed-0020.pbm": "f312fc233262e156545db88d99520ec617311f43cc76cced1f7e1fe8bbc85605",
+    "confed-0030.pbm": "18d8454dd468e36beb3a49c0984427bc408362fc31a3035216e88daa5180fdc2",
+    "confed-0050.pbm": "eb70211f676a719d36a4351344ea1504b6525eace87aeeb8db68e8cc40b7c6c4",
+    "confed-0100.pbm": "8eb1b1e7a2986832f561100bc6c53165d9162d04fc4c5c85bc40bb6f05470395",
+    "confed-0200.pbm": "0cb946660d34b6613cdaba705aecf18baef3603ad6d48142f7ba0c6c98476211",
+    "confed-0400.pbm": "bfbe2cc904359e8deee44062731e23e1bf52464149e59022b4098486a755b579",
+    "confed-0700.pbm": "582c386b0498699dc2c976962c31ed4b601936d50fef3515c4006946538bef27"
+  },
+  "seed": 714,
+  "cpu": "13th Gen Intel(R) Core(TM) i7-13700H"
+}
