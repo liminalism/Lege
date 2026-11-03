@@ -5,10 +5,10 @@ use crate::encoding::{EncodingError, Result};
 /// OpenJPEG-style JPEG 2000 parameters, translated field by field onto
 /// jp2lam's `RateControl`, `CodingOptions` and `TilePolicy` by [`encode`].
 ///
-/// jp2lam writes one quality layer, so `rates` collapses to its final
-/// (highest-quality, smallest-ratio) entry, and it has no PSNR target, so
-/// `psnrs` is rejected rather than guessed at. A `rate` of 1 or less, or
-/// `irreversible: Some(false)`, means lossless.
+/// `rates` is OpenJPEG's layer list: compression ratios, most compressed
+/// first, one quality layer each, the last being the final stream. jp2lam has
+/// no PSNR target, so `psnrs` is rejected rather than guessed at. A `rate` of
+/// 1 or less, or `irreversible: Some(false)`, means lossless.
 #[derive(Debug, Clone, Default)]
 pub struct Jp2Settings {
     pub num_resolutions: Option<i32>,
@@ -345,8 +345,9 @@ pub fn encode(
     jp2lam::encode(&image, &options).map_err(|e| EncodingError::EncoderError(e.to_string()))
 }
 
-/// Translate [`Jp2Settings`] into jp2lam options. jp2lam emits one quality
-/// layer, so the final entry of `rates` (the full-quality layer) is the target.
+/// Translate [`Jp2Settings`] into jp2lam options. The last entry of `rates`
+/// is the stream's compression ratio; the entries before it become
+/// intermediate quality layers at those ratios.
 fn options_from_settings(settings: &Jp2Settings) -> Result<jp2lam::EncodeOptions> {
     let invalid = |message: String| EncodingError::InvalidInput(message);
     if settings.psnrs.is_some() {
@@ -360,6 +361,23 @@ fn options_from_settings(settings: &Jp2Settings) -> Result<jp2lam::EncodeOptions
             .as_ref()
             .and_then(|rates| rates.last().copied())
     });
+    // OpenJPEG's `-r` list runs from the most compressed layer to the final
+    // one; jp2lam validates the intermediate entries, the final one is checked
+    // against them here.
+    if let Some(rates) = settings.rates.as_deref()
+        && let Some(pair) = rates.windows(2).find(|pair| pair[1] >= pair[0])
+    {
+        return Err(invalid(format!(
+            "JP2 rates must be strictly descending compression ratios, got {} then {}",
+            pair[0], pair[1]
+        )));
+    }
+    let layers = match settings.rates.as_deref() {
+        Some([intermediate @ .., _final]) if !intermediate.is_empty() => {
+            jp2lam::QualityLayers::Ratios(intermediate.to_vec())
+        }
+        _ => jp2lam::QualityLayers::One,
+    };
     let rate_control = match (settings.irreversible, ratio) {
         (Some(false), Some(ratio)) if ratio > 1.0 => {
             return Err(invalid(format!(
@@ -420,6 +438,7 @@ fn options_from_settings(settings: &Jp2Settings) -> Result<jp2lam::EncodeOptions
             decomposition_levels,
             code_block_size,
             progression_order,
+            layers,
             ..jp2lam::CodingOptions::default()
         },
         ..jp2lam::EncodeOptions::default()
@@ -868,6 +887,41 @@ mod tests {
         let ratio = rgb.len() as f64 / data.len() as f64;
         assert!((ratio - 12.0).abs() < 0.6, "ratio {ratio}");
         decode_jp2_bytes(&data).expect("decodes");
+    }
+
+    #[test]
+    fn jp2_rates_list_becomes_quality_layers() {
+        let (w, h) = (120u32, 90u32);
+        let rgb = textured_rgb(w, h);
+        let data = encode(
+            &rgb,
+            w,
+            h,
+            3,
+            &Jp2Settings {
+                rates: Some(vec![40.0, 20.0, 10.0]),
+                ..Jp2Settings::default()
+            },
+        )
+        .expect("layered encode");
+        let meta = jp2lam::inspect_jp2(&data).expect("inspect");
+        assert_eq!(meta.codestream.cod.layers, 3);
+        let ratio = rgb.len() as f64 / data.len() as f64;
+        assert!((ratio - 10.0).abs() < 0.6, "ratio {ratio}");
+        // Ascending ratios are not a layer ladder.
+        assert!(
+            encode(
+                &rgb,
+                w,
+                h,
+                3,
+                &Jp2Settings {
+                    rates: Some(vec![10.0, 20.0]),
+                    ..Jp2Settings::default()
+                },
+            )
+            .is_err()
+        );
     }
 
     #[test]

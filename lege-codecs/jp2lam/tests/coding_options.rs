@@ -5,7 +5,7 @@
 
 use jp2lam::{
     CodingOptions, ComponentTransform, EncodeOptions, Image, OutputFormat, ProgressionOrder,
-    RateControl, TilePolicy, decode_jp2, encode, inspect_jp2,
+    QualityLayers, RateControl, TilePolicy, decode_jp2, encode, inspect_jp2,
 };
 use std::process::Command;
 
@@ -142,7 +142,7 @@ fn explicit_decomposition_levels_are_honoured() {
         let encoded = assert_lossless(
             &format!("levels {levels}"),
             &image,
-            &with_coding(RateControl::Lossless, coding),
+            &with_coding(RateControl::Lossless, coding.clone()),
         );
         let meta = inspect_jp2(&encoded).expect("inspect");
         assert_eq!(meta.codestream.cod.decomposition_levels, levels);
@@ -188,7 +188,7 @@ fn code_block_sizes_across_the_legal_range_round_trip() {
         let encoded = assert_lossless(
             &format!("code-block {width}x{height}"),
             &image,
-            &with_coding(RateControl::Lossless, coding),
+            &with_coding(RateControl::Lossless, coding.clone()),
         );
         let cod = inspect_jp2(&encoded).expect("inspect").codestream.cod;
         assert_eq!(
@@ -230,7 +230,7 @@ fn component_transform_none_stores_components_as_given() {
     let encoded = assert_lossless(
         "rgb without MCT",
         &image,
-        &with_coding(RateControl::Lossless, coding),
+        &with_coding(RateControl::Lossless, coding.clone()),
     );
     assert!(
         !inspect_jp2(&encoded)
@@ -258,7 +258,7 @@ fn component_transform_none_stores_components_as_given() {
             effort: jp2lam::PerceptualEffort::Fast,
         },
     ] {
-        let lossy = encode(&image, &with_coding(rate_control, coding))
+        let lossy = encode(&image, &with_coding(rate_control, coding.clone()))
             .unwrap_or_else(|err| panic!("{rate_control:?}: {err}"));
         assert!(!inspect_jp2(&lossy).expect("inspect").codestream.cod.use_mct);
         assert!(psnr(&image, &lossy) > 25.0, "{rate_control:?}");
@@ -273,6 +273,7 @@ fn combined_options_survive_the_tiled_lossy_path() {
         code_block_size: Some((32, 32)),
         progression_order: ProgressionOrder::Rpcl,
         component_transform: ComponentTransform::Auto,
+        layers: QualityLayers::One,
     };
     let options = EncodeOptions {
         tile_policy: TilePolicy::Fixed {
@@ -338,4 +339,260 @@ fn decode_with_openjpeg(encoded: &[u8], image: &Image) -> Option<Vec<u8>> {
         "OpenJPEG (via {tool}) rejected the stream"
     );
     Some(std::fs::read(output).expect("read raw"))
+}
+
+// ---------------------------------------------------------------------------
+// Quality layers
+// ---------------------------------------------------------------------------
+
+fn layered(rate_control: RateControl, layers: QualityLayers) -> EncodeOptions {
+    with_coding(
+        rate_control,
+        CodingOptions {
+            layers,
+            ..CodingOptions::default()
+        },
+    )
+}
+
+/// Layers only split the same stream into more packets: the final layer
+/// completes the selection the rate control chose, so the decoded image is
+/// the single-layer one and the file grows by packet headers alone.
+#[test]
+fn layers_split_the_same_stream_without_changing_the_picture() {
+    let image = rgb(180, 140);
+    for rate_control in [RateControl::Lossless, RateControl::ApproxQuality(70)] {
+        let single = encode(&image, &layered(rate_control, QualityLayers::One)).expect("single");
+        let reference = decode_jp2(&single).expect("decode single");
+        for order in ORDERS {
+            for count in [2u16, 4, 7] {
+                let options = EncodeOptions {
+                    coding: CodingOptions {
+                        progression_order: order,
+                        layers: QualityLayers::Count(count),
+                        ..CodingOptions::default()
+                    },
+                    ..layered(rate_control, QualityLayers::One)
+                };
+                let label = format!("{rate_control:?} {order:?} x{count}");
+                let encoded = encode(&image, &options).unwrap_or_else(|e| panic!("{label}: {e}"));
+                let meta = inspect_jp2(&encoded).expect("inspect");
+                assert_eq!(meta.codestream.cod.layers, count, "{label}");
+                assert_eq!(meta.codestream.cod.progression_order, order, "{label}");
+                let decoded = decode_jp2(&encoded).unwrap_or_else(|e| panic!("{label}: {e}"));
+                for (a, b) in decoded.components.iter().zip(&reference.components) {
+                    assert_eq!(a.data, b.data, "{label}");
+                }
+                // Packets per layer: one per (resolution, component).
+                let packets = (usize::from(meta.codestream.cod.decomposition_levels) + 1) * 3;
+                let overhead = encoded.len() - single.len();
+                assert!(
+                    overhead <= packets * usize::from(count - 1) * 24,
+                    "{label}: {overhead} bytes of layer overhead"
+                );
+                if let Some(external) = decode_with_openjpeg(&encoded, &image) {
+                    assert_close(&external, &interleaved(&decoded), rate_control, &label);
+                }
+            }
+        }
+    }
+}
+
+/// Each layer below the final one is a usable prefix: decoding only the first
+/// `k` layers gives a picture whose quality rises with `k`, and whose byte
+/// share sits near the geometric ladder the count asks for.
+/// Each layer below the final one is a usable prefix: decoding only the first
+/// `k` layers gives a picture whose quality rises with `k`.
+#[test]
+fn intermediate_layers_are_progressive_prefixes() {
+    let image = gray(256, 192);
+    let encoded = encode(
+        &image,
+        &layered(RateControl::ApproxQuality(85), QualityLayers::Count(4)),
+    )
+    .expect("four layers");
+    let Some(scores) = layer_psnrs_with_openjpeg(&encoded, &image) else {
+        eprintln!("no OpenJPEG; skipping the per-layer decode");
+        return;
+    };
+    let full = psnr(&image, &encoded);
+    for pair in scores.windows(2) {
+        assert!(
+            pair[0] < pair[1],
+            "layers must improve monotonically: {scores:?}"
+        );
+    }
+    assert!(
+        (scores[3] - full).abs() < 0.05,
+        "all layers = full: {scores:?} vs {full}"
+    );
+    assert!(
+        scores[0] + 5.0 < scores[3],
+        "first layer must be visibly coarser: {scores:?}"
+    );
+}
+
+#[test]
+fn explicit_layer_ratios_give_three_rising_layers() {
+    let image = rgb(240, 200);
+    let source_bytes = (image.width * image.height * 3) as f64;
+    let options = layered(
+        RateControl::CompressionRatio(8.0),
+        QualityLayers::Ratios(vec![64.0, 24.0]),
+    );
+    let encoded = encode(&image, &options).expect("ratio layers");
+    let meta = inspect_jp2(&encoded).expect("inspect");
+    assert_eq!(meta.codestream.cod.layers, 3);
+    let ratio = source_bytes / encoded.len() as f64;
+    assert!((7.5..=8.5).contains(&ratio), "final ratio {ratio:.2}");
+    let decoded = decode_jp2(&encoded).expect("decode");
+    assert_eq!(decoded.components.len(), 3);
+    if let Some(scores) = layer_psnrs_with_openjpeg(&encoded, &image) {
+        assert!(scores[0] < scores[1] && scores[1] < scores[2], "{scores:?}");
+        assert!(
+            (scores[2] - psnr(&image, &encoded)).abs() < 0.05,
+            "{scores:?}"
+        );
+    }
+}
+
+#[test]
+fn layer_options_are_validated() {
+    let image = gray(32, 32);
+    for layers in [
+        QualityLayers::Count(0),
+        QualityLayers::Ratios(vec![10.0, 20.0]),
+        QualityLayers::Ratios(vec![10.0, 10.0]),
+        QualityLayers::Ratios(vec![f32::NAN]),
+        QualityLayers::Ratios(vec![0.0]),
+    ] {
+        assert!(
+            encode(&image, &layered(RateControl::Lossless, layers.clone())).is_err(),
+            "accepted {layers:?}"
+        );
+    }
+    assert_eq!(QualityLayers::Count(1).count(), 1);
+    assert_eq!(QualityLayers::Ratios(vec![30.0, 15.0]).count(), 3);
+    // One layer by count is the single-layer stream, byte for byte.
+    let one = encode(&image, &layered(RateControl::Lossless, QualityLayers::One)).unwrap();
+    let count_one = encode(
+        &image,
+        &layered(RateControl::Lossless, QualityLayers::Count(1)),
+    )
+    .unwrap();
+    assert_eq!(one, count_one);
+}
+
+#[test]
+fn layers_combine_with_tiles_and_exact_rate() {
+    let image = rgb(300, 220);
+    let options = EncodeOptions {
+        tile_policy: TilePolicy::Fixed {
+            width: 128,
+            height: 128,
+        },
+        coding: CodingOptions {
+            progression_order: ProgressionOrder::Rlcp,
+            layers: QualityLayers::Count(3),
+            ..CodingOptions::default()
+        },
+        ..with_coding(RateControl::TargetBytes(14_000), CodingOptions::default())
+    };
+    let encoded = encode(&image, &options).expect("tiled layered exact-rate");
+    assert!(
+        encoded.len() <= 14_000 && encoded.len() > 13_000,
+        "{} bytes",
+        encoded.len()
+    );
+    assert_eq!(
+        inspect_jp2(&encoded)
+            .expect("inspect")
+            .codestream
+            .cod
+            .layers,
+        3
+    );
+    assert!(psnr(&image, &encoded) > 25.0);
+    if let Some(external) = decode_with_openjpeg(&encoded, &image) {
+        assert_close(
+            &external,
+            &interleaved(&decode_jp2(&encoded).expect("decode")),
+            RateControl::TargetBytes(14_000),
+            "tiled layered exact-rate",
+        );
+    }
+}
+
+/// OpenJPEG and jp2lam agree exactly on reversible streams; on 9/7 streams
+/// their float synthesis and colour transforms round differently by a sample
+/// level here and there, so lossy agreement is "within 2 everywhere".
+fn assert_close(external: &[u8], mine: &[u8], rate_control: RateControl, label: &str) {
+    assert_eq!(external.len(), mine.len(), "{label}: decode sizes");
+    if rate_control == RateControl::Lossless {
+        assert_eq!(external, mine, "{label}: OpenJPEG disagrees");
+        return;
+    }
+    let worst = external
+        .iter()
+        .zip(mine)
+        .map(|(&a, &b)| a.abs_diff(b))
+        .max()
+        .unwrap_or(0);
+    assert!(worst <= 2, "{label}: OpenJPEG differs by up to {worst}");
+}
+
+fn imagemagick_tool() -> Option<&'static str> {
+    ["magick", "convert"].into_iter().find(|tool| {
+        Command::new(tool)
+            .args(["-list", "format"])
+            .output()
+            .is_ok_and(|out| {
+                out.status.success() && String::from_utf8_lossy(&out.stdout).contains("JP2")
+            })
+    })
+}
+
+/// PSNR of the picture OpenJPEG reconstructs from the first `k` layers, for
+/// every `k`, via ImageMagick's `jp2:layer-number` define.
+fn layer_psnrs_with_openjpeg(encoded: &[u8], source: &Image) -> Option<Vec<f64>> {
+    let tool = imagemagick_tool()?;
+    let layers = inspect_jp2(encoded).ok()?.codestream.cod.layers;
+    let dir = tempfile::tempdir().ok()?;
+    let input = dir.path().join("in.jp2");
+    std::fs::write(&input, encoded).ok()?;
+    let format = if source.components.len() == 1 {
+        "gray"
+    } else {
+        "rgb"
+    };
+    let reference = interleaved(source);
+    let mut scores = Vec::new();
+    for k in 1..=layers {
+        let output = dir.path().join(format!("l{k}.raw"));
+        let status = Command::new(tool)
+            .arg("-define")
+            .arg(format!("jp2:layer-number={k}"))
+            .arg(&input)
+            .args(["-depth", "8"])
+            .arg(format!("{format}:{}", output.display()))
+            .status()
+            .ok()?;
+        if !status.success() {
+            return None;
+        }
+        let bytes = std::fs::read(output).ok()?;
+        assert_eq!(bytes.len(), reference.len(), "layer {k} decode size");
+        let mse = bytes
+            .iter()
+            .zip(&reference)
+            .map(|(&a, &b)| (f64::from(a) - f64::from(b)).powi(2))
+            .sum::<f64>()
+            / bytes.len() as f64;
+        scores.push(if mse == 0.0 {
+            99.0
+        } else {
+            10.0 * (255.0f64 * 255.0 / mse).log10()
+        });
+    }
+    Some(scores)
 }

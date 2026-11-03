@@ -136,25 +136,40 @@ impl EncodedBlockStore {
         prefix_len: usize,
         writer: &mut W,
     ) -> Result<()> {
-        if prefix_len > payload.len {
+        self.write_range_to(payload, 0, prefix_len, writer)
+    }
+
+    /// Write `len` bytes of a stored payload starting `start` bytes in: one
+    /// quality layer's share of a code-block's embedded stream.
+    pub(crate) fn write_range_to<W: Write>(
+        &self,
+        payload: PayloadRef,
+        start: usize,
+        len: usize,
+        writer: &mut W,
+    ) -> Result<()> {
+        let end = start.checked_add(len).filter(|&end| end <= payload.len);
+        let Some(end) = end else {
             return Err(Jp2LamError::EncodeFailed(format!(
-                "selected payload prefix {prefix_len} exceeds stored length {}",
+                "selected payload range {start}+{len} exceeds stored length {}",
                 payload.len
             )));
-        }
+        };
         match payload.location {
             PayloadLocation::Memory { index } => {
                 let bytes = self.memory_payloads.get(index as usize).ok_or_else(|| {
                     Jp2LamError::EncodeFailed("invalid RAM payload reference".into())
                 })?;
-                writer.write_all(&bytes[..prefix_len]).map_err(io_error)
+                writer.write_all(&bytes[start..end]).map_err(io_error)
             }
             PayloadLocation::Spill { offset } => {
                 let spill = self.spill.as_ref().ok_or_else(|| {
                     Jp2LamError::EncodeFailed("missing spill backing file".into())
                 })?;
-                let mut remaining = prefix_len;
-                let mut read_offset = offset;
+                let mut remaining = len;
+                let mut read_offset = offset.checked_add(start as u64).ok_or_else(|| {
+                    Jp2LamError::EncodeFailed("spill read offset overflow".into())
+                })?;
                 let mut buffer = [0u8; COPY_BUFFER_BYTES];
                 while remaining > 0 {
                     let chunk = remaining.min(buffer.len());

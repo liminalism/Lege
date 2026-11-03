@@ -58,6 +58,30 @@ pub(crate) struct QualityLayer {
     pub target_rate: Option<f32>,
 }
 
+/// Where the layers below the final one end, derived from
+/// [`QualityLayers`](crate::model::QualityLayers).
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum LayerPlan {
+    /// One layer.
+    Single,
+    /// `n` layers; intermediate boundaries at geometric fractions of the
+    /// final body: the layer below the final holds about half of it, the one
+    /// below that a quarter, and so on.
+    Geometric(u16),
+    /// Complete-output byte targets for each intermediate layer, ascending.
+    OutputBytes(Vec<u64>),
+}
+
+impl LayerPlan {
+    pub(crate) fn count(&self) -> u16 {
+        match self {
+            Self::Single => 1,
+            Self::Geometric(n) => *n,
+            Self::OutputBytes(targets) => targets.len() as u16 + 1,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum OutputRateTarget {
     Bytes(u64),
@@ -152,7 +176,9 @@ pub(crate) struct EncodingPlan {
     pub num_resolutions: u8,
     pub code_block_size: CodeBlockSize,
     pub guard_bits: u8,
+    /// One entry per quality layer; the length is what COD signals.
     pub layers: Vec<QualityLayer>,
+    pub layer_plan: LayerPlan,
     /// Only read by tests, verifying that plan derivation reflects the
     /// user-supplied tile policy; live code consumes the derived `tile`
     /// field instead.
@@ -283,6 +309,18 @@ impl EncodingPlan {
         } else {
             RateMode::QualityLambda
         };
+        let layer_plan = match &options.coding.layers {
+            crate::model::QualityLayers::One | crate::model::QualityLayers::Count(1) => {
+                LayerPlan::Single
+            }
+            crate::model::QualityLayers::Count(n) => LayerPlan::Geometric(*n),
+            crate::model::QualityLayers::Ratios(ratios) => LayerPlan::OutputBytes(
+                ratios
+                    .iter()
+                    .map(|&ratio| target_bytes_from_ratio(image, ratio))
+                    .collect::<Result<Vec<_>>>()?,
+            ),
+        };
         let quant_scale = if matches!(rate_mode, RateMode::PerceptualTarget) {
             derive::quality_step_scaler(75)
         } else {
@@ -329,7 +367,8 @@ impl EncodingPlan {
                 .map(|(width, height)| CodeBlockSize { width, height })
                 .unwrap_or_else(|| derive_code_block_size(quality)),
             guard_bits: 2,
-            layers: vec![QualityLayer { target_rate }],
+            layers: vec![QualityLayer { target_rate }; usize::from(layer_plan.count())],
+            layer_plan,
             #[cfg(test)]
             tile_policy: options.tile_policy,
             resource_limits: options.resource_limits.clone(),

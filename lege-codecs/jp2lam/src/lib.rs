@@ -56,6 +56,6 @@ pub use model::{
     CodingOptions, ColorEncoding, ColorSpace, Component, ComponentSampleData, ComponentTransform,
     ComponentView, ContentProfile, DisplayColor, DisplayProfile, EncodeOptions, IccComponentModel,
     Image, ImageView, OutputFormat, PerceptualEffort, PerceptualObservation, PerceptualProbe,
-    PerceptualTarget, PerceptualTrace, Preset, QualityStatus, RateControl, ResourceLimits,
-    SamplePrecision, TilePolicy,
+    PerceptualTarget, PerceptualTrace, Preset, QualityLayers, QualityStatus, RateControl,
+    ResourceLimits, SamplePrecision, TilePolicy,
 };

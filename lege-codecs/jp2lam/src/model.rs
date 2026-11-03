@@ -383,12 +383,48 @@ pub enum ComponentTransform {
 /// choose", which is what the encoder did before these were exposed.
 ///
 /// Fields that are not here are fixed by the encoder and are legal Part 1
-/// choices: one quality layer, one precinct per subband (Scod precinct bit
-/// clear, so 2^15 precincts), code-block style 0 (no bypass, reset, restart,
-/// causal, predictable termination or segmentation symbols), 2 guard bits, a
-/// zero image and tile origin, one tile-part per tile, no SOP/EPH, ROI, POC,
-/// TLM or PLT markers, and Rsiz 0.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+/// choices: one precinct per subband (Scod precinct bit clear, so 2^15
+/// precincts), code-block style 0 (no bypass, reset, restart, causal,
+/// predictable termination or segmentation symbols), 2 guard bits, a zero
+/// image and tile origin, one tile-part per tile, no SOP/EPH, ROI, POC, TLM
+/// or PLT markers, and Rsiz 0.
+/// How many quality layers a tile's packets are split into (Annex B.6).
+///
+/// The final layer always completes the stream the rate control chose; the
+/// layers below it are rate-distortion-optimal prefixes of that same stream,
+/// so a reader that stops after layer *k* sees the best picture those bytes
+/// can give. Every layer costs a packet header per (resolution, component),
+/// a few bytes each.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub enum QualityLayers {
+    /// One layer: the whole stream in one packet per (resolution, component).
+    #[default]
+    One,
+    /// `n` layers (1..=65535). Each intermediate layer holds about half the
+    /// bytes of the next, so `Count(4)` places layer boundaries near 1/8, 1/4
+    /// and 1/2 of the final size.
+    Count(u16),
+    /// Explicit compression ratios (source bits / output bits) for the layers
+    /// below the final one, most compressed first and strictly descending,
+    /// as OpenJPEG's `-r` list reads them. A ratio the final stream already
+    /// beats gives an empty layer.
+    Ratios(Vec<f32>),
+}
+
+impl QualityLayers {
+    /// Total layers written to COD.
+    pub fn count(&self) -> u16 {
+        match self {
+            Self::One => 1,
+            Self::Count(n) => (*n).max(1),
+            Self::Ratios(ratios) => {
+                ratios.len().saturating_add(1).min(usize::from(u16::MAX)) as u16
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct CodingOptions {
     /// Number of wavelet decomposition levels (`NL`, 0..=32); one fewer than
     /// the number of resolutions. `None` derives it from the image: enough
@@ -401,17 +437,45 @@ pub struct CodingOptions {
     /// 64x64, or 32x32 for legacy approximate qualities below 30.
     pub code_block_size: Option<(u32, u32)>,
     /// Packet progression order written to COD and used to emit packets.
-    /// With one layer and one precinct per subband, LRCP, RLCP and RPCL emit
-    /// the same resolution-major packet sequence and PCRL and CPRL the same
-    /// component-major one; the choice matters to readers that stream or
-    /// truncate by component.
+    /// With one precinct per subband the position loop is trivial, so the
+    /// orders differ in how layer, resolution and component nest: LRCP puts
+    /// every layer's low resolutions first (quality-progressive), RLCP and
+    /// RPCL complete each resolution before the next, PCRL and CPRL complete
+    /// each component.
     pub progression_order: ProgressionOrder,
     /// Whether three-component input gets the multiple-component transform.
     pub component_transform: ComponentTransform,
+    /// Quality layers per tile; one by default.
+    pub layers: QualityLayers,
 }
 
 impl CodingOptions {
     pub(crate) fn validate(&self) -> crate::error::Result<()> {
+        match &self.layers {
+            QualityLayers::One => {}
+            QualityLayers::Count(0) => {
+                return Err(invalid_input("quality layer count must be at least 1"));
+            }
+            QualityLayers::Count(_) => {}
+            QualityLayers::Ratios(ratios) => {
+                if ratios.len() >= usize::from(u16::MAX) {
+                    return Err(invalid_input("at most 65535 quality layers fit in COD"));
+                }
+                for pair in ratios.windows(2) {
+                    if pair[1] >= pair[0] {
+                        return Err(invalid_input(format!(
+                            "quality layer ratios must be strictly descending, got {} then {}",
+                            pair[0], pair[1]
+                        )));
+                    }
+                }
+                if let Some(bad) = ratios.iter().find(|r| !r.is_finite() || **r <= 0.0) {
+                    return Err(invalid_input(format!(
+                        "quality layer ratio must be finite and positive, got {bad}"
+                    )));
+                }
+            }
+        }
         if let Some(levels) = self.decomposition_levels
             && levels > 32
         {
