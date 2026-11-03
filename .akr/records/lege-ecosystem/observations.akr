@@ -18,6 +18,84 @@ record lege-ecosystem.encode-quality.headsup-measurement-2026-08-11/1 : observat
     method observation
 }
 
+record lege-ecosystem.encode-quality.jp2lam-alpha-channel-20261103/1 : observation {
+    title "jp2lam encodes an alpha channel as a fourth/second component with a cdef box; ImageMagick cannot oracle translucent colour"
+    state verified
+    statement """
+        An image with one component more than its colour space has colour channels is encoded with the extra component as straight opacity: coded on its own outside the ICT (the transform and the per-component loaders now cover components 0..3 only), declared in a JP2 cdef box identical byte for byte to the one ImageMagick/OpenJPEG writes ((0,0,1),(1,0,2),(2,0,3),(3,1,0)), and reported by this crate's decoder as in_data_alpha. Lossless RGBA and gray+alpha round-trip exactly; lossy keeps use_mct on the colour planes; layers, tiles, bypass and borrowed views combine with it. Perceptual (SSIMULACRA2) targets reject alpha because the metric scores colour only.
+
+        ImageMagick is not usable as an oracle for the colour of translucent pixels: a lossless RGBA JP2 it encodes itself does not round-trip through its rgba: export (4193 of 4234 translucent pixels and all 24 opaque ones differ, identically for our file and its own), while -alpha extract reproduces the alpha plane exactly. The alpha test therefore checks the alpha plane exactly and that OpenJPEG's rgba: export of our file equals its export of ImageMagick's own lossless encode of the same pixels.
+        """
+    observed_at git:dd6747e0abb146e90bda4847cccef0069ec4d320
+    method command
+    watches [
+        "lege-codecs/jp2lam/src/jp2.rs",
+        "lege-codecs/jp2lam/src/model.rs",
+        "lege-codecs/jp2lam/src/plan/validate.rs",
+        "lege-codecs/jp2lam/tests/alpha.rs"
+    ]
+    author "Claude"
+}
+
+record lege-ecosystem.encode-quality.jp2lam-encoder-review-fixes-20261103/1 : observation {
+    title "jp2lam encoder-review fixes: decoder 5/3 fallback bug, precinct limit, Lege facade misuse"
+    state verified
+    statement """
+        Working an external review of jp2lam as a general encoder turned up three defects beyond the review's list. (1) The decoder's checked i128 inverse 5/3 fallback, taken whenever inverse_fast_path_is_safe predicts i32 overflow (9+ decomposition levels on 8-bit data, fewer on 16-bit), used the odd sample's own slot instead of the mirrored even sample at the right edge of even-length lines; streams decoded exactly by OpenJPEG 2.5 (ImageMagick) came back wrong from jp2lam (150x97 at 9 levels: 13454 of 14550 samples). (2) The encoder writes one precinct per subband with PPx=PPy=15, so any tile crossing a multiple of 32768 samples produced packets the precinct partition does not match; such tilings are now rejected and TilePolicy::Auto picks a precinct-sized tile. (3) Lossless RGB never uses the RCT (native_use_mct is 9/7-only), contrary to the review's claim; documented, not changed.
+
+        Lege's facade (lege-process/encoding/jp2.rs) discarded every Jp2Settings field but rate, and mapped rate through 100/sqrt(rate), which for every ratio above 4 landed on the q50 floor; encode_to_target_size ran a seven-encode quality ladder instead of RateControl::TargetBytes; the display path fell back on any error. Production page/region images already used the verified display path and MRC backgrounds the ApproxQuality preset, which is now spelled out as RateControl::ApproxQuality rather than left to EncodeOptions::quality.
+
+        Open, not attempted: multiple quality layers, Tier-1 mode switches (bypass/termall/segsym exist only under cfg(test) and the packet writer assumes one terminated segment), alpha/cdef, palettes, resolution boxes, a 10-16-bit perceptual metric, and the resolution-dependent ApproxQuality lambda scaling.
+        """
+    observed_at git:94ae2770423ac2f1652073ddb336e6e3848f8666
+    method command
+    watches [
+        "lege-codecs/jp2lam/src/dwt/rev53.rs",
+        "lege-codecs/jp2lam/src/plan/**",
+        "lege-codecs/jp2lam/src/model.rs",
+        "lege-process/encoding/jp2.rs"
+    ]
+    author "Claude"
+}
+
+record lege-ecosystem.encode-quality.jp2lam-layers-and-code-block-styles-20261103/1 : observation {
+    title "jp2lam gained quality layers and the six code-block coding switches; both verified against OpenJPEG"
+    state verified
+    statement """
+        Quality layers (CodingOptions::layers): the final layer is the rate control's own selection and each lower layer is PCRD rerun on measured-MSE curves truncated at the final pass counts, so layers nest and the decoded picture equals the single-layer one; only packet headers are added (83 bytes on a 256x192 Count(4) encode). OpenJPEG decoded that file layer by layer at 17.9, 20.9, 28.0 and 38.5 dB. Single-layer output stayed byte-identical across nine configurations. The first attempt failed on multi-block bands because inclusion tag-tree values were set per block during coding; a parent node's value must be final before its first leaf is coded, so all first inclusions of a band are now set before any block's header bits.
+
+        Code-block style (CodingOptions::code_block_style): all six Annex D switches are written to COD and honoured by the encoder, which took a general per-pass loop (the all-off style keeps the tuned single-segment path, byte-identical). The decoder gained raw-segment decoding and Table D.9 segmentation, so bypass streams no longer fail. Twelve style combinations round-trip exactly lossless, within 2 of OpenJPEG lossy, and with layers plus tiles. Two decoder decisions: a segmentation-symbol mismatch on the last pass a stream carries is tolerated, because a rate-truncated codeword loses its marker first; and the ERTERM flush keeps the reference accounting (the byte at the write position is excluded, matching RefMq), since including it changed decoded symbols.
+
+        Open: OpenJPEG prints "PTERM check failure: N synthetized 0xFF markers" for predictable-termination streams that PCRD truncated mid-codeword (21 warnings across the lossy style sweep, none on lossless or layered-lossless). Truncating only at terminated passes when predictable_termination is set would remove it at some rate cost; not done. Lege's Jp2Settings has no field for the style, so Lege cannot select it yet.
+        """
+    observed_at git:7eaef90ff61c025a5001bcc0883abdd066470d24
+    method command
+    watches [
+        "lege-codecs/jp2lam/src/encode/backend/native/t1.rs",
+        "lege-codecs/jp2lam/src/encode/backend/native/t2.rs",
+        "lege-codecs/jp2lam/src/decode/t1.rs",
+        "lege-codecs/jp2lam/src/decode/t2.rs",
+        "lege-codecs/jp2lam/src/model.rs"
+    ]
+    author "Claude"
+}
+
+record lege-ecosystem.encode-quality.no-sibling-checkout-dependencies-20261103/1 : observation {
+    title "No Lege crate depends on a sibling checkout: jpxl-perceptual from crates.io, liminalkit from GitHub"
+    state verified
+    statement """
+        A scan of every Cargo.toml in the Lege, JPXL, AKR and liminalkit checkouts for path dependencies leaving their own repository found two: jp2lam's jpxl-perceptual (../../../jpegXL-rs/JPXL/...) and the liminalUI GUI's five liminalkit crates (../../../../liminalkit/...). jp2lam now takes jpxl-perceptual 0.3.0 from crates.io, whose src/ is byte-identical to the JPXL checkout; the full jp2lam suite passes on it and  for jp2lam 0.3.0 packages 94 files and verifies. The GUI takes liminalkit from github.com/liminalism/liminalkit branch main, which Cargo.lock pins at 19c5cd393ad6, the commit the sibling checkout was already on; lege and lege-gui-liminalui check with all targets. liminalkit is not on crates.io. In-repo path dependencies and the root [patch] entries for the in-tree codecs are unchanged: those crates' canonical source is this repository.
+        """
+    observed_at git:093e961c62b3ca11aa16d539537bcce73772ceda
+    method command
+    watches [
+        "lege-codecs/jp2lam/Cargo.toml",
+        "lege-process/GUI/liminalUI/Cargo.toml",
+        "Cargo.lock"
+    ]
+    author "Claude"
+}
+
 record lege-ecosystem.observation.a-bitonal-djvu-page-costs-more-in-iw44-than-in-jb2/1 : observation {
     title "A bitonal DjVu page spends most of its encode time on an all-white IW44 background, not on JB2"
     state verified

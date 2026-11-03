@@ -30,14 +30,16 @@ required-features = ["cli"]
 
 [features]
 default = ["simd"]
-cli          = ["dep:chrono", "dep:image", "dep:zip"]
+cli          = ["image", "image/png", "dep:chrono", "dep:zip"]
+# `image::ImageEncoder` implementation (`Jp2Encoder`), no image codecs pulled in.
+image        = ["dep:image"]
 profile = []
 counters = []
 simd = ["dep:wide"]
 
 [dependencies]
 chrono = { version = "0.4", optional = true, default-features = false, features = ["clock"] }
-image = { version = "0.25.9", optional = true, default-features = false, features = ["png"] }
+image = { version = "0.25.9", optional = true, default-features = false }
 memmap2 = "0.9"
 rayon = { version = "1.10" }
 tempfile = "3"
@@ -46,9 +48,10 @@ tempfile = "3"
 # tree compiles and links two copies of `wide`.
 wide = { version = "=0.7.33", optional = true }
 zip = { version = "2", optional = true, default-features = false, features = ["deflate"] }
-# Shared production SSIMULACRA2 (`ssimulacra2-jpxl-1`). Default features omit
-# the JXL evaluator; rust-av `ssimulacra2` stays a test-only oracle below.
-jpxl-perceptual = { path = "../../../jpegXL-rs/JPXL/crates/jpxl-perceptual", version = "0.3.0", default-features = false }
+# Shared production SSIMULACRA2 (`ssimulacra2-jpxl-1`), published from the
+# JPXL workspace. Default features omit the JXL evaluator; rust-av
+# `ssimulacra2` stays a test-only oracle below.
+jpxl-perceptual = { version = "0.3.0", default-features = false }
 
 [dev-dependencies]
 butteraugli = "0.9.3"

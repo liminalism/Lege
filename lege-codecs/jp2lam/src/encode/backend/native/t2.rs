@@ -1,6 +1,7 @@
-use crate::encode::block_store::{SharedEncodedBlockStore, StoredBand, StoredTier1Layout};
+use crate::encode::block_store::{SharedEncodedBlockStore, StoredCodeBlock, StoredTier1Layout};
 use crate::encode::profile_enter;
 use crate::error::{Jp2LamError, Result};
+use crate::plan::ProgressionOrder;
 use crate::t2::{PacketSequenceBuilder, StoredPacket, StoredPayloadRange, TilePartPayload};
 
 use super::t1::{NativeEncodedTier1Band, NativeEncodedTier1Layout, NativeTier1SelectionLayout};
@@ -445,6 +446,253 @@ fn build_packet_body(
 // Resolution-level packet grouping
 // ---------------------------------------------------------------------------
 
+/// `(layer, resolution, component)` triples in the order one tile's packets
+/// are written (Annex B.12).
+///
+/// The encoder emits one precinct per subband, so the position loop of
+/// B.12.1.3-B.12.1.5 visits a single position (the tile origin, where every
+/// resolution's only precinct starts). What remains is the nesting of layer,
+/// resolution and component: LRCP, RLCP and RPCL are resolution-major over
+/// component and differ in where the layer loop sits; PCRL and CPRL are
+/// component-major with the layer loop innermost.
+pub(crate) fn packet_order(
+    order: ProgressionOrder,
+    max_resolution: u8,
+    component_count: usize,
+    layers: u16,
+) -> Vec<(u16, u8, usize)> {
+    let resolutions = 0..=max_resolution;
+    let components = 0..component_count;
+    let layers = 0..layers;
+    let mut packets =
+        Vec::with_capacity((usize::from(max_resolution) + 1) * component_count * layers.len());
+    match order {
+        ProgressionOrder::Lrcp => {
+            for l in layers {
+                for r in resolutions.clone() {
+                    for c in components.clone() {
+                        packets.push((l, r, c));
+                    }
+                }
+            }
+        }
+        ProgressionOrder::Rlcp => {
+            for r in resolutions {
+                for l in layers.clone() {
+                    for c in components.clone() {
+                        packets.push((l, r, c));
+                    }
+                }
+            }
+        }
+        ProgressionOrder::Rpcl => {
+            for r in resolutions {
+                for c in components.clone() {
+                    for l in layers.clone() {
+                        packets.push((l, r, c));
+                    }
+                }
+            }
+        }
+        ProgressionOrder::Pcrl | ProgressionOrder::Cprl => {
+            for c in components {
+                for r in resolutions.clone() {
+                    for l in layers.clone() {
+                        packets.push((l, r, c));
+                    }
+                }
+            }
+        }
+    }
+    packets
+}
+
+// ---------------------------------------------------------------------------
+// Layered packet headers (ISO 15444-1 B.10, state carried across layers)
+// ---------------------------------------------------------------------------
+
+/// What a packet header needs to know about one code-block.
+#[derive(Clone, Copy)]
+struct HeaderBlock<'a> {
+    x0: usize,
+    y0: usize,
+    x1: usize,
+    y1: usize,
+    zero_bitplanes: u8,
+    passes: &'a [super::t1::NativeEncodedTier1Pass],
+}
+
+impl<'a> From<&'a StoredCodeBlock> for HeaderBlock<'a> {
+    fn from(block: &'a StoredCodeBlock) -> Self {
+        Self {
+            x0: block.x0,
+            y0: block.y0,
+            x1: block.x1,
+            y1: block.y1,
+            zero_bitplanes: block.zero_bitplanes,
+            passes: &block.passes,
+        }
+    }
+}
+
+fn header_cb_dims(blocks: &[HeaderBlock<'_>]) -> (usize, usize) {
+    let Some(first) = blocks.first() else {
+        return (0, 0);
+    };
+    let x0 = blocks.iter().map(|b| b.x0).min().unwrap_or(0);
+    let y0 = blocks.iter().map(|b| b.y0).min().unwrap_or(0);
+    let cbw = first.x1 - first.x0;
+    let cbh = first.y1 - first.y0;
+    if cbw == 0 || cbh == 0 {
+        return (1, blocks.len());
+    }
+    let x1 = blocks.iter().map(|b| b.x1).max().unwrap_or(0);
+    let y1 = blocks.iter().map(|b| b.y1).max().unwrap_or(0);
+    ((x1 - x0).div_ceil(cbw), (y1 - y0).div_ceil(cbh))
+}
+
+/// Per-code-block header state that persists from one layer's packet to the
+/// next for the same (resolution, component, precinct): whether the block has
+/// been included yet (B.10.4) and its current `Lblock` (B.10.7.1).
+struct BlockHeaderState {
+    included: bool,
+    lblock: u32,
+}
+
+struct BandHeaderState {
+    inclusion: TagTree,
+    zero_bitplanes: TagTree,
+    blocks: Vec<BlockHeaderState>,
+}
+
+/// Header state for every band of one (resolution, component) packet, in the
+/// band order the packets use.
+pub(crate) struct PacketHeaderState {
+    bands: Vec<BandHeaderState>,
+}
+
+impl PacketHeaderState {
+    fn new(bands: &[Vec<HeaderBlock<'_>>]) -> Self {
+        Self {
+            bands: bands
+                .iter()
+                .map(|blocks| {
+                    let (cx, cy) = header_cb_dims(blocks);
+                    let mut inclusion = TagTree::new(cx.max(1), cy.max(1));
+                    let mut zero_bitplanes = TagTree::new(cx.max(1), cy.max(1));
+                    inclusion.reset();
+                    zero_bitplanes.reset();
+                    for (index, block) in blocks.iter().enumerate() {
+                        zero_bitplanes.set_value(index, i32::from(block.zero_bitplanes));
+                    }
+                    BandHeaderState {
+                        inclusion,
+                        zero_bitplanes,
+                        blocks: blocks
+                            .iter()
+                            .map(|_| BlockHeaderState {
+                                included: false,
+                                lblock: 3,
+                            })
+                            .collect(),
+                    }
+                })
+                .collect(),
+        }
+    }
+}
+
+/// One layer's packet header for a (resolution, component) packet. `bands`
+/// lists each band's blocks; `starts[b][i]..ends[b][i]` are the passes block
+/// `i` of band `b` contributes to this layer (cumulative counts, so `starts`
+/// is the previous layer's `ends`). `state` carries inclusion and `Lblock`
+/// across layers and must be the same object for every layer of this packet.
+fn build_layer_packet_header(
+    bands: &[Vec<HeaderBlock<'_>>],
+    starts: &[&[u16]],
+    ends: &[&[u16]],
+    layer: u16,
+    state: &mut PacketHeaderState,
+) -> Vec<u8> {
+    let mut bio = PacketBio::new();
+    let packet_has_data = starts
+        .iter()
+        .zip(ends)
+        .any(|(start, end)| start.iter().zip(end.iter()).any(|(s, e)| e > s));
+    if !packet_has_data {
+        bio.putbit(0);
+        let header = bio.flush();
+        crate::encode::counters::record_packet_header(header.len());
+        return header;
+    }
+
+    bio.putbit(1);
+    for (band_index, blocks) in bands.iter().enumerate() {
+        if blocks.is_empty() {
+            continue;
+        }
+        let band_state = &mut state.bands[band_index];
+        let pass_range = |index: usize, block: &HeaderBlock<'_>| {
+            let start = usize::from(starts[band_index][index]).min(block.passes.len());
+            let end = usize::from(ends[band_index][index])
+                .min(block.passes.len())
+                .max(start);
+            (start, end)
+        };
+
+        // Every block first included in this layer must be in the inclusion
+        // tag tree before any block of the band is coded: a parent node's
+        // value is the minimum over its subtree, and the first leaf coded
+        // under it commits that value to the stream (B.10.2).
+        for (index, block) in blocks.iter().enumerate() {
+            let (start, end) = pass_range(index, block);
+            if !band_state.blocks[index].included && end > start {
+                band_state.inclusion.set_value(index, i32::from(layer));
+            }
+        }
+
+        for (index, block) in blocks.iter().enumerate() {
+            let (start, end) = pass_range(index, block);
+            let new_passes = end - start;
+            let block_state = &mut band_state.blocks[index];
+
+            // B.10.4: first inclusion is tag-tree coded against the layer
+            // threshold; later inclusion is a single bit.
+            if block_state.included {
+                bio.putbit(u32::from(new_passes > 0));
+            } else {
+                band_state
+                    .inclusion
+                    .encode(&mut bio, index, i32::from(layer) + 1);
+            }
+            if new_passes == 0 {
+                continue;
+            }
+            if !block_state.included {
+                // B.10.5: zero bit-planes, only with the first inclusion.
+                band_state.zero_bitplanes.encode(&mut bio, index, 999);
+                block_state.included = true;
+            }
+
+            put_numpasses(&mut bio, new_passes as u32);
+
+            // B.10.7: one Lblock increment for the layer, sized for the
+            // largest codeword segment it carries, then one length per segment.
+            let segments = codeblock_segments(&block.passes[start..end]);
+            let increment = length_increment(block_state.lblock, &segments);
+            put_commacode(&mut bio, increment);
+            block_state.lblock += increment;
+            for (seg_len, seg_nump) in segments {
+                bio.write_bits(seg_len, block_state.lblock + floor_log2(seg_nump));
+            }
+        }
+    }
+
+    let header = bio.flush();
+    crate::encode::counters::record_packet_header(header.len());
+    header
+}
+
 /// The tile-0 convenience wrappers that used to sit here
 /// (`build_packet_sequence`, `_for_components`, `_for_components_with_selections`)
 /// had no caller anywhere, including tests, and were deleted. This function
@@ -586,6 +834,7 @@ pub(crate) fn build_tile_part_payload_for_tile_components_owned(
     tile_index: u16,
     mut layouts: Vec<NativeEncodedTier1Layout>,
     selections: Option<&[NativeTier1SelectionLayout]>,
+    order: ProgressionOrder,
 ) -> Result<TilePartPayload> {
     let _p = profile_enter("t2::build_tile_part_payload_for_components_owned");
     validate_layouts_for_tile(tile_index, &layouts)?;
@@ -606,8 +855,9 @@ pub(crate) fn build_tile_part_payload_for_tile_components_owned(
         .unwrap_or(0);
 
     let mut builder = PacketSequenceBuilder::new();
-    for resolution in 0..=max_resolution {
-        for (component_index, component) in layouts.iter_mut().enumerate() {
+    for (_, resolution, component_index) in packet_order(order, max_resolution, layouts.len(), 1) {
+        {
+            let component = &mut layouts[component_index];
             let band_indices = component
                 .bands
                 .iter()
@@ -673,137 +923,156 @@ pub(crate) fn build_tile_part_payload_for_tile_components_owned(
     Ok(builder.finish_payload())
 }
 
-/// Build packet headers plus store-backed payload ranges for one tile.
+/// Build packet headers plus store-backed payload ranges for one tile, for
+/// every quality layer.
 ///
-/// This is the Phase 5 emission boundary: packet planning clones only compact
-/// Tier-1 metadata. Compressed bytes remain in `EncodedBlockStore` and are read
-/// directly when the final codestream writer emits each selected prefix.
+/// `layers[l][c]` is the cumulative pass selection of component `c` after
+/// layer `l`; layer `l` carries the passes between `layers[l-1]` and
+/// `layers[l]`. Packet planning clones only compact Tier-1 metadata:
+/// compressed bytes remain in `EncodedBlockStore` and are read directly when
+/// the final codestream writer emits each selected range.
 pub(crate) fn build_stored_tile_part_payload(
     tile_index: u16,
     store: SharedEncodedBlockStore,
     layouts: &[StoredTier1Layout],
-    selections: Option<&[NativeTier1SelectionLayout]>,
+    layers: &[Vec<NativeTier1SelectionLayout>],
+    order: ProgressionOrder,
 ) -> Result<TilePartPayload> {
     if layouts.iter().any(|layout| layout.tile_index != tile_index) {
         return Err(Jp2LamError::EncodeFailed(format!(
             "stored Tier-1 layouts do not all belong to tile {tile_index}"
         )));
     }
-    if selections.is_some_and(|selected| selected.len() != layouts.len()) {
+    if layers.is_empty() {
+        return Err(Jp2LamError::EncodeFailed(
+            "a tile needs at least one quality layer".into(),
+        ));
+    }
+    if layers.iter().any(|layer| layer.len() != layouts.len()) {
         return Err(Jp2LamError::EncodeFailed(format!(
             "stored component selection count does not match layout count {}",
             layouts.len()
         )));
+    }
+    for (layout, selection) in layouts.iter().zip(&layers[0]) {
+        if selection.bands.len() != layout.bands.len()
+            || selection
+                .bands
+                .iter()
+                .zip(&layout.bands)
+                .any(|(s, b)| s.selected_passes.len() != b.blocks.len())
+        {
+            return Err(Jp2LamError::EncodeFailed(
+                "stored packet selection does not match the layout's band or block counts".into(),
+            ));
+        }
     }
     let max_resolution = layouts
         .iter()
         .flat_map(|layout| layout.bands.iter().map(|band| band.resolution))
         .max()
         .unwrap_or(0);
+    let layer_count = u16::try_from(layers.len())
+        .map_err(|_| Jp2LamError::EncodeFailed("more than 65535 quality layers".into()))?;
+
+    // Per-(component, resolution) header state, created at that packet's
+    // first layer and reused by its later ones.
+    let resolutions = usize::from(max_resolution) + 1;
+    let mut states: Vec<Option<PacketHeaderState>> =
+        (0..layouts.len() * resolutions).map(|_| None).collect();
+    let empty: Vec<u16> = Vec::new();
     let mut packets = Vec::new();
 
-    for resolution in 0..=max_resolution {
-        for (component_index, layout) in layouts.iter().enumerate() {
-            let stored_band_indices = layout
-                .bands
-                .iter()
-                .enumerate()
-                .filter_map(|(index, band)| (band.resolution == resolution).then_some(index))
-                .collect::<Vec<_>>();
-            if stored_band_indices.is_empty() {
-                continue;
-            }
-            let stored_bands = stored_band_indices
-                .iter()
-                .map(|&index| &layout.bands[index])
-                .collect::<Vec<_>>();
-            let header_bands = stored_bands
-                .iter()
-                .map(|band| native_header_band(band))
-                .collect::<Vec<_>>();
-            let header_refs = header_bands.iter().collect::<Vec<_>>();
-            let selected_band_refs = selections
-                .and_then(|all| all.get(component_index))
-                .map(|selected_layout| {
-                    stored_band_indices
-                        .iter()
-                        .map(|&index| {
-                            selected_layout.bands.get(index).ok_or_else(|| {
-                                Jp2LamError::EncodeFailed(
-                                    "stored packet selection band count mismatch".into(),
-                                )
-                            })
-                        })
-                        .collect::<Result<Vec<_>>>()
-                })
-                .transpose()?;
-            let header = build_packet_header(&header_refs, selected_band_refs.as_deref());
-            let mut body = Vec::new();
-            for (packet_band_index, band) in stored_bands.iter().enumerate() {
-                let selected_band = selected_band_refs
-                    .as_ref()
-                    .and_then(|bands| bands.get(packet_band_index).copied());
-                if selected_band
-                    .is_some_and(|selected| selected.selected_passes.len() != band.blocks.len())
-                {
-                    return Err(Jp2LamError::EncodeFailed(
-                        "stored packet selection block count mismatch".into(),
-                    ));
+    for (layer, resolution, component_index) in
+        packet_order(order, max_resolution, layouts.len(), layer_count)
+    {
+        let layout = &layouts[component_index];
+        let band_indices = layout
+            .bands
+            .iter()
+            .enumerate()
+            .filter_map(|(index, band)| (band.resolution == resolution).then_some(index))
+            .collect::<Vec<_>>();
+        if band_indices.is_empty() {
+            continue;
+        }
+        let bands: Vec<Vec<HeaderBlock<'_>>> = band_indices
+            .iter()
+            .map(|&index| {
+                layout.bands[index]
+                    .blocks
+                    .iter()
+                    .map(HeaderBlock::from)
+                    .collect()
+            })
+            .collect();
+        let ends: Vec<&[u16]> = band_indices
+            .iter()
+            .map(|&index| {
+                layers[usize::from(layer)][component_index].bands[index]
+                    .selected_passes
+                    .as_slice()
+            })
+            .collect();
+        let starts: Vec<&[u16]> = band_indices
+            .iter()
+            .map(|&index| match layer.checked_sub(1) {
+                Some(previous) => layers[usize::from(previous)][component_index].bands[index]
+                    .selected_passes
+                    .as_slice(),
+                None => empty.as_slice(),
+            })
+            .collect();
+        // Layer 0 starts every block at pass 0.
+        let zero_starts: Vec<Vec<u16>>;
+        let starts: Vec<&[u16]> = if layer == 0 {
+            zero_starts = ends.iter().map(|end| vec![0u16; end.len()]).collect();
+            zero_starts.iter().map(Vec::as_slice).collect()
+        } else {
+            starts
+        };
+
+        let state_slot = &mut states[component_index * resolutions + usize::from(resolution)];
+        let state = state_slot.get_or_insert_with(|| PacketHeaderState::new(&bands));
+        let header = build_layer_packet_header(&bands, &starts, &ends, layer, state);
+        let mut body = Vec::new();
+        for (packet_band_index, &band_index) in band_indices.iter().enumerate() {
+            let band = &layout.bands[band_index];
+            for (block_index, block) in band.blocks.iter().enumerate() {
+                let start =
+                    usize::from(starts[packet_band_index][block_index]).min(block.passes.len());
+                let end = usize::from(ends[packet_band_index][block_index])
+                    .min(block.passes.len())
+                    .max(start);
+                if end == start {
+                    continue;
                 }
-                for (block_index, block) in band.blocks.iter().enumerate() {
-                    let selected_count = selected_band
-                        .and_then(|selected| selected.selected_passes.get(block_index).copied())
-                        .map(usize::from)
-                        .unwrap_or(block.passes.len())
-                        .min(block.passes.len());
-                    if selected_count == 0 {
-                        continue;
-                    }
-                    let last_pass = &block.passes[selected_count - 1];
-                    let selected_len = last_pass.cumulative_length;
-                    if selected_len > block.payload.len() {
-                        return Err(Jp2LamError::EncodeFailed(format!(
-                            "stored block {:?} pass length {selected_len} exceeds payload length {}",
-                            block.id,
-                            block.payload.len()
-                        )));
-                    }
+                let byte_start = if start == 0 {
+                    0
+                } else {
+                    block.passes[start - 1].cumulative_length
+                };
+                let byte_end = block.passes[end - 1].cumulative_length;
+                if byte_end > block.payload.len() || byte_start > byte_end {
+                    return Err(Jp2LamError::EncodeFailed(format!(
+                        "stored block {:?} pass range {byte_start}..{byte_end} exceeds payload length {}",
+                        block.id,
+                        block.payload.len()
+                    )));
+                }
+                if byte_end > byte_start {
                     body.push(StoredPayloadRange {
                         payload: block.payload,
-                        len: selected_len,
+                        start: byte_start,
+                        len: byte_end - byte_start,
                     });
                 }
             }
-            packets.push(StoredPacket { header, body });
         }
+        packets.push(StoredPacket { header, body });
     }
 
     Ok(TilePartPayload::from_stored_packets(store, packets))
-}
-
-fn native_header_band(band: &StoredBand) -> NativeEncodedTier1Band {
-    NativeEncodedTier1Band {
-        resolution: band.resolution,
-        band: band.band,
-        blocks: band
-            .blocks
-            .iter()
-            .map(|block| super::t1::NativeEncodedTier1CodeBlock {
-                tile_index: block.id.tile_index,
-                resolution: block.id.resolution,
-                band: block.id.band,
-                x0: block.x0,
-                y0: block.y0,
-                x1: block.x1,
-                y1: block.y1,
-                magnitude_bitplanes: block.magnitude_bitplanes,
-                zero_bitplanes: block.zero_bitplanes,
-                block_class: block.block_class,
-                payload: Vec::new(),
-                passes: block.passes.clone(),
-            })
-            .collect(),
-    }
 }
 
 fn validate_layouts_for_tile(tile_index: u16, layouts: &[NativeEncodedTier1Layout]) -> Result<()> {
@@ -844,6 +1113,8 @@ fn build_packet_body_segments(
 // ---------------------------------------------------------------------------
 #[cfg(test)]
 mod tests {
+    use crate::plan::ProgressionOrder;
+
     use super::{
         PacketBio, TagTree, build_packet_sequence_for_tile_components_with_selections,
         build_tile_part_payload, build_tile_part_payload_for_components,
@@ -1076,8 +1347,13 @@ mod tests {
         .expect("borrowed tile payload");
         assert_eq!(borrowed.packet_count(), 3);
 
-        let owned = build_tile_part_payload_for_tile_components_owned(3, vec![encoded], None)
-            .expect("owned tile payload");
+        let owned = build_tile_part_payload_for_tile_components_owned(
+            3,
+            vec![encoded],
+            None,
+            ProgressionOrder::Lrcp,
+        )
+        .expect("owned tile payload");
         assert_eq!(owned.packet_count(), 3);
     }
 
@@ -1093,8 +1369,13 @@ mod tests {
         .expect_err("packet sequence should reject wrong tile");
         assert!(err.to_string().contains("not tile 3"), "{err}");
 
-        let owned_err = build_tile_part_payload_for_tile_components_owned(3, vec![encoded], None)
-            .expect_err("owned payload should reject wrong tile");
+        let owned_err = build_tile_part_payload_for_tile_components_owned(
+            3,
+            vec![encoded],
+            None,
+            ProgressionOrder::Lrcp,
+        )
+        .expect_err("owned payload should reject wrong tile");
         assert!(owned_err.to_string().contains("not tile 3"), "{owned_err}");
     }
 

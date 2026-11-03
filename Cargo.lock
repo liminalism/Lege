@@ -2426,6 +2426,8 @@ checksum = "a0370574b86f7eca156b9f298392b5e69a23f8c86f3f865add60bbc2e79467a6"
 [[package]]
 name = "jpxl-perceptual"
 version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b734c38ec7d53fe700caa7036a2ed764c79bb7952afdf1f51173f8fc3982b539"
 
 [[package]]
 name = "js-sys"
@@ -2843,6 +2845,7 @@ dependencies = [
 [[package]]
 name = "liminalkit-raster"
 version = "0.1.0"
+source = "git+https://github.com/liminalism/liminalkit?branch=main#19c5cd393ad6ee802170a789fd3fd1e4ff84bcdf"
 dependencies = [
  "wide",
 ]
@@ -2850,6 +2853,7 @@ dependencies = [
 [[package]]
 name = "liminalkit-shell"
 version = "0.1.0"
+source = "git+https://github.com/liminalism/liminalkit?branch=main#19c5cd393ad6ee802170a789fd3fd1e4ff84bcdf"
 dependencies = [
  "arboard",
  "liminalkit-raster",
@@ -2861,6 +2865,7 @@ dependencies = [
 [[package]]
 name = "liminalkit-text"
 version = "0.1.0"
+source = "git+https://github.com/liminalism/liminalkit?branch=main#19c5cd393ad6ee802170a789fd3fd1e4ff84bcdf"
 dependencies = [
  "liminalkit-raster",
 ]
@@ -2868,6 +2873,7 @@ dependencies = [
 [[package]]
 name = "liminalkit-ui"
 version = "0.1.0"
+source = "git+https://github.com/liminalism/liminalkit?branch=main#19c5cd393ad6ee802170a789fd3fd1e4ff84bcdf"
 dependencies = [
  "liminalkit-raster",
  "liminalkit-shell",
@@ -2879,6 +2885,7 @@ dependencies = [
 [[package]]
 name = "liminalkit-windowing"
 version = "0.1.0"
+source = "git+https://github.com/liminalism/liminalkit?branch=main#19c5cd393ad6ee802170a789fd3fd1e4ff84bcdf"
 dependencies = [
  "liminalkit-raster",
  "liminalkit-shell",

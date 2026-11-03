@@ -238,7 +238,8 @@ pub fn sweep_source(
                 shared.as_ref(),
             )?;
             let observation = evaluator.score_image(&reconstructed, None)?;
-            let tile_parts = build_stored_tile_parts(&stored_tiles, selections, shared.clone())?;
+            let tile_parts =
+                build_stored_tile_parts(&stored_tiles, selections, shared.clone(), &rung_context)?;
             let parts = CodestreamParts {
                 main_header_segments: headers.clone(),
                 tile_parts,

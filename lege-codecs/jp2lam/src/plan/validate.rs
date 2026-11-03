@@ -13,11 +13,12 @@ pub(super) fn validate_image(image: &Image) -> Result<()> {
         ));
     }
 
-    if image.components.len() != image.colorspace.component_count() {
+    let colour = image.colorspace.component_count();
+    if image.components.len() != colour && image.components.len() != colour + 1 {
         return Err(Jp2LamError::InvalidInput(format!(
-            "{:?} images must have exactly {} component(s)",
+            "{:?} images must have {colour} component(s), or {} with an alpha channel",
             image.colorspace,
-            image.colorspace.component_count()
+            colour + 1
         )));
     }
 
@@ -74,11 +75,12 @@ pub(super) fn validate_image_view(image: &ImageView<'_>) -> Result<()> {
         ));
     }
 
-    if image.components.len() != image.colorspace.component_count() {
+    let colour = image.colorspace.component_count();
+    if image.components.len() != colour && image.components.len() != colour + 1 {
         return Err(Jp2LamError::InvalidInput(format!(
-            "{:?} images must have exactly {} component(s)",
+            "{:?} images must have {colour} component(s), or {} with an alpha channel",
             image.colorspace,
-            image.colorspace.component_count()
+            colour + 1
         )));
     }
 
@@ -108,9 +110,8 @@ pub(super) fn validate_image_view(image: &ImageView<'_>) -> Result<()> {
         }
     }
 
-    if image.components.len() == 3
-        && image
-            .components
+    if image.colorspace.component_count() == 3
+        && image.components[..3]
             .iter()
             .any(|component| component.precision != image.components[0].precision)
     {

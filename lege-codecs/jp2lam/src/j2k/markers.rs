@@ -49,6 +49,10 @@ pub(crate) fn encode_cod(plan: &EncodingPlan) -> Vec<u8> {
     };
     let progression = match plan.progression_order {
         ProgressionOrder::Lrcp => 0u8,
+        ProgressionOrder::Rlcp => 1,
+        ProgressionOrder::Rpcl => 2,
+        ProgressionOrder::Pcrl => 3,
+        ProgressionOrder::Cprl => 4,
     };
     let cblk_width = code_block_exponent(plan.code_block_size.width);
     let cblk_height = code_block_exponent(plan.code_block_size.height);
@@ -63,7 +67,7 @@ pub(crate) fn encode_cod(plan: &EncodingPlan) -> Vec<u8> {
     out.push(plan.decomposition_levels);
     out.push(cblk_width);
     out.push(cblk_height);
-    out.push(0);
+    out.push(plan.code_block_style.to_byte());
     out.push(transform);
     out
 }

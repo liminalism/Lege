@@ -15,7 +15,8 @@ use crate::perceptual::{
     ContrastMaskMap, ContrastMaskParams, build_contrast_mask_map_from_luma_u8,
 };
 use crate::plan::{
-    EncodeLane, EncodingPlan, OutputRateTarget, QuantizationStyle, SubbandQuant, WaveletTransform,
+    EncodeLane, EncodingPlan, LayerPlan, OutputRateTarget, QuantizationStyle, SubbandQuant,
+    WaveletTransform,
 };
 use crate::simd::PRIMITIVES;
 use crate::tiling::{TileRect, tile_component_rect, tile_grid};
@@ -432,6 +433,7 @@ impl NativeBackend {
                     tile_index,
                     component_index as u16,
                     context.plan.code_block_size,
+                    context.plan.code_block_style,
                     |_, band| t1::band_max_bitplanes(effective_precision, guard_bits, band),
                 )
             }
@@ -441,6 +443,7 @@ impl NativeBackend {
                     tile_index,
                     component_index as u16,
                     context.plan.code_block_size,
+                    context.plan.code_block_style,
                     |resolution, band| {
                         context
                             .plan
@@ -637,7 +640,12 @@ impl NativeBackend {
     ) -> Result<crate::t2::TilePartPayload> {
         let _p = crate::encode::profile_enter("prepare_tile_part_payload");
         let (encoded, selections) = self.prepare_tier1_encoded_layouts_and_selections(context)?;
-        t2::build_tile_part_payload_for_tile_components_owned(0, encoded, Some(&selections))
+        t2::build_tile_part_payload_for_tile_components_owned(
+            0,
+            encoded,
+            Some(&selections),
+            context.plan.progression_order,
+        )
     }
 
     /// Prepare one tile-part payload from a tile rectangle.
@@ -659,7 +667,7 @@ impl NativeBackend {
             ));
         }
 
-        let encoded = if native_use_mct(&context.plan) {
+        let mut encoded = if native_use_mct(&context.plan) {
             self.prepare_tier1_encoded_mct_components_rect(
                 context,
                 tile.tile_index,
@@ -669,33 +677,41 @@ impl NativeBackend {
                 tile.height(),
             )?
         } else {
-            let mut encoded = Vec::with_capacity(context.plan.component_count as usize);
-            for (component_index, component) in context.plan.components.iter().enumerate() {
-                let tc = tile_component_rect(&tile, component_index as u16, component);
-                if tc.width() == 0 || tc.height() == 0 {
-                    return Err(Jp2LamError::EncodeFailed(format!(
-                        "tile {} component {component_index} has empty tile-component extent",
-                        tile.tile_index
-                    )));
-                }
-                encoded.push(self.prepare_tier1_encoded_component_rect(
-                    context,
-                    tile.tile_index,
-                    component_index,
-                    tc.x0,
-                    tc.y0,
-                    tc.width(),
-                    tc.height(),
-                )?);
-            }
-            encoded
+            Vec::with_capacity(context.plan.component_count as usize)
         };
+        // Components the transform did not cover (all of them without MCT,
+        // an alpha channel with it) are coded on their own.
+        for (component_index, component) in context
+            .plan
+            .components
+            .iter()
+            .enumerate()
+            .skip(encoded.len())
+        {
+            let tc = tile_component_rect(&tile, component_index as u16, component);
+            if tc.width() == 0 || tc.height() == 0 {
+                return Err(Jp2LamError::EncodeFailed(format!(
+                    "tile {} component {component_index} has empty tile-component extent",
+                    tile.tile_index
+                )));
+            }
+            encoded.push(self.prepare_tier1_encoded_component_rect(
+                context,
+                tile.tile_index,
+                component_index,
+                tc.x0,
+                tc.y0,
+                tc.width(),
+                tc.height(),
+            )?);
+        }
 
         let selections = all_pass_selections(&encoded);
         t2::build_tile_part_payload_for_tile_components_owned(
             tile.tile_index,
             encoded,
             Some(&selections),
+            context.plan.progression_order,
         )
     }
 
@@ -717,8 +733,11 @@ impl NativeBackend {
             ));
         }
 
-        if native_use_mct(&context.plan) {
-            let mut stored = Vec::with_capacity(3);
+        // The multiple-component transform covers components 0..3 (Annex
+        // G); any component after them - an alpha channel - is coded on its
+        // own like a gray plane.
+        let mut stored = Vec::with_capacity(context.plan.component_count as usize);
+        let first_plain = if native_use_mct(&context.plan) {
             self.visit_tier1_encoded_mct_components_rect(
                 context,
                 tile.tile_index,
@@ -731,11 +750,14 @@ impl NativeBackend {
                     Ok(())
                 },
             )?;
-            return Ok(stored);
-        }
+            3
+        } else {
+            0
+        };
 
-        let mut stored = Vec::with_capacity(context.plan.component_count as usize);
-        for (component_index, component) in context.plan.components.iter().enumerate() {
+        for (component_index, component) in
+            context.plan.components.iter().enumerate().skip(first_plain)
+        {
             let tc = tile_component_rect(&tile, component_index as u16, component);
             if tc.width() == 0 || tc.height() == 0 {
                 return Err(Jp2LamError::EncodeFailed(format!(
@@ -883,7 +905,10 @@ impl NativeBackend {
         // Phase 5 store and referenced by packet plans rather than copied into
         // packet-owned body vectors.
         let tile_rects = grid.tile_rects();
-        let tile_parts = if tile_rects.len() > 1 || !context.plan.is_lossless() {
+        let tile_parts = if tile_rects.len() > 1
+            || !context.plan.is_lossless()
+            || context.plan.layers.len() > 1
+        {
             let mut store = EncodedBlockStore::from_resource_limits(&context.plan.resource_limits);
             let mut stored_tiles = Vec::with_capacity(tile_rects.len());
             for tile in &tile_rects {
@@ -910,7 +935,7 @@ impl NativeBackend {
                 )?
             } else {
                 let stored_selections = select_stored_tile_passes(&stored_tiles, context, None)?;
-                build_stored_tile_parts(&stored_tiles, stored_selections, shared_store)?
+                build_stored_tile_parts(&stored_tiles, stored_selections, shared_store, context)?
             }
         } else {
             let tile = tile_rects[0];
@@ -1300,7 +1325,9 @@ fn irreversible_input_component_rect(
     width: u32,
     height: u32,
 ) -> Result<Vec<f32>> {
-    if !native_use_mct(&context.plan) {
+    // The colour transform covers components 0..3; an alpha component past
+    // them is level-shifted on its own.
+    if !native_use_mct(&context.plan) || component_index >= 3 {
         let source = context.load_component_rect_i32(component_index, x0, y0, width, height)?;
         let mut out = vec![0.0f32; source.len()];
         let precision = SamplePrecision::new(context.plan.components[component_index].precision)?;
@@ -1330,9 +1357,11 @@ impl IctTileInputs {
         width: u32,
         height: u32,
     ) -> Result<Self> {
-        if context.plan.component_count != 3 {
+        // The transform covers components 0..3; a fourth (alpha) is coded
+        // outside it.
+        if context.plan.component_count < 3 {
             return Err(Jp2LamError::EncodeFailed(
-                "irreversible MCT requires exactly 3 components".to_string(),
+                "irreversible MCT requires three colour components".to_string(),
             ));
         }
         let r = context.load_component_rect_i32(0, x0, y0, width, height)?;
@@ -1381,16 +1410,16 @@ fn reversible_input_component_rect(
     width: u32,
     height: u32,
 ) -> Result<Vec<i32>> {
-    if !native_use_mct(&context.plan) {
+    if !native_use_mct(&context.plan) || component_index >= 3 {
         let source = context.load_component_rect_i32(component_index, x0, y0, width, height)?;
         let mut out = vec![0i32; source.len()];
         let precision = SamplePrecision::new(context.plan.components[component_index].precision)?;
         (PRIMITIVES.color.level_shift_i32)(&source, precision.unsigned_level_shift(), &mut out);
         return Ok(out);
     }
-    if context.plan.component_count != 3 {
+    if context.plan.component_count < 3 {
         return Err(Jp2LamError::EncodeFailed(
-            "reversible MCT requires exactly 3 components".to_string(),
+            "reversible MCT requires three colour components".to_string(),
         ));
     }
     let r = context.load_component_rect_i32(0, x0, y0, width, height)?;
@@ -1765,12 +1794,28 @@ pub(crate) fn build_stored_tile_parts(
     stored_tiles: &[(TileRect, Vec<StoredTier1Layout>)],
     stored_selections: Vec<Vec<t1::NativeTier1SelectionLayout>>,
     shared_store: SharedEncodedBlockStore,
+    context: &EncodeContext<'_>,
 ) -> Result<Vec<TilePart>> {
     let _p = crate::encode::profile_enter("t2::build_stored_tile_parts");
+    let layered = layer_stored_selections(stored_tiles, context, stored_selections, &shared_store)?;
+    build_layered_stored_tile_parts(
+        stored_tiles,
+        &layered,
+        shared_store,
+        context.plan.progression_order,
+    )
+}
+
+fn build_layered_stored_tile_parts(
+    stored_tiles: &[(TileRect, Vec<StoredTier1Layout>)],
+    layered: &[Vec<Vec<t1::NativeTier1SelectionLayout>>],
+    shared_store: SharedEncodedBlockStore,
+    order: crate::plan::ProgressionOrder,
+) -> Result<Vec<TilePart>> {
     stored_tiles
         .iter()
-        .zip(stored_selections)
-        .map(|((tile, layouts), selections)| {
+        .zip(layered)
+        .map(|((tile, layouts), layers)| {
             Ok(TilePart {
                 header: TilePartHeader {
                     tile_index: tile.tile_index,
@@ -1782,11 +1827,172 @@ pub(crate) fn build_stored_tile_parts(
                     tile.tile_index,
                     shared_store.clone(),
                     layouts,
-                    Some(&selections),
+                    layers,
+                    order,
                 )?,
             })
         })
         .collect()
+}
+
+/// Split the final pass selection into the plan's quality layers:
+/// `[tile][layer][component]`, each layer a cumulative selection no larger
+/// than the next.
+///
+/// The final layer is the selection the rate control chose, untouched. Each
+/// layer below it is the rate-distortion-optimal prefix of that selection for
+/// a smaller body budget (Annex J.10's PCRD run again on curves truncated at
+/// the final pass counts, with measured mean-squared-error slopes), so
+/// truncating the stream after any layer gives the best picture that many
+/// bytes can carry. Budgets come from the plan: geometric fractions of the
+/// final body, or explicit output sizes less the stream's fixed overhead.
+fn layer_stored_selections(
+    stored_tiles: &[(TileRect, Vec<StoredTier1Layout>)],
+    context: &EncodeContext<'_>,
+    final_selections: Vec<Vec<t1::NativeTier1SelectionLayout>>,
+    shared_store: &SharedEncodedBlockStore,
+) -> Result<Vec<Vec<Vec<t1::NativeTier1SelectionLayout>>>> {
+    let layer_count = usize::from(context.plan.layer_plan.count());
+    if layer_count <= 1 {
+        return Ok(final_selections
+            .into_iter()
+            .map(|tile| vec![tile])
+            .collect());
+    }
+
+    // The final selection, flattened in the global block order PCRD uses
+    // (tiles, then components, bands, blocks), with its body size.
+    let mut final_counts = Vec::new();
+    let mut final_body = 0u64;
+    for ((_, layouts), selections) in stored_tiles.iter().zip(&final_selections) {
+        for (layout, selection) in layouts.iter().zip(selections) {
+            for (band, selected) in layout.bands.iter().zip(&selection.bands) {
+                for (block, &count) in band.blocks.iter().zip(&selected.selected_passes) {
+                    final_counts.push(count);
+                    if count > 0 {
+                        final_body += block.passes[usize::from(count) - 1].cumulative_length as u64;
+                    }
+                }
+            }
+        }
+    }
+
+    let body_targets: Vec<u64> = match &context.plan.layer_plan {
+        LayerPlan::Single => unreachable!("single layer returned above"),
+        LayerPlan::Geometric(n) => (0..usize::from(*n) - 1)
+            .map(|index| {
+                let steps_below_final = (usize::from(*n) - 1 - index) as i32;
+                (final_body as f64 * 0.5f64.powi(steps_below_final)).round() as u64
+            })
+            .collect(),
+        LayerPlan::OutputBytes(targets) => {
+            // Fixed overhead of the stream as a single layer: headers, boxes,
+            // packet headers. Intermediate layers add packet headers of their
+            // own, so their output sizes land a little above the targets.
+            let single: Vec<_> = final_selections
+                .iter()
+                .cloned()
+                .map(|tile| vec![tile])
+                .collect();
+            let parts = build_layered_stored_tile_parts(
+                stored_tiles,
+                &single,
+                shared_store.clone(),
+                context.plan.progression_order,
+            )?;
+            let emit_plan = native_emit_plan(&context.plan);
+            let complete = complete_output_len(
+                context,
+                &emit_plan,
+                &CodestreamParts {
+                    main_header_segments: build_main_header_segments(&emit_plan)?,
+                    tile_parts: parts,
+                },
+            )?;
+            let overhead = complete.saturating_sub(final_body);
+            targets
+                .iter()
+                .map(|&target| target.saturating_sub(overhead).min(final_body))
+                .collect()
+        }
+    };
+
+    // Measured-MSE curves, cut at the final selection so no layer can reach
+    // past it.
+    let mut curves = Vec::with_capacity(final_counts.len());
+    for (tile, layouts) in stored_tiles {
+        for layout in layouts {
+            let component_index = usize::from(layout.component);
+            let precision = context
+                .plan
+                .components
+                .get(component_index)
+                .map(|component| component.precision)
+                .unwrap_or(8);
+            let component_curves = rate::curves_from_stored_layout(
+                layout,
+                curves.len(),
+                context.plan.num_resolutions,
+                &context.plan.subband_quants,
+                precision,
+                pcrd_component_weight(context, component_index),
+                context.plan.quality,
+                None,
+                tile.x0 as usize,
+                tile.y0 as usize,
+                false,
+            )
+            .map_err(|error| Jp2LamError::EncodeFailed(error.to_string()))?;
+            curves.extend(component_curves);
+        }
+    }
+    if curves.len() != final_counts.len() {
+        return Err(Jp2LamError::EncodeFailed(
+            "quality layer curve count does not match the block count".into(),
+        ));
+    }
+    for curve in &mut curves {
+        let limit = final_counts[curve.block_id];
+        curve.points.retain(|point| point.passes <= limit);
+    }
+
+    // Layers from the one below the final downwards, each clamped to the
+    // layer above so the selections nest.
+    let mut counts_per_layer = vec![final_counts.clone(); layer_count];
+    for index in (0..layer_count - 1).rev() {
+        let target = u32::try_from(body_targets[index]).unwrap_or(u32::MAX);
+        let selection = crate::dwt::pcrd::select_for_target_bytes(&curves, target)
+            .map_err(|error| Jp2LamError::EncodeFailed(error.to_string()))?;
+        let mut counts = vec![0u16; final_counts.len()];
+        for block in selection.selections {
+            counts[block.block_id] = block.passes;
+        }
+        let above = &counts_per_layer[index + 1];
+        for (count, &cap) in counts.iter_mut().zip(above) {
+            *count = (*count).min(cap);
+        }
+        counts_per_layer[index] = counts;
+    }
+
+    let mut layered = Vec::with_capacity(stored_tiles.len());
+    let mut tile_block_offset = 0usize;
+    for ((_, layouts), final_tile) in stored_tiles.iter().zip(final_selections) {
+        let mut layers = Vec::with_capacity(layer_count);
+        let mut tile_blocks = 0usize;
+        for counts in counts_per_layer.iter().take(layer_count - 1) {
+            let mut next_block = tile_block_offset;
+            let selections = layouts
+                .iter()
+                .map(|layout| stored_selection_layout_from_flat(layout, counts, &mut next_block))
+                .collect::<Result<Vec<_>>>()?;
+            tile_blocks = next_block - tile_block_offset;
+            layers.push(selections);
+        }
+        layers.push(final_tile);
+        tile_block_offset += tile_blocks;
+        layered.push(layers);
+    }
+    Ok(layered)
 }
 
 pub(crate) fn max_stored_body_bytes(stored_tiles: &[(TileRect, Vec<StoredTier1Layout>)]) -> u32 {
@@ -1855,7 +2061,8 @@ fn select_perceptual_tile_parts(
         let reconstruct_millis =
             u64::try_from(reconstruct_started.elapsed().as_millis()).unwrap_or(u64::MAX);
         let observation = evaluator.score_image(&reconstructed, Some(reconstruct_millis))?;
-        let tile_parts = build_stored_tile_parts(stored_tiles, selections, shared_store.clone())?;
+        let tile_parts =
+            build_stored_tile_parts(stored_tiles, selections, shared_store.clone(), context)?;
         let parts = CodestreamParts {
             main_header_segments: main_header_segments.to_vec(),
             tile_parts: tile_parts.clone(),
@@ -2032,7 +2239,8 @@ fn select_exact_rate_tile_parts(
     while low <= high {
         let body_target = low + (high - low) / 2;
         let selections = select_stored_tile_passes(stored_tiles, context, Some(body_target))?;
-        let tile_parts = build_stored_tile_parts(stored_tiles, selections, shared_store.clone())?;
+        let tile_parts =
+            build_stored_tile_parts(stored_tiles, selections, shared_store.clone(), context)?;
         let candidate = CodestreamParts {
             main_header_segments: main_header_segments.to_vec(),
             tile_parts: tile_parts.clone(),
@@ -2864,5 +3072,98 @@ mod tests {
 
         assert_eq!(weight, 1.0);
         assert_eq!(weight_without_tile_origin, 0.25);
+    }
+
+    /// The layers below the final one must nest and sit near the geometric
+    /// (or explicit) body budgets the plan asks for; the final layer is the
+    /// rate control's own selection.
+    #[test]
+    fn quality_layers_nest_and_track_their_budgets() {
+        use super::{layer_stored_selections, select_stored_tile_passes, t1};
+        use crate::encode::block_store::EncodedBlockStore;
+        use crate::encode::context::EncodeContext;
+        use crate::model::{CodingOptions, EncodeOptions, Image, QualityLayers, RateControl};
+        use crate::tiling::tile_grid;
+
+        let (width, height) = (160u32, 120u32);
+        let data: Vec<u8> = (0..width * height)
+            .map(|i| {
+                let (x, y) = (i % width, i / width);
+                ((x * 13 + y * 7 + (x ^ y)) & 0xff) as u8
+            })
+            .collect();
+        let image = Image::from_gray_bytes(width, height, &data).expect("gray");
+
+        for (layers, expected_fractions) in [
+            (QualityLayers::Count(4), vec![0.125, 0.25, 0.5]),
+            (QualityLayers::Count(2), vec![0.5]),
+        ] {
+            let options = EncodeOptions {
+                rate_control: Some(RateControl::ApproxQuality(80)),
+                coding: CodingOptions {
+                    layers,
+                    ..CodingOptions::default()
+                },
+                ..EncodeOptions::default()
+            };
+            let context = EncodeContext::new(&image, &options).expect("context");
+            let backend = NativeBackend;
+            let mut store = EncodedBlockStore::from_resource_limits(&context.plan.resource_limits);
+            let mut stored_tiles = Vec::new();
+            for tile in tile_grid(&context.plan).tile_rects() {
+                stored_tiles.push((
+                    tile,
+                    backend
+                        .prepare_stored_tier1_for_tile_rect(&context, tile, &mut store)
+                        .expect("t1"),
+                ));
+            }
+            let shared = store.into_shared();
+            let final_selections =
+                select_stored_tile_passes(&stored_tiles, &context, None).expect("final");
+            let layered =
+                layer_stored_selections(&stored_tiles, &context, final_selections.clone(), &shared)
+                    .expect("layers");
+
+            assert_eq!(layered.len(), 1);
+            let layers = &layered[0];
+            assert_eq!(layers.len(), expected_fractions.len() + 1);
+            assert_eq!(layers.last(), final_selections.first());
+
+            let body_bytes = |selection: &Vec<t1::NativeTier1SelectionLayout>| -> u64 {
+                let mut total = 0u64;
+                for (layout, selected) in stored_tiles[0].1.iter().zip(selection) {
+                    for (band, counts) in layout.bands.iter().zip(&selected.bands) {
+                        for (block, &count) in band.blocks.iter().zip(&counts.selected_passes) {
+                            if count > 0 {
+                                total +=
+                                    block.passes[usize::from(count) - 1].cumulative_length as u64;
+                            }
+                        }
+                    }
+                }
+                total
+            };
+            let final_body = body_bytes(layers.last().expect("final layer")) as f64;
+            for (index, fraction) in expected_fractions.iter().enumerate() {
+                let body = body_bytes(&layers[index]) as f64;
+                let achieved = body / final_body;
+                assert!(
+                    (achieved - fraction).abs() < 0.08,
+                    "layer {index}: {achieved:.3} of the final body, wanted {fraction}"
+                );
+                // Nesting: no block loses passes from one layer to the next.
+                for (lower, upper) in layers[index].iter().zip(&layers[index + 1]) {
+                    for (a, b) in lower.bands.iter().zip(&upper.bands) {
+                        assert!(
+                            a.selected_passes
+                                .iter()
+                                .zip(&b.selected_passes)
+                                .all(|(x, y)| x <= y)
+                        );
+                    }
+                }
+            }
+        }
     }
 }

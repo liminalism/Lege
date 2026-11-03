@@ -1,5 +1,4 @@
 pub(crate) const MQC_NUMCTXS: usize = 19;
-#[cfg(test)]
 pub(crate) const BYPASS_CT_INIT: u32 = 0xDEAD_BEEF;
 
 pub(crate) const T1_CTXNO_ZC: u8 = 0;
@@ -166,6 +165,51 @@ impl<'a> MqDecoder<'a> {
     }
 }
 
+/// Reader for a raw (arithmetic-coder bypass) codeword segment, D.6: bits
+/// most significant first, a byte following 0xff carrying only seven bits,
+/// and reads past the end of the segment returning 1s, which is what the
+/// encoder's flush padding decodes to.
+#[derive(Debug, Clone)]
+pub(crate) struct RawDecoder<'a> {
+    bytes: &'a [u8],
+    bp: usize,
+    c: u32,
+    ct: u32,
+}
+
+impl<'a> RawDecoder<'a> {
+    pub(crate) fn new(bytes: &'a [u8]) -> Self {
+        Self {
+            bytes,
+            bp: 0,
+            c: 0,
+            ct: 0,
+        }
+    }
+
+    pub(crate) fn decode_bit(&mut self) -> u8 {
+        if self.ct == 0 {
+            let next = self.bytes.get(self.bp).copied().unwrap_or(0xff);
+            if self.c == 0xff {
+                if next > 0x8f {
+                    self.c = 0xff;
+                    self.ct = 8;
+                } else {
+                    self.c = u32::from(next);
+                    self.bp += 1;
+                    self.ct = 7;
+                }
+            } else {
+                self.c = u32::from(next);
+                self.bp += 1;
+                self.ct = 8;
+            }
+        }
+        self.ct -= 1;
+        ((self.c >> self.ct) & 1) as u8
+    }
+}
+
 impl Default for MqCoder {
     fn default() -> Self {
         Self::new()
@@ -272,7 +316,30 @@ impl MqCoder {
         bytes
     }
 
-    #[cfg(test)]
+    /// Reset every context to its initial state (RESET switch, D.4.1).
+    pub(crate) fn reset_contexts(&mut self) {
+        self.reset_state_only();
+    }
+
+    /// Terminate the MQ codeword and restart the coder for the next segment,
+    /// keeping context states: the plain FLUSH (C.3.5) or, with
+    /// `predictable`, the ERTERM procedure a decoder can check.
+    pub(crate) fn terminate(&mut self, predictable: bool) -> Vec<u8> {
+        if predictable {
+            let bytes = self.erterm_flush();
+            self.restart_init();
+            bytes
+        } else {
+            self.flush_and_restart()
+        }
+    }
+
+    /// Predictable termination (D.4.2 ERTERM, Figure C.11): shift the
+    /// remaining register bits out so the decoder's 0xff fill past the end
+    /// reproduces every coded symbol. The byte the final BYTEOUT leaves at
+    /// the write position is not part of the codeword (the reference vector in
+    /// `erterm_matches_reference_after_payload` ends before it, and including
+    /// it changes decoded symbols), so the segment ends one short of it.
     pub(crate) fn erterm_flush(&mut self) -> Vec<u8> {
         let mut k = (11_i32).wrapping_sub(self.ct as i32).wrapping_add(1);
         while k > 0 {
@@ -293,13 +360,11 @@ impl MqCoder {
         }
     }
 
-    #[cfg(test)]
     pub(crate) fn bypass_init(&mut self) {
         self.c = 0;
         self.ct = BYPASS_CT_INIT;
     }
 
-    #[cfg(test)]
     pub(crate) fn bypass_encode(&mut self, bit: u8) {
         debug_assert!(bit <= 1);
         if self.ct == BYPASS_CT_INIT {
@@ -317,7 +382,6 @@ impl MqCoder {
         }
     }
 
-    #[cfg(test)]
     pub(crate) fn bypass_flush(&mut self, erterm: bool) {
         let prev_is_ff = self.pos > 0 && self.out[self.pos] == 0xff;
 
@@ -344,7 +408,6 @@ impl MqCoder {
         }
     }
 
-    #[cfg(test)]
     pub(crate) fn raw_term_flush_and_restart(&mut self, erterm: bool) -> Vec<u8> {
         self.bypass_flush(erterm);
         let bytes = self.take_bytes();

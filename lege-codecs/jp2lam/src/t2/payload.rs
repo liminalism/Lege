@@ -21,9 +21,12 @@ pub(crate) struct StoredPacket {
     pub body: Vec<StoredPayloadRange>,
 }
 
+/// `len` bytes of a stored code-block payload starting at `start`: the
+/// passes one packet carries for that block.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct StoredPayloadRange {
     pub payload: PayloadRef,
+    pub start: usize,
     pub len: usize,
 }
 
@@ -87,7 +90,7 @@ impl TilePartPayload {
                         Jp2LamError::EncodeFailed(format!("packet header write failed: {error}"))
                     })?;
                     for range in &packet.body {
-                        store.write_prefix_to(range.payload, range.len, writer)?;
+                        store.write_range_to(range.payload, range.start, range.len, writer)?;
                     }
                 }
                 Ok(())

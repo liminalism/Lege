@@ -2,10 +2,12 @@ use crate::dwt::norms::reversible_exponent;
 #[cfg(feature = "counters")]
 use crate::encode::counters;
 use crate::encode::profile_enter;
+use crate::j2k::decode_markers::CodeBlockStyle;
 use crate::mq::{MqCoder, T1_CTXNO_AGG, T1_CTXNO_UNI, T1_CTXNO_ZC};
 use crate::plan::BandOrientation;
 use crate::profile::{BlockClass, classify_from_nonzero_fraction};
 use crate::simd::PRIMITIVES;
+use crate::tier1::consts::{T1_SIGMA_S, T1_SIGMA_SE, T1_SIGMA_SW};
 use crate::tier1::flags::FlagGrid;
 use crate::tier1::helpers::{
     magnitude_context, sign_context, sign_prediction_bit, zero_coding_context,
@@ -118,26 +120,18 @@ pub(crate) enum NativeTier1PassKind {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum NativeTier1PassTermination {
+    /// Plain FLUSH termination (C.3.5).
     TermAll,
-    /// Explicit per-pass termination (ISO/IEC 15444-1 Annex D.5's SEGSYM/ERTERM
-    /// option). The encoder's default coding policy never selects this — only
-    /// `TermAll` is constructed outside tests — so this variant and its
-    /// handling in `finalize_pass_bytes` are `#[cfg(test)]`-gated. The
-    /// decode/write machinery (`MqCoder::erterm_flush`/`restart_init`) fully
-    /// supports it; only the encoder's own policy never opts in.
-    #[cfg(test)]
+    /// Predictable termination (D.4.2 ERTERM), selected by
+    /// [`CodeBlockStyle::predictable_termination`].
     ErTerm,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum NativeTier1PassCodingMode {
     Mq,
-    /// Bypass (raw) coding of lower bitplanes (ISO/IEC 15444-1 Annex D.6).
-    /// Never selected by the encoder's default policy — only `Mq` is
-    /// constructed outside tests — so this variant and its handling are
-    /// `#[cfg(test)]`-gated; see [`NativeTier1PassTermination::ErTerm`]'s
-    /// doc comment.
-    #[cfg(test)]
+    /// Bypass (raw) coding of lower bit-planes (ISO/IEC 15444-1 Annex D.6),
+    /// selected by [`CodeBlockStyle::bypass`].
     Raw,
 }
 
@@ -257,6 +251,7 @@ where
         0,
         component_index,
         code_block_size,
+        CodeBlockStyle::default(),
         max_bitplanes_for_subband,
     )
 }
@@ -266,6 +261,7 @@ pub(crate) fn encode_component_coefficients_for_tile_with_max_bitplanes<F>(
     tile_index: u16,
     component_index: u16,
     code_block_size: CodeBlockSize,
+    style: CodeBlockStyle,
     mut max_bitplanes_for_subband: F,
 ) -> NativeEncodedTier1Layout
 where
@@ -290,7 +286,6 @@ where
         subband.y0 -= tc.y0;
         subband.y1 -= tc.y0;
     }
-    let policy = NativeTier1CodingPolicy::default();
     let mut next_block_id = 0usize;
 
     let bands = subbands
@@ -319,7 +314,7 @@ where
                         block.y1 as usize,
                         scratch,
                     );
-                    let encoded = encode_codeblock_with_policy(&analyzed, &policy);
+                    let encoded = encode_codeblock_styled(&analyzed, style);
                     *worker_scratch = analyzed.coefficients;
                     worker_scratch.clear();
                     encoded
@@ -446,10 +441,9 @@ fn analyze_codeblock_coefficients(
 // Encoding phase (entry point)
 // ---------------------------------------------------------------------------
 
-/// Encodes with the default coding policy. Only exercised by tests; the
+/// Encodes with the default code-block style. Only exercised by tests; the
 /// production encode path always goes through
-/// [`encode_component_coefficients_for_tile_with_max_bitplanes`], which
-/// selects a policy per-band.
+/// [`encode_component_coefficients_for_tile_with_max_bitplanes`].
 #[cfg(test)]
 pub(crate) fn encode_placeholder_tier1(layout: &NativeTier1Layout) -> NativeEncodedTier1Layout {
     let _p = profile_enter("t1::encode_placeholder_tier1");
@@ -461,7 +455,6 @@ pub(crate) fn encode_placeholder_tier1(layout: &NativeTier1Layout) -> NativeEnco
         counters::TOTAL_BLOCKS.fetch_add(band_count as u64, std::sync::atomic::Ordering::Relaxed);
     }
 
-    let policy = NativeTier1CodingPolicy::default();
     let mut bands = Vec::with_capacity(layout.bands.len());
     let mut jobs = Vec::new();
 
@@ -476,7 +469,12 @@ pub(crate) fn encode_placeholder_tier1(layout: &NativeTier1Layout) -> NativeEnco
 
     let encoded: Vec<_> = jobs
         .par_iter()
-        .map(|&(band_index, block)| (band_index, encode_codeblock_with_policy(block, &policy)))
+        .map(|&(band_index, block)| {
+            (
+                band_index,
+                encode_codeblock_styled(block, CodeBlockStyle::default()),
+            )
+        })
         .collect();
 
     for (band_index, block) in encoded {
@@ -487,14 +485,11 @@ pub(crate) fn encode_placeholder_tier1(layout: &NativeTier1Layout) -> NativeEnco
 }
 
 #[cfg(test)]
-fn encode_band_with_policy(
-    band: &NativeTier1Band,
-    policy: &NativeTier1CodingPolicy,
-) -> NativeEncodedTier1Band {
+fn encode_band_styled(band: &NativeTier1Band, style: CodeBlockStyle) -> NativeEncodedTier1Band {
     let blocks = band
         .blocks
         .par_iter()
-        .map(|block| encode_codeblock_with_policy(block, policy))
+        .map(|block| encode_codeblock_styled(block, style))
         .collect();
 
     NativeEncodedTier1Band {
@@ -504,16 +499,17 @@ fn encode_band_with_policy(
     }
 }
 
-/// Encode one codeblock using TERMALL mode: every pass is individually
-/// flushed and produces its own byte stream. Context states persist across
-/// passes within the block (only a/c/ct restart at each pass boundary).
+/// Encode one code-block under `style` (the Annex D switches).
 ///
-/// Pass structure follows ISO 15444-1 §C.4 / OpenJPEG convention:
-///   • Cleanup only for the most-significant bitplane.
-///   • SP → MR → Cleanup for all lower bitplanes.
-fn encode_codeblock_with_policy(
+/// The all-off style takes [`encode_codeblock_single_term`], the tuned
+/// single-segment path. Any switch takes the general loop here, which decides
+/// per pass whether it is MQ or raw coded and whether the codeword
+/// terminates after it (Table D.9), resets contexts, and appends
+/// segmentation symbols. Context states persist across segments; only the
+/// coder registers and output restart at a termination.
+fn encode_codeblock_styled(
     block: &NativeTier1CodeBlock,
-    policy: &NativeTier1CodingPolicy,
+    style: CodeBlockStyle,
 ) -> NativeEncodedTier1CodeBlock {
     let sample_count = block.width.saturating_mul(block.height);
     crate::encode::counters::record_codeblock_worker(
@@ -543,157 +539,114 @@ fn encode_codeblock_with_policy(
         };
     }
 
-    if policy.single_termination {
+    if style == CodeBlockStyle::default() {
         return encode_codeblock_single_term(block);
     }
 
-    // Pre-allocate MQ output buffer based on codeblock size
-    // Rough estimate: half the pixels plus some overhead
+    let causal = style.vertical_causal;
+    let top = block.magnitude_bitplanes - 1;
+    let mut schedule = Vec::with_capacity(1 + 3 * usize::from(top));
+    schedule.push((NativeTier1PassKind::Cleanup, top));
+    for bitplane in (0..top).rev() {
+        schedule.push((NativeTier1PassKind::SignificancePropagation, bitplane));
+        schedule.push((NativeTier1PassKind::MagnitudeRefinement, bitplane));
+        schedule.push((NativeTier1PassKind::Cleanup, bitplane));
+    }
+
     let estimated_capacity = (block.width * block.height) / 2 + 64;
     let mut coder = MqCoder::with_capacity(estimated_capacity);
     let mut flags = FlagGrid::new(block.width, block.height);
-    let mut passes: Vec<NativeEncodedTier1Pass> = Vec::with_capacity(block.coding_passes.len());
+    let mut passes: Vec<NativeEncodedTier1Pass> = Vec::with_capacity(schedule.len());
     let mut payload = Vec::new();
-    let mut cumulative_length = 0usize;
-    let mut pass_index = 0u16;
+    // Passes of the codeword segment still open: (pass slot, bytes so far).
+    let mut open_segment: Vec<(usize, usize)> = Vec::new();
     let mut significant_so_far = 0usize;
 
-    let top = block.magnitude_bitplanes - 1;
+    for (pass_index, &(kind, bitplane)) in schedule.iter().enumerate() {
+        let index = pass_index as u32;
+        let raw = style.pass_is_raw(index);
+        let terminated = pass_index + 1 == schedule.len() || style.pass_is_terminated(index);
+        let mode = if raw {
+            NativeTier1PassCodingMode::Raw
+        } else {
+            NativeTier1PassCodingMode::Mq
+        };
+        if raw && open_segment.is_empty() {
+            coder.bypass_init();
+        }
 
-    // Most-significant bitplane: Cleanup only.
-    {
-        let coding_style = pass_coding_style(policy, NativeTier1PassKind::Cleanup, top, block);
-        let (newly_significant, cl_mse) = cleanup_encode(&mut coder, block, top, &mut flags);
-        let cl_bytes = finalize_pass_bytes(
-            &mut coder,
-            coding_style.mode,
-            coding_style.termination,
-            coding_style.segmark,
-        );
-        append_pass(
-            &mut passes,
-            &mut payload,
-            &mut cumulative_length,
-            pass_index,
-            NativeTier1PassKind::Cleanup,
-            top,
-            coding_style.mode,
-            coding_style.termination,
-            coding_style.segmark,
-            0,
-            newly_significant,
-            cl_mse,
-            cl_bytes,
-            block,
-        );
+        let significant_before = significant_so_far;
+        let (newly_significant, mse_numerator) = match kind {
+            NativeTier1PassKind::SignificancePropagation => {
+                sigpass_encode(&mut coder, block, bitplane, &mut flags, mode, causal)
+            }
+            NativeTier1PassKind::MagnitudeRefinement => (
+                0,
+                refpass_encode_mut(&mut coder, block, bitplane, &mut flags, mode, causal),
+            ),
+            NativeTier1PassKind::Cleanup => {
+                let result = cleanup_encode(&mut coder, block, bitplane, &mut flags, causal);
+                if style.segmentation_symbols {
+                    coder.segmark_encode();
+                }
+                clear_visited_all(&mut flags, block.width, block.height);
+                result
+            }
+        };
         significant_so_far += newly_significant;
-        pass_index += 1;
+        if style.reset_contexts {
+            coder.reset_contexts();
+        }
 
-        // Clear the per-bitplane visited flags before moving to the next bitplane.
-        clear_visited_all(&mut flags, block.width, block.height);
+        #[cfg(feature = "counters")]
+        match kind {
+            NativeTier1PassKind::Cleanup => {
+                counters::CLEANUP_PASSES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            }
+            NativeTier1PassKind::SignificancePropagation => {
+                counters::SP_PASSES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            }
+            NativeTier1PassKind::MagnitudeRefinement => {
+                counters::MR_PASSES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            }
+        }
+
+        passes.push(NativeEncodedTier1Pass {
+            kind,
+            bitplane,
+            pass_index: index as u16,
+            coding_mode: mode,
+            termination: if style.predictable_termination {
+                NativeTier1PassTermination::ErTerm
+            } else {
+                NativeTier1PassTermination::TermAll
+            },
+            segmark: style.segmentation_symbols && kind == NativeTier1PassKind::Cleanup,
+            is_terminated: terminated,
+            newly_significant,
+            significant_before,
+            length: 0,
+            cumulative_length: 0,
+            distortion_hint: distortion_hint(bitplane, newly_significant, block.max_magnitude),
+            mse_numerator,
+        });
+        open_segment.push((passes.len() - 1, coder.numbytes()));
+
+        if terminated {
+            let bytes = match mode {
+                NativeTier1PassCodingMode::Mq => coder.terminate(style.predictable_termination),
+                NativeTier1PassCodingMode::Raw => {
+                    coder.raw_term_flush_and_restart(style.predictable_termination)
+                }
+            };
+            close_segment(&mut passes, &mut open_segment, bytes.len(), payload.len());
+            payload.extend_from_slice(&bytes);
+        }
     }
-
-    // Lower bitplanes: SP → MR → Cleanup.
-    for bitplane in (0..top).rev() {
-        // MR refines the coefficients that were significant before this bitplane's SP
-        // pass ran. Save the count now so we can credit MR correctly in PCRD.
-        let significant_before_sp = significant_so_far;
-
-        let sp_style = pass_coding_style(
-            policy,
-            NativeTier1PassKind::SignificancePropagation,
-            bitplane,
-            block,
-        );
-        initialize_pass_coder(&mut coder, sp_style.mode);
-        let (sp_ns, sp_mse) =
-            sigpass_encode(&mut coder, block, bitplane, &mut flags, sp_style.mode);
-        let sp_bytes = finalize_pass_bytes(
-            &mut coder,
-            sp_style.mode,
-            sp_style.termination,
-            sp_style.segmark,
-        );
-        append_pass(
-            &mut passes,
-            &mut payload,
-            &mut cumulative_length,
-            pass_index,
-            NativeTier1PassKind::SignificancePropagation,
-            bitplane,
-            sp_style.mode,
-            sp_style.termination,
-            sp_style.segmark,
-            significant_before_sp,
-            sp_ns,
-            sp_mse,
-            sp_bytes,
-            block,
-        );
-        significant_so_far += sp_ns;
-        pass_index += 1;
-
-        let mr_style = pass_coding_style(
-            policy,
-            NativeTier1PassKind::MagnitudeRefinement,
-            bitplane,
-            block,
-        );
-        initialize_pass_coder(&mut coder, mr_style.mode);
-        let mr_mse = refpass_encode_mut(&mut coder, block, bitplane, &mut flags, mr_style.mode);
-        let mr_bytes = finalize_pass_bytes(
-            &mut coder,
-            mr_style.mode,
-            mr_style.termination,
-            mr_style.segmark,
-        );
-        append_pass(
-            &mut passes,
-            &mut payload,
-            &mut cumulative_length,
-            pass_index,
-            NativeTier1PassKind::MagnitudeRefinement,
-            bitplane,
-            mr_style.mode,
-            mr_style.termination,
-            mr_style.segmark,
-            significant_before_sp,
-            0,
-            mr_mse,
-            mr_bytes,
-            block,
-        );
-        pass_index += 1;
-
-        let cl_style = pass_coding_style(policy, NativeTier1PassKind::Cleanup, bitplane, block);
-        let (cl_ns, cl_mse) = cleanup_encode(&mut coder, block, bitplane, &mut flags);
-        let cl_bytes = finalize_pass_bytes(
-            &mut coder,
-            cl_style.mode,
-            cl_style.termination,
-            cl_style.segmark,
-        );
-        append_pass(
-            &mut passes,
-            &mut payload,
-            &mut cumulative_length,
-            pass_index,
-            NativeTier1PassKind::Cleanup,
-            bitplane,
-            cl_style.mode,
-            cl_style.termination,
-            cl_style.segmark,
-            significant_so_far,
-            cl_ns,
-            cl_mse,
-            cl_bytes,
-            block,
-        );
-        significant_so_far += cl_ns;
-        pass_index += 1;
-
-        clear_visited_all(&mut flags, block.width, block.height);
-    }
+    debug_assert!(open_segment.is_empty());
+    #[cfg(feature = "counters")]
+    counters::TOTAL_PASS_BYTES
+        .fetch_add(payload.len() as u64, std::sync::atomic::Ordering::Relaxed);
 
     NativeEncodedTier1CodeBlock {
         tile_index: block.tile_index,
@@ -709,6 +662,35 @@ fn encode_codeblock_with_policy(
         payload,
         passes,
     }
+}
+
+/// Give the passes of a just-terminated codeword segment their byte lengths:
+/// the coder's running byte count at each pass, with the final pass absorbing
+/// the termination bytes, so the lengths sum to the segment exactly and
+/// `cumulative_length` keeps counting across the whole block payload.
+fn close_segment(
+    passes: &mut [NativeEncodedTier1Pass],
+    open_segment: &mut Vec<(usize, usize)>,
+    segment_bytes: usize,
+    payload_before: usize,
+) {
+    let last = open_segment.len().saturating_sub(1);
+    let mut assigned = 0usize;
+    let mut previous = 0usize;
+    for (position, &(slot, snapshot)) in open_segment.iter().enumerate() {
+        let length = if position == last {
+            segment_bytes - assigned
+        } else {
+            let capped = snapshot.min(segment_bytes);
+            let length = capped.saturating_sub(previous);
+            previous = capped;
+            length
+        };
+        assigned += length;
+        passes[slot].length = length;
+        passes[slot].cumulative_length = payload_before + assigned;
+    }
+    open_segment.clear();
 }
 
 /// Default JPEG 2000 Part-1 codeblock coding: a single MQ-terminated segment
@@ -727,7 +709,7 @@ fn encode_codeblock_single_term(block: &NativeTier1CodeBlock) -> NativeEncodedTi
     let top = block.magnitude_bitplanes - 1;
 
     // Most-significant bitplane: cleanup only, no SP/MR.
-    let (ns, cl_mse) = cleanup_encode(&mut coder, block, top, &mut flags);
+    let (ns, cl_mse) = cleanup_encode(&mut coder, block, top, &mut flags, false);
     metas.push((
         NativeTier1PassKind::Cleanup,
         top,
@@ -748,6 +730,7 @@ fn encode_codeblock_single_term(block: &NativeTier1CodeBlock) -> NativeEncodedTi
             bitplane,
             &mut flags,
             NativeTier1PassCodingMode::Mq,
+            false,
         );
         metas.push((
             NativeTier1PassKind::SignificancePropagation,
@@ -765,6 +748,7 @@ fn encode_codeblock_single_term(block: &NativeTier1CodeBlock) -> NativeEncodedTi
             bitplane,
             &mut flags,
             NativeTier1PassCodingMode::Mq,
+            false,
         );
         metas.push((
             NativeTier1PassKind::MagnitudeRefinement,
@@ -775,7 +759,7 @@ fn encode_codeblock_single_term(block: &NativeTier1CodeBlock) -> NativeEncodedTi
             mr_mse,
         ));
 
-        let (cl_ns, cl_mse) = cleanup_encode(&mut coder, block, bitplane, &mut flags);
+        let (cl_ns, cl_mse) = cleanup_encode(&mut coder, block, bitplane, &mut flags, false);
         metas.push((
             NativeTier1PassKind::Cleanup,
             bitplane,
@@ -861,155 +845,6 @@ fn encode_codeblock_single_term(block: &NativeTier1CodeBlock) -> NativeEncodedTi
     }
 }
 
-fn append_pass(
-    passes: &mut Vec<NativeEncodedTier1Pass>,
-    payload: &mut Vec<u8>,
-    cumulative_length: &mut usize,
-    pass_index: u16,
-    kind: NativeTier1PassKind,
-    bitplane: u8,
-    coding_mode: NativeTier1PassCodingMode,
-    termination: NativeTier1PassTermination,
-    segmark: bool,
-    significant_before: usize,
-    newly_significant: usize,
-    mse_numerator: f64,
-    bytes: Vec<u8>,
-    block: &NativeTier1CodeBlock,
-) {
-    let length = bytes.len();
-    payload.extend_from_slice(&bytes);
-    *cumulative_length += length;
-
-    // Count passes
-    #[cfg(feature = "counters")]
-    {
-        #[allow(unreachable_patterns)]
-        match kind {
-            NativeTier1PassKind::Cleanup => {
-                counters::CLEANUP_PASSES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            }
-            NativeTier1PassKind::SignificancePropagation => {
-                counters::SP_PASSES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            }
-            NativeTier1PassKind::MagnitudeRefinement => {
-                counters::MR_PASSES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            }
-            _ => {}
-        }
-        counters::TOTAL_PASS_BYTES.fetch_add(length as u64, std::sync::atomic::Ordering::Relaxed);
-    }
-
-    passes.push(NativeEncodedTier1Pass {
-        kind,
-        bitplane,
-        pass_index,
-        coding_mode,
-        termination,
-        segmark,
-        is_terminated: true,
-        newly_significant,
-        significant_before,
-        length,
-        cumulative_length: *cumulative_length,
-        distortion_hint: distortion_hint(bitplane, newly_significant, block.max_magnitude),
-        mse_numerator,
-    });
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct NativeTier1CodingStyle {
-    mode: NativeTier1PassCodingMode,
-    termination: NativeTier1PassTermination,
-    segmark: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct NativeTier1CodingPolicy {
-    lower_mode: NativeTier1PassCodingMode,
-    cleanup_termination: NativeTier1PassTermination,
-    cleanup_segmark: bool,
-    /// When true (default), emit a single MQ-terminated segment per codeblock
-    /// with per-pass length snapshots (standard Part-1 behavior). When false,
-    /// use the legacy TERMALL/restart path configured by `cleanup_termination`.
-    single_termination: bool,
-}
-
-impl Default for NativeTier1CodingPolicy {
-    fn default() -> Self {
-        Self {
-            lower_mode: NativeTier1PassCodingMode::Mq,
-            cleanup_termination: NativeTier1PassTermination::TermAll,
-            cleanup_segmark: false,
-            single_termination: true,
-        }
-    }
-}
-
-fn pass_coding_style(
-    policy: &NativeTier1CodingPolicy,
-    _kind: NativeTier1PassKind,
-    _bitplane: u8,
-    _block: &NativeTier1CodeBlock,
-) -> NativeTier1CodingStyle {
-    match _kind {
-        NativeTier1PassKind::Cleanup => NativeTier1CodingStyle {
-            mode: NativeTier1PassCodingMode::Mq,
-            termination: policy.cleanup_termination,
-            segmark: policy.cleanup_segmark,
-        },
-        NativeTier1PassKind::SignificancePropagation | NativeTier1PassKind::MagnitudeRefinement => {
-            NativeTier1CodingStyle {
-                mode: policy.lower_mode,
-                termination: NativeTier1PassTermination::TermAll,
-                segmark: false,
-            }
-        }
-    }
-}
-
-fn initialize_pass_coder(coder: &mut MqCoder, mode: NativeTier1PassCodingMode) {
-    match mode {
-        // No bypass-init step for MQ coding. `Mq` is the only variant that
-        // exists outside `#[cfg(test)]` (see `NativeTier1PassCodingMode::Raw`'s
-        // doc comment), so this arm still needs to reference both parameters
-        // there to avoid an unused-parameter warning.
-        NativeTier1PassCodingMode::Mq => {
-            #[cfg(not(test))]
-            let _ = (&coder, &mode);
-        }
-        #[cfg(test)]
-        NativeTier1PassCodingMode::Raw => coder.bypass_init(),
-    }
-}
-
-fn finalize_pass_bytes(
-    coder: &mut MqCoder,
-    mode: NativeTier1PassCodingMode,
-    termination: NativeTier1PassTermination,
-    segmark: bool,
-) -> Vec<u8> {
-    match mode {
-        NativeTier1PassCodingMode::Mq => {
-            if segmark {
-                coder.segmark_encode();
-            }
-            match termination {
-                NativeTier1PassTermination::TermAll => coder.flush_and_restart(),
-                #[cfg(test)]
-                NativeTier1PassTermination::ErTerm => {
-                    let bytes = coder.erterm_flush();
-                    coder.restart_init();
-                    bytes
-                }
-            }
-        }
-        #[cfg(test)]
-        NativeTier1PassCodingMode::Raw => coder
-            .raw_term_flush_and_restart(matches!(termination, NativeTier1PassTermination::ErTerm)),
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Significance Propagation pass
 //
@@ -1024,6 +859,7 @@ fn sigpass_encode(
     bitplane: u8,
     flags: &mut FlagGrid,
     mode: NativeTier1PassCodingMode,
+    causal: bool,
 ) -> (usize, f64) {
     let w = block.width;
     let h = block.height;
@@ -1049,6 +885,7 @@ fn sigpass_encode(
                     &mut newly_significant,
                     &mut mse_num,
                     mode,
+                    causal,
                 );
             }
         }
@@ -1069,6 +906,7 @@ fn sigpass_encode(
                     &mut newly_significant,
                     &mut mse_num,
                     mode,
+                    causal,
                 );
             }
         }
@@ -1089,11 +927,12 @@ fn sigpass_step(
     newly_significant: &mut usize,
     mse_num: &mut f64,
     mode: NativeTier1PassCodingMode,
+    causal: bool,
 ) {
     if flags.is_significant(x, y) {
         return;
     }
-    let neighbour_mask = flags.neighbour_mask(x, y);
+    let neighbour_mask = neighbours(flags, x, y, causal);
     if neighbour_mask == 0 {
         return;
     }
@@ -1107,10 +946,7 @@ fn sigpass_step(
     flags.mark_visited(x, y);
     if plane_bit == 1 {
         let sign_bit = (coeff < 0) as u8;
-        let (sign_lut_index, _) = flags.cardinal_sign_context(x, y);
-        let sign_ctx = sign_context(sign_lut_index);
-        let prediction = sign_prediction_bit(sign_lut_index);
-        encode_symbol(coder, mode, sign_ctx, sign_bit ^ prediction);
+        encode_sign(coder, mode, flags, x, y, causal, sign_bit);
         flags.mark_significant(x, y, sign_bit);
         *newly_significant += 1;
         *mse_num += sig_mse_delta(mag, one);
@@ -1130,6 +966,7 @@ fn refpass_encode_mut(
     bitplane: u8,
     flags: &mut FlagGrid,
     mode: NativeTier1PassCodingMode,
+    causal: bool,
 ) -> f64 {
     let w = block.width;
     let h = block.height;
@@ -1143,7 +980,7 @@ fn refpass_encode_mut(
         if !flags.is_significant(x, y) || flags.is_visited(x, y) {
             return;
         }
-        let has_sig_neighbor = flags.neighbour_mask(x, y) != 0;
+        let has_sig_neighbor = neighbours(flags, x, y, causal) != 0;
         let ctx = magnitude_context(has_sig_neighbor, flags.has_refinement_history(x, y));
         // SAFETY: x < w and y < height, so y*w+x is always in bounds
         let mag = unsafe { block.coefficients.get_unchecked(y * w + x).unsigned_abs() };
@@ -1187,6 +1024,7 @@ fn cleanup_encode(
     block: &NativeTier1CodeBlock,
     bitplane: u8,
     flags: &mut FlagGrid,
+    causal: bool,
 ) -> (usize, f64) {
     let w = block.width;
     let h = block.height;
@@ -1209,6 +1047,7 @@ fn cleanup_encode(
                 flags,
                 &mut newly_significant,
                 &mut mse_num,
+                causal,
             );
         }
     }
@@ -1226,6 +1065,7 @@ fn cleanup_encode(
                 flags,
                 &mut newly_significant,
                 &mut mse_num,
+                causal,
             );
         }
     }
@@ -1244,11 +1084,12 @@ fn cleanup_stripe(
     flags: &mut FlagGrid,
     newly_significant: &mut usize,
     mse_num: &mut f64,
+    causal: bool,
 ) {
     debug_assert_eq!(lim, 4);
     let w = block.width;
 
-    if flags.stripe_is_clean(x, k, lim) {
+    if flags.stripe_is_clean_with_causal(x, k, lim, causal) {
         // AGG path: encode whether any of the 4 samples becomes significant.
         let runlen = (0..lim).find(|&ci| {
             let y = k + ci;
@@ -1270,10 +1111,15 @@ fn cleanup_stripe(
                 let coeff = unsafe { *block.coefficients.get_unchecked(y * w + x) };
                 let mag = coeff.unsigned_abs();
                 let sign_bit = (coeff < 0) as u8;
-                let (sign_lut_index, _) = flags.cardinal_sign_context(x, y);
-                let sign_ctx = sign_context(sign_lut_index);
-                let prediction = sign_prediction_bit(sign_lut_index);
-                coder.encode_with_ctx(sign_ctx, sign_bit ^ prediction);
+                encode_sign(
+                    coder,
+                    NativeTier1PassCodingMode::Mq,
+                    flags,
+                    x,
+                    y,
+                    causal,
+                    sign_bit,
+                );
                 flags.mark_significant(x, y, sign_bit);
                 *newly_significant += 1;
                 flags.clear_visited(x, y);
@@ -1293,6 +1139,7 @@ fn cleanup_stripe(
                     newly_significant,
                     mse_num,
                     w,
+                    causal,
                 );
             }
         } else {
@@ -1318,6 +1165,7 @@ fn cleanup_stripe(
                 newly_significant,
                 mse_num,
                 w,
+                causal,
             );
         }
     }
@@ -1334,6 +1182,7 @@ fn cleanup_stripe_partial(
     flags: &mut FlagGrid,
     newly_significant: &mut usize,
     mse_num: &mut f64,
+    causal: bool,
 ) {
     let w = block.width;
     for ci in 0..lim {
@@ -1348,6 +1197,7 @@ fn cleanup_stripe_partial(
             newly_significant,
             mse_num,
             w,
+            causal,
         );
     }
 }
@@ -1366,6 +1216,7 @@ fn cleanup_sample_regular(
     newly_significant: &mut usize,
     mse_num: &mut f64,
     w: usize,
+    causal: bool,
 ) {
     let visited = flags.is_visited(x, y);
     let significant = flags.is_significant(x, y);
@@ -1376,7 +1227,7 @@ fn cleanup_sample_regular(
         return;
     }
 
-    let neighbour_mask = flags.neighbour_mask(x, y);
+    let neighbour_mask = neighbours(flags, x, y, causal);
     let ctx = if neighbour_mask != 0 {
         zero_coding_context(block.band, neighbour_mask)
     } else {
@@ -1392,13 +1243,58 @@ fn cleanup_sample_regular(
 
     if plane_bit == 1 {
         let sign_bit = (coeff < 0) as u8;
-        let (sign_lut_index, _) = flags.cardinal_sign_context(x, y);
-        let sign_ctx = sign_context(sign_lut_index);
-        let prediction = sign_prediction_bit(sign_lut_index);
-        coder.encode_with_ctx(sign_ctx, sign_bit ^ prediction);
+        encode_sign(
+            coder,
+            NativeTier1PassCodingMode::Mq,
+            flags,
+            x,
+            y,
+            causal,
+            sign_bit,
+        );
         flags.mark_significant(x, y, sign_bit);
         *newly_significant += 1;
         *mse_num += sig_mse_delta(mag, one);
+    }
+}
+
+/// Significant-neighbour mask for context formation; under vertically causal
+/// mode (D.7) the bottom row of a stripe does not see the stripe below.
+#[inline(always)]
+fn neighbours(flags: &FlagGrid, x: usize, y: usize, causal: bool) -> u32 {
+    let mask = flags.neighbour_mask(x, y);
+    if causal && y % 4 == 3 {
+        mask & !(T1_SIGMA_S | T1_SIGMA_SW | T1_SIGMA_SE)
+    } else {
+        mask
+    }
+}
+
+/// Code the sign of a newly significant sample: MQ-coded with the sign
+/// context and prediction of Table D.3 (south neighbour ignored at a causal
+/// stripe boundary), or the raw sign bit itself in a bypass pass (D.6).
+#[inline(always)]
+fn encode_sign(
+    coder: &mut MqCoder,
+    mode: NativeTier1PassCodingMode,
+    flags: &FlagGrid,
+    x: usize,
+    y: usize,
+    causal: bool,
+    sign_bit: u8,
+) {
+    match mode {
+        NativeTier1PassCodingMode::Raw => coder.bypass_encode(sign_bit),
+        NativeTier1PassCodingMode::Mq => {
+            let (sign_lut_index, _) = if causal && y % 4 == 3 {
+                flags.cardinal_sign_context_without_south(x, y)
+            } else {
+                flags.cardinal_sign_context(x, y)
+            };
+            let sign_ctx = sign_context(sign_lut_index);
+            let prediction = sign_prediction_bit(sign_lut_index);
+            coder.encode_with_ctx(sign_ctx, sign_bit ^ prediction);
+        }
     }
 }
 
@@ -1450,7 +1346,6 @@ fn distortion_hint(bitplane: u8, newly_significant: usize, max_magnitude: u32) -
 fn encode_symbol(coder: &mut MqCoder, mode: NativeTier1PassCodingMode, ctx: u8, bit: u8) {
     match mode {
         NativeTier1PassCodingMode::Mq => coder.encode_with_ctx(ctx, bit),
-        #[cfg(test)]
         NativeTier1PassCodingMode::Raw => coder.bypass_encode(bit),
     }
 }
@@ -1560,13 +1455,14 @@ fn plan_coding_passes(coefficients: &[i32], magnitude_bitplanes: u8) -> Vec<Nati
 #[cfg(test)]
 mod tests {
     use super::{
-        NativeTier1CodingPolicy, NativeTier1Layout, NativeTier1PassCodingMode, NativeTier1PassKind,
+        NativeTier1Layout, NativeTier1PassCodingMode, NativeTier1PassKind,
         NativeTier1PassTermination, analyze_component_layout, band_max_bitplanes,
-        encode_band_with_policy, encode_component_coefficients_for_tile_with_max_bitplanes,
+        encode_band_styled, encode_component_coefficients_for_tile_with_max_bitplanes,
         encode_component_coefficients_with, encode_placeholder_tier1,
     };
     use crate::encode::backend::native::NativeComponentCoefficients;
     use crate::encode::backend::native::layout::build_component_layout;
+    use crate::j2k::decode_markers::CodeBlockStyle;
     use crate::plan::{BandOrientation, CodeBlockSize};
 
     #[test]
@@ -1674,6 +1570,7 @@ mod tests {
             7,
             2,
             code_block_size,
+            CodeBlockStyle::default(),
             |_, band| band_max_bitplanes(8, 2, band),
         );
 
@@ -1869,15 +1766,21 @@ mod tests {
         }
     }
 
-    #[test]
-    fn cleanup_policy_can_select_erterm() {
+    /// A 4x8 LL block (zero decomposition levels, so the whole plane is one
+    /// band; two stripes, so vertically causal context formation has a
+    /// boundary to act on) whose magnitudes reach eight bit-planes, so it has
+    /// 22 coding passes and the bypass rule (raw from pass 10) applies.
+    fn deep_ll_band() -> super::NativeTier1Band {
         let coefficients = NativeComponentCoefficients {
             x0: 0,
             y0: 0,
             width: 4,
-            height: 4,
-            levels: 1,
-            data: vec![7, -3, 0, 5, 2, -8, 1, 0, 4, 0, 6, -2, 0, 1, 0, 3],
+            height: 8,
+            levels: 0,
+            data: vec![
+                200, -3, 0, 150, 2, -8, 1, 0, 4, 0, 6, -2, 0, 1, 0, -255, 9, 0, -40, 3, 0, 77, 0,
+                -1, 12, 0, 0, 5, -90, 2, 0, 0,
+            ],
         };
         let layout = build_component_layout(
             &coefficients,
@@ -1887,181 +1790,161 @@ mod tests {
             },
         )
         .expect("build layout");
-        let analyzed = analyze_component_layout(&layout);
-        let band = analyzed
+        analyze_component_layout(&layout)
             .bands
-            .iter()
+            .into_iter()
             .find(|band| band.band == BandOrientation::Ll)
-            .expect("ll band");
+            .expect("ll band")
+    }
 
-        let termall = encode_band_with_policy(
-            band,
-            &NativeTier1CodingPolicy {
-                lower_mode: NativeTier1PassCodingMode::Mq,
-                cleanup_termination: NativeTier1PassTermination::TermAll,
-                cleanup_segmark: false,
-                single_termination: false,
-            },
-        );
-        let erterm = encode_band_with_policy(
-            band,
-            &NativeTier1CodingPolicy {
-                lower_mode: NativeTier1PassCodingMode::Mq,
-                cleanup_termination: NativeTier1PassTermination::ErTerm,
-                cleanup_segmark: false,
-                single_termination: false,
-            },
-        );
+    fn styled(style: CodeBlockStyle) -> super::NativeEncodedTier1CodeBlock {
+        let band = encode_band_styled(&deep_ll_band(), style);
+        assert_eq!(band.blocks.len(), 1);
+        band.blocks.into_iter().next().expect("one block")
+    }
 
-        assert_eq!(termall.blocks.len(), 1);
-        assert_eq!(erterm.blocks.len(), 1);
-        let cleanup_termall: Vec<_> = termall.blocks[0]
-            .passes
-            .iter()
-            .filter(|pass| pass.kind == NativeTier1PassKind::Cleanup)
-            .collect();
-        let cleanup_erterm: Vec<_> = erterm.blocks[0]
-            .passes
-            .iter()
-            .filter(|pass| pass.kind == NativeTier1PassKind::Cleanup)
-            .collect();
+    /// Every styled encode keeps per-pass lengths that sum to the payload
+    /// and cumulative lengths that end at it; segments end exactly where
+    /// Table D.9 says.
+    fn assert_lengths_consistent(
+        block: &super::NativeEncodedTier1CodeBlock,
+        style: CodeBlockStyle,
+    ) {
+        let total: usize = block.passes.iter().map(|pass| pass.length).sum();
+        assert_eq!(total, block.payload.len());
+        let mut running = 0;
+        for (index, pass) in block.passes.iter().enumerate() {
+            running += pass.length;
+            assert_eq!(pass.cumulative_length, running, "pass {index}");
+            let expected_terminated =
+                index + 1 == block.passes.len() || style.pass_is_terminated(index as u32);
+            assert_eq!(
+                pass.is_terminated, expected_terminated,
+                "pass {index} termination"
+            );
+            assert_eq!(
+                pass.coding_mode == NativeTier1PassCodingMode::Raw,
+                style.pass_is_raw(index as u32),
+                "pass {index} mode"
+            );
+        }
+    }
 
-        assert!(!cleanup_termall.is_empty());
-        assert_eq!(cleanup_termall.len(), cleanup_erterm.len());
+    #[test]
+    fn predictable_termination_changes_terminated_passes() {
+        let termall = CodeBlockStyle {
+            terminate_each_pass: true,
+            ..CodeBlockStyle::default()
+        };
+        let erterm = CodeBlockStyle {
+            predictable_termination: true,
+            ..termall
+        };
+        let plain = styled(termall);
+        let predictable = styled(erterm);
+        assert_lengths_consistent(&plain, termall);
+        assert_lengths_consistent(&predictable, erterm);
+        assert_eq!(plain.passes.len(), 22);
+        assert!(plain.passes.iter().all(|pass| pass.is_terminated));
         assert!(
-            cleanup_erterm
+            predictable
+                .passes
                 .iter()
                 .all(|pass| pass.termination == NativeTier1PassTermination::ErTerm)
         );
-        assert!(
-            termall.blocks[0].payload != erterm.blocks[0].payload,
-            "erterm policy should change at least one cleanup pass payload"
+        assert_ne!(
+            plain.payload, predictable.payload,
+            "ERTERM should change at least one terminated pass"
         );
     }
 
     #[test]
-    fn cleanup_policy_can_enable_segmark() {
-        let coefficients = NativeComponentCoefficients {
-            x0: 0,
-            y0: 0,
-            width: 4,
-            height: 4,
-            levels: 1,
-            data: vec![7, -3, 0, 5, 2, -8, 1, 0, 4, 0, 6, -2, 0, 1, 0, 3],
+    fn segmentation_symbols_mark_cleanup_passes() {
+        let plain = CodeBlockStyle {
+            terminate_each_pass: true,
+            ..CodeBlockStyle::default()
         };
-        let layout = build_component_layout(
-            &coefficients,
-            CodeBlockSize {
-                width: 64,
-                height: 64,
-            },
-        )
-        .expect("build layout");
-        let analyzed = analyze_component_layout(&layout);
-        let band = analyzed
-            .bands
-            .iter()
-            .find(|band| band.band == BandOrientation::Ll)
-            .expect("ll band");
-
-        let default_encoded = encode_band_with_policy(
-            band,
-            &NativeTier1CodingPolicy {
-                lower_mode: NativeTier1PassCodingMode::Mq,
-                cleanup_termination: NativeTier1PassTermination::TermAll,
-                cleanup_segmark: false,
-                single_termination: false,
-            },
-        );
-        let segmark_encoded = encode_band_with_policy(
-            band,
-            &NativeTier1CodingPolicy {
-                lower_mode: NativeTier1PassCodingMode::Mq,
-                cleanup_termination: NativeTier1PassTermination::TermAll,
-                cleanup_segmark: true,
-                single_termination: false,
-            },
-        );
-
-        let cleanup_segmark: Vec<_> = segmark_encoded.blocks[0]
+        let segsym = CodeBlockStyle {
+            segmentation_symbols: true,
+            ..plain
+        };
+        let without = styled(plain);
+        let with = styled(segsym);
+        assert_lengths_consistent(&with, segsym);
+        let cleanups: Vec<_> = with
             .passes
             .iter()
             .filter(|pass| pass.kind == NativeTier1PassKind::Cleanup)
             .collect();
-
-        assert!(!cleanup_segmark.is_empty());
-        assert!(cleanup_segmark.iter().all(|pass| pass.segmark));
-        assert!(
-            default_encoded.blocks[0].payload != segmark_encoded.blocks[0].payload,
-            "segmark policy should change at least one cleanup pass payload"
-        );
+        assert_eq!(cleanups.len(), 8);
+        assert!(cleanups.iter().all(|pass| pass.segmark));
+        assert!(with.passes.iter().filter(|pass| pass.segmark).count() == 8);
+        assert_ne!(with.payload, without.payload);
     }
 
     #[test]
-    fn lower_pass_policy_can_select_raw_mode() {
-        let coefficients = NativeComponentCoefficients {
-            x0: 0,
-            y0: 0,
-            width: 4,
-            height: 4,
-            levels: 1,
-            data: vec![7, -3, 0, 5, 2, -8, 1, 0, 4, 0, 6, -2, 0, 1, 0, 3],
+    fn bypass_codes_lower_significance_and_refinement_passes_raw() {
+        let bypass = CodeBlockStyle {
+            bypass: true,
+            ..CodeBlockStyle::default()
         };
-        let layout = build_component_layout(
-            &coefficients,
-            CodeBlockSize {
-                width: 64,
-                height: 64,
-            },
-        )
-        .expect("build layout");
-        let analyzed = analyze_component_layout(&layout);
-        let band = analyzed
-            .bands
-            .iter()
-            .find(|band| band.band == BandOrientation::Ll)
-            .expect("ll band");
-
-        let mq_encoded = encode_band_with_policy(
-            band,
-            &NativeTier1CodingPolicy {
-                lower_mode: NativeTier1PassCodingMode::Mq,
-                cleanup_termination: NativeTier1PassTermination::TermAll,
-                cleanup_segmark: false,
-                single_termination: false,
-            },
-        );
-        let raw_encoded = encode_band_with_policy(
-            band,
-            &NativeTier1CodingPolicy {
-                lower_mode: NativeTier1PassCodingMode::Raw,
-                cleanup_termination: NativeTier1PassTermination::TermAll,
-                cleanup_segmark: false,
-                single_termination: false,
-            },
-        );
-
-        let lower_raw: Vec<_> = raw_encoded.blocks[0]
+        let block = styled(bypass);
+        assert_lengths_consistent(&block, bypass);
+        let raw: Vec<_> = block
             .passes
             .iter()
-            .filter(|pass| {
-                matches!(
-                    pass.kind,
-                    NativeTier1PassKind::SignificancePropagation
-                        | NativeTier1PassKind::MagnitudeRefinement
-                )
-            })
+            .filter(|pass| pass.coding_mode == NativeTier1PassCodingMode::Raw)
             .collect();
+        // Passes 10..22 minus the four cleanups among them.
+        assert_eq!(raw.len(), 8);
+        assert!(raw.iter().all(|pass| pass.pass_index >= 10));
+        assert!(
+            raw.iter()
+                .all(|pass| pass.kind != NativeTier1PassKind::Cleanup)
+        );
+        // Table D.9 segments: passes 0..=9, then (SP, MR) raw and CL alone.
+        let terminated: Vec<u16> = block
+            .passes
+            .iter()
+            .filter(|pass| pass.is_terminated)
+            .map(|pass| pass.pass_index)
+            .collect();
+        assert_eq!(terminated, vec![9, 11, 12, 14, 15, 17, 18, 20, 21]);
 
-        assert!(!lower_raw.is_empty());
-        assert!(
-            lower_raw
-                .iter()
-                .all(|pass| pass.coding_mode == NativeTier1PassCodingMode::Raw)
-        );
-        assert!(
-            mq_encoded.blocks[0].payload != raw_encoded.blocks[0].payload,
-            "raw lower-pass policy should change at least one lower-pass payload"
-        );
+        let mq = styled(CodeBlockStyle::default());
+        assert_ne!(mq.payload, block.payload);
+        // The MQ-coded prefix is the same codeword up to the first termination.
+        assert!(block.passes[9].cumulative_length > 0);
+    }
+
+    #[test]
+    fn reset_and_causal_switches_change_the_codeword_but_not_its_shape() {
+        for style in [
+            CodeBlockStyle {
+                reset_contexts: true,
+                ..CodeBlockStyle::default()
+            },
+            CodeBlockStyle {
+                vertical_causal: true,
+                ..CodeBlockStyle::default()
+            },
+        ] {
+            let block = styled(style);
+            assert_lengths_consistent(&block, style);
+            assert_eq!(block.passes.len(), 22);
+            assert!(
+                block
+                    .passes
+                    .iter()
+                    .filter(|pass| pass.is_terminated)
+                    .count()
+                    == 1
+            );
+            assert_ne!(
+                block.payload,
+                styled(CodeBlockStyle::default()).payload,
+                "{style:?}"
+            );
+        }
     }
 }

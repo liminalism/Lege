@@ -133,8 +133,13 @@ pub struct PrecinctSize {
     pub pp_y: u8,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Packet progression order (ISO/IEC 15444-1 Table A.16): the nesting of
+/// layer (L), resolution (R), component (C) and position (P) in which a tile's
+/// packets are written. Read from a decoded COD marker, and selectable for
+/// encoding through [`crate::CodingOptions::progression_order`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ProgressionOrder {
+    #[default]
     Lrcp,
     Rlcp,
     Rpcl,
@@ -148,14 +153,71 @@ pub enum WaveletTransform {
     Reversible53,
 }
 
+/// The six code-block coding switches of the COD/COC `SPcod` style byte
+/// (ISO/IEC 15444-1 Table A.19, Annex D). All off is the default style every
+/// Part 1 decoder handles; each switch trades a little compression for
+/// speed, error resilience, or decoder memory.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct CodeBlockStyle {
+    /// Selective arithmetic coding bypass (D.6): from the fifth significant
+    /// bit-plane on, significance and refinement passes are written as raw
+    /// bits instead of MQ-coded symbols. Faster to encode and decode, a few
+    /// percent larger.
     pub bypass: bool,
+    /// Reset the MQ context states at the end of every coding pass (D.4.1).
     pub reset_contexts: bool,
+    /// Terminate the codeword after every coding pass (D.4.2), so each pass
+    /// is an independently decodable segment with its own signalled length.
     pub terminate_each_pass: bool,
+    /// Vertically causal (stripe-causal) context formation (D.7): a sample's
+    /// context ignores the stripe below it, letting a decoder process stripes
+    /// without look-ahead.
     pub vertical_causal: bool,
+    /// Predictable termination (D.4.2, C.3.5): terminate codewords so a
+    /// decoder can detect corrupted passes. The guarantee covers terminated
+    /// passes; a lossy encode that rate-truncates a code-block mid-codeword
+    /// leaves its final pass unterminated, which a strict decoder reports
+    /// (OpenJPEG: "PTERM check failure"). Pair it with `terminate_each_pass`
+    /// when every pass must be checkable.
     pub predictable_termination: bool,
+    /// Append the four-symbol segmentation marker `1010` to each cleanup pass
+    /// (D.5), another error-detection aid.
     pub segmentation_symbols: bool,
+}
+
+impl CodeBlockStyle {
+    /// The `SPcod` code-block style byte.
+    pub fn to_byte(self) -> u8 {
+        u8::from(self.bypass)
+            | (u8::from(self.reset_contexts) << 1)
+            | (u8::from(self.terminate_each_pass) << 2)
+            | (u8::from(self.vertical_causal) << 3)
+            | (u8::from(self.predictable_termination) << 4)
+            | (u8::from(self.segmentation_symbols) << 5)
+    }
+
+    /// Whether `pass_index` (0 = the first cleanup pass) is coded raw under
+    /// this style: bypass is on, the pass is a significance or refinement
+    /// pass, and it lies in the fifth or a later significant bit-plane.
+    pub(crate) fn pass_is_raw(self, pass_index: u32) -> bool {
+        // Index 0 is the first cleanup pass; after it the passes cycle
+        // significance (index % 3 == 1), refinement (2), cleanup (0).
+        self.bypass && pass_index >= 10 && pass_index % 3 != 0
+    }
+
+    /// Whether the codeword is terminated after `pass_index` (Table D.9):
+    /// after every pass with `terminate_each_pass`; with bypass alone, after
+    /// the fourth cleanup pass and then after every raw refinement pass and
+    /// every cleanup pass, so raw and MQ passes never share a segment. The
+    /// final pass of a code-block is always terminated as well.
+    pub(crate) fn pass_is_terminated(self, pass_index: u32) -> bool {
+        if self.terminate_each_pass {
+            return true;
+        }
+        // pass_index % 3: 0 = cleanup (for index > 0), 1 = significance,
+        // 2 = refinement; index 0 is the first cleanup.
+        self.bypass && pass_index >= 9 && pass_index % 3 != 1
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -867,11 +929,6 @@ fn validate_decoder_scope(
     if siz.components.len() == 1 && cod.use_mct {
         return Err(invalid("MCT is unsupported for grayscale decoder slice"));
     }
-    if cod.code_block_style.bypass {
-        return Err(invalid(
-            "unsupported code-block style: arithmetic bypass is not implemented",
-        ));
-    }
     if cod.code_block_width > 1024
         || cod.code_block_height > 1024
         || cod.code_block_width * cod.code_block_height > 4096
@@ -1553,30 +1610,11 @@ mod tests {
         assert!(err.contains("code-block width"), "{err}");
     }
 
+    /// Every value of the style byte parses, each bit landing on its switch,
+    /// and the byte round-trips through `to_byte`.
     #[test]
-    fn arithmetic_bypass_codeblock_style_fails_fast() {
-        for style in [0x01, 0x03, 0x3f] {
-            let mut segments = supported_segments();
-            segments[1] = cod_segment(1, style);
-
-            let err = CodestreamHeader::from_marker_segments(
-                segments.iter().map(Vec::as_slice),
-                tile_header(0),
-                1,
-            )
-            .unwrap_err()
-            .to_string();
-
-            assert!(
-                err.contains("arithmetic bypass"),
-                "style 0x{style:02x}: {err}"
-            );
-        }
-    }
-
-    #[test]
-    fn non_bypass_codeblock_style_matrix_is_accepted() {
-        for style in [0x02, 0x04, 0x08, 0x10, 0x20, 0x3e] {
+    fn every_codeblock_style_byte_is_accepted_and_round_trips() {
+        for style in 0u8..=0x3f {
             let mut segments = supported_segments();
             segments[1] = cod_segment(1, style);
             let header = CodestreamHeader::from_marker_segments(
@@ -1585,8 +1623,37 @@ mod tests {
                 1,
             )
             .unwrap_or_else(|err| panic!("style 0x{style:02x}: {err}"));
-            assert_eq!(header.cod.code_block_style.bypass, false);
+            let parsed = header.cod.code_block_style;
+            assert_eq!(parsed.to_byte(), style);
+            assert_eq!(parsed.bypass, style & 0x01 != 0);
+            assert_eq!(parsed.reset_contexts, style & 0x02 != 0);
+            assert_eq!(parsed.terminate_each_pass, style & 0x04 != 0);
+            assert_eq!(parsed.vertical_causal, style & 0x08 != 0);
+            assert_eq!(parsed.predictable_termination, style & 0x10 != 0);
+            assert_eq!(parsed.segmentation_symbols, style & 0x20 != 0);
         }
+    }
+
+    /// Table D.9 segmentation for the bypass switch: passes 0..=9 one MQ
+    /// segment, then raw (SP, MR) pairs and MQ cleanups alternating.
+    #[test]
+    fn bypass_pass_rules_follow_table_d9() {
+        let bypass = CodeBlockStyle {
+            bypass: true,
+            ..CodeBlockStyle::default()
+        };
+        let raw: Vec<u32> = (0..22).filter(|&i| bypass.pass_is_raw(i)).collect();
+        assert_eq!(raw, vec![10, 11, 13, 14, 16, 17, 19, 20]);
+        let terminated: Vec<u32> = (0..22).filter(|&i| bypass.pass_is_terminated(i)).collect();
+        assert_eq!(terminated, vec![9, 11, 12, 14, 15, 17, 18, 20, 21]);
+
+        let termall = CodeBlockStyle {
+            terminate_each_pass: true,
+            ..bypass
+        };
+        assert!((0..22).all(|i| termall.pass_is_terminated(i)));
+        assert!((0..22).all(|i| !CodeBlockStyle::default().pass_is_terminated(i)));
+        assert!((0..22).all(|i| !CodeBlockStyle::default().pass_is_raw(i)));
     }
 
     #[test]

@@ -384,7 +384,8 @@ mod tests {
         let headers = build_main_header_segments(&emit_plan).expect("hdr");
         let shared = store.into_shared();
         let tile_parts =
-            build_stored_tile_parts(&stored_tiles, selections.clone(), shared).expect("parts");
+            build_stored_tile_parts(&stored_tiles, selections.clone(), shared, &context)
+                .expect("parts");
         let stream = CodestreamParts {
             main_header_segments: headers,
             tile_parts,

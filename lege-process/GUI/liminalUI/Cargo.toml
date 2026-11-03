@@ -20,11 +20,16 @@ debug-logging = []
 dark-mode = []
 
 [dependencies]
-liminalkit-shell = { path = "../../../../liminalkit/crates/liminalkit-shell" }
-liminalkit-windowing = { path = "../../../../liminalkit/crates/liminalkit-windowing" }
-liminalkit-ui = { path = "../../../../liminalkit/crates/liminalkit-ui" }
-liminalkit-raster = { path = "../../../../liminalkit/crates/liminalkit-raster" }
-liminalkit-text = { path = "../../../../liminalkit/crates/liminalkit-text" }
+# liminalkit comes from its GitHub repository; Cargo.lock pins the commit
+# (`cargo update -p liminalkit-ui` moves it). To build against a local checkout
+# instead, override in an untracked `.cargo/config.toml`:
+#   [patch."https://github.com/liminalism/liminalkit"]
+#   liminalkit-ui = { path = "../liminalkit/crates/liminalkit-ui" }   # etc.
+liminalkit-shell = { git = "https://github.com/liminalism/liminalkit", branch = "main" }
+liminalkit-windowing = { git = "https://github.com/liminalism/liminalkit", branch = "main" }
+liminalkit-ui = { git = "https://github.com/liminalism/liminalkit", branch = "main" }
+liminalkit-raster = { git = "https://github.com/liminalism/liminalkit", branch = "main" }
+liminalkit-text = { git = "https://github.com/liminalism/liminalkit", branch = "main" }
 rfd = { path = "../rfd" }
 lege-ipc = { path = "../../lege-ipc" }
 tokio = { version = "1.49", features = ["rt", "sync", "macros", "time"] }
