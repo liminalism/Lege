@@ -4,16 +4,27 @@
 name = "jp2lam"
 version = "0.3.0"
 edition = "2024"
-description = "Safe, native Rust JPEG 2000 encoder for document and photographic workloads"
+description = "Pure Rust JPEG 2000 (JP2 and J2K) encoder and focused Part 1 decoder for document and photographic images, with lossless, measured-quality, and exact-rate compression"
 license = "MIT OR Apache-2.0"
-rust-version = "1.95"
+rust-version = "1.97"
 readme = "README.md"
 documentation = "https://docs.rs/jp2lam"
 homepage = "https://github.com/liminalism/lege/tree/main/lege-codecs/jp2lam"
 repository = "https://github.com/liminalism/lege"
-keywords = ["jpeg2000", "jpeg-2000", "jp2", "j2k", "encoder"]
-categories = ["multimedia::encoding", "multimedia::images"]
-include = ["Cargo.toml", "Cargo.lock", "README.md", "LICENSE-MIT", "LICENSE-APACHE", "src/**", "tests/**", "examples/**"]
+keywords = ["jpeg2000", "jp2", "j2k", "encoder", "decoder"]
+categories = ["multimedia::encoding", "multimedia::images", "compression"]
+# Backup copies (`*.rs.bk`) and in-tree notes stay in the checkout. The
+# published package is the library, both binaries' sources, tests, and examples.
+include = [
+    "Cargo.toml",
+    "Cargo.lock",
+    "README.md",
+    "LICENSE-MIT",
+    "LICENSE-APACHE",
+    "src/**/*.rs",
+    "tests/**/*.rs",
+    "examples/**/*.rs",
+]
 
 [lib]
 path = "src/lib.rs"

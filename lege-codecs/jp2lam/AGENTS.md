@@ -93,8 +93,8 @@ OpenJPEG should not be used as:
 
 ## Rust Modernization Guidance
 
-The crate is pinned to Rust 1.95. Keep refactors within that toolchain's stable
-feature set.
+The crate is pinned to Rust 1.97, the same floor as `jpxl-perceptual` 0.3.0.
+Keep refactors within that toolchain's stable feature set.
 
 Prefer Rust-native structure and ownership:
 

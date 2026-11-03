@@ -37,7 +37,7 @@ JPXL so both codecs score with the same `METRIC_VERSION`.
 Minimum Rust version from the crate manifest:
 
 ```text
-Rust 1.95+
+Rust 1.97+
 ```
 
 ## Quick Start
