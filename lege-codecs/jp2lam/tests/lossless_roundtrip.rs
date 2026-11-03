@@ -759,14 +759,80 @@ fn decode_u16_with_imagemagick(
         .collect()
 }
 
+/// Smallest matrix-shaper profile the restricted JP2 check accepts: header,
+/// tag table, and an identity `curv` shared by every TRC plus one `XYZ ` value
+/// per colorant (tags may share data, ICC.1 7.3.1).
 fn minimal_restricted_icc(data_space: [u8; 4]) -> Vec<u8> {
-    let mut profile = vec![0u8; 128];
-    profile[0..4].copy_from_slice(&128u32.to_be_bytes());
+    let rgb = &data_space == b"RGB ";
+    let signatures: &[&[u8; 4]] = if rgb {
+        &[b"rTRC", b"gTRC", b"bTRC", b"rXYZ", b"gXYZ", b"bXYZ"]
+    } else {
+        &[b"kTRC"]
+    };
+    let table_end = 132 + 12 * signatures.len();
+    let curve_offset = table_end;
+    let xyz_offset = curve_offset + 12;
+    let total = xyz_offset + 20;
+
+    let mut profile = vec![0u8; total];
+    profile[0..4].copy_from_slice(&(total as u32).to_be_bytes());
     profile[12..16].copy_from_slice(b"scnr");
     profile[16..20].copy_from_slice(&data_space);
     profile[20..24].copy_from_slice(b"XYZ ");
     profile[36..40].copy_from_slice(b"acsp");
+    profile[128..132].copy_from_slice(&(signatures.len() as u32).to_be_bytes());
+    for (index, signature) in signatures.iter().enumerate() {
+        let entry = 132 + 12 * index;
+        let (offset, size) = if signature.ends_with(b"TRC") {
+            (curve_offset, 12)
+        } else {
+            (xyz_offset, 20)
+        };
+        profile[entry..entry + 4].copy_from_slice(*signature);
+        profile[entry + 4..entry + 8].copy_from_slice(&(offset as u32).to_be_bytes());
+        profile[entry + 8..entry + 12].copy_from_slice(&(size as u32).to_be_bytes());
+    }
+    // `curv` with zero entries is the identity curve.
+    profile[curve_offset..curve_offset + 4].copy_from_slice(b"curv");
+    profile[xyz_offset..xyz_offset + 4].copy_from_slice(b"XYZ ");
     profile
+}
+
+/// A header-only or LUT-based profile used to pass because only the header
+/// was read. The restricted method is matrix-shaper only.
+#[test]
+fn restricted_icc_requires_a_matrix_shaper_profile() {
+    assert!(
+        ColorEncoding::restricted_icc(minimal_restricted_icc(*b"RGB "), IccComponentModel::Rgb)
+            .is_ok()
+    );
+    assert!(
+        ColorEncoding::restricted_icc(minimal_restricted_icc(*b"GRAY"), IccComponentModel::Gray)
+            .is_ok()
+    );
+
+    let mut header_only = vec![0u8; 132];
+    header_only[0..4].copy_from_slice(&132u32.to_be_bytes());
+    header_only[12..16].copy_from_slice(b"scnr");
+    header_only[16..20].copy_from_slice(b"RGB ");
+    header_only[20..24].copy_from_slice(b"XYZ ");
+    header_only[36..40].copy_from_slice(b"acsp");
+    let err = ColorEncoding::restricted_icc(header_only, IccComponentModel::Rgb)
+        .expect_err("no matrix-shaper tags");
+    assert!(err.to_string().contains("rTRC"), "{err}");
+
+    // Same profile, plus an A2B0 lookup table pointing at the curve data.
+    let mut lut = minimal_restricted_icc(*b"RGB ");
+    let tag_count = u32::from_be_bytes(lut[128..132].try_into().unwrap());
+    let entry = 132 + 12 * 5; // overwrite bXYZ's entry signature
+    assert!(tag_count > 5);
+    lut[entry..entry + 4].copy_from_slice(b"A2B0");
+    let err = ColorEncoding::restricted_icc(lut, IccComponentModel::Rgb).expect_err("LUT profile");
+    assert!(err.to_string().contains("A2B0"), "{err}");
+
+    let mut link = minimal_restricted_icc(*b"RGB ");
+    link[12..16].copy_from_slice(b"link");
+    assert!(ColorEncoding::restricted_icc(link, IccComponentModel::Rgb).is_err());
 }
 
 #[derive(Clone, Copy)]

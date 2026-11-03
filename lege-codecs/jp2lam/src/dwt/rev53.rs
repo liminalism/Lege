@@ -368,7 +368,14 @@ fn inverse_53_1d_i128(coefficients: &mut [i128], even: bool, out: &mut [i128]) {
         }
         for index in 0..high_count {
             let left = out[2 * index];
-            let right = out[(2 * index + 2).min(width - 1)];
+            // F.3.7 symmetric extension: past the right edge of an even-length
+            // signal X(width) mirrors to X(width - 2), the same even sample as
+            // `left`. `width - 1` is this odd sample's own slot, not yet written.
+            let right = if 2 * index + 2 < width {
+                out[2 * index + 2]
+            } else {
+                left
+            };
             out[2 * index + 1] = high[index] + ((left + right) >> 1);
         }
     } else {
@@ -1278,8 +1285,33 @@ fn scatter_column(data: &mut [i32], stride: usize, height: usize, x: usize, valu
 mod tests {
     use super::{
         forward_53_2d_in_place, forward_53_2d_in_place_at, inverse_53_2d_in_place,
-        inverse_53_2d_in_place_at,
+        inverse_53_2d_in_place_at, inverse_53_checked_fallback, phase_steps,
     };
+
+    /// The exact i128 fallback (taken when coefficients could overflow i32:
+    /// deep decompositions, high-precision samples) must invert the forward
+    /// transform exactly, including even-length rows and columns whose last
+    /// high-pass sample mirrors past the edge.
+    #[test]
+    fn checked_fallback_inverts_forward_for_even_and_odd_extents() {
+        for (width, height, x0, y0, levels) in [
+            (16usize, 16usize, 0usize, 0usize, 3u8),
+            (17, 10, 0, 0, 4),
+            (10, 17, 1, 3, 3),
+            (64, 64, 0, 0, 9),
+            (150, 97, 0, 0, 9),
+            (7, 2, 0, 0, 1),
+        ] {
+            let original: Vec<i32> = (0..width * height)
+                .map(|i| ((i * 37 + (i / width) * 11) % 251) as i32 - 125)
+                .collect();
+            let mut data = original.clone();
+            forward_53_2d_in_place_at(&mut data, width, height, levels, x0, y0).expect("forward");
+            let steps = phase_steps(x0, y0, width, height, levels);
+            inverse_53_checked_fallback(&mut data, width, &steps).expect("fallback inverse");
+            assert_eq!(data, original, "{width}x{height}@({x0},{y0}) L{levels}");
+        }
+    }
 
     #[test]
     fn one_level_transform_matches_known_2x2_case() {

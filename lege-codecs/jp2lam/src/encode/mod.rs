@@ -113,8 +113,30 @@ pub fn encode(image: &Image, options: &EncodeOptions) -> Result<Vec<u8>> {
 }
 
 pub fn encode_view(image: ImageView<'_>, options: &EncodeOptions) -> Result<Vec<u8>> {
-    let resampled = display_resampled_source(&image, options)?;
-    encode_prepared_view(&prepared_context(&image, resampled.as_ref(), options)?)
+    with_thread_limit(&options.resource_limits, || {
+        let resampled = display_resampled_source(&image, options)?;
+        encode_prepared_view(&prepared_context(&image, resampled.as_ref(), options)?)
+    })
+}
+
+/// Runs `work` on a dedicated Rayon pool of
+/// [`ResourceLimits::max_threads`](crate::ResourceLimits::max_threads) workers
+/// when the caller set a limit, so the limit bounds every parallel stage (DWT,
+/// Tier-1, rate search, metric) rather than only component parallelism. With no
+/// limit the work runs on whatever pool the caller is already in.
+fn with_thread_limit<R: Send>(
+    limits: &crate::model::ResourceLimits,
+    work: impl FnOnce() -> Result<R> + Send,
+) -> Result<R> {
+    match limits.max_threads {
+        None => work(),
+        Some(threads) => rayon::ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .thread_name(|index| format!("jp2lam-encode-{index}"))
+            .build()
+            .map_err(|err| Jp2LamError::EncodeFailed(format!("encode thread pool: {err}")))?
+            .install(work),
+    }
 }
 
 /// The context the backend encodes: the resampled image when a display profile
@@ -290,18 +312,51 @@ pub fn encode_view_to_writer<W: Write>(
     options: &EncodeOptions,
     writer: &mut W,
 ) -> Result<()> {
-    let resampled = display_resampled_source(&image, options)?;
-    encode_prepared_view_to_writer(
-        &prepared_context(&image, resampled.as_ref(), options)?,
-        writer,
-    )
+    let prepared = with_thread_limit(&options.resource_limits, || {
+        let resampled = display_resampled_source(&image, options)?;
+        let context = prepared_context(&image, resampled.as_ref(), options)?;
+        prepare_writer_output(&context)
+    })?;
+    prepared.write_to(writer)
 }
 
-fn encode_prepared_view_to_writer<W: Write>(
-    context: &EncodeContext<'_>,
-    writer: &mut W,
-) -> Result<()> {
-    let _p = profile_enter("encode_to_writer::total");
+/// Everything the writer path computes before it touches the writer, so the
+/// compute half can run on a thread-limited pool without requiring `W: Send`.
+enum PreparedOutput {
+    /// A complete J2K or JP2 byte stream (the perceptual path builds it whole).
+    Bytes(Vec<u8>),
+    /// Store-backed codestream parts, streamed after an optional JP2 header.
+    Parts {
+        jp2_header: Option<Vec<u8>>,
+        parts: CodestreamParts,
+        emit_plan: Box<crate::plan::EncodingPlan>,
+    },
+}
+
+impl PreparedOutput {
+    fn write_to<W: Write>(self, writer: &mut W) -> Result<()> {
+        match self {
+            Self::Bytes(bytes) => writer
+                .write_all(&bytes)
+                .map_err(|err| Jp2LamError::Io(err.to_string())),
+            Self::Parts {
+                jp2_header,
+                parts,
+                emit_plan,
+            } => {
+                if let Some(header) = jp2_header {
+                    writer
+                        .write_all(&header)
+                        .map_err(|err| Jp2LamError::Io(err.to_string()))?;
+                }
+                parts.write_to(&emit_plan, writer)
+            }
+        }
+    }
+}
+
+fn prepare_writer_output(context: &EncodeContext<'_>) -> Result<PreparedOutput> {
+    let _p = profile_enter("encode_to_writer::prepare");
     let native = NativeBackend;
     if !native.supports(context) {
         return Err(Jp2LamError::EncodeFailed(
@@ -310,36 +365,33 @@ fn encode_prepared_view_to_writer<W: Write>(
     }
     if context.plan.perceptual.is_some() {
         let j2k = native.encode_codestream(context)?;
-        match context.plan.output_format {
-            OutputFormat::J2k => writer
-                .write_all(&j2k)
-                .map_err(|err| Jp2LamError::Io(err.to_string())),
+        return Ok(PreparedOutput::Bytes(match context.plan.output_format {
+            OutputFormat::J2k => j2k,
             OutputFormat::Jp2 => {
-                jp2::wrap_codestream_view(&context.image, &context.plan.color_encoding, &j2k)
-                    .and_then(|jp2| {
-                        writer
-                            .write_all(&jp2)
-                            .map_err(|err| Jp2LamError::Io(err.to_string()))
-                    })
+                jp2::wrap_codestream_view(&context.image, &context.plan.color_encoding, &j2k)?
             }
-        }
-    } else {
-        let parts = native.prepare_codestream_parts(context)?;
-        let emit_plan = native.emit_plan(&context.plan);
-        match context.plan.output_format {
-            OutputFormat::J2k => parts.write_to(&emit_plan, writer),
-            OutputFormat::Jp2 => {
-                let codestream_len = parts.byte_len(&emit_plan)?;
-                jp2::write_jp2_header_for_view(
-                    &context.image,
-                    &context.plan.color_encoding,
-                    codestream_len,
-                    writer,
-                )?;
-                parts.write_to(&emit_plan, writer)
-            }
-        }
+        }));
     }
+    let parts = native.prepare_codestream_parts(context)?;
+    let emit_plan = Box::new(native.emit_plan(&context.plan));
+    let jp2_header = match context.plan.output_format {
+        OutputFormat::J2k => None,
+        OutputFormat::Jp2 => {
+            let mut header = Vec::new();
+            jp2::write_jp2_header_for_view(
+                &context.image,
+                &context.plan.color_encoding,
+                parts.byte_len(&emit_plan)?,
+                &mut header,
+            )?;
+            Some(header)
+        }
+    };
+    Ok(PreparedOutput::Parts {
+        jp2_header,
+        parts,
+        emit_plan,
+    })
 }
 
 /// Image quality metrics from an encode cycle.
@@ -363,12 +415,13 @@ pub fn encode_with_psnr(
     options: &EncodeOptions,
 ) -> Result<(Vec<u8>, EncodeMetrics)> {
     let view = image.as_view()?;
-    let resampled = display_resampled_source(&view, options)?;
-    let context = prepared_context(&view, resampled.as_ref(), options)?;
-    let bytes = encode_prepared_view(&context)?;
-    let native = NativeBackend;
-    let metrics = native.compute_quality_metrics(&context, &bytes)?;
-    Ok((bytes, metrics))
+    with_thread_limit(&options.resource_limits, || {
+        let resampled = display_resampled_source(&view, options)?;
+        let context = prepared_context(&view, resampled.as_ref(), options)?;
+        let bytes = encode_prepared_view(&context)?;
+        let metrics = NativeBackend.compute_quality_metrics(&context, &bytes)?;
+        Ok((bytes, metrics))
+    })
 }
 
 #[cfg(test)]

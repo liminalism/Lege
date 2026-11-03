@@ -133,8 +133,13 @@ pub struct PrecinctSize {
     pub pp_y: u8,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Packet progression order (ISO/IEC 15444-1 Table A.16): the nesting of
+/// layer (L), resolution (R), component (C) and position (P) in which a tile's
+/// packets are written. Read from a decoded COD marker, and selectable for
+/// encoding through [`crate::CodingOptions::progression_order`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ProgressionOrder {
+    #[default]
     Lrcp,
     Rlcp,
     Rpcl,

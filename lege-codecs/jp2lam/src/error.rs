@@ -4,15 +4,13 @@ use std::fmt::{Display, Formatter};
 pub type Result<T> = std::result::Result<T, Jp2LamError>;
 
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum Jp2LamError {
     InvalidInput(String),
     EncodeFailed(String),
     DecodeFailed(String),
     UnsupportedFeature(String),
     Io(String),
-    /// Historical variant from Session 2; the controller is now wired.
-    #[allow(dead_code)]
-    PerceptualNotImplemented,
     /// Bounded search finished without a stream at or above the SSIMULACRA2 floor.
     PerceptualTargetMissed {
         achieved: f64,
@@ -29,9 +27,6 @@ impl Display for Jp2LamError {
             Self::DecodeFailed(msg) => write!(f, "decode failed: {msg}"),
             Self::UnsupportedFeature(msg) => write!(f, "unsupported feature: {msg}"),
             Self::Io(msg) => write!(f, "I/O error: {msg}"),
-            Self::PerceptualNotImplemented => {
-                write!(f, "perceptual SSIMULACRA2 targeting is not implemented yet")
-            }
             Self::PerceptualTargetMissed {
                 achieved,
                 target,
@@ -56,11 +51,6 @@ impl Jp2LamError {
     }
 
     #[must_use]
-    pub fn is_perceptual_not_implemented(&self) -> bool {
-        matches!(self, Self::PerceptualNotImplemented)
-    }
-
-    #[must_use]
     pub fn is_perceptual_target_missed(&self) -> bool {
         matches!(self, Self::PerceptualTargetMissed { .. })
     }
@@ -72,9 +62,6 @@ impl Jp2LamError {
             | Self::DecodeFailed(msg)
             | Self::UnsupportedFeature(msg)
             | Self::Io(msg) => msg,
-            Self::PerceptualNotImplemented => {
-                "perceptual SSIMULACRA2 targeting is not implemented yet"
-            }
             Self::PerceptualTargetMissed { .. } => {
                 "perceptual encode missed the requested SSIMULACRA2 floor"
             }

@@ -5,8 +5,8 @@ use crate::error::{Jp2LamError, Result};
 #[cfg(test)]
 use crate::model::Image;
 use crate::model::{
-    ColorEncoding, ColorSpace, ComponentView, EncodeOptions, ImageView, OutputFormat,
-    PerceptualTarget, RateControl, ResourceLimits, TilePolicy,
+    ColorEncoding, ColorSpace, ComponentTransform, ComponentView, EncodeOptions, ImageView,
+    OutputFormat, PerceptualTarget, RateControl, ResourceLimits, TilePolicy,
 };
 use derive::{
     apply_document_step_scaling, apply_quality_step_scaling, derive_code_block_size, derive_lane,
@@ -17,10 +17,7 @@ use derive::{
 use validate::validate_image;
 use validate::validate_image_view;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ProgressionOrder {
-    Lrcp,
-}
+pub(crate) use crate::j2k::decode_markers::ProgressionOrder;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum WaveletTransform {
@@ -181,6 +178,7 @@ impl EncodingPlan {
     pub(crate) fn build_view(image: &ImageView<'_>, options: &EncodeOptions) -> Result<Self> {
         validate_image_view(image)?;
         validate_resource_limits(&options.resource_limits)?;
+        options.coding.validate()?;
 
         let color_encoding = match (&options.color_encoding, image.colorspace) {
             (Some(encoding), colorspace) => {
@@ -239,19 +237,28 @@ impl EncodingPlan {
         } else {
             WaveletTransform::Irreversible97
         };
-        let use_mct = use_mct(encoding_colorspace);
+        let use_mct = use_mct(encoding_colorspace)
+            && options.coding.component_transform == ComponentTransform::Auto;
         let lossy_rgb_mct = !is_lossless && use_mct;
         let tile = derive_tile_plan(image, options, 0, lossy_rgb_mct)?;
         validate_tile_count(image.width, image.height, tile.width, tile.height)?;
-        let decomposition_cap = max_target_decompositions(encoding_colorspace);
-        let decomposition_levels = max_decompositions(image.width, image.height)
-            .min(decomposition_cap)
-            .min(max_tile_grid_decompositions(
-                image.width,
-                image.height,
-                tile.width,
-                tile.height,
-            )) as u8;
+        validate_single_precinct_tiles(image.width, image.height, tile.width, tile.height)?;
+        let feasible_levels =
+            max_tile_grid_decompositions(image.width, image.height, tile.width, tile.height);
+        let decomposition_levels = match options.coding.decomposition_levels {
+            Some(levels) if u32::from(levels) > feasible_levels => {
+                return Err(Jp2LamError::InvalidInput(format!(
+                    "{levels} decomposition levels would empty the low-pass band of a \
+                     {}x{} tile; at most {feasible_levels} fit",
+                    tile.width.min(image.width),
+                    tile.height.min(image.height),
+                )));
+            }
+            Some(levels) => levels,
+            None => max_decompositions(image.width, image.height)
+                .min(max_target_decompositions(encoding_colorspace))
+                .min(feasible_levels) as u8,
+        };
         let target_rate = if is_lossless {
             None
         } else {
@@ -310,13 +317,17 @@ impl EncodingPlan {
             perceptual,
             quant_scale,
             base_subband_quants,
-            progression_order: ProgressionOrder::Lrcp,
+            progression_order: options.coding.progression_order,
             transform,
             quantization_style,
             use_mct,
             decomposition_levels,
             num_resolutions: decomposition_levels.saturating_add(1),
-            code_block_size: derive_code_block_size(quality),
+            code_block_size: options
+                .coding
+                .code_block_size
+                .map(|(width, height)| CodeBlockSize { width, height })
+                .unwrap_or_else(|| derive_code_block_size(quality)),
             guard_bits: 2,
             layers: vec![QualityLayer { target_rate }],
             #[cfg(test)]
@@ -355,6 +366,11 @@ fn resolve_rate_control(image: &ImageView<'_>, options: &EncodeOptions) -> Resul
         RateControl::ApproxQuality(quality) => Err(Jp2LamError::InvalidInput(format!(
             "approximate quality preset must be in 0..=99, got {quality}"
         ))),
+        // A floor of 100 asks for an identical image: only reversible coding
+        // meets it, so both quality forms resolve there, the same way a source
+        // below the metric's minimum size does.
+        RateControl::Quality { level: 100.., .. } => Ok(RateControl::Lossless),
+        RateControl::Perceptual(target) if target.score == 100.0 => Ok(RateControl::Lossless),
         RateControl::Quality { level, effort } => {
             PerceptualTarget::for_quality(level, effort)?;
             reject_unsupported_perceptual_source(image)?;
@@ -369,13 +385,6 @@ fn resolve_rate_control(image: &ImageView<'_>, options: &EncodeOptions) -> Resul
                     "perceptual minimum score must be finite and in 0..=100, got {}",
                     target.score
                 )));
-            }
-            if target.score >= 100.0 {
-                return Err(Jp2LamError::PerceptualTargetMissed {
-                    achieved: 0.0,
-                    target: target.score,
-                    status: "SaturatedTop",
-                });
             }
             reject_unsupported_perceptual_source(image)?;
             Ok(perceptual_or_lossless_below_metric_floor(
@@ -540,6 +549,38 @@ fn validate_tile_count(
     Ok(())
 }
 
+/// Precinct edge the encoder signals: Scod bit 0 is clear, so every resolution
+/// uses PPx = PPy = 15 (Annex A.6.1).
+const MAX_PRECINCT_EDGE: u32 = 1 << 15;
+
+/// The encoder writes one precinct per resolution, so no tile may straddle a
+/// precinct boundary. Precinct boundaries sit on multiples of 2^15 in each
+/// resolution's coordinates; a tile that stays inside one 2^15-aligned block at
+/// full resolution stays inside one at every lower resolution too, because
+/// those boundaries are multiples of 2^15 in image coordinates as well.
+fn validate_single_precinct_tiles(
+    image_width: u32,
+    image_height: u32,
+    tile_width: u32,
+    tile_height: u32,
+) -> Result<()> {
+    let axis_fits = |extent: u32, tile: u32| {
+        (0..extent.div_ceil(tile)).all(|index| {
+            let start = index * tile;
+            let last = start.saturating_add(tile).min(extent) - 1;
+            start / MAX_PRECINCT_EDGE == last / MAX_PRECINCT_EDGE
+        })
+    };
+    if axis_fits(image_width, tile_width) && axis_fits(image_height, tile_height) {
+        return Ok(());
+    }
+    Err(Jp2LamError::InvalidInput(format!(
+        "a {tile_width}x{tile_height} tile grid on a {image_width}x{image_height} image puts \
+         a tile across a 32768-sample precinct boundary, which needs more than one precinct \
+         per resolution; use a tile size that divides 32768 (TilePolicy::Auto picks one)"
+    )))
+}
+
 /// Maximum common decomposition count that keeps every actual tile's LL
 /// interval non-empty. Arbitrary tile origins are allowed; bounds follow the
 /// Annex B ceil-division recurrence rather than nominal tile dimensions.
@@ -581,16 +622,25 @@ fn derive_auto_tile_dimensions(
     limits: &ResourceLimits,
     lossy_rgb_mct: bool,
 ) -> Result<(u32, u32)> {
-    const DEFAULT_EDGE: u32 = 2048;
     const LARGE_EDGE: u32 = 4096;
     const MIN_EDGE: u32 = 64;
 
+    // The wavelet does not cross tile borders, so every tile edge is a
+    // potential seam at low rates. Without a memory cap nothing asks for
+    // tiles, and the image stays one tile unless it is too large for the
+    // single precinct per subband the encoder writes; then it gets the largest
+    // tile that fits one.
+    let largest = (
+        image.width.min(MAX_PRECINCT_EDGE),
+        image.height.min(MAX_PRECINCT_EDGE),
+    );
     let Some(max_working_memory) = limits.max_working_memory else {
-        return Ok((
-            DEFAULT_EDGE.min(image.width),
-            DEFAULT_EDGE.min(image.height),
-        ));
+        return Ok(largest);
     };
+    if estimate_auto_tile_working_bytes(largest.0, largest.1, lossy_rgb_mct)? <= max_working_memory
+    {
+        return Ok(largest);
+    }
 
     let mut edge = LARGE_EDGE;
     while edge >= MIN_EDGE {
@@ -732,10 +782,6 @@ mod tests {
         let image = gray_image(13, 11);
         for rate_control in [
             RateControl::ApproxQuality(100),
-            RateControl::Quality {
-                level: 100,
-                effort: crate::model::PerceptualEffort::Balanced,
-            },
             RateControl::TargetBytes(0),
             RateControl::TargetBitsPerPixel(f32::NAN),
             RateControl::CompressionRatio(0.0),
@@ -782,7 +828,7 @@ mod tests {
             },
         )
         .expect_err("out of range score");
-        assert!(!bad.is_perceptual_not_implemented(), "{bad}");
+        assert!(matches!(bad, Jp2LamError::InvalidInput(_)), "{bad}");
     }
 
     #[test]
@@ -836,6 +882,7 @@ mod tests {
                 spill_directory: None,
             },
             color_encoding: None,
+            coding: Default::default(),
         };
 
         let plan = EncodingPlan::build(&image, &options).expect("build plan");
@@ -904,6 +951,68 @@ mod tests {
         assert_eq!(plan.tile.width, 16);
         assert_eq!(plan.tile.height, 16);
         assert_eq!(crate::tiling::tile_grid(&plan).num_tiles(), 1);
+    }
+
+    #[test]
+    fn auto_policy_without_a_memory_cap_keeps_one_tile() {
+        // The photographic helpers default to `Auto`; it used to cut at 2048
+        // with no cap, which leaves wavelet seams on large photos.
+        let image = gray_image(5000, 3000);
+        let plan = EncodingPlan::build(
+            &image,
+            &EncodeOptions {
+                tile_policy: TilePolicy::Auto,
+                ..Default::default()
+            },
+        )
+        .expect("auto plan");
+        assert_eq!((plan.tile.width, plan.tile.height), (5000, 3000));
+
+        // A cap the whole image fits under also keeps one tile.
+        let plan = EncodingPlan::build(
+            &image,
+            &EncodeOptions {
+                tile_policy: TilePolicy::Auto,
+                resource_limits: ResourceLimits {
+                    max_working_memory: Some(512 * 1024 * 1024),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+        )
+        .expect("auto plan under a roomy cap");
+        assert_eq!((plan.tile.width, plan.tile.height), (5000, 3000));
+    }
+
+    #[test]
+    fn tiles_never_straddle_a_precinct_boundary() {
+        let image = gray_image(40_000, 8);
+        let build = |tile_policy| {
+            EncodingPlan::build(
+                &image,
+                &EncodeOptions {
+                    tile_policy,
+                    ..Default::default()
+                },
+            )
+        };
+        let err = build(TilePolicy::Single).expect_err("one 40000-wide tile");
+        assert!(err.to_string().contains("precinct"), "{err}");
+        let err = build(TilePolicy::Fixed {
+            width: 3000,
+            height: 8,
+        })
+        .expect_err("a 3000 grid straddles x=32768");
+        assert!(err.to_string().contains("precinct"), "{err}");
+        assert!(
+            build(TilePolicy::Fixed {
+                width: 4096,
+                height: 8
+            })
+            .is_ok()
+        );
+        let auto = build(TilePolicy::Auto).expect("auto picks a precinct-sized tile");
+        assert_eq!((auto.tile.width, auto.tile.height), (32_768, 8));
     }
 
     #[test]

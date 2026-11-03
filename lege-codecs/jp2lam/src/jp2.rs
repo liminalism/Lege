@@ -47,7 +47,7 @@ fn wrap_codestream_metadata(
     color_encoding: &ColorEncoding,
     codestream: &[u8],
 ) -> Result<Vec<u8>> {
-    let codestream_box_len = box_len(codestream.len())?;
+    let codestream_header = codestream_box_header(codestream.len())?;
     let (shared_bpc, bpcc) = jp2_component_depths(components)?;
     let bpcc_box_len = bpcc.as_ref().map_or(0, |values| 8 + values.len() as u32);
     let color_box_len = color_spec_box_len(color_encoding)?;
@@ -55,7 +55,8 @@ fn wrap_codestream_metadata(
     let total_len = JP2_SIGNATURE_BOX_LEN as usize
         + JP2_FILE_TYPE_BOX_LEN as usize
         + jp2_header_box_len as usize
-        + codestream_box_len as usize;
+        + codestream_header.len()
+        + codestream.len();
     let mut out = Vec::with_capacity(total_len);
 
     write_box_header(&mut out, JP2_SIGNATURE_BOX_LEN, b"jP  ");
@@ -84,7 +85,7 @@ fn wrap_codestream_metadata(
 
     write_color_spec(&mut out, color_encoding)?;
 
-    write_box_header(&mut out, codestream_box_len, b"jp2c");
+    out.extend_from_slice(&codestream_header);
     out.extend_from_slice(codestream);
 
     Ok(out)
@@ -98,7 +99,7 @@ fn write_jp2_header_metadata<W: Write>(
     codestream_len: usize,
     writer: &mut W,
 ) -> Result<()> {
-    let codestream_box_len = box_len(codestream_len)?;
+    let codestream_header = codestream_box_header(codestream_len)?;
     let (shared_bpc, bpcc) = jp2_component_depths(components)?;
     let bpcc_box_len = bpcc.as_ref().map_or(0, |values| 8 + values.len() as u32);
     let color_box_len = color_spec_box_len(color_encoding)?;
@@ -127,7 +128,7 @@ fn write_jp2_header_metadata<W: Write>(
 
     write_color_spec_to(writer, color_encoding)?;
 
-    write_box_header_to(writer, codestream_box_len, b"jp2c")
+    write_all(writer, &codestream_header)
 }
 
 /// ISO/IEC 15444-1 Annex I.5.3.1/I.5.3.2: BPC is `precision - 1`
@@ -200,6 +201,25 @@ fn write_color_spec_to<W: Write>(writer: &mut W, color_encoding: &ColorEncoding)
     }
 }
 
+/// Header of the contiguous codestream box. A codestream whose box would not
+/// fit a 32-bit `LBox` uses the extended form (I.4): `LBox` = 1 followed by a
+/// 64-bit `XLBox` that counts the whole box, its 16 header bytes included.
+fn codestream_box_header(payload_len: usize) -> Result<Vec<u8>> {
+    if let Ok(len) = box_len(payload_len) {
+        let mut header = Vec::with_capacity(8);
+        write_box_header(&mut header, len, b"jp2c");
+        return Ok(header);
+    }
+    let extended_len = u64::try_from(payload_len)
+        .ok()
+        .and_then(|len| len.checked_add(16))
+        .ok_or_else(|| Jp2LamError::EncodeFailed("JP2 box length overflow".to_string()))?;
+    let mut header = Vec::with_capacity(16);
+    write_box_header(&mut header, 1, b"jp2c");
+    header.extend_from_slice(&extended_len.to_be_bytes());
+    Ok(header)
+}
+
 fn box_len(payload_len: usize) -> Result<u32> {
     let total_len = payload_len
         .checked_add(8)
@@ -226,8 +246,24 @@ fn write_all<W: Write>(writer: &mut W, bytes: &[u8]) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{jp2_component_depths, wrap_codestream_metadata};
+    use super::{codestream_box_header, jp2_component_depths, wrap_codestream_metadata};
     use crate::model::{ColorEncoding, ComponentView};
+
+    #[test]
+    fn annex_i_4_codestream_box_switches_to_xlbox_past_32_bits() {
+        assert_eq!(
+            codestream_box_header(100).expect("small box"),
+            [0, 0, 0, 108, b'j', b'p', b'2', b'c']
+        );
+        let limit = u32::MAX as usize - 8;
+        assert_eq!(codestream_box_header(limit).expect("largest LBox").len(), 8);
+        let header = codestream_box_header(limit + 1).expect("extended box");
+        assert_eq!(&header[..8], &[0, 0, 0, 1, b'j', b'p', b'2', b'c']);
+        assert_eq!(
+            u64::from_be_bytes(header[8..].try_into().expect("XLBox")),
+            limit as u64 + 1 + 16
+        );
+    }
 
     #[test]
     fn annex_i_5_3_component_depths_use_shared_bpc_or_bpcc() {

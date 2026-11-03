@@ -1,6 +1,7 @@
 use crate::encode::block_store::{SharedEncodedBlockStore, StoredBand, StoredTier1Layout};
 use crate::encode::profile_enter;
 use crate::error::{Jp2LamError, Result};
+use crate::plan::ProgressionOrder;
 use crate::t2::{PacketSequenceBuilder, StoredPacket, StoredPayloadRange, TilePartPayload};
 
 use super::t1::{NativeEncodedTier1Band, NativeEncodedTier1Layout, NativeTier1SelectionLayout};
@@ -445,6 +446,39 @@ fn build_packet_body(
 // Resolution-level packet grouping
 // ---------------------------------------------------------------------------
 
+/// `(resolution, component)` pairs in the order one tile's packets are written.
+///
+/// The encoder emits one quality layer and one precinct per subband, so the
+/// position loop of Annex B.12.1.3-B.12.1.5 visits a single position (the
+/// tile origin, where every resolution's only precinct starts) and the layer
+/// loop a single layer. What remains is whether resolution or component is the
+/// outer loop: LRCP, RLCP and RPCL are resolution-major, PCRL and CPRL are
+/// component-major.
+pub(crate) fn packet_order(
+    order: ProgressionOrder,
+    max_resolution: u8,
+    component_count: usize,
+) -> Vec<(u8, usize)> {
+    let mut packets = Vec::with_capacity((usize::from(max_resolution) + 1) * component_count);
+    match order {
+        ProgressionOrder::Lrcp | ProgressionOrder::Rlcp | ProgressionOrder::Rpcl => {
+            for resolution in 0..=max_resolution {
+                for component in 0..component_count {
+                    packets.push((resolution, component));
+                }
+            }
+        }
+        ProgressionOrder::Pcrl | ProgressionOrder::Cprl => {
+            for component in 0..component_count {
+                for resolution in 0..=max_resolution {
+                    packets.push((resolution, component));
+                }
+            }
+        }
+    }
+    packets
+}
+
 /// The tile-0 convenience wrappers that used to sit here
 /// (`build_packet_sequence`, `_for_components`, `_for_components_with_selections`)
 /// had no caller anywhere, including tests, and were deleted. This function
@@ -586,6 +620,7 @@ pub(crate) fn build_tile_part_payload_for_tile_components_owned(
     tile_index: u16,
     mut layouts: Vec<NativeEncodedTier1Layout>,
     selections: Option<&[NativeTier1SelectionLayout]>,
+    order: ProgressionOrder,
 ) -> Result<TilePartPayload> {
     let _p = profile_enter("t2::build_tile_part_payload_for_components_owned");
     validate_layouts_for_tile(tile_index, &layouts)?;
@@ -606,8 +641,9 @@ pub(crate) fn build_tile_part_payload_for_tile_components_owned(
         .unwrap_or(0);
 
     let mut builder = PacketSequenceBuilder::new();
-    for resolution in 0..=max_resolution {
-        for (component_index, component) in layouts.iter_mut().enumerate() {
+    for (resolution, component_index) in packet_order(order, max_resolution, layouts.len()) {
+        {
+            let component = &mut layouts[component_index];
             let band_indices = component
                 .bands
                 .iter()
@@ -683,6 +719,7 @@ pub(crate) fn build_stored_tile_part_payload(
     store: SharedEncodedBlockStore,
     layouts: &[StoredTier1Layout],
     selections: Option<&[NativeTier1SelectionLayout]>,
+    order: ProgressionOrder,
 ) -> Result<TilePartPayload> {
     if layouts.iter().any(|layout| layout.tile_index != tile_index) {
         return Err(Jp2LamError::EncodeFailed(format!(
@@ -702,8 +739,9 @@ pub(crate) fn build_stored_tile_part_payload(
         .unwrap_or(0);
     let mut packets = Vec::new();
 
-    for resolution in 0..=max_resolution {
-        for (component_index, layout) in layouts.iter().enumerate() {
+    for (resolution, component_index) in packet_order(order, max_resolution, layouts.len()) {
+        {
+            let layout = &layouts[component_index];
             let stored_band_indices = layout
                 .bands
                 .iter()
@@ -844,6 +882,8 @@ fn build_packet_body_segments(
 // ---------------------------------------------------------------------------
 #[cfg(test)]
 mod tests {
+    use crate::plan::ProgressionOrder;
+
     use super::{
         PacketBio, TagTree, build_packet_sequence_for_tile_components_with_selections,
         build_tile_part_payload, build_tile_part_payload_for_components,
@@ -1076,8 +1116,13 @@ mod tests {
         .expect("borrowed tile payload");
         assert_eq!(borrowed.packet_count(), 3);
 
-        let owned = build_tile_part_payload_for_tile_components_owned(3, vec![encoded], None)
-            .expect("owned tile payload");
+        let owned = build_tile_part_payload_for_tile_components_owned(
+            3,
+            vec![encoded],
+            None,
+            ProgressionOrder::Lrcp,
+        )
+        .expect("owned tile payload");
         assert_eq!(owned.packet_count(), 3);
     }
 
@@ -1093,8 +1138,13 @@ mod tests {
         .expect_err("packet sequence should reject wrong tile");
         assert!(err.to_string().contains("not tile 3"), "{err}");
 
-        let owned_err = build_tile_part_payload_for_tile_components_owned(3, vec![encoded], None)
-            .expect_err("owned payload should reject wrong tile");
+        let owned_err = build_tile_part_payload_for_tile_components_owned(
+            3,
+            vec![encoded],
+            None,
+            ProgressionOrder::Lrcp,
+        )
+        .expect_err("owned payload should reject wrong tile");
         assert!(owned_err.to_string().contains("not tile 3"), "{owned_err}");
     }
 

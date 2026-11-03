@@ -544,7 +544,7 @@ fn parse_color_spec(
                     ));
                 }
             };
-            crate::model::validate_restricted_icc(profile, component_model)
+            crate::model::validate_icc_header(profile, component_model)
                 .map_err(|error| invalid(error.to_string()))?;
             let encoding = if retain_icc {
                 ColorEncoding::IccProfile {
@@ -623,7 +623,7 @@ fn retain_valid_icc_or_default(
     default: ColorEncoding,
     retain_icc: bool,
 ) -> Result<ColorEncoding> {
-    if crate::model::validate_restricted_icc(profile, component_model).is_err() || !retain_icc {
+    if crate::model::validate_icc_header(profile, component_model).is_err() || !retain_icc {
         return Ok(default);
     }
     Ok(ColorEncoding::IccProfile {

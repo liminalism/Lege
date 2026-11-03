@@ -4,6 +4,8 @@ pub mod decode;
 mod dwt;
 mod encode;
 mod error;
+#[cfg(feature = "image")]
+mod image_encoder;
 mod j2k;
 mod jp2;
 mod model;
@@ -42,14 +44,18 @@ pub use encode::{
     encode_with_psnr, print_timing_data,
 };
 pub use error::{Jp2LamError, Result};
+#[cfg(feature = "image")]
+pub use image_encoder::Jp2Encoder;
+pub use j2k::decode_markers::ProgressionOrder;
 /// Pinned production SSIMULACRA2 identity, shared with JPXL.
 ///
 /// A perceptual encode is only comparable across codecs when both score with
 /// this string. Bumping it is an encoder-behaviour change.
 pub use jpxl_perceptual::METRIC_VERSION;
 pub use model::{
-    ColorEncoding, ColorSpace, Component, ComponentSampleData, ComponentView, ContentProfile,
-    DisplayColor, DisplayProfile, EncodeOptions, IccComponentModel, Image, ImageView, OutputFormat,
-    PerceptualEffort, PerceptualObservation, PerceptualProbe, PerceptualTarget, PerceptualTrace,
-    Preset, QualityStatus, RateControl, ResourceLimits, SamplePrecision, TilePolicy,
+    CodingOptions, ColorEncoding, ColorSpace, Component, ComponentSampleData, ComponentTransform,
+    ComponentView, ContentProfile, DisplayColor, DisplayProfile, EncodeOptions, IccComponentModel,
+    Image, ImageView, OutputFormat, PerceptualEffort, PerceptualObservation, PerceptualProbe,
+    PerceptualTarget, PerceptualTrace, Preset, QualityStatus, RateControl, ResourceLimits,
+    SamplePrecision, TilePolicy,
 };

@@ -637,7 +637,12 @@ impl NativeBackend {
     ) -> Result<crate::t2::TilePartPayload> {
         let _p = crate::encode::profile_enter("prepare_tile_part_payload");
         let (encoded, selections) = self.prepare_tier1_encoded_layouts_and_selections(context)?;
-        t2::build_tile_part_payload_for_tile_components_owned(0, encoded, Some(&selections))
+        t2::build_tile_part_payload_for_tile_components_owned(
+            0,
+            encoded,
+            Some(&selections),
+            context.plan.progression_order,
+        )
     }
 
     /// Prepare one tile-part payload from a tile rectangle.
@@ -696,6 +701,7 @@ impl NativeBackend {
             tile.tile_index,
             encoded,
             Some(&selections),
+            context.plan.progression_order,
         )
     }
 
@@ -910,7 +916,12 @@ impl NativeBackend {
                 )?
             } else {
                 let stored_selections = select_stored_tile_passes(&stored_tiles, context, None)?;
-                build_stored_tile_parts(&stored_tiles, stored_selections, shared_store)?
+                build_stored_tile_parts(
+                    &stored_tiles,
+                    stored_selections,
+                    shared_store,
+                    context.plan.progression_order,
+                )?
             }
         } else {
             let tile = tile_rects[0];
@@ -1765,6 +1776,7 @@ pub(crate) fn build_stored_tile_parts(
     stored_tiles: &[(TileRect, Vec<StoredTier1Layout>)],
     stored_selections: Vec<Vec<t1::NativeTier1SelectionLayout>>,
     shared_store: SharedEncodedBlockStore,
+    order: crate::plan::ProgressionOrder,
 ) -> Result<Vec<TilePart>> {
     let _p = crate::encode::profile_enter("t2::build_stored_tile_parts");
     stored_tiles
@@ -1783,6 +1795,7 @@ pub(crate) fn build_stored_tile_parts(
                     shared_store.clone(),
                     layouts,
                     Some(&selections),
+                    order,
                 )?,
             })
         })
@@ -1855,7 +1868,12 @@ fn select_perceptual_tile_parts(
         let reconstruct_millis =
             u64::try_from(reconstruct_started.elapsed().as_millis()).unwrap_or(u64::MAX);
         let observation = evaluator.score_image(&reconstructed, Some(reconstruct_millis))?;
-        let tile_parts = build_stored_tile_parts(stored_tiles, selections, shared_store.clone())?;
+        let tile_parts = build_stored_tile_parts(
+            stored_tiles,
+            selections,
+            shared_store.clone(),
+            context.plan.progression_order,
+        )?;
         let parts = CodestreamParts {
             main_header_segments: main_header_segments.to_vec(),
             tile_parts: tile_parts.clone(),
@@ -2032,7 +2050,12 @@ fn select_exact_rate_tile_parts(
     while low <= high {
         let body_target = low + (high - low) / 2;
         let selections = select_stored_tile_passes(stored_tiles, context, Some(body_target))?;
-        let tile_parts = build_stored_tile_parts(stored_tiles, selections, shared_store.clone())?;
+        let tile_parts = build_stored_tile_parts(
+            stored_tiles,
+            selections,
+            shared_store.clone(),
+            context.plan.progression_order,
+        )?;
         let candidate = CodestreamParts {
             main_header_segments: main_header_segments.to_vec(),
             tile_parts: tile_parts.clone(),

@@ -1,3 +1,5 @@
+use crate::j2k::decode_markers::ProgressionOrder;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ColorSpace {
     Gray,
@@ -37,6 +39,16 @@ pub enum ColorEncoding {
 }
 
 impl ColorEncoding {
+    /// Describe the samples with an ICC profile embedded by the JP2 Restricted
+    /// ICC method. The profile must be a monochrome or three-component
+    /// matrix-shaper profile (grey TRC, or RGB colorant XYZ columns plus TRCs,
+    /// input or display class, no `A2B0` lookup table); anything else needs
+    /// the JPX any-ICC method, which this crate does not write.
+    ///
+    /// # Errors
+    ///
+    /// [`crate::error::Jp2LamError::InvalidInput`] for a profile that is not a
+    /// well-formed restricted profile of `component_model`.
     pub fn restricted_icc(
         bytes: Vec<u8>,
         component_model: IccComponentModel,
@@ -86,7 +98,139 @@ impl ColorEncoding {
 
 const MAX_ICC_PROFILE_BYTES: usize = 16 * 1024 * 1024;
 
+/// Encoder-side check for the JP2 Restricted ICC method (ISO/IEC 15444-1
+/// I.5.3.3): the header checks of [`validate_icc_header`], plus the profile
+/// must be a Monochrome or Three-Component Matrix-Based profile - an input
+/// (`scnr`) or display (`mntr`) class profile whose transform is the grey TRC,
+/// or the three colorant XYZ columns and three TRCs, with no LUT-based
+/// `A2B0` transform that a full ICC reader would apply instead of the matrix.
+///
+/// The encoder embeds the profile unchanged and never converts samples, so a
+/// profile that a restricted JP2 reader cannot interpret would silently
+/// describe the pixels wrongly; it is refused here instead.
 pub(crate) fn validate_restricted_icc(
+    bytes: &[u8],
+    model: IccComponentModel,
+) -> crate::error::Result<()> {
+    validate_icc_header(bytes, model)?;
+    let class = &bytes[12..16];
+    if class != b"scnr" && class != b"mntr" {
+        return Err(invalid_input(format!(
+            "restricted JP2 ICC profile class must be input ('scnr') or display ('mntr'), got '{}'",
+            String::from_utf8_lossy(class)
+        )));
+    }
+    let tags = icc_tag_table(bytes)?;
+    let find = |signature: &[u8; 4]| tags.iter().find(|tag| &tag.signature == signature);
+    if find(b"A2B0").is_some() {
+        return Err(invalid_input(
+            "ICC profile carries an A2B0 lookup table; restricted JP2 accepts matrix-shaper \
+             profiles only",
+        ));
+    }
+    let (curves, colorants): (&[&[u8; 4]], &[&[u8; 4]]) = match model {
+        IccComponentModel::Gray => (&[b"kTRC"], &[]),
+        IccComponentModel::Rgb => (&[b"rTRC", b"gTRC", b"bTRC"], &[b"rXYZ", b"gXYZ", b"bXYZ"]),
+    };
+    for signature in curves {
+        let tag = find(signature).ok_or_else(|| {
+            invalid_input(format!(
+                "restricted JP2 ICC profile lacks the '{}' tone curve of a matrix-shaper profile",
+                String::from_utf8_lossy(*signature)
+            ))
+        })?;
+        let data = tag.data(bytes);
+        let ok = match data.get(0..4) {
+            Some(b"curv") => data
+                .get(8..12)
+                .map(|count| u32::from_be_bytes(count.try_into().expect("four bytes")))
+                .is_some_and(|count| {
+                    (count as usize)
+                        .checked_mul(2)
+                        .and_then(|len| len.checked_add(12))
+                        .is_some_and(|len| len <= data.len())
+                }),
+            Some(b"para") => data
+                .get(8..10)
+                .map(|kind| u16::from_be_bytes(kind.try_into().expect("two bytes")))
+                .and_then(|kind| [4usize, 12, 16, 20, 28].get(usize::from(kind)).copied())
+                .is_some_and(|params| 12 + params <= data.len()),
+            _ => false,
+        };
+        if !ok {
+            return Err(invalid_input(format!(
+                "ICC '{}' tag is not a well-formed 'curv' or 'para' curve",
+                String::from_utf8_lossy(*signature)
+            )));
+        }
+    }
+    for signature in colorants {
+        let tag = find(signature).ok_or_else(|| {
+            invalid_input(format!(
+                "restricted JP2 ICC profile lacks the '{}' colorant of a matrix-shaper profile",
+                String::from_utf8_lossy(*signature)
+            ))
+        })?;
+        let data = tag.data(bytes);
+        if data.get(0..4) != Some(b"XYZ ".as_slice()) || data.len() < 20 {
+            return Err(invalid_input(format!(
+                "ICC '{}' tag is not a well-formed 'XYZ ' colorant",
+                String::from_utf8_lossy(*signature)
+            )));
+        }
+    }
+    Ok(())
+}
+
+struct IccTag {
+    signature: [u8; 4],
+    offset: usize,
+    size: usize,
+}
+
+impl IccTag {
+    fn data<'a>(&self, profile: &'a [u8]) -> &'a [u8] {
+        &profile[self.offset..self.offset + self.size]
+    }
+}
+
+/// The ICC tag table (ICC.1 7.3): a count at byte 128, then 12-byte
+/// signature/offset/size entries, every one inside the profile.
+fn icc_tag_table(bytes: &[u8]) -> crate::error::Result<Vec<IccTag>> {
+    let read_u32 = |at: usize| {
+        bytes
+            .get(at..at + 4)
+            .map(|word| u32::from_be_bytes(word.try_into().expect("four bytes")) as usize)
+            .ok_or_else(|| invalid_input("ICC tag table is truncated"))
+    };
+    let count = read_u32(128)?;
+    let table_end = count
+        .checked_mul(12)
+        .and_then(|len| len.checked_add(132))
+        .filter(|&end| end <= bytes.len())
+        .ok_or_else(|| invalid_input("ICC tag table is truncated"))?;
+    (132..table_end)
+        .step_by(12)
+        .map(|entry| {
+            let offset = read_u32(entry + 4)?;
+            let size = read_u32(entry + 8)?;
+            if offset.checked_add(size).is_none_or(|end| end > bytes.len()) {
+                return Err(invalid_input("ICC tag data lies outside the profile"));
+            }
+            Ok(IccTag {
+                signature: bytes[entry..entry + 4].try_into().expect("four bytes"),
+                offset,
+                size,
+            })
+        })
+        .collect()
+}
+
+/// The ICC header fields a JP2 reader relies on: size, `acsp` signature, an
+/// XYZ connection space and a data colour space matching the component model.
+/// Decoding accepts any profile that passes this; encoding additionally
+/// requires [`validate_restricted_icc`].
+pub(crate) fn validate_icc_header(
     bytes: &[u8],
     model: IccComponentModel,
 ) -> crate::error::Result<()> {
@@ -195,8 +339,18 @@ impl TryFrom<u32> for SamplePrecision {
 
 /// High-resolution tile selection policy.
 ///
-/// `Single` preserves one-full-image-tile behavior. `Fixed` selects a regular
-/// tile grid and `Auto` derives a bounded tile size from [`ResourceLimits`].
+/// `Single` encodes the image as one tile. `Fixed` selects a regular tile grid.
+/// `Auto` keeps one tile unless something requires more: a
+/// [`ResourceLimits::max_working_memory`] the whole image does not fit under
+/// (then the largest power-of-two edge from 4096 down that does), or an image
+/// wider or taller than 32768 samples, which one precinct per resolution
+/// cannot cover. The wavelet does not cross tile borders, so every extra tile
+/// edge is a possible seam at low rates.
+///
+/// Every policy is rejected when a tile would straddle a multiple of 32768
+/// samples, for the same precinct reason; `Single` therefore refuses images
+/// larger than that, and `Fixed` needs a tile size that divides 32768 on such
+/// images.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum TilePolicy {
     #[default]
@@ -208,16 +362,99 @@ pub enum TilePolicy {
     Auto,
 }
 
-/// Resource limits that will guide bounded-memory high-resolution encoding.
+/// Multiple-component transform (ISO/IEC 15444-1 Annex G) for three-component
+/// input.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ComponentTransform {
+    /// The irreversible colour transform for lossy RGB. Lossless RGB is coded
+    /// without the reversible colour transform for now (COD signals none): the
+    /// encoder writes one QCD for all components, and RCT chroma needs its own
+    /// bit-plane range. Gray input has nothing to transform.
+    #[default]
+    Auto,
+    /// Code the components exactly as given and signal no transform in COD.
+    /// Use this for samples that are already decorrelated (YCbCr, XYZ) so they
+    /// are not transformed a second time. Lossy coding of correlated RGB this
+    /// way costs bytes; it is a fidelity knob, not a speed one.
+    None,
+}
+
+/// Codestream coding parameters. Every field defaults to "let the encoder
+/// choose", which is what the encoder did before these were exposed.
 ///
-/// These limits are intentionally optional so the current default behavior
-/// remains unchanged while Phase 4 wires them into tile-size and concurrency
-/// planning.
+/// Fields that are not here are fixed by the encoder and are legal Part 1
+/// choices: one quality layer, one precinct per subband (Scod precinct bit
+/// clear, so 2^15 precincts), code-block style 0 (no bypass, reset, restart,
+/// causal, predictable termination or segmentation symbols), 2 guard bits, a
+/// zero image and tile origin, one tile-part per tile, no SOP/EPH, ROI, POC,
+/// TLM or PLT markers, and Rsiz 0.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct CodingOptions {
+    /// Number of wavelet decomposition levels (`NL`, 0..=32); one fewer than
+    /// the number of resolutions. `None` derives it from the image: enough
+    /// levels to leave a low-pass band of roughly 16-32 pixels, at most 5 for
+    /// gray and 6 for colour. An explicit value must leave every tile's
+    /// low-pass band non-empty or the encode is rejected.
+    pub decomposition_levels: Option<u8>,
+    /// Nominal code-block width and height. Each must be a power of two in
+    /// 4..=1024 and their product at most 4096 (Annex A.6.1). `None` uses
+    /// 64x64, or 32x32 for legacy approximate qualities below 30.
+    pub code_block_size: Option<(u32, u32)>,
+    /// Packet progression order written to COD and used to emit packets.
+    /// With one layer and one precinct per subband, LRCP, RLCP and RPCL emit
+    /// the same resolution-major packet sequence and PCRL and CPRL the same
+    /// component-major one; the choice matters to readers that stream or
+    /// truncate by component.
+    pub progression_order: ProgressionOrder,
+    /// Whether three-component input gets the multiple-component transform.
+    pub component_transform: ComponentTransform,
+}
+
+impl CodingOptions {
+    pub(crate) fn validate(&self) -> crate::error::Result<()> {
+        if let Some(levels) = self.decomposition_levels
+            && levels > 32
+        {
+            return Err(invalid_input(format!(
+                "decomposition levels must be in 0..=32, got {levels}"
+            )));
+        }
+        if let Some((width, height)) = self.code_block_size {
+            for (label, value) in [("width", width), ("height", height)] {
+                if !value.is_power_of_two() || !(4..=1024).contains(&value) {
+                    return Err(invalid_input(format!(
+                        "code-block {label} must be a power of two in 4..=1024, got {value}"
+                    )));
+                }
+            }
+            if u64::from(width) * u64::from(height) > 4096 {
+                return Err(invalid_input(format!(
+                    "code-block area {width}x{height} exceeds 4096 samples"
+                )));
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Optional resource bounds for an encode. Every field defaults to unbounded.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ResourceLimits {
+    /// Encoder-owned transient memory per active tile, in bytes (borrowed
+    /// source samples are excluded). Drives [`TilePolicy::Auto`] and decides
+    /// whether components may be transformed concurrently and whether the
+    /// perceptual search may cache unquantized wavelet planes.
     pub max_working_memory: Option<usize>,
+    /// Worker threads for the whole encode. When set, the encode runs on its
+    /// own Rayon pool of this size - DWT, Tier-1, rate search and metric work
+    /// all included - instead of the caller's pool. Output does not depend on
+    /// it. Component-level concurrency additionally needs a
+    /// `max_working_memory` large enough for every component at once.
     pub max_threads: Option<usize>,
+    /// RAM held for encoded code-block bytes before they spill to disk.
     pub encoded_store_memory_limit: Option<usize>,
+    /// Where spilled code-block bytes go; the system temporary directory when
+    /// `None`.
     pub spill_directory: Option<std::path::PathBuf>,
 }
 
@@ -1024,7 +1261,12 @@ pub enum RateControl {
     /// of the same value (`ssimulacra2-jpxl-1`), so quality 80 means score 80
     /// for every image and resolution. Emits the smallest exact stream that
     /// meets it; `effort` bounds the metric evaluations spent finding it.
-    /// Requires 8-bit gray or sRGB; 100 is [`Self::Lossless`].
+    ///
+    /// Requires 8-bit unsigned gray or enumerated sRGB; other inputs are
+    /// rejected. Two cases resolve to [`Self::Lossless`], which meets every
+    /// floor exactly: `level` 100 (an identical image is the only way to score
+    /// 100), and a source below the metric's 8x8 minimum in either dimension,
+    /// where no score exists.
     Quality { level: u8, effort: PerceptualEffort },
     /// Legacy open-loop photographic preset in `0..=99`: one encode at a rate
     /// derived from the number, no measurement. Cheap, but the resulting
@@ -1033,9 +1275,12 @@ pub enum RateControl {
     /// 14 at 50 MP). Not on the [`Self::Quality`] scale.
     ApproxQuality(u8),
     /// Expert form of [`Self::Quality`]: a raw SSIMULACRA2 floor, fractional
-    /// scores allowed.
+    /// scores allowed, with the same input requirements. A score of exactly
+    /// 100 resolves to [`Self::Lossless`], like `Quality { level: 100 }`.
     Perceptual(PerceptualTarget),
-    /// Target complete output size in bytes.
+    /// Target complete output size in bytes. This and the two variants below
+    /// allocate by measured mean-squared error, not by the perceptual metric:
+    /// they hit a size, not a look.
     TargetBytes(u64),
     /// Target complete output bits per full-image pixel, across all components.
     TargetBitsPerPixel(f32),
@@ -1067,6 +1312,10 @@ pub struct EncodeOptions {
     /// `ColorSpace::Rgb`; ordinary Gray/Srgb constructors infer their matching
     /// enumerated description when this is `None`.
     pub color_encoding: Option<ColorEncoding>,
+    /// Codestream coding parameters (decomposition levels, code-block size,
+    /// progression order, component transform). Defaults let the encoder
+    /// choose.
+    pub coding: CodingOptions,
 }
 
 impl EncodeOptions {
@@ -1095,6 +1344,7 @@ impl EncodeOptions {
             },
             resource_limits: ResourceLimits::default(),
             color_encoding: None,
+            coding: CodingOptions::default(),
         }
     }
 
@@ -1129,6 +1379,7 @@ impl EncodeOptions {
             tile_policy: TilePolicy::Single,
             resource_limits: ResourceLimits::default(),
             color_encoding: None,
+            coding: CodingOptions::default(),
         }
     }
 
@@ -1151,6 +1402,7 @@ impl EncodeOptions {
             tile_policy: TilePolicy::Auto,
             resource_limits: ResourceLimits::default(),
             color_encoding: None,
+            coding: CodingOptions::default(),
         }
     }
 }
@@ -1165,6 +1417,7 @@ impl Default for EncodeOptions {
             tile_policy: TilePolicy::Single,
             resource_limits: ResourceLimits::default(),
             color_encoding: None,
+            coding: CodingOptions::default(),
         }
     }
 }

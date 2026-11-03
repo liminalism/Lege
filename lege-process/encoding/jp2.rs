@@ -2,6 +2,13 @@
 
 use crate::encoding::{EncodingError, Result};
 
+/// OpenJPEG-style JPEG 2000 parameters, translated field by field onto
+/// jp2lam's `RateControl`, `CodingOptions` and `TilePolicy` by [`encode`].
+///
+/// jp2lam writes one quality layer, so `rates` collapses to its final
+/// (highest-quality, smallest-ratio) entry, and it has no PSNR target, so
+/// `psnrs` is rejected rather than guessed at. A `rate` of 1 or less, or
+/// `irreversible: Some(false)`, means lossless.
 #[derive(Debug, Clone, Default)]
 pub struct Jp2Settings {
     pub num_resolutions: Option<i32>,
@@ -266,15 +273,33 @@ pub fn encode_display(
     .map_err(|e| EncodingError::InvalidInput(e.to_string()))?;
 
     let profile = display_profile(settings, channels);
-    match jp2lam::EncodeOptions::display_photo(f64::from(settings.floor.min(99)), profile)
-        .and_then(|options| jp2lam::encode(&image, &options))
-    {
+    // A degenerate display box has no verified encode to try.
+    let Ok(options) =
+        jp2lam::EncodeOptions::display_photo(f64::from(settings.floor.min(99)), profile)
+    else {
+        return encode_image(&image, settings.fallback_quality);
+    };
+    match jp2lam::encode(&image, &options) {
         Ok(data) => Ok(data),
-        // The verified path refuses some sources (a degenerate box, a source
-        // below the metric's 8x8 floor). Falling back to the legacy preset
-        // keeps the page instead of failing it; it emits at source size, which
+        // The verified search can refuse: no stream it tried cleared the floor,
+        // or the source is outside what the metric scores. (A source below the
+        // metric's 8x8 minimum is not a refusal: jp2lam encodes it lossless.)
+        // The legacy preset keeps the page; it emits at source size, which
         // `jp2_dimensions` reports correctly.
-        Err(_) => encode_image(&image, settings.fallback_quality),
+        Err(error)
+            if error.is_perceptual_target_missed()
+                || matches!(error, jp2lam::Jp2LamError::InvalidInput(_)) =>
+        {
+            encode_image(&image, settings.fallback_quality)
+        }
+        // Anything else is an encoder fault, not a refusal. Keep the page, but
+        // say so instead of hiding it behind the fallback.
+        Err(error) => {
+            crate::error_log!(
+                "verified JP2 display encode failed ({error}); using the preset fallback"
+            );
+            encode_image(&image, settings.fallback_quality)
+        }
     }
 }
 
@@ -298,6 +323,15 @@ pub fn encode_gray(data: &[u8], width: u32, height: u32, quality: u8) -> Result<
     encode_image(&image, quality)
 }
 
+/// Encode with OpenJPEG-style [`Jp2Settings`]. Every field reaches jp2lam: a
+/// `rate` is an exact compression ratio, `num_resolutions`, `prog_order`,
+/// `codeblock` and `tile_size` set the codestream's coding parameters, and
+/// `irreversible: Some(false)` selects lossless. Settings jp2lam cannot honour
+/// (PSNR targets, lossy reversible coding) are an error, not a guess.
+///
+/// An explicit rate is the caller's decision and is honoured exactly, even
+/// where it lands below the [`JP2_MIN_QUALITY`] preset; production paths that
+/// must respect that floor use [`encode_to_target_size`] or the presets.
 pub fn encode(
     input: &[u8],
     width: u32,
@@ -305,8 +339,104 @@ pub fn encode(
     channels: u8,
     settings: &Jp2Settings,
 ) -> Result<Vec<u8>> {
-    let quality = quality_from_settings(settings);
-    encode_with_quality(input, width, height, channels, quality)
+    validate_input(input, width, height, channels)?;
+    let image = image_from_bytes(input, width, height, channels)?;
+    let options = options_from_settings(settings)?;
+    jp2lam::encode(&image, &options).map_err(|e| EncodingError::EncoderError(e.to_string()))
+}
+
+/// Translate [`Jp2Settings`] into jp2lam options. jp2lam emits one quality
+/// layer, so the final entry of `rates` (the full-quality layer) is the target.
+fn options_from_settings(settings: &Jp2Settings) -> Result<jp2lam::EncodeOptions> {
+    let invalid = |message: String| EncodingError::InvalidInput(message);
+    if settings.psnrs.is_some() {
+        return Err(invalid(
+            "JP2 PSNR layer targets are not supported by jp2lam; use a rate".into(),
+        ));
+    }
+    let ratio = settings.rate.or_else(|| {
+        settings
+            .rates
+            .as_ref()
+            .and_then(|rates| rates.last().copied())
+    });
+    let rate_control = match (settings.irreversible, ratio) {
+        (Some(false), Some(ratio)) if ratio > 1.0 => {
+            return Err(invalid(format!(
+                "JP2 rate {ratio} needs irreversible coding; jp2lam's reversible 5/3 is lossless-only"
+            )));
+        }
+        (_, Some(ratio)) if !ratio.is_finite() => {
+            return Err(invalid(format!("JP2 rate {ratio} is not finite")));
+        }
+        (_, Some(ratio)) if ratio > 1.0 => jp2lam::RateControl::CompressionRatio(ratio),
+        // OpenJPEG's convention: a rate of 1 (or none) is a lossless layer.
+        _ => jp2lam::RateControl::Lossless,
+    };
+
+    let decomposition_levels = match settings.num_resolutions {
+        None => None,
+        Some(resolutions @ 1..=33) => Some((resolutions - 1) as u8),
+        Some(resolutions) => {
+            return Err(invalid(format!(
+                "JP2 num_resolutions must be in 1..=33, got {resolutions}"
+            )));
+        }
+    };
+    let progression_order = match settings.prog_order {
+        None | Some(0) => jp2lam::ProgressionOrder::Lrcp,
+        Some(1) => jp2lam::ProgressionOrder::Rlcp,
+        Some(2) => jp2lam::ProgressionOrder::Rpcl,
+        Some(3) => jp2lam::ProgressionOrder::Pcrl,
+        Some(4) => jp2lam::ProgressionOrder::Cprl,
+        Some(order) => {
+            return Err(invalid(format!(
+                "JP2 prog_order must be 0 (LRCP) to 4 (CPRL), got {order}"
+            )));
+        }
+    };
+    let positive = |(w, h): (i32, i32), what: &str| match (u32::try_from(w), u32::try_from(h)) {
+        (Ok(w), Ok(h)) if w > 0 && h > 0 => Ok((w, h)),
+        _ => Err(invalid(format!("JP2 {what} {w}x{h} must be positive"))),
+    };
+    let code_block_size = settings
+        .codeblock
+        .map(|size| positive(size, "code-block size"))
+        .transpose()?;
+    let tile_policy = match settings.tile_size {
+        None => jp2lam::TilePolicy::Single,
+        Some(size) => {
+            let (width, height) = positive(size, "tile size")?;
+            jp2lam::TilePolicy::Fixed { width, height }
+        }
+    };
+
+    Ok(jp2lam::EncodeOptions {
+        rate_control: Some(rate_control),
+        format: jp2lam::OutputFormat::Jp2,
+        profile: jp2lam::ContentProfile::General,
+        tile_policy,
+        coding: jp2lam::CodingOptions {
+            decomposition_levels,
+            code_block_size,
+            progression_order,
+            ..jp2lam::CodingOptions::default()
+        },
+        ..jp2lam::EncodeOptions::default()
+    })
+}
+
+fn image_from_bytes(input: &[u8], width: u32, height: u32, channels: u8) -> Result<jp2lam::Image> {
+    match channels {
+        1 => jp2lam::Image::from_gray_bytes(width, height, input),
+        3 => jp2lam::Image::from_rgb_bytes(width, height, input),
+        _ => {
+            return Err(EncodingError::InvalidInput(
+                "JP2 requires 1 (grayscale) or 3 (RGB) channels".to_string(),
+            ));
+        }
+    }
+    .map_err(|e| EncodingError::InvalidInput(e.to_string()))
 }
 
 pub fn encode_with_quality(
@@ -326,6 +456,15 @@ pub fn encode_with_quality(
     }
 }
 
+/// Encode to `target_bytes` with jp2lam's exact byte-target rate control, and
+/// return the achieved compression ratio (source bytes / output bytes) with
+/// the stream.
+///
+/// The program-wide quality floor still wins over the budget: when even the
+/// [`JP2_MIN_QUALITY`] preset does not fit, that preset's stream is returned
+/// and the target is missed, as the old quality ladder did. Otherwise the
+/// output is the best stream jp2lam can fit in `target_bytes`, instead of the
+/// first rung of a fixed ladder that happened to fit.
 pub fn encode_to_target_size(
     input: &[u8],
     width: u32,
@@ -339,29 +478,21 @@ pub fn encode_to_target_size(
             "JP2 target size must be greater than zero".to_string(),
         ));
     }
-
-    let mut best: Option<(u8, usize, Vec<u8>)> = None;
-    // Ladder floors at JP2_MIN_QUALITY: better to miss a byte target than to
-    // ship sub-50 jp2lam output.
-    for quality in [92, 84, 76, 68, 60, 52, 50] {
-        let data = encode_with_quality(input, width, height, channels, quality)?;
-        let size = data.len();
-        if best
-            .as_ref()
-            .map(|(_, best_size, _)| size.abs_diff(target_bytes) < best_size.abs_diff(target_bytes))
-            .unwrap_or(true)
-        {
-            best = Some((quality, size, data));
-        }
-        if size <= target_bytes {
-            break;
-        }
-    }
-
-    let (quality, _, data) = best.ok_or_else(|| {
-        EncodingError::EncoderError("JP2 target-size search produced no candidates".to_string())
-    })?;
-    Ok((quality_to_rate(quality), data))
+    let image = image_from_bytes(input, width, height, channels)?;
+    let floor = encode_image(&image, JP2_MIN_QUALITY)?;
+    let data = if floor.len() > target_bytes {
+        floor
+    } else {
+        let options = jp2lam::EncodeOptions {
+            rate_control: Some(jp2lam::RateControl::TargetBytes(target_bytes as u64)),
+            format: jp2lam::OutputFormat::Jp2,
+            profile: jp2lam::ContentProfile::General,
+            ..jp2lam::EncodeOptions::default()
+        };
+        jp2lam::encode(&image, &options).map_err(|e| EncodingError::EncoderError(e.to_string()))?
+    };
+    let source_bytes = width as usize * height as usize * channels as usize;
+    Ok((source_bytes as f32 / data.len() as f32, data))
 }
 
 fn encode_image(image: &jp2lam::Image, quality: u8) -> Result<Vec<u8>> {
@@ -377,15 +508,31 @@ fn encode_image_with_profile(
     quality: u8,
     profile: jp2lam::ContentProfile,
 ) -> Result<Vec<u8>> {
-    let options = jp2lam::EncodeOptions {
-        quality: quality.clamp(JP2_MIN_QUALITY, 100),
+    jp2lam::encode(image, &preset_options(quality, profile))
+        .map_err(|e| EncodingError::EncoderError(e.to_string()))
+}
+
+/// jp2lam options for Lege's quality presets, with the rate control spelled
+/// out rather than left to `EncodeOptions::quality`'s compatibility default:
+/// 100 is lossless and anything else is jp2lam's open-loop
+/// `ApproxQuality` preset, floored at [`JP2_MIN_QUALITY`]. That preset is not
+/// jp2lam's verified SSIMULACRA2 scale (`RateControl::Quality`) - its
+/// perceptual result drifts with resolution - which is why page and region
+/// images go through [`encode_display`] and only MRC background layers, whose
+/// presets were tuned on this scale, stay here.
+fn preset_options(quality: u8, profile: jp2lam::ContentProfile) -> jp2lam::EncodeOptions {
+    let quality = quality.clamp(JP2_MIN_QUALITY, 100);
+    jp2lam::EncodeOptions {
+        quality,
+        rate_control: Some(if quality >= 100 {
+            jp2lam::RateControl::Lossless
+        } else {
+            jp2lam::RateControl::ApproxQuality(quality)
+        }),
         format: jp2lam::OutputFormat::Jp2,
         profile,
         ..jp2lam::EncodeOptions::default()
-    };
-    jp2lam::BatchEncoder::new(options)
-        .encode_one(image)
-        .map_err(|e| EncodingError::EncoderError(e.to_string()))
+    }
 }
 
 /// Encode a full cleaned document page (text/line art on a flat background)
@@ -422,37 +569,6 @@ fn validate_input(input: &[u8], width: u32, height: u32, channels: u8) -> Result
         ));
     }
     Ok(())
-}
-
-fn quality_from_settings(settings: &Jp2Settings) -> u8 {
-    if let Some(psnrs) = &settings.psnrs {
-        return psnrs
-            .last()
-            .copied()
-            .unwrap_or(45.0)
-            .round()
-            .clamp(1.0, 100.0) as u8;
-    }
-    if let Some(rate) = settings.rate {
-        return rate_to_quality(rate);
-    }
-    if let Some(rates) = &settings.rates {
-        return rates.last().copied().map(rate_to_quality).unwrap_or(80);
-    }
-    100
-}
-
-fn rate_to_quality(rate: f32) -> u8 {
-    if rate <= 0.0 {
-        100
-    } else {
-        (100.0 / rate.sqrt()).round().clamp(1.0, 100.0) as u8
-    }
-}
-
-fn quality_to_rate(quality: u8) -> f32 {
-    let q = quality.max(1) as f32;
-    (100.0 / q).powi(2)
 }
 
 #[derive(Clone, Copy)]
@@ -601,12 +717,10 @@ pub struct Jp2BatchEncoder {
 impl Jp2BatchEncoder {
     pub fn new(quality: u8) -> Self {
         Self {
-            inner: jp2lam::BatchEncoder::new(jp2lam::EncodeOptions {
-                quality: quality.clamp(JP2_MIN_QUALITY, 100),
-                format: jp2lam::OutputFormat::Jp2,
-                profile: jp2lam::ContentProfile::General,
-                ..jp2lam::EncodeOptions::default()
-            }),
+            inner: jp2lam::BatchEncoder::new(preset_options(
+                quality,
+                jp2lam::ContentProfile::General,
+            )),
         }
     }
 
@@ -712,6 +826,125 @@ mod tests {
         };
 
         assert!(jp2_image_to_rgb(image).is_err());
+    }
+
+    fn textured_rgb(width: u32, height: u32) -> Vec<u8> {
+        (0..width * height)
+            .flat_map(|i| {
+                let (x, y) = (i % width, i / width);
+                let t = ((x * 7 + y * 3) % 23) as u8;
+                [
+                    (x * 200 / width) as u8 + t,
+                    (y * 200 / height) as u8 + t,
+                    ((x + y) * 100 / (width + height)) as u8 + 2 * t,
+                ]
+            })
+            .collect()
+    }
+
+    /// Every `Jp2Settings` field used to be dropped except `rate`, which went
+    /// through a made-up rate-to-quality curve and always landed on the q50
+    /// floor. Each field now reaches the codestream.
+    #[test]
+    fn jp2_settings_reach_the_codestream() {
+        let (w, h) = (160u32, 120u32);
+        let rgb = textured_rgb(w, h);
+        let settings = Jp2Settings {
+            num_resolutions: Some(4),
+            prog_order: Some(4),
+            rate: Some(12.0),
+            irreversible: Some(true),
+            tile_size: Some((128, 128)),
+            codeblock: Some((32, 16)),
+            ..Jp2Settings::default()
+        };
+        let data = encode(&rgb, w, h, 3, &settings).expect("settings encode");
+        let meta = jp2lam::inspect_jp2(&data).expect("inspect");
+        let cod = &meta.codestream.cod;
+        assert_eq!(cod.decomposition_levels, 3);
+        assert_eq!(cod.progression_order, jp2lam::ProgressionOrder::Cprl);
+        assert_eq!((cod.code_block_width, cod.code_block_height), (32, 16));
+        assert_eq!(meta.codestream.siz.tile_width, 128);
+        let ratio = rgb.len() as f64 / data.len() as f64;
+        assert!((ratio - 12.0).abs() < 0.6, "ratio {ratio}");
+        decode_jp2_bytes(&data).expect("decodes");
+    }
+
+    #[test]
+    fn jp2_settings_lossless_and_refusals() {
+        let (w, h) = (40u32, 30u32);
+        let rgb = textured_rgb(w, h);
+        for settings in [
+            Jp2Settings::default(),
+            Jp2Settings {
+                irreversible: Some(false),
+                ..Jp2Settings::default()
+            },
+            Jp2Settings {
+                rate: Some(1.0),
+                ..Jp2Settings::default()
+            },
+        ] {
+            let data = encode(&rgb, w, h, 3, &settings).expect("lossless");
+            assert_eq!(
+                decode_jp2_bytes(&data).expect("decode").2,
+                rgb,
+                "{settings:?}"
+            );
+        }
+        for settings in [
+            Jp2Settings {
+                psnrs: Some(vec![40.0]),
+                ..Jp2Settings::default()
+            },
+            Jp2Settings {
+                irreversible: Some(false),
+                rate: Some(10.0),
+                ..Jp2Settings::default()
+            },
+            Jp2Settings {
+                prog_order: Some(5),
+                ..Jp2Settings::default()
+            },
+            Jp2Settings {
+                codeblock: Some((48, 48)),
+                ..Jp2Settings::default()
+            },
+        ] {
+            assert!(encode(&rgb, w, h, 3, &settings).is_err(), "{settings:?}");
+        }
+    }
+
+    /// The old ladder stepped through seven encodes and returned whichever
+    /// fixed quality landed nearest; the byte target is now jp2lam's own.
+    #[test]
+    fn target_size_is_met_by_one_exact_encode() {
+        let (w, h) = (200u32, 150u32);
+        let rgb = textured_rgb(w, h);
+        let target = 6_000;
+        let (ratio, data) = encode_to_target_size(&rgb, w, h, 3, target).expect("target");
+        assert!(
+            data.len() <= target && data.len() + 64 >= target,
+            "{} bytes",
+            data.len()
+        );
+        assert!((ratio - rgb.len() as f32 / data.len() as f32).abs() < 1e-3);
+
+        // Below what the q50 floor needs, the floor wins and the target is missed.
+        let floor = encode_with_quality(&rgb, w, h, 3, JP2_MIN_QUALITY).expect("floor");
+        let (_, starved) = encode_to_target_size(&rgb, w, h, 3, 200).expect("starved");
+        assert_eq!(starved, floor);
+    }
+
+    #[test]
+    fn preset_rate_control_is_explicit() {
+        let lossless = preset_options(100, jp2lam::ContentProfile::General);
+        assert_eq!(lossless.rate_control, Some(jp2lam::RateControl::Lossless));
+        let floored = preset_options(20, jp2lam::ContentProfile::Document);
+        assert_eq!(
+            floored.rate_control,
+            Some(jp2lam::RateControl::ApproxQuality(JP2_MIN_QUALITY))
+        );
     }
 
     #[test]

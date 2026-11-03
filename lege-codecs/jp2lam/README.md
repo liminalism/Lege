@@ -13,12 +13,14 @@ The current goal is practical document-image interoperability first: a small Rus
 - Encode unsigned 8–16-bit grayscale or sRGB input from owned images or borrowed planar/interleaved views.
 - Write JP2 wrapper files or raw J2K codestreams.
 - Use explicit lossless, quality, target-byte, total-bpp, or compression-ratio rate control.
+- Choose decomposition levels, code-block size, progression order, and whether RGB gets the component transform (`CodingOptions`).
 - Bound high-resolution work with fixed/automatic tiling and RAM-to-temporary-file code-block spill.
-- Label enumerated grayscale/sRGB explicitly or preserve a validated restricted ICC profile exactly.
+- Label enumerated grayscale/sRGB explicitly, or embed a restricted (matrix-shaper) ICC profile exactly; anything else is refused rather than mislabelled.
 - Decode Internet Archive-style JP2 page images into the crate's native `Image` model.
 - Batch encode or decode folders whose images share dimensions, color model, and precision; encoded batches also share quality and format.
 - Retain the legacy `quality` field while providing explicit `RateControl` and photographic presets.
 - Optional PSNR/SSIM helper through `encode_with_psnr`.
+- Optional `image::ImageEncoder` implementation (`Jp2Encoder`) behind the `image` feature.
 - Optional CLI behind the `cli` feature.
 
 ## Install
@@ -27,6 +29,10 @@ The current goal is practical document-image interoperability first: a small Rus
 [dependencies]
 jp2lam = "0.3"
 ```
+
+Not on crates.io yet: the production SSIMULACRA2 metric comes from the sibling
+`jpxl-perceptual` crate, which has to be published first (see the comment on
+that dependency in `Cargo.toml`). Until then, depend on the git repository.
 
 Minimum Rust version from the crate manifest:
 
@@ -111,8 +117,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn render_rgb8(_width: u32, _height: u32, _stride: usize, _pixels: &[u8]) {}
 ```
 
-Reduced-resolution requests currently require a single-tile codestream.
-Region-of-interest decoding is planned but is not implemented yet.
+Reduced-resolution and region (`DecodeRegion`) requests work on single- and
+multi-tile codestreams.
 
 ### Batch Encode Matching Pages
 
@@ -163,7 +169,9 @@ This is not a universal JPEG 2000 or JPX decoder yet. Selective arithmetic bypas
 
 ## Quality Guide
 
-Prefer `RateControl` for new code. `Lossless` selects reversible 5/3. `Quality { level, effort }` is the canonical quality scale: `level` is a verified SSIMULACRA2 floor of the same value (quality 80 means score 80 on every image and resolution), and the encoder emits the smallest stream that meets it, spending up to `effort` metric evaluations to find it; `EncodeOptions::photo_quality(80)` is the one-call form. `ApproxQuality(0..=99)` is the legacy open-loop photographic preset: one encode at a rate derived from the number, cheap and unmeasured, whose perceptual quality varies with content and resolution (preset 80 measured SSIMULACRA2 52 at 0.8 MP and 14 at 50 MP). `Perceptual(PerceptualTarget)` is the expert form of `Quality` with a raw fractional score, and its optional `display` profile (`PerceptualTarget::for_display`, `EncodeOptions::display_photo`, CLI `--display eink:WxH` / `--display tablet:WxH`) moves the floor to where the reader sees it: source and candidate are both box-filtered in linear light into the display box (fit inside, aspect preserved, never upscaled) and, for `Eink`, folded to display luminance, so the score means "SSIMULACRA2 at display size". That metric is cheaper and more permissive than the source-resolution one, so a display target spends at most three evaluations - one encode plus two corrections - and still refuses to emit an under-floor stream; 72-75 with `Eink` and `Fast` effort suits small page images. A profile that conditions nothing for the source - a color panel the image already fits, or an e-ink panel for a gray source - is planned as the plain `Quality` target with the effort's own search (`DisplayProfile::conditions`): the display policy at box == source shipped first probes up to 1.5x the bytes of that search. `DisplayProfile::resampling_source()` (CLI `--resample`) goes one step further and encodes the display-sized image instead of the source, so the pixels the reader will never see are never coded: on the 2026-09-05 display corpus (11 photos, 0.8-6 MP, floor 70 into e-ink 600x450) that is 0.44x the bytes, 0.26x the encode time and 0.30x the decode time of the same target at source resolution, with every emitted stream still clearing the floor when re-measured against a linear-light downscale of the original. **It changes the emitted image dimensions** - `DisplayProfile::encoded_size(width, height)` says what they will be - so whatever places the image must read them back; it is off by default, and skipped when the source is less than `DisplayProfile::RESAMPLE_MIN_FACTOR` (1.25x) larger than the box. A source below the metric's 8x8 floor has no meaningful score, so a `Quality` or `Perceptual` target on one silently encodes reversible 5/3 instead of failing. exact-rate variants target the complete J2K codestream or JP2 file. The legacy `quality` field retains its compatibility meaning when `rate_control` is absent.
+Prefer `RateControl` for new code. `Lossless` selects reversible 5/3. `Quality { level, effort }` is the canonical quality scale: `level` is a verified SSIMULACRA2 floor of the same value (quality 80 means score 80 on every image and resolution), and the encoder emits the smallest stream that meets it, spending up to `effort` metric evaluations to find it; `EncodeOptions::photo_quality(80)` is the one-call form. `ApproxQuality(0..=99)` is the legacy open-loop photographic preset: one encode at a rate derived from the number, cheap and unmeasured, whose perceptual quality varies with content and resolution (preset 80 measured SSIMULACRA2 52 at 0.8 MP and 14 at 50 MP). `Perceptual(PerceptualTarget)` is the expert form of `Quality` with a raw fractional score, and its optional `display` profile (`PerceptualTarget::for_display`, `EncodeOptions::display_photo`, CLI `--display eink:WxH` / `--display tablet:WxH`) moves the floor to where the reader sees it: source and candidate are both box-filtered in linear light into the display box (fit inside, aspect preserved, never upscaled) and, for `Eink`, folded to display luminance, so the score means "SSIMULACRA2 at display size". That metric is cheaper and more permissive than the source-resolution one, so a display target spends at most three evaluations - one encode plus two corrections - and still refuses to emit an under-floor stream; 72-75 with `Eink` and `Fast` effort suits small page images. A profile that conditions nothing for the source - a color panel the image already fits, or an e-ink panel for a gray source - is planned as the plain `Quality` target with the effort's own search (`DisplayProfile::conditions`): the display policy at box == source shipped first probes up to 1.5x the bytes of that search. `DisplayProfile::resampling_source()` (CLI `--resample`) goes one step further and encodes the display-sized image instead of the source, so the pixels the reader will never see are never coded: on the 2026-09-05 display corpus (11 photos, 0.8-6 MP, floor 70 into e-ink 600x450) that is 0.44x the bytes, 0.26x the encode time and 0.30x the decode time of the same target at source resolution, with every emitted stream still clearing the floor when re-measured against a linear-light downscale of the original. **It changes the emitted image dimensions** - `DisplayProfile::encoded_size(width, height)` says what they will be - so whatever places the image must read them back; it is off by default, and skipped when the source is less than `DisplayProfile::RESAMPLE_MIN_FACTOR` (1.25x) larger than the box. Two inputs resolve a `Quality` or `Perceptual` target to reversible 5/3, which meets any floor exactly, instead of failing: a floor of 100 (only an identical image scores 100), and a source below the metric's 8x8 minimum, which has no score. Verified quality needs 8-bit unsigned gray or enumerated sRGB; 10-16-bit input takes `ApproxQuality` or an exact-rate target. The exact-rate variants (`TargetBytes`, `TargetBitsPerPixel`, `CompressionRatio`) target the complete J2K codestream or JP2 file and allocate bytes by measured mean-squared error, not by the perceptual metric. The legacy `quality` field retains its compatibility meaning when `rate_control` is absent.
+
+The table below is the legacy `quality` / `ApproxQuality` preset scale, not the verified `Quality` scale:
 
 | Quality  | Use case                                                                    |
 | -------: | --------------------------------------------------------------------------- |
@@ -180,7 +188,7 @@ Encoder input:
 - Unsigned 8–16-bit grayscale.
 - Unsigned 8–16-bit sRGB/RGB with explicit color description.
 - Full-size, non-subsampled components.
-- Images at least `2x2`.
+- Any non-zero size. A tile may not straddle a multiple of 32768 samples (the encoder writes one precinct per resolution), so images larger than that need `TilePolicy::Auto` or a fixed tile size that divides 32768.
 - Borrowed `u8`/`u16` planar or interleaved input through `ImageView`.
 - Interleaved RGB input through `Image::from_rgb_bytes`.
 - Grayscale input through `Image::from_gray_bytes`.
@@ -211,6 +219,41 @@ cargo run --release --features cli --bin jp2lam -- decode-zip book_jp2.zip book_
 ```
 
 The CLI reads normal image files through the optional `image` dependency, writes encoded JP2 output, and writes decoded pages as PNG files. `decode-zip` also walks nested ZIP entries and preserves the archive-relative output layout.
+
+## Coding Parameters
+
+`EncodeOptions::coding` holds the codestream parameters a caller can set. Every field defaults to letting the encoder choose.
+
+```rust
+use jp2lam::{CodingOptions, ComponentTransform, EncodeOptions, ProgressionOrder, RateControl};
+
+let options = EncodeOptions {
+    rate_control: Some(RateControl::CompressionRatio(20.0)),
+    coding: CodingOptions {
+        decomposition_levels: Some(5),     // NL; resolutions = NL + 1
+        code_block_size: Some((32, 32)),   // powers of two, 4..=1024, area <= 4096
+        progression_order: ProgressionOrder::Rpcl,
+        component_transform: ComponentTransform::Auto, // `None`: store RGB/YCbCr as given
+    },
+    ..EncodeOptions::default()
+};
+```
+
+The rest of the recipe is fixed, and every fixed choice is a legal Part 1 baseline: one quality layer, one precinct per subband, code-block style 0 (no arithmetic bypass, termination or segmentation-symbol switches), two guard bits, zero image and tile origins, one tile-part per tile, no SOP/EPH, ROI, POC, TLM or PLT markers, and Rsiz 0. With one layer and one precinct, LRCP, RLCP and RPCL write the same resolution-major packet sequence and PCRL and CPRL the same component-major one. Lossless RGB is coded without the reversible colour transform for now.
+
+Not encoded: signed samples, subsampled components, precision outside 8-16 bits, alpha, palettes, CMYK and YCbCr colour spaces (all of which the decoder reads), resolution boxes, and XML/UUID metadata. A JP2 file whose codestream exceeds 4 GiB uses the extended (`XLBox`) box length.
+
+## `image` Crate Integration
+
+With the `image` feature, `Jp2Encoder` implements `image::ImageEncoder` for `L8`, `L16`, `Rgb8` and `Rgb16` buffers, and `set_icc_profile` embeds a restricted (matrix-shaper) ICC profile:
+
+```rust,ignore
+let picture = image::open("page.png")?;
+let mut out = std::fs::File::create("page.jp2")?;
+picture.write_with_encoder(jp2lam::Jp2Encoder::new(&mut out))?; // lossless
+```
+
+`Jp2Encoder::with_options` takes any `EncodeOptions`.
 
 ## Batch API
 
@@ -276,20 +319,22 @@ The crate also has an explicit Annex B geometry layer for tiles, tile-components
 Default library build:
 
 ```toml
-jp2lam = "0.1"
+jp2lam = "0.3"
 ```
 
 Optional CLI:
 
 ```toml
-jp2lam = { version = "0.1", features = ["cli"] }
+jp2lam = { version = "0.3", features = ["cli"] }
 ```
 
 Available feature flags:
 
 | Feature    | Purpose                                             |
 | ---------- | --------------------------------------------------- |
-| `cli`      | Enables the command-line tools and image-file input |
+| `simd`     | Default. Portable SIMD (`wide`) for DWT and colour transforms |
+| `image`    | `Jp2Encoder`, an `image::ImageEncoder` implementation |
+| `cli`      | Enables the command-line tools and image-file input (implies `image`) |
 | `profile`  | Enables profiling hooks                             |
 | `counters` | Exposes Tier-1 and stage-level memory high-water counters |
 

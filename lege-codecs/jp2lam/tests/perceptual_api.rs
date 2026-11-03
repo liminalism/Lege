@@ -1,8 +1,9 @@
 //! Public perceptual encode path: score floor, refusal, and metric identity.
 
 use jp2lam::{
-    DisplayProfile, EncodeOptions, Image, METRIC_VERSION, OutputFormat, PerceptualEffort,
-    PerceptualTarget, RateControl, StreamEvaluator, decode_jp2, encode, last_achieved_score,
+    DisplayProfile, EncodeOptions, Image, Jp2LamError, METRIC_VERSION, OutputFormat,
+    PerceptualEffort, PerceptualTarget, RateControl, StreamEvaluator, decode_jp2, encode,
+    last_achieved_score,
 };
 
 fn gray_ramp(width: u32, height: u32) -> Image {
@@ -96,15 +97,36 @@ fn noisy_gray(width: u32, height: u32) -> Image {
     Image::from_gray_bytes(width, height, &data).expect("noise")
 }
 
+/// A floor of 100 asks for an identical image. Both quality forms resolve it
+/// to reversible coding, the only thing that meets it, instead of one form
+/// refusing it as an input error and the other as a missed target.
 #[test]
-fn infeasible_ssim_floor_is_not_ordinary_success() {
+fn a_floor_of_one_hundred_is_lossless_in_both_quality_forms() {
     let image = noisy_gray(48, 40);
-    let err = encode_perceptual(&image, 100.0, PerceptualEffort::Fast)
-        .expect_err("score 100 is lossless-only; 9/7 refuses it as SaturatedTop");
-    assert!(
-        err.is_perceptual_target_missed(),
-        "expected under-floor refusal, got {err}"
-    );
+    let lossless = encode(
+        &image,
+        &EncodeOptions {
+            rate_control: Some(RateControl::Lossless),
+            ..Default::default()
+        },
+    )
+    .expect("lossless");
+    let perceptual = encode_perceptual(&image, 100.0, PerceptualEffort::Fast).expect("score 100");
+    let quality = encode(
+        &image,
+        &EncodeOptions {
+            rate_control: Some(RateControl::Quality {
+                level: 100,
+                effort: PerceptualEffort::Fast,
+            }),
+            ..Default::default()
+        },
+    )
+    .expect("quality 100");
+    assert_eq!(perceptual, lossless);
+    assert_eq!(quality, lossless);
+    let decoded = jp2lam::decode_jp2(&perceptual).expect("decode");
+    assert_eq!(decoded.components[0].data, image.components[0].data);
 }
 
 #[test]
@@ -123,7 +145,7 @@ fn perceptual_score_outside_range_is_invalid_input_not_nyi() {
         },
     )
     .expect_err("invalid score");
-    assert!(!err.is_perceptual_not_implemented(), "{err}");
+    assert!(matches!(err, Jp2LamError::InvalidInput(_)), "{err}");
 }
 
 #[test]

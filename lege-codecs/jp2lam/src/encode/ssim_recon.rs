@@ -383,8 +383,13 @@ mod tests {
         let emit_plan = backend.emit_plan(&context.plan);
         let headers = build_main_header_segments(&emit_plan).expect("hdr");
         let shared = store.into_shared();
-        let tile_parts =
-            build_stored_tile_parts(&stored_tiles, selections.clone(), shared).expect("parts");
+        let tile_parts = build_stored_tile_parts(
+            &stored_tiles,
+            selections.clone(),
+            shared,
+            context.plan.progression_order,
+        )
+        .expect("parts");
         let stream = CodestreamParts {
             main_header_segments: headers,
             tile_parts,
