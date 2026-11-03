@@ -58,3 +58,5 @@ cargo check --manifest-path lege-pdf/pdf-integrity/Cargo.toml
 ```
 
 Renderer sweep history and the older write/print plans are in [../dev-notes/lege-pdf](../dev-notes/lege-pdf).
+
+The plan for publishing the engine as the `lege-pdf` crate (and the emitter as `lege-pdf-write`) is [CRATES-IO-PLAN.md](CRATES-IO-PLAN.md).
