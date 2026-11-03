@@ -106,8 +106,8 @@ fn rgba_and_gray_alpha_round_trip_losslessly_with_a_cdef_box() {
         assert_eq!(usize::from(alpha.component), channels - 1, "{label}");
         assert!(!alpha.premultiplied);
         // RGB keeps its colour transform; the alpha plane is outside it.
-        assert_eq!(
-            meta.codestream.cod.use_mct, false,
+        assert!(
+            !meta.codestream.cod.use_mct,
             "{label}: lossless RGB has no RCT yet"
         );
 
