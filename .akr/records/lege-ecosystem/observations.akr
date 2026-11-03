@@ -18,6 +18,25 @@ record lege-ecosystem.encode-quality.headsup-measurement-2026-08-11/1 : observat
     method observation
 }
 
+record lege-ecosystem.encode-quality.jp2lam-alpha-channel-20261103/1 : observation {
+    title "jp2lam encodes an alpha channel as a fourth/second component with a cdef box; ImageMagick cannot oracle translucent colour"
+    state verified
+    statement """
+        An image with one component more than its colour space has colour channels is encoded with the extra component as straight opacity: coded on its own outside the ICT (the transform and the per-component loaders now cover components 0..3 only), declared in a JP2 cdef box identical byte for byte to the one ImageMagick/OpenJPEG writes ((0,0,1),(1,0,2),(2,0,3),(3,1,0)), and reported by this crate's decoder as in_data_alpha. Lossless RGBA and gray+alpha round-trip exactly; lossy keeps use_mct on the colour planes; layers, tiles, bypass and borrowed views combine with it. Perceptual (SSIMULACRA2) targets reject alpha because the metric scores colour only.
+
+        ImageMagick is not usable as an oracle for the colour of translucent pixels: a lossless RGBA JP2 it encodes itself does not round-trip through its rgba: export (4193 of 4234 translucent pixels and all 24 opaque ones differ, identically for our file and its own), while -alpha extract reproduces the alpha plane exactly. The alpha test therefore checks the alpha plane exactly and that OpenJPEG's rgba: export of our file equals its export of ImageMagick's own lossless encode of the same pixels.
+        """
+    observed_at git:dd6747e0abb146e90bda4847cccef0069ec4d320
+    method command
+    watches [
+        "lege-codecs/jp2lam/src/jp2.rs",
+        "lege-codecs/jp2lam/src/model.rs",
+        "lege-codecs/jp2lam/src/plan/validate.rs",
+        "lege-codecs/jp2lam/tests/alpha.rs"
+    ]
+    author "Claude"
+}
+
 record lege-ecosystem.encode-quality.jp2lam-encoder-review-fixes-20261103/1 : observation {
     title "jp2lam encoder-review fixes: decoder 5/3 fallback bug, precinct limit, Lege facade misuse"
     state verified

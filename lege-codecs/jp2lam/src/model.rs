@@ -572,12 +572,26 @@ pub struct Component {
     pub dy: u32,
 }
 
+/// An owned image: one [`Component`] per colour channel of `colorspace`,
+/// optionally followed by one more component carrying opacity (straight,
+/// not premultiplied). A trailing alpha component is coded as its own
+/// codestream component, left out of any colour transform, and declared in
+/// the JP2 file's `cdef` box; see [`Image::from_rgba_bytes`] and
+/// [`Image::has_alpha`].
 #[derive(Debug, Clone)]
 pub struct Image {
     pub width: u32,
     pub height: u32,
     pub components: Vec<Component>,
     pub colorspace: ColorSpace,
+}
+
+impl Image {
+    /// Whether the last component is an opacity channel: one more component
+    /// than `colorspace` has colour channels.
+    pub fn has_alpha(&self) -> bool {
+        self.components.len() == self.colorspace.component_count() + 1
+    }
 }
 
 /// Borrowed component sample storage for high-resolution encoding views.
@@ -781,6 +795,61 @@ pub struct ImageView<'a> {
 }
 
 impl<'a> ImageView<'a> {
+    /// Whether the last component is an opacity channel (see
+    /// [`Image::has_alpha`]).
+    pub fn has_alpha(&self) -> bool {
+        self.components.len() == self.colorspace.component_count() + 1
+    }
+
+    /// Interleaved 8-bit gray plus alpha (2 bytes per pixel).
+    pub fn from_gray_alpha8_interleaved(
+        width: u32,
+        height: u32,
+        data: &'a [u8],
+    ) -> crate::error::Result<Self> {
+        validate_exact_len("gray-alpha8", data.len(), width, height, 2)?;
+        Self::interleaved_u8(width, height, data, 2, ColorSpace::Gray)
+    }
+
+    /// Interleaved 8-bit sRGB plus alpha (4 bytes per pixel, R-G-B-A order).
+    pub fn from_rgba8_interleaved(
+        width: u32,
+        height: u32,
+        data: &'a [u8],
+    ) -> crate::error::Result<Self> {
+        validate_exact_len("rgba8", data.len(), width, height, 4)?;
+        Self::interleaved_u8(width, height, data, 4, ColorSpace::Srgb)
+    }
+
+    fn interleaved_u8(
+        width: u32,
+        height: u32,
+        data: &'a [u8],
+        channels: usize,
+        colorspace: ColorSpace,
+    ) -> crate::error::Result<Self> {
+        let row_stride = (width as usize)
+            .checked_mul(channels)
+            .ok_or_else(|| invalid_input("interleaved row stride overflows usize"))?;
+        let components = (0..channels)
+            .map(|offset| {
+                ComponentView::new(
+                    ComponentSampleData::U8(data),
+                    offset,
+                    row_stride,
+                    channels,
+                    width,
+                    height,
+                    8,
+                    false,
+                    1,
+                    1,
+                )
+            })
+            .collect::<crate::error::Result<Vec<_>>>()?;
+        Self::from_planar_components(width, height, colorspace, components)
+    }
+
     pub fn from_gray8(width: u32, height: u32, data: &'a [u8]) -> crate::error::Result<Self> {
         validate_exact_len("gray8", data.len(), width, height, 1)?;
         Self::from_planar_components(
@@ -871,9 +940,11 @@ impl<'a> ImageView<'a> {
     ) -> crate::error::Result<Self> {
         validate_nonzero_dimensions(width, height)?;
         let expected_components = colorspace.component_count();
-        if components.len() != expected_components {
+        if components.len() != expected_components && components.len() != expected_components + 1 {
             return Err(invalid_input(format!(
-                "{colorspace:?} image view expects {expected_components} components, got {}",
+                "{colorspace:?} image view expects {expected_components} components, or {} with \
+                 an alpha channel, got {}",
+                expected_components + 1,
                 components.len()
             )));
         }
@@ -930,6 +1001,43 @@ impl Image {
         })
     }
 
+    /// Construct from interleaved sRGB plus alpha bytes (4 bytes per pixel,
+    /// R-G-B-A order); the alpha is straight (unassociated) opacity.
+    ///
+    /// `data.len()` must equal `width * height * 4`.
+    pub fn from_rgba_bytes(width: u32, height: u32, data: &[u8]) -> crate::error::Result<Self> {
+        validate_exact_len("RGBA", data.len(), width, height, 4)?;
+        Ok(Self {
+            width,
+            height,
+            components: deinterleave(data, 4)
+                .into_iter()
+                .map(|plane| make_component(plane, width, height))
+                .collect(),
+            colorspace: ColorSpace::Srgb,
+        })
+    }
+
+    /// Construct from interleaved gray plus alpha bytes (2 bytes per pixel).
+    ///
+    /// `data.len()` must equal `width * height * 2`.
+    pub fn from_gray_alpha_bytes(
+        width: u32,
+        height: u32,
+        data: &[u8],
+    ) -> crate::error::Result<Self> {
+        validate_exact_len("gray-alpha", data.len(), width, height, 2)?;
+        Ok(Self {
+            width,
+            height,
+            components: deinterleave(data, 2)
+                .into_iter()
+                .map(|plane| make_component(plane, width, height))
+                .collect(),
+            colorspace: ColorSpace::Gray,
+        })
+    }
+
     /// Construct from grayscale bytes (1 byte per pixel).
     ///
     /// `data.len()` must equal `width * height`.
@@ -947,6 +1055,17 @@ impl Image {
     pub fn as_view(&self) -> crate::error::Result<ImageView<'_>> {
         ImageView::from_image(self)
     }
+}
+
+fn deinterleave(data: &[u8], channels: usize) -> Vec<Vec<i32>> {
+    let pixels = data.len() / channels;
+    let mut planes = vec![Vec::with_capacity(pixels); channels];
+    for px in data.chunks_exact(channels) {
+        for (plane, &sample) in planes.iter_mut().zip(px) {
+            plane.push(i32::from(sample));
+        }
+    }
+    planes
 }
 
 fn make_component(data: Vec<i32>, width: u32, height: u32) -> Component {

@@ -13,8 +13,9 @@ use crate::model::{ColorEncoding, EncodeOptions, IccComponentModel, ImageView};
 ///
 /// Accepts `L8`, `L16`, `Rgb8` and `Rgb16` samples (16-bit samples in native
 /// endianness, as the `image` crate supplies them, coded at full 16-bit
-/// precision). Other colour types are reported as unsupported; alpha is not
-/// encoded by this crate.
+/// precision), and `La8` / `Rgba8` with the alpha channel coded as a
+/// straight-opacity component. Other colour types are reported as
+/// unsupported.
 ///
 /// ```no_run
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -78,7 +79,9 @@ impl<W: Write> ImageEncoder for Jp2Encoder<W> {
         let wide;
         let view = match color_type {
             ExtendedColorType::L8 => ImageView::from_gray8(width, height, buf),
+            ExtendedColorType::La8 => ImageView::from_gray_alpha8_interleaved(width, height, buf),
             ExtendedColorType::Rgb8 => ImageView::from_rgb8_interleaved(width, height, buf),
+            ExtendedColorType::Rgba8 => ImageView::from_rgba8_interleaved(width, height, buf),
             ExtendedColorType::L16 => {
                 wide = native_u16(buf);
                 ImageView::from_gray16(width, height, &wide, 16)
@@ -149,9 +152,28 @@ mod tests {
             assert_eq!(component.data, expected);
         }
 
+        let rgba: Vec<u8> = (0..4 * 3 * 4).map(|i| (i * 37 % 256) as u8).collect();
+        let mut out = Vec::new();
+        Jp2Encoder::new(&mut out)
+            .write_image(&rgba, 4, 3, ExtendedColorType::Rgba8)
+            .expect("Rgba8");
+        let meta = crate::inspect_jp2(&out).expect("inspect");
+        assert_eq!(meta.in_data_alpha.map(|a| a.component), Some(3));
+        let decoded = crate::decode_jp2(&out).expect("decode Rgba8");
+        assert_eq!(decoded.components.len(), 4);
+        for (channel, component) in decoded.components.iter().enumerate() {
+            let expected: Vec<i32> = rgba
+                .iter()
+                .skip(channel)
+                .step_by(4)
+                .map(|&v| i32::from(v))
+                .collect();
+            assert_eq!(component.data, expected);
+        }
+
         let err = Jp2Encoder::new(Vec::new())
-            .write_image(&[0; 16], 2, 2, ExtendedColorType::Rgba8)
-            .expect_err("alpha");
+            .write_image(&[0; 8], 2, 2, ExtendedColorType::Rgb32F)
+            .expect_err("float samples");
         assert!(matches!(err, image::ImageError::Unsupported(_)), "{err}");
     }
 }

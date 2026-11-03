@@ -10,7 +10,7 @@ The current goal is practical document-image interoperability first: a small Rus
 
 ## Highlights
 
-- Encode unsigned 8–16-bit grayscale or sRGB input from owned images or borrowed planar/interleaved views.
+- Encode unsigned 8–16-bit grayscale or sRGB input, with an optional alpha channel, from owned images or borrowed planar/interleaved views.
 - Write JP2 wrapper files or raw J2K codestreams.
 - Use explicit lossless, quality, target-byte, total-bpp, or compression-ratio rate control.
 - Choose decomposition levels, code-block size, progression order, quality layers, the six code-block coding switches, and whether RGB gets the component transform (`CodingOptions`).
@@ -187,6 +187,7 @@ Encoder input:
 
 - Unsigned 8–16-bit grayscale.
 - Unsigned 8–16-bit sRGB/RGB with explicit color description.
+- Either of those plus one straight-alpha component.
 - Full-size, non-subsampled components.
 - Any non-zero size. A tile may not straddle a multiple of 32768 samples (the encoder writes one precinct per resolution), so images larger than that need `TilePolicy::Auto` or a fixed tile size that divides 32768.
 - Borrowed `u8`/`u16` planar or interleaved input through `ImageView`.
@@ -253,11 +254,13 @@ Quality layers split each tile's packets so a reader can stop early: the final l
 
 The rest of the recipe is fixed, and every fixed choice is a legal Part 1 baseline: one precinct per subband, two guard bits, zero image and tile origins, one tile-part per tile, no SOP/EPH, ROI, POC, TLM or PLT markers, and Rsiz 0. Lossless RGB is coded without the reversible colour transform for now.
 
-Not encoded: signed samples, subsampled components, precision outside 8-16 bits, alpha, palettes, CMYK and YCbCr colour spaces (all of which the decoder reads), resolution boxes, and XML/UUID metadata. A JP2 file whose codestream exceeds 4 GiB uses the extended (`XLBox`) box length.
+An alpha channel is one more component after the colour ones (`Image::from_rgba_bytes`, `Image::from_gray_alpha_bytes`, `ImageView::from_rgba8_interleaved`, `ImageView::from_gray_alpha8_interleaved`, or any view whose component count is the colour count plus one). It is coded as its own codestream component outside the colour transform and declared as straight opacity in the JP2 `cdef` box, which this crate's decoder reports as `in_data_alpha`. The verified quality floor scores colour only, so images with alpha take `ApproxQuality`, `Lossless` or an exact-rate target.
+
+Not encoded: signed samples, subsampled components, precision outside 8-16 bits, premultiplied alpha, palettes, CMYK and YCbCr colour spaces (all of which the decoder reads), resolution boxes, and XML/UUID metadata. A JP2 file whose codestream exceeds 4 GiB uses the extended (`XLBox`) box length.
 
 ## `image` Crate Integration
 
-With the `image` feature, `Jp2Encoder` implements `image::ImageEncoder` for `L8`, `L16`, `Rgb8` and `Rgb16` buffers, and `set_icc_profile` embeds a restricted (matrix-shaper) ICC profile:
+With the `image` feature, `Jp2Encoder` implements `image::ImageEncoder` for `L8`, `L16`, `Rgb8`, `Rgb16`, `La8` and `Rgba8` buffers, and `set_icc_profile` embeds a restricted (matrix-shaper) ICC profile:
 
 ```rust,ignore
 let picture = image::open("page.png")?;

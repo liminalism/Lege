@@ -472,6 +472,13 @@ fn perceptual_or_lossless_below_metric_floor(
 }
 
 fn reject_unsupported_perceptual_source(image: &ImageView<'_>) -> Result<()> {
+    if image.has_alpha() {
+        return Err(Jp2LamError::InvalidInput(
+            "perceptual targeting does not score an alpha channel; use ApproxQuality, \
+             Lossless or an exact-rate target for images with alpha"
+                .into(),
+        ));
+    }
     let domain = image.colorspace.encoding_domain();
     if !matches!(domain, ColorSpace::Gray | ColorSpace::Srgb) {
         return Err(Jp2LamError::InvalidInput(format!(

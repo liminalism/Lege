@@ -667,7 +667,7 @@ impl NativeBackend {
             ));
         }
 
-        let encoded = if native_use_mct(&context.plan) {
+        let mut encoded = if native_use_mct(&context.plan) {
             self.prepare_tier1_encoded_mct_components_rect(
                 context,
                 tile.tile_index,
@@ -677,27 +677,34 @@ impl NativeBackend {
                 tile.height(),
             )?
         } else {
-            let mut encoded = Vec::with_capacity(context.plan.component_count as usize);
-            for (component_index, component) in context.plan.components.iter().enumerate() {
-                let tc = tile_component_rect(&tile, component_index as u16, component);
-                if tc.width() == 0 || tc.height() == 0 {
-                    return Err(Jp2LamError::EncodeFailed(format!(
-                        "tile {} component {component_index} has empty tile-component extent",
-                        tile.tile_index
-                    )));
-                }
-                encoded.push(self.prepare_tier1_encoded_component_rect(
-                    context,
-                    tile.tile_index,
-                    component_index,
-                    tc.x0,
-                    tc.y0,
-                    tc.width(),
-                    tc.height(),
-                )?);
-            }
-            encoded
+            Vec::with_capacity(context.plan.component_count as usize)
         };
+        // Components the transform did not cover (all of them without MCT,
+        // an alpha channel with it) are coded on their own.
+        for (component_index, component) in context
+            .plan
+            .components
+            .iter()
+            .enumerate()
+            .skip(encoded.len())
+        {
+            let tc = tile_component_rect(&tile, component_index as u16, component);
+            if tc.width() == 0 || tc.height() == 0 {
+                return Err(Jp2LamError::EncodeFailed(format!(
+                    "tile {} component {component_index} has empty tile-component extent",
+                    tile.tile_index
+                )));
+            }
+            encoded.push(self.prepare_tier1_encoded_component_rect(
+                context,
+                tile.tile_index,
+                component_index,
+                tc.x0,
+                tc.y0,
+                tc.width(),
+                tc.height(),
+            )?);
+        }
 
         let selections = all_pass_selections(&encoded);
         t2::build_tile_part_payload_for_tile_components_owned(
@@ -726,8 +733,11 @@ impl NativeBackend {
             ));
         }
 
-        if native_use_mct(&context.plan) {
-            let mut stored = Vec::with_capacity(3);
+        // The multiple-component transform covers components 0..3 (Annex
+        // G); any component after them - an alpha channel - is coded on its
+        // own like a gray plane.
+        let mut stored = Vec::with_capacity(context.plan.component_count as usize);
+        let first_plain = if native_use_mct(&context.plan) {
             self.visit_tier1_encoded_mct_components_rect(
                 context,
                 tile.tile_index,
@@ -740,11 +750,14 @@ impl NativeBackend {
                     Ok(())
                 },
             )?;
-            return Ok(stored);
-        }
+            3
+        } else {
+            0
+        };
 
-        let mut stored = Vec::with_capacity(context.plan.component_count as usize);
-        for (component_index, component) in context.plan.components.iter().enumerate() {
+        for (component_index, component) in
+            context.plan.components.iter().enumerate().skip(first_plain)
+        {
             let tc = tile_component_rect(&tile, component_index as u16, component);
             if tc.width() == 0 || tc.height() == 0 {
                 return Err(Jp2LamError::EncodeFailed(format!(
@@ -1312,7 +1325,9 @@ fn irreversible_input_component_rect(
     width: u32,
     height: u32,
 ) -> Result<Vec<f32>> {
-    if !native_use_mct(&context.plan) {
+    // The colour transform covers components 0..3; an alpha component past
+    // them is level-shifted on its own.
+    if !native_use_mct(&context.plan) || component_index >= 3 {
         let source = context.load_component_rect_i32(component_index, x0, y0, width, height)?;
         let mut out = vec![0.0f32; source.len()];
         let precision = SamplePrecision::new(context.plan.components[component_index].precision)?;
@@ -1342,9 +1357,11 @@ impl IctTileInputs {
         width: u32,
         height: u32,
     ) -> Result<Self> {
-        if context.plan.component_count != 3 {
+        // The transform covers components 0..3; a fourth (alpha) is coded
+        // outside it.
+        if context.plan.component_count < 3 {
             return Err(Jp2LamError::EncodeFailed(
-                "irreversible MCT requires exactly 3 components".to_string(),
+                "irreversible MCT requires three colour components".to_string(),
             ));
         }
         let r = context.load_component_rect_i32(0, x0, y0, width, height)?;
@@ -1393,16 +1410,16 @@ fn reversible_input_component_rect(
     width: u32,
     height: u32,
 ) -> Result<Vec<i32>> {
-    if !native_use_mct(&context.plan) {
+    if !native_use_mct(&context.plan) || component_index >= 3 {
         let source = context.load_component_rect_i32(component_index, x0, y0, width, height)?;
         let mut out = vec![0i32; source.len()];
         let precision = SamplePrecision::new(context.plan.components[component_index].precision)?;
         (PRIMITIVES.color.level_shift_i32)(&source, precision.unsigned_level_shift(), &mut out);
         return Ok(out);
     }
-    if context.plan.component_count != 3 {
+    if context.plan.component_count < 3 {
         return Err(Jp2LamError::EncodeFailed(
-            "reversible MCT requires exactly 3 components".to_string(),
+            "reversible MCT requires three colour components".to_string(),
         ));
     }
     let r = context.load_component_rect_i32(0, x0, y0, width, height)?;

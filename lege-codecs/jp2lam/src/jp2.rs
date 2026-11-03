@@ -1,5 +1,5 @@
 use crate::error::{Jp2LamError, Result};
-use crate::model::{ColorEncoding, ComponentView, ImageView};
+use crate::model::{ColorEncoding, ComponentView, IccComponentModel, ImageView};
 use std::io::Write;
 
 const JP2_SIGNATURE_BOX_LEN: u32 = 12;
@@ -51,7 +51,9 @@ fn wrap_codestream_metadata(
     let (shared_bpc, bpcc) = jp2_component_depths(components)?;
     let bpcc_box_len = bpcc.as_ref().map_or(0, |values| 8 + values.len() as u32);
     let color_box_len = color_spec_box_len(color_encoding)?;
-    let jp2_header_box_len = 8 + JP2_IMAGE_HEADER_BOX_LEN + bpcc_box_len + color_box_len;
+    let cdef = channel_definition_box(components.len(), color_encoding);
+    let jp2_header_box_len =
+        8 + JP2_IMAGE_HEADER_BOX_LEN + bpcc_box_len + color_box_len + cdef.len() as u32;
     let total_len = JP2_SIGNATURE_BOX_LEN as usize
         + JP2_FILE_TYPE_BOX_LEN as usize
         + jp2_header_box_len as usize
@@ -84,6 +86,7 @@ fn wrap_codestream_metadata(
     }
 
     write_color_spec(&mut out, color_encoding)?;
+    out.extend_from_slice(&cdef);
 
     out.extend_from_slice(&codestream_header);
     out.extend_from_slice(codestream);
@@ -103,7 +106,9 @@ fn write_jp2_header_metadata<W: Write>(
     let (shared_bpc, bpcc) = jp2_component_depths(components)?;
     let bpcc_box_len = bpcc.as_ref().map_or(0, |values| 8 + values.len() as u32);
     let color_box_len = color_spec_box_len(color_encoding)?;
-    let jp2_header_box_len = 8 + JP2_IMAGE_HEADER_BOX_LEN + bpcc_box_len + color_box_len;
+    let cdef = channel_definition_box(components.len(), color_encoding);
+    let jp2_header_box_len =
+        8 + JP2_IMAGE_HEADER_BOX_LEN + bpcc_box_len + color_box_len + cdef.len() as u32;
 
     write_box_header_to(writer, JP2_SIGNATURE_BOX_LEN, b"jP  ")?;
     write_all(writer, &[0x0d, 0x0a, 0x87, 0x0a])?;
@@ -127,8 +132,51 @@ fn write_jp2_header_metadata<W: Write>(
     }
 
     write_color_spec_to(writer, color_encoding)?;
+    write_all(writer, &cdef)?;
 
     write_all(writer, &codestream_header)
+}
+
+/// Colour channels the colour specification describes; a component beyond
+/// them is an opacity channel.
+fn colour_channel_count(color_encoding: &ColorEncoding) -> usize {
+    match color_encoding {
+        ColorEncoding::Gray => 1,
+        ColorEncoding::Srgb => 3,
+        ColorEncoding::Cmyk => 4,
+        ColorEncoding::IccProfile {
+            component_model: IccComponentModel::Gray,
+            ..
+        } => 1,
+        ColorEncoding::IccProfile {
+            component_model: IccComponentModel::Rgb,
+            ..
+        } => 3,
+    }
+}
+
+/// The channel definition box (I.5.3.6) when the image carries an alpha
+/// component: colour channels keep their default association and the last
+/// component is straight opacity for the whole image (`Typ` 1, `Asoc` 0).
+/// Without alpha the default definition applies and no box is written.
+fn channel_definition_box(component_count: usize, color_encoding: &ColorEncoding) -> Vec<u8> {
+    let colour = colour_channel_count(color_encoding);
+    if component_count != colour + 1 {
+        return Vec::new();
+    }
+    let entries = component_count as u16;
+    let mut out = Vec::with_capacity(10 + 6 * component_count);
+    write_box_header(&mut out, 10 + 6 * entries as u32, b"cdef");
+    out.extend_from_slice(&entries.to_be_bytes());
+    for channel in 0..colour as u16 {
+        out.extend_from_slice(&channel.to_be_bytes());
+        out.extend_from_slice(&0u16.to_be_bytes());
+        out.extend_from_slice(&(channel + 1).to_be_bytes());
+    }
+    out.extend_from_slice(&(colour as u16).to_be_bytes());
+    out.extend_from_slice(&1u16.to_be_bytes());
+    out.extend_from_slice(&0u16.to_be_bytes());
+    out
 }
 
 /// ISO/IEC 15444-1 Annex I.5.3.1/I.5.3.2: BPC is `precision - 1`
