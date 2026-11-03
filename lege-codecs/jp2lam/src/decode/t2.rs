@@ -12,7 +12,7 @@ use std::time::Instant;
 
 use crate::decode::DecodeLimits;
 use crate::error::{Jp2LamError, Result};
-use crate::j2k::decode_markers::{CodestreamHeader, ProgressionOrder};
+use crate::j2k::decode_markers::{CodeBlockStyle, CodestreamHeader, ProgressionOrder};
 use crate::plan::BandOrientation;
 
 const TGT_NO_PARENT: u32 = u32::MAX;
@@ -141,6 +141,9 @@ struct BlockState {
     included: bool,
     numlenbits: u32,
     zero_bitplanes: Option<u32>,
+    /// Coding passes contributed so far, which fixes where the next
+    /// contribution's codeword terminations fall (Table D.9).
+    passes: u32,
 }
 #[derive(Debug, Clone)]
 struct Contribution {
@@ -168,6 +171,9 @@ impl Contribution {
 struct ContributionSegment {
     passes: u32,
     length: usize,
+    /// Whether the codeword terminates after this segment's last pass. An
+    /// unterminated tail continues in the block's next layer contribution.
+    terminated: bool,
 }
 
 /// One value inline for the overwhelmingly common case, spilling only when
@@ -255,7 +261,7 @@ pub(crate) struct TilePacketDecoder<'a> {
     band_lookup: Vec<Vec<Vec<usize>>>,
     sop_markers: bool,
     eph_markers: bool,
-    terminate_each_pass: bool,
+    code_block_style: CodeBlockStyle,
     next_sop_sequence: u16,
     packet_positions: PacketProgression,
     next_packet_index: usize,
@@ -576,7 +582,7 @@ impl<'a> TilePacketDecoder<'a> {
             bands,
             sop_markers: header.cod.sop_markers,
             eph_markers: header.cod.eph_markers,
-            terminate_each_pass: header.cod.code_block_style.terminate_each_pass,
+            code_block_style: header.cod.code_block_style,
             next_sop_sequence: 0,
             packet_positions,
             next_packet_index: 0,
@@ -642,7 +648,7 @@ impl<'a> TilePacketDecoder<'a> {
                         packet.layer,
                         packet.precinct,
                         band_index,
-                        self.terminate_each_pass,
+                        self.code_block_style,
                         &mut self.bands,
                         &mut contributions,
                     )?;
@@ -884,6 +890,7 @@ impl<'a> TilePacketDecoder<'a> {
                 if retain {
                     let merged = MergedSegment {
                         passes: segment.passes,
+                        terminated: segment.terminated,
                         chunks: InlineValues::One(data),
                     };
                     if let Some(new_segments) = &mut new_segments {
@@ -904,21 +911,22 @@ impl<'a> TilePacketDecoder<'a> {
                 Entry::Occupied(mut slot) => {
                     let existing = slot.get_mut();
                     existing.passes += contribution.passes;
-                    if self.terminate_each_pass {
-                        existing.segments.try_extend(new_segments)?;
-                    } else {
-                        let segment = existing
+                    // A segment left open by the previous layer continues
+                    // with this layer's first piece; every piece after a
+                    // termination starts a segment of its own.
+                    for piece in new_segments.into_vec() {
+                        let open = existing
                             .segments
                             .last_mut()
-                            .expect("included code-block has one MQ segment");
-                        segment.passes += contribution.passes;
-                        let new_segment = match new_segments {
-                            InlineValues::One(segment) => segment,
-                            InlineValues::Many(_) => {
-                                unreachable!("unterminated contribution has one segment")
+                            .filter(|segment| !segment.terminated);
+                        match open {
+                            Some(segment) => {
+                                segment.passes += piece.passes;
+                                segment.terminated = piece.terminated;
+                                segment.chunks.try_extend(piece.chunks)?;
                             }
-                        };
-                        segment.chunks.try_extend(new_segment.chunks)?;
+                            None => existing.segments.try_push(piece)?,
+                        }
                     }
                 }
                 Entry::Vacant(slot) => {
@@ -980,6 +988,8 @@ struct MergedBlock<'a> {
 #[derive(Debug, Clone)]
 struct MergedSegment<'a> {
     passes: u32,
+    /// False while the segment's codeword is still open to a later layer.
+    terminated: bool,
     chunks: InlineValues<&'a [u8]>,
 }
 
@@ -1009,16 +1019,6 @@ fn validate_packet_scope(header: &CodestreamHeader) -> Result<()> {
             }
         }
     }
-    // Segmentation symbols are handled entirely inside Tier-1 (they add four
-    // UNIFORM-context symbols at each cleanup pass) and leave packet
-    // segmentation untouched, so they are permitted here. The remaining
-    // styles do change how passes are segmented into codeword segments,
-    // which this concatenating parser does not model.
-    if header.cod.code_block_style.bypass {
-        return Err(invalid(
-            "selective arithmetic bypass packet segmentation is unsupported",
-        ));
-    }
     Ok(())
 }
 
@@ -1027,7 +1027,7 @@ fn read_band_contributions(
     layer: u16,
     precinct_index: usize,
     band_index: usize,
-    terminate_each_pass: bool,
+    style: CodeBlockStyle,
     bands: &mut [BandState],
     contributions: &mut Vec<Contribution>,
 ) -> Result<()> {
@@ -1072,41 +1072,48 @@ fn read_band_contributions(
             .numlenbits
             .checked_add(increment)
             .ok_or_else(|| invalid("codeword length-bit count overflow"))?;
-        let segments = if terminate_each_pass {
-            let segment_count =
-                usize::try_from(passes).map_err(|_| invalid("coding-pass count exceeds usize"))?;
-            let len_bits = band.blocks[block_index]
-                .numlenbits
-                .checked_add(floor_log2(1))
-                .ok_or_else(|| invalid("codeword segment length-bit count overflow"))?;
-            if segment_count == 1 {
-                InlineValues::One(ContributionSegment {
-                    passes: 1,
-                    length: bio.read_bits_usize(len_bits)?,
-                })
-            } else {
-                let mut segments = Vec::new();
-                segments
-                    .try_reserve_exact(segment_count)
-                    .map_err(|_| invalid("codeword contribution allocation failed"))?;
-                for _ in 0..segment_count {
-                    segments.push(ContributionSegment {
-                        passes: 1,
-                        length: bio.read_bits_usize(len_bits)?,
-                    });
-                }
-                InlineValues::Many(segments)
-            }
-        } else {
-            let len_bits = band.blocks[block_index]
-                .numlenbits
-                .checked_add(floor_log2(passes))
-                .ok_or_else(|| invalid("codeword segment length-bit count overflow"))?;
+        // B.10.7: one length per codeword segment the contribution touches.
+        // Terminations fall where the code-block style puts them (every
+        // pass with TERMALL, the Table D.9 points with bypass); a run that
+        // reaches the end of the contribution without one stays open for the
+        // next layer.
+        let first_pass = band.blocks[block_index].passes;
+        let mut segments: InlineValues<ContributionSegment> =
             InlineValues::One(ContributionSegment {
-                passes,
-                length: bio.read_bits_usize(len_bits)?,
-            })
-        };
+                passes: 0,
+                length: 0,
+                terminated: false,
+            });
+        let mut first = true;
+        let mut run = 0u32;
+        for offset in 0..passes {
+            run += 1;
+            let index = first_pass
+                .checked_add(offset)
+                .ok_or_else(|| invalid("coding-pass index overflow"))?;
+            let terminated = style.pass_is_terminated(index);
+            if terminated || offset + 1 == passes {
+                let len_bits = band.blocks[block_index]
+                    .numlenbits
+                    .checked_add(floor_log2(run))
+                    .ok_or_else(|| invalid("codeword segment length-bit count overflow"))?;
+                let segment = ContributionSegment {
+                    passes: run,
+                    length: bio.read_bits_usize(len_bits)?,
+                    terminated,
+                };
+                if first {
+                    segments = InlineValues::One(segment);
+                    first = false;
+                } else {
+                    segments.try_push(segment)?;
+                }
+                run = 0;
+            }
+        }
+        band.blocks[block_index].passes = first_pass
+            .checked_add(passes)
+            .ok_or_else(|| invalid("coding-pass count overflow"))?;
         band.blocks[block_index].included = true;
         contributions.push(Contribution {
             band_index,
@@ -1513,6 +1520,7 @@ fn build_precinct_band(
                         included: false,
                         numlenbits: 3,
                         zero_bitplanes: None,
+                        passes: 0,
                     });
                 }
             }

@@ -5,7 +5,7 @@
 
 use crate::error::{Jp2LamError, Result};
 use crate::j2k::decode_markers::{CodeBlockStyle, CodestreamHeader, WaveletTransform};
-use crate::mq::{MqDecoder, T1_CTXNO_AGG, T1_CTXNO_UNI, T1_CTXNO_ZC};
+use crate::mq::{MqDecoder, RawDecoder, T1_CTXNO_AGG, T1_CTXNO_UNI, T1_CTXNO_ZC};
 use crate::plan::BandOrientation;
 use crate::tier1::consts::{T1_SIGMA_S, T1_SIGMA_SE, T1_SIGMA_SW};
 use crate::tier1::flags::FlagGrid;
@@ -527,13 +527,17 @@ pub(crate) fn decode_tile_coefficients(
 
 /// Consume the segmentation symbol that closes a cleanup pass: four symbols
 /// coded with the UNIFORM context spelling `0b1010` (ISO/IEC 15444-1 D.5).
-/// A different value means the codeword segment has desynchronized.
-fn read_segmentation_symbol(decoder: &mut MqDecoder<'_>) -> Result<()> {
+/// A different value means the codeword has desynchronized - unless this is
+/// the last pass the stream carries for the block: a rate-truncated codeword
+/// ends mid-pass, its final symbols are the decoder's 0xff fill, and the
+/// marker after them is the first thing to go. That tail is the truncation
+/// the encoder chose, not an error, so only an earlier mismatch is one.
+fn read_segmentation_symbol(decoder: &mut MqDecoder<'_>, last_pass: bool) -> Result<()> {
     let mut value = 0u8;
     for _ in 0..4 {
         value = (value << 1) | decoder.decode_with_ctx(T1_CTXNO_UNI);
     }
-    if value != 0xA {
+    if value != 0xA && !last_pass {
         return Err(invalid(format!(
             "segmentation symbol mismatch: expected 0xA, found {value:#x}"
         )));
@@ -705,6 +709,50 @@ fn decode_codeblock_segments_into(
         if segment.passes == 0 {
             return Err(invalid("codeword segment carries zero coding passes"));
         }
+        // D.6: a raw segment holds significance and refinement passes of the
+        // fifth and later significant bit-planes; MQ contexts are untouched.
+        if style.pass_is_raw(pass_index) {
+            let mut raw = RawDecoder::new(&segment.data);
+            for _ in 0..segment.passes {
+                let (pass_kind, bitplane) = pass_kind_and_bitplane(pass_index, top)?;
+                let pass_start = stats.start();
+                match pass_kind {
+                    PassKind::Significance => sigpass_decode_raw(
+                        &mut raw,
+                        bitplane,
+                        &mut scratch.flags,
+                        &mut scratch.coefficients,
+                        width,
+                        height,
+                        style.vertical_causal,
+                    ),
+                    PassKind::Refinement => refpass_decode_raw(
+                        &mut raw,
+                        bitplane,
+                        &mut scratch.flags,
+                        &mut scratch.coefficients,
+                        width,
+                        height,
+                    ),
+                    PassKind::Cleanup => {
+                        return Err(invalid("cleanup pass inside a raw bypass codeword segment"));
+                    }
+                }
+                stats.finish(pass_start, |stats, elapsed| match pass_kind {
+                    PassKind::Significance => {
+                        stats.tier1_significance_ns =
+                            stats.tier1_significance_ns.saturating_add(elapsed);
+                    }
+                    PassKind::Refinement => {
+                        stats.tier1_refinement_ns =
+                            stats.tier1_refinement_ns.saturating_add(elapsed);
+                    }
+                    PassKind::Cleanup => {}
+                });
+                pass_index += 1;
+            }
+            continue;
+        }
         let mut decoder = match contexts {
             Some(saved) if !style.reset_contexts => {
                 MqDecoder::new_with_contexts(&segment.data, saved)
@@ -714,6 +762,9 @@ fn decode_codeblock_segments_into(
 
         for _ in 0..segment.passes {
             let (pass_kind, bitplane) = pass_kind_and_bitplane(pass_index, top)?;
+            if style.pass_is_raw(pass_index) {
+                return Err(invalid("bypass-coded pass inside an MQ codeword segment"));
+            }
             let pass_start = stats.start();
             match pass_kind {
                 PassKind::Significance => sigpass_decode(
@@ -747,7 +798,7 @@ fn decode_codeblock_segments_into(
                         style.vertical_causal,
                     );
                     if style.segmentation_symbols {
-                        read_segmentation_symbol(&mut decoder)?;
+                        read_segmentation_symbol(&mut decoder, pass_index + 1 == pass_count)?;
                     }
                     debug_assert!(
                         !scratch.flags.has_visited(),
@@ -891,6 +942,92 @@ fn sigpass_step(
             y,
             vertical_causal,
         );
+    }
+}
+
+/// Raw significance pass (D.6): the same traversal and membership test as
+/// [`sigpass_decode`], with the significance bit and then the sign read as
+/// plain bits, no context and no sign prediction.
+fn sigpass_decode_raw(
+    raw: &mut RawDecoder<'_>,
+    bitplane: u8,
+    flags: &mut FlagGrid,
+    magnitudes: &mut [i32],
+    width: usize,
+    height: usize,
+    vertical_causal: bool,
+) {
+    let one = 1i32 << bitplane;
+    let mut step = |x: usize, y: usize, flags: &mut FlagGrid, magnitudes: &mut [i32]| {
+        if flags.is_significant(x, y) || neighbour_mask(flags, x, y, vertical_causal) == 0 {
+            return;
+        }
+        flags.mark_visited(x, y);
+        if raw.decode_bit() != 0 {
+            let sign_bit = raw.decode_bit();
+            magnitudes[y * width + x] = one | (one >> 1);
+            flags.mark_significant(x, y, sign_bit);
+        }
+    };
+    let full_stripes = height / 4;
+    for k in (0..full_stripes * 4).step_by(4) {
+        for x in 0..width {
+            for ci in 0..4 {
+                step(x, k + ci, flags, magnitudes);
+            }
+        }
+    }
+    let rem = height % 4;
+    if rem > 0 {
+        let k = full_stripes * 4;
+        for x in 0..width {
+            for ci in 0..rem {
+                step(x, k + ci, flags, magnitudes);
+            }
+        }
+    }
+}
+
+/// Raw magnitude refinement pass (D.6): [`refpass_decode`] with the
+/// refinement bit read as a plain bit.
+fn refpass_decode_raw(
+    raw: &mut RawDecoder<'_>,
+    bitplane: u8,
+    flags: &mut FlagGrid,
+    magnitudes: &mut [i32],
+    width: usize,
+    height: usize,
+) {
+    let one = 1i32 << bitplane;
+    let half = one >> 1;
+    let mut step = |x: usize, y: usize, flags: &mut FlagGrid, magnitudes: &mut [i32]| {
+        if !flags.is_significant(x, y) || flags.is_visited(x, y) {
+            return;
+        }
+        let idx = y * width + x;
+        if raw.decode_bit() != 0 {
+            magnitudes[idx] += half;
+        } else {
+            magnitudes[idx] -= one - half;
+        }
+        flags.mark_refined(x, y);
+    };
+    let full_stripes = height / 4;
+    for k in (0..full_stripes * 4).step_by(4) {
+        for x in 0..width {
+            for ci in 0..4 {
+                step(x, k + ci, flags, magnitudes);
+            }
+        }
+    }
+    let rem = height % 4;
+    if rem > 0 {
+        let k = full_stripes * 4;
+        for x in 0..width {
+            for ci in 0..rem {
+                step(x, k + ci, flags, magnitudes);
+            }
+        }
     }
 }
 

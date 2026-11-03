@@ -1,4 +1,4 @@
-use crate::j2k::decode_markers::ProgressionOrder;
+use crate::j2k::decode_markers::{CodeBlockStyle, ProgressionOrder};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ColorSpace {
@@ -384,10 +384,8 @@ pub enum ComponentTransform {
 ///
 /// Fields that are not here are fixed by the encoder and are legal Part 1
 /// choices: one precinct per subband (Scod precinct bit clear, so 2^15
-/// precincts), code-block style 0 (no bypass, reset, restart, causal,
-/// predictable termination or segmentation symbols), 2 guard bits, a zero
-/// image and tile origin, one tile-part per tile, no SOP/EPH, ROI, POC, TLM
-/// or PLT markers, and Rsiz 0.
+/// precincts), 2 guard bits, a zero image and tile origin, one tile-part per
+/// tile, no SOP/EPH, ROI, POC, TLM or PLT markers, and Rsiz 0.
 /// How many quality layers a tile's packets are split into (Annex B.6).
 ///
 /// The final layer always completes the stream the rate control chose; the
@@ -447,6 +445,9 @@ pub struct CodingOptions {
     pub component_transform: ComponentTransform,
     /// Quality layers per tile; one by default.
     pub layers: QualityLayers,
+    /// Code-block coding switches (bypass, reset, termall, causal,
+    /// predictable termination, segmentation symbols); all off by default.
+    pub code_block_style: CodeBlockStyle,
 }
 
 impl CodingOptions {

@@ -46,7 +46,7 @@ pub use encode::{
 pub use error::{Jp2LamError, Result};
 #[cfg(feature = "image")]
 pub use image_encoder::Jp2Encoder;
-pub use j2k::decode_markers::ProgressionOrder;
+pub use j2k::decode_markers::{CodeBlockStyle, ProgressionOrder};
 /// Pinned production SSIMULACRA2 identity, shared with JPXL.
 ///
 /// A perceptual encode is only comparable across codecs when both score with

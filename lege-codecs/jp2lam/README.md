@@ -13,7 +13,7 @@ The current goal is practical document-image interoperability first: a small Rus
 - Encode unsigned 8–16-bit grayscale or sRGB input from owned images or borrowed planar/interleaved views.
 - Write JP2 wrapper files or raw J2K codestreams.
 - Use explicit lossless, quality, target-byte, total-bpp, or compression-ratio rate control.
-- Choose decomposition levels, code-block size, progression order, quality layers, and whether RGB gets the component transform (`CodingOptions`).
+- Choose decomposition levels, code-block size, progression order, quality layers, the six code-block coding switches, and whether RGB gets the component transform (`CodingOptions`).
 - Bound high-resolution work with fixed/automatic tiling and RAM-to-temporary-file code-block spill.
 - Label enumerated grayscale/sRGB explicitly, or embed a restricted (matrix-shaper) ICC profile exactly; anything else is refused rather than mislabelled.
 - Decode Internet Archive-style JP2 page images into the crate's native `Image` model.
@@ -162,10 +162,10 @@ The decoder is intentionally focused. It currently targets JP2 wrapper files and
 - Unsigned 8–16-bit grayscale, RGB, CMYK, and palette-mapped images.
 - Single or multi-tile codestreams, including multiple packet-boundary tile-parts per tile and Annex B.11 interleaving between tiles. Per-tile coding-style and quantization overrides remain unsupported.
 - All five Part 1 progression orders, explicit precinct partitions, and SOP/EPH packet delimiters.
-- MQ code-block styles including context reset, per-pass termination, vertical-causal contexts, predictable termination, and segmentation symbols.
+- All six code-block coding switches: selective arithmetic bypass, context reset, per-pass termination, vertical-causal contexts, predictable termination, and segmentation symbols.
 - Common Archive.org `_jp2.zip` and extracted `*_jp2/` page-image layouts through the CLI.
 
-This is not a universal JPEG 2000 or JPX decoder yet. Selective arithmetic bypass, arbitrary ICC profiles, multiple codestream boxes, and other out-of-scope features fail explicitly.
+This is not a universal JPEG 2000 or JPX decoder yet. Arbitrary ICC profiles, multiple codestream boxes, and other out-of-scope features fail explicitly.
 
 ## Quality Guide
 
@@ -226,7 +226,8 @@ The CLI reads normal image files through the optional `image` dependency, writes
 
 ```rust
 use jp2lam::{
-    CodingOptions, ComponentTransform, EncodeOptions, ProgressionOrder, QualityLayers, RateControl,
+    CodeBlockStyle, CodingOptions, ComponentTransform, EncodeOptions, ProgressionOrder,
+    QualityLayers, RateControl,
 };
 
 let options = EncodeOptions {
@@ -237,6 +238,10 @@ let options = EncodeOptions {
         progression_order: ProgressionOrder::Rpcl,
         component_transform: ComponentTransform::Auto, // `None`: store RGB/YCbCr as given
         layers: QualityLayers::Count(4),  // or Ratios(vec![40.0, 20.0]) below the final rate
+        code_block_style: CodeBlockStyle {
+            bypass: true,                  // raw-coded lower passes: faster, slightly larger
+            ..CodeBlockStyle::default()    // reset, termall, causal, pterm, segsym likewise
+        },
     },
     ..EncodeOptions::default()
 };
@@ -244,7 +249,9 @@ let options = EncodeOptions {
 
 Quality layers split each tile's packets so a reader can stop early: the final layer completes the stream the rate control chose, and each layer below it is the rate-distortion-optimal prefix of that stream for a smaller budget (PCRD run again on the final selection), so the decoded picture is the single-layer one and only packet headers are added. `Count(n)` places boundaries at geometric fractions of the final size; `Ratios` names compression ratios for the layers below the final one, the way OpenJPEG's `-r` list reads. On a 256x192 test image at `ApproxQuality(85)`, `Count(4)` decoded layer by layer with OpenJPEG at 17.9, 20.9, 28.0 and 38.5 dB for 83 extra bytes.
 
-The rest of the recipe is fixed, and every fixed choice is a legal Part 1 baseline: one precinct per subband, code-block style 0 (no arithmetic bypass, termination or segmentation-symbol switches), two guard bits, zero image and tile origins, one tile-part per tile, no SOP/EPH, ROI, POC, TLM or PLT markers, and Rsiz 0. Lossless RGB is coded without the reversible colour transform for now.
+`code_block_style` sets the six Annex D switches, written to COD and honoured per pass: with `bypass`, the significance and refinement passes of the fifth and later bit-planes are raw bits in their own codeword segments (Table D.9); `terminate_each_pass` makes every pass a segment; `reset_contexts`, `vertical_causal`, `predictable_termination` and `segmentation_symbols` do what their names say. The all-off style is the tuned single-segment encoder; any switch takes the general pass loop. Every combination round-trips through this crate's decoder and OpenJPEG, lossless and lossy, with quality layers and tiles.
+
+The rest of the recipe is fixed, and every fixed choice is a legal Part 1 baseline: one precinct per subband, two guard bits, zero image and tile origins, one tile-part per tile, no SOP/EPH, ROI, POC, TLM or PLT markers, and Rsiz 0. Lossless RGB is coded without the reversible colour transform for now.
 
 Not encoded: signed samples, subsampled components, precision outside 8-16 bits, alpha, palettes, CMYK and YCbCr colour spaces (all of which the decoder reads), resolution boxes, and XML/UUID metadata. A JP2 file whose codestream exceeds 4 GiB uses the extended (`XLBox`) box length.
 

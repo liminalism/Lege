@@ -273,7 +273,7 @@ fn combined_options_survive_the_tiled_lossy_path() {
         code_block_size: Some((32, 32)),
         progression_order: ProgressionOrder::Rpcl,
         component_transform: ComponentTransform::Auto,
-        layers: QualityLayers::One,
+        ..CodingOptions::default()
     };
     let options = EncodeOptions {
         tile_policy: TilePolicy::Fixed {

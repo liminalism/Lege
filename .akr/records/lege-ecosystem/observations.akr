@@ -39,6 +39,28 @@ record lege-ecosystem.encode-quality.jp2lam-encoder-review-fixes-20261103/1 : ob
     author "Claude"
 }
 
+record lege-ecosystem.encode-quality.jp2lam-layers-and-code-block-styles-20261103/1 : observation {
+    title "jp2lam gained quality layers and the six code-block coding switches; both verified against OpenJPEG"
+    state verified
+    statement """
+        Quality layers (CodingOptions::layers): the final layer is the rate control's own selection and each lower layer is PCRD rerun on measured-MSE curves truncated at the final pass counts, so layers nest and the decoded picture equals the single-layer one; only packet headers are added (83 bytes on a 256x192 Count(4) encode). OpenJPEG decoded that file layer by layer at 17.9, 20.9, 28.0 and 38.5 dB. Single-layer output stayed byte-identical across nine configurations. The first attempt failed on multi-block bands because inclusion tag-tree values were set per block during coding; a parent node's value must be final before its first leaf is coded, so all first inclusions of a band are now set before any block's header bits.
+
+        Code-block style (CodingOptions::code_block_style): all six Annex D switches are written to COD and honoured by the encoder, which took a general per-pass loop (the all-off style keeps the tuned single-segment path, byte-identical). The decoder gained raw-segment decoding and Table D.9 segmentation, so bypass streams no longer fail. Twelve style combinations round-trip exactly lossless, within 2 of OpenJPEG lossy, and with layers plus tiles. Two decoder decisions: a segmentation-symbol mismatch on the last pass a stream carries is tolerated, because a rate-truncated codeword loses its marker first; and the ERTERM flush keeps the reference accounting (the byte at the write position is excluded, matching RefMq), since including it changed decoded symbols.
+
+        Open: OpenJPEG prints "PTERM check failure: N synthetized 0xFF markers" for predictable-termination streams that PCRD truncated mid-codeword (21 warnings across the lossy style sweep, none on lossless or layered-lossless). Truncating only at terminated passes when predictable_termination is set would remove it at some rate cost; not done. Lege's Jp2Settings has no field for the style, so Lege cannot select it yet.
+        """
+    observed_at git:7eaef90ff61c025a5001bcc0883abdd066470d24
+    method command
+    watches [
+        "lege-codecs/jp2lam/src/encode/backend/native/t1.rs",
+        "lege-codecs/jp2lam/src/encode/backend/native/t2.rs",
+        "lege-codecs/jp2lam/src/decode/t1.rs",
+        "lege-codecs/jp2lam/src/decode/t2.rs",
+        "lege-codecs/jp2lam/src/model.rs"
+    ]
+    author "Claude"
+}
+
 record lege-ecosystem.encode-quality.no-sibling-checkout-dependencies-20261103/1 : observation {
     title "No Lege crate depends on a sibling checkout: jpxl-perceptual from crates.io, liminalkit from GitHub"
     state verified

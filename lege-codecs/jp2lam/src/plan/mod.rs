@@ -175,6 +175,7 @@ pub(crate) struct EncodingPlan {
     pub decomposition_levels: u8,
     pub num_resolutions: u8,
     pub code_block_size: CodeBlockSize,
+    pub code_block_style: crate::j2k::decode_markers::CodeBlockStyle,
     pub guard_bits: u8,
     /// One entry per quality layer; the length is what COD signals.
     pub layers: Vec<QualityLayer>,
@@ -366,6 +367,7 @@ impl EncodingPlan {
                 .code_block_size
                 .map(|(width, height)| CodeBlockSize { width, height })
                 .unwrap_or_else(|| derive_code_block_size(quality)),
+            code_block_style: options.coding.code_block_style,
             guard_bits: 2,
             layers: vec![QualityLayer { target_rate }; usize::from(layer_plan.count())],
             layer_plan,

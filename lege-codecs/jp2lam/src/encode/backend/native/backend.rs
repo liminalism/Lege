@@ -433,6 +433,7 @@ impl NativeBackend {
                     tile_index,
                     component_index as u16,
                     context.plan.code_block_size,
+                    context.plan.code_block_style,
                     |_, band| t1::band_max_bitplanes(effective_precision, guard_bits, band),
                 )
             }
@@ -442,6 +443,7 @@ impl NativeBackend {
                     tile_index,
                     component_index as u16,
                     context.plan.code_block_size,
+                    context.plan.code_block_style,
                     |resolution, band| {
                         context
                             .plan

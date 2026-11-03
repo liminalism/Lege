@@ -215,6 +215,7 @@ impl FlagGrid {
     }
 
     /// Stripe is clean if no samples are significant, visited, or have significant neighbors
+    #[cfg(test)]
     pub(crate) fn stripe_is_clean(&self, x: usize, k: usize, lim: usize) -> bool {
         self.stripe_is_clean_with_causal(x, k, lim, false)
     }

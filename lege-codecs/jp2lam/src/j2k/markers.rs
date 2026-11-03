@@ -67,7 +67,7 @@ pub(crate) fn encode_cod(plan: &EncodingPlan) -> Vec<u8> {
     out.push(plan.decomposition_levels);
     out.push(cblk_width);
     out.push(cblk_height);
-    out.push(0);
+    out.push(plan.code_block_style.to_byte());
     out.push(transform);
     out
 }
