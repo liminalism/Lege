@@ -29,7 +29,7 @@ cd lege
 cargo build --release
 ```
 
-The same `cargo build --release` command also builds both binaries when run from `lege-process/`. Output is in the workspace's `target/release/` directory. The GUI uses the sibling `liminalkit` checkout.
+The same `cargo build --release` command also builds both binaries when run from `lege-process/`. Output is in the workspace's `target/release/` directory. The GUI takes liminalkit from its GitHub repository (`github.com/liminalism/liminalkit`, pinned in `Cargo.lock`); no sibling checkout is needed.
 
 The default build embeds PP-OCR, layout detection, and JPEG 2000. It does not need a system Tesseract install. The legacy Tesseract backend is opt-in (`--features tesseract-ocr`) and then needs `tesseract-ocr`, `libtesseract-dev`, and `libleptonica-dev`.
 

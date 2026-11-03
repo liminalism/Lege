@@ -30,9 +30,9 @@ The current goal is practical document-image interoperability first: a small Rus
 jp2lam = "0.3"
 ```
 
-Not on crates.io yet: the production SSIMULACRA2 metric comes from the sibling
-`jpxl-perceptual` crate, which has to be published first (see the comment on
-that dependency in `Cargo.toml`). Until then, depend on the git repository.
+The production SSIMULACRA2 metric comes from the published
+[`jpxl-perceptual`](https://crates.io/crates/jpxl-perceptual) crate, shared with
+JPXL so both codecs score with the same `METRIC_VERSION`.
 
 Minimum Rust version from the crate manifest:
 

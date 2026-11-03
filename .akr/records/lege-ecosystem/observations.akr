@@ -39,6 +39,22 @@ record lege-ecosystem.encode-quality.jp2lam-encoder-review-fixes-20261103/1 : ob
     author "Claude"
 }
 
+record lege-ecosystem.encode-quality.no-sibling-checkout-dependencies-20261103/1 : observation {
+    title "No Lege crate depends on a sibling checkout: jpxl-perceptual from crates.io, liminalkit from GitHub"
+    state verified
+    statement """
+        A scan of every Cargo.toml in the Lege, JPXL, AKR and liminalkit checkouts for path dependencies leaving their own repository found two: jp2lam's jpxl-perceptual (../../../jpegXL-rs/JPXL/...) and the liminalUI GUI's five liminalkit crates (../../../../liminalkit/...). jp2lam now takes jpxl-perceptual 0.3.0 from crates.io, whose src/ is byte-identical to the JPXL checkout; the full jp2lam suite passes on it and  for jp2lam 0.3.0 packages 94 files and verifies. The GUI takes liminalkit from github.com/liminalism/liminalkit branch main, which Cargo.lock pins at 19c5cd393ad6, the commit the sibling checkout was already on; lege and lege-gui-liminalui check with all targets. liminalkit is not on crates.io. In-repo path dependencies and the root [patch] entries for the in-tree codecs are unchanged: those crates' canonical source is this repository.
+        """
+    observed_at git:093e961c62b3ca11aa16d539537bcce73772ceda
+    method command
+    watches [
+        "lege-codecs/jp2lam/Cargo.toml",
+        "lege-process/GUI/liminalUI/Cargo.toml",
+        "Cargo.lock"
+    ]
+    author "Claude"
+}
+
 record lege-ecosystem.observation.a-bitonal-djvu-page-costs-more-in-iw44-than-in-jb2/1 : observation {
     title "A bitonal DjVu page spends most of its encode time on an all-white IW44 background, not on JB2"
     state verified
