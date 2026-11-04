@@ -2591,11 +2591,18 @@ const PROMOTION_CACHE_CODEC: u8 = 0x80;
 /// everything that shapes the per-texel result (the colour space's tables and
 /// the `/Decode` array), so two draws of one object, or two objects with the
 /// same bytes, share one conversion, and nothing else can match it.
+///
+/// Indexed (palette) images take the same route. The executor used to expand
+/// them to RGB8 at every draw (`paint_image`), which for a 7 Mpx cover is a
+/// full pass over the source per render; behind the cache only the first draw
+/// pays it. The expansion is the one `paint_image` performs
+/// (`PreparedImage::indexed_source_as_rgb8`), so the draw is unchanged.
 fn promote_through_cache(
     out: &CpuPreparedPage,
     prepared: Box<crate::image::PreparedImage>,
 ) -> Box<crate::image::PreparedImage> {
-    if !prepared.generic_promotion_eligible() {
+    let indexed = prepared.indexed_promotion_eligible();
+    if !indexed && !prepared.generic_promotion_eligible() {
         return prepared;
     }
     let cache = out
@@ -2609,7 +2616,12 @@ fn promote_through_cache(
     {
         return Box::new(prepared.with_rgb8_samples(hit.samples));
     }
-    let Some(samples) = prepared.generic_source_as_rgb8() else {
+    let samples = if indexed {
+        prepared.indexed_source_as_rgb8()
+    } else {
+        prepared.generic_source_as_rgb8()
+    };
+    let Some(samples) = samples else {
         return prepared;
     };
     if let Some((cache, key)) = cache {
@@ -2631,7 +2643,6 @@ fn promote_through_cache(
 
 /// The cache identity of a promoted image: see [`promote_through_cache`].
 fn promotion_cache_key(img: &crate::image::PreparedImage) -> ImageCacheKey {
-    use pdf_page_ir::ImageColorSpace;
     let (h0, h1) = content_hash_128(&img.samples);
     // Fold the colour space's tables and the /Decode array into `parms`.
     let mut h: u64 = 0x9E37_79B9_7F4A_7C15;
@@ -2641,7 +2652,46 @@ fn promotion_cache_key(img: &crate::image::PreparedImage) -> ImageCacheKey {
     };
     let f32s =
         |v: &[f32]| -> Vec<u8> { v.iter().flat_map(|x| x.to_bits().to_le_bytes()).collect() };
-    match &img.color_space {
+    mix_color_space_identity(&img.color_space, &mut mix);
+    if let Some(d) = &img.decode {
+        mix(b"decode");
+        mix(&f32s(&d.iter().flatten().copied().collect::<Vec<f32>>()));
+    }
+    ImageCacheKey {
+        h0,
+        h1,
+        len: img.samples.len(),
+        codec: PROMOTION_CACHE_CODEC,
+        width: img.width,
+        height: img.height,
+        bpc: img.bpc,
+        is_mask: false,
+        target: None,
+        parms: h | 1,
+    }
+}
+
+/// Feed everything that shapes a texel's resolved colour under `space` into
+/// `mix`: the family tag and its tables, and for an Indexed space the base
+/// space (recursively), `hival` and the palette bytes.
+fn mix_color_space_identity(space: &pdf_page_ir::ImageColorSpace, mix: &mut impl FnMut(&[u8])) {
+    use pdf_page_ir::ImageColorSpace;
+    let f32s =
+        |v: &[f32]| -> Vec<u8> { v.iter().flat_map(|x| x.to_bits().to_le_bytes()).collect() };
+    match space {
+        ImageColorSpace::Gray => mix(b"gray"),
+        ImageColorSpace::Rgb => mix(b"rgb"),
+        ImageColorSpace::Cmyk => mix(b"cmyk"),
+        ImageColorSpace::Indexed {
+            base,
+            hival,
+            lookup,
+        } => {
+            mix(b"indexed");
+            mix_color_space_identity(base, mix);
+            mix(&hival.to_le_bytes());
+            mix(lookup);
+        }
         ImageColorSpace::IccRgb { trc, matrix } => {
             mix(b"iccrgb");
             mix(&f32s(trc));
@@ -2678,23 +2728,6 @@ fn promotion_cache_key(img: &crate::image::PreparedImage) -> ImageCacheKey {
             mix(b"tint2");
             mix(rgb);
         }
-        _ => {}
-    }
-    if let Some(d) = &img.decode {
-        mix(b"decode");
-        mix(&f32s(&d.iter().flatten().copied().collect::<Vec<f32>>()));
-    }
-    ImageCacheKey {
-        h0,
-        h1,
-        len: img.samples.len(),
-        codec: PROMOTION_CACHE_CODEC,
-        width: img.width,
-        height: img.height,
-        bpc: img.bpc,
-        is_mask: false,
-        target: None,
-        parms: h | 1,
     }
 }
 
@@ -6679,6 +6712,88 @@ mod image_cache_tests {
         let base = render_pixels(&uncached);
         assert_eq!(base, render_pixels(&cold), "cache-off vs cache-cold pixels");
         assert_eq!(base, render_pixels(&warm), "cache-off vs cache-warm pixels");
+    }
+
+    /// A 16×16 Indexed page: 4-bit samples over an RGB palette of `lookup`.
+    fn indexed_page(lookup: Vec<u8>, decode: Option<[f32; 2]>) -> CompiledPage {
+        let mut page = dct_page(jpeg_payload(0));
+        let mut image = page.images[0].clone();
+        image.bits_per_component = 4;
+        image.color_space = ImageColorSpace::Indexed {
+            base: Box::new(ImageColorSpace::Rgb),
+            hival: 15,
+            lookup: Arc::from(lookup),
+        };
+        image.decode = decode.map(|d| Arc::from(vec![d]));
+        image.samples = Some(Arc::from(
+            (0..16 * 8)
+                .map(|i| (i as u8).wrapping_mul(37))
+                .collect::<Vec<u8>>(),
+        ));
+        image.codec = None;
+        image.codec_data = None;
+        page.images = Arc::from([image]);
+        page
+    }
+
+    fn prepared_image(prepared: &CpuPreparedPage) -> &crate::image::PreparedImage {
+        prepared
+            .ops
+            .iter()
+            .find_map(|op| match op {
+                PreparedOp::Image(img) => Some(&**img),
+                _ => None,
+            })
+            .expect("an image op was lowered")
+    }
+
+    /// Indexed images are expanded at lowering behind the content-keyed cache:
+    /// the lowered image is the expansion `paint_image` performs (RGB8, no
+    /// `/Decode`, no LUT), a second lowering of the same bytes is a hit that
+    /// shares the payload, a different palette or `/Decode` is a different
+    /// entry, and the pixels match the uncached lowering and the draw-time
+    /// expansion of the original.
+    #[test]
+    fn indexed_promotion_is_cached_by_content_and_renders_identically() {
+        let lookup: Vec<u8> = (0..48u8).map(|i| i.wrapping_mul(53)).collect();
+        let page = indexed_page(lookup.clone(), None);
+        let cache = Arc::new(SharedImageCache::default());
+
+        let uncached = lower_page(&page, None);
+        let cold = lower_page(&page, Some(&cache));
+        let warm = lower_page(&page, Some(&cache));
+        assert_eq!(cache.stats(), (1, 1, 1), "miss+insert then hit");
+        let img = prepared_image(&cold);
+        assert_eq!(img.color_space, ImageColorSpace::Rgb);
+        assert_eq!(
+            (img.bpc, img.decode.is_none(), img.sample_lut.is_none()),
+            (8, true, true)
+        );
+        assert!(Arc::ptr_eq(&img.samples, &prepared_image(&warm).samples));
+        assert_eq!(prepared_samples(&uncached), prepared_samples(&cold));
+
+        // The draw-time expansion of the original Indexed image.
+        let mut original = img.clone();
+        let ir = &page.images[0];
+        original.color_space = ir.color_space.clone();
+        original.bpc = 4;
+        original.samples = ir.samples.clone().unwrap();
+        original.sample_lut = crate::image::build_sample_lut(4, &ir.color_space, None, false);
+        let expanded = original.indexed_promoted_to_rgb8().expect("eligible");
+        assert_eq!(expanded.samples, img.samples);
+
+        let base = render_pixels(&uncached);
+        assert_eq!(base, render_pixels(&cold));
+        assert_eq!(base, render_pixels(&warm));
+
+        // Same samples, another palette; then the first palette under /Decode.
+        let mut other = lookup.clone();
+        other[3] ^= 0xff;
+        let repaletted = lower_page(&indexed_page(other, None), Some(&cache));
+        let decoded = lower_page(&indexed_page(lookup, Some([15.0, 0.0])), Some(&cache));
+        assert_eq!(cache.len(), 3, "palette and /Decode are part of the key");
+        assert_ne!(prepared_samples(&repaletted), prepared_samples(&cold));
+        assert_ne!(prepared_samples(&decoded), prepared_samples(&cold));
     }
 
     #[test]
