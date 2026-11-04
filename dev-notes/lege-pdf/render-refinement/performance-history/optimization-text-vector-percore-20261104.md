@@ -192,3 +192,133 @@ headsup-lege-final <pdf> <scale> 1 time <outdir>              # whole document s
 cargo build --release --features bench-profiling --manifest-path lege-pdf/render/tools/pdfium-diff/Cargo.toml
 pdfium-diff profile <scale> <pdf> <page> 20 out.jsonl
 ```
+
+## Round 2 — AVX2 `blend_mask` for the glyph blit — 2026-11-04 (later the same day)
+
+Follow-up requested after round 1: vectorize `kernels::blend_mask`, the
+source-over of a coverage mask with a constant colour, which is the glyph
+blit (`paint_glyph_run` calls it once per glyph row) and the partial-coverage
+spans of `dispatch_row`. Same ground rules: byte-identical output, scalar
+fallback selected at runtime, same crates.
+
+### What changed (`pdf-render-cpu/src/kernels.rs` only)
+
+- `blend_mask_avx2` — eight RGBA8 pixels per step in two 16-lane `u16`
+  registers. Coverage bytes widen to `u16`, are scaled by the constant alpha
+  with the same `mul_div_255` op sequence as the scalar kernel when
+  `alpha != 255`, and are spread to four channels each with an in-lane byte
+  shuffle (`_mm256_shuffle_epi8` on a broadcast 128-bit alpha vector). The
+  source vector is `[r g b 255]×4`; since `mul_div_255(255, a) == a`, the
+  alpha channel takes the same `src·a + dst·(255−a)` formula as the scalar
+  `a + mul_div_255(px[3], ia)`. The `u16` sum is masked with `0x00FF` before
+  `packus`, reproducing the scalar `as u8` truncation exactly, and a 64-bit
+  permute undoes `packus`'s per-lane interleave. The scalar early-outs for
+  `c == 0` / `a == 0` are identities in this arithmetic, so there is no
+  per-pixel branching.
+- Tail: four to seven remaining pixels take one half-width step (128-bit
+  pixel load/store, same arithmetic in the low register); zero to three run
+  the scalar reference. A first version staged the remainder through a
+  zero-padded stack buffer so every row took the full vector step; the
+  microbenchmark below showed that at **twice** the scalar cost for rows
+  under eight pixels (two variable-length copies plus a store-forwarding
+  stall), so it was dropped before measurement on pages.
+- `KernelSet::select()` installs it when `is_x86_feature_detected!("avx2")`;
+  `PDF_RENDERER_KERNELS=scalar` (or `0`/`off`, read once) keeps the scalar
+  table for same-binary A/B. The AVX2 entry re-probes on call (a cached
+  atomic load) so a direct call on a CPU without AVX2 still runs the scalar
+  kernel. Non-x86_64 builds are unchanged.
+- New gate `kernels::tests::blend_mask_avx2_matches_scalar_bit_exact`:
+  every (alpha, coverage) pair over 8-pixel spans with random colour and
+  backdrop, plus 40 random spans at each length 0..=41 (vector body, half
+  step and scalar tail in every combination) against the scalar kernel,
+  byte for byte.
+
+### Kernel microbenchmark (one P-core, min of 15 × 200k calls, alpha 255)
+
+| row width (px) | scalar ns | AVX2 ns | ns/px scalar → AVX2 |
+|---:|---:|---:|---:|
+| 2 | 10.4 | 13.2 | 5.2 → 6.6 |
+| 3 | 13.2 | 14.6 | 4.4 → 4.9 |
+| 4 | 14.3 | 10.7 | 3.6 → 2.7 |
+| 6 | 17.7 | 15.6 | 3.0 → 2.6 |
+| 8 | 23.7 | 12.2 | 3.0 → 1.5 |
+| 12 | 33.2 | 13.2 | 2.8 → 1.1 |
+| 16 | 47.9 | 12.9 | 3.0 → 0.8 |
+| 24 | 71.2 | 16.8 | 3.0 → 0.7 |
+| 48 | 139.2 | 25.6 | 2.9 → 0.5 |
+
+Per call the floor is ~10 ns (fn-pointer call, feature probe, constant
+setup, loop control), which is why a 2–3 px row is a few ns slower and the
+gain is bounded by row width: glyph rows at 72 DPI are mostly 3–8 px, at
+144 DPI 6–16 px.
+
+### Structured profile, `render.path.glyph_runs` (ms, median of 20, min of two interleaved rounds)
+
+Same `pdfium-diff` binary, `PDF_RENDERER_KERNELS=scalar` vs default, arms
+alternated per case so load drift hits both equally. Output hashes
+unchanged in every row (xenosystems p152 `c75087d5dfd4d328` /
+`0ba3beb2b069a54c`, vogtle p3 `de73ba9be3303db2` / `0baf559928e01705`,
+vogtle p10 `23f7c526fe495569` / `b5b20f7ce7485b04`).
+
+| page | glyph blits | scalar | AVX2 | change | share of page before |
+|---|---:|---:|---:|---:|---:|
+| xenosystems p152, scale 1 | 2,096 | 0.493 | 0.396 | −20% | 24% |
+| xenosystems p152, scale 2 | 2,096 | 1.229 | 0.860 | −30% | 34% |
+| vogtle p3, scale 1 | 1,497 | 0.192 | 0.183 | −5% | 21% |
+| vogtle p3, scale 2 | 1,497 | 0.443 | 0.347 | −22% | 33% |
+| vogtle p10, scale 1 | 738 | 0.103 | 0.085 | −17% | 13% |
+| vogtle p10, scale 2 | 738 | 0.247 | 0.191 | −23% | 22% |
+
+So the blit is 0.1–0.37 ms per page cheaper at 144 DPI, 3–10% of the page.
+What remains in `glyph_runs` is per-glyph/per-row overhead rather than
+pixel math: the cache probe and placement clamp per glyph, one indirect
+call per row, and the per-row `covered` statistic (`src.iter().filter(c !=
+0).count()`), which is a second pass over every coverage byte and is not
+profiling-gated. Folding that count into the kernel or sampling it, and
+blitting a whole glyph (all rows) per call so the constants are set up once,
+are the next steps if the glyph path is revisited; neither was in scope.
+
+### Target pages, warm, serial, P-cores (ms) — noise-bounded today
+
+The machine was **not idle** for this round: a qemu VM and two JVMs kept
+15–45% of the CPUs busy throughout, and hayro itself read 40% slower than
+in round 1 (3.9 vs 2.7 ms on xenosystems p152 scale 1). Absolute numbers are
+therefore not comparable with the round-1 table, only arms within one
+interleaved round with each other. Arms were alternated per case
+(hayro → 751de415 → this change → this change forced scalar), three rounds,
+each arm's value the median of 20 warm re-renders; median of the three
+rounds, with the min in brackets.
+
+| page | hayro 0.9.0 | 751de415 | AVX2 | AVX2 forced scalar |
+|---|---:|---:|---:|---:|
+| xenosystems p152, scale 1 | 3.92 [3.71] | 2.42 [2.16] | 2.42 [2.11] | 2.52 [2.35] |
+| xenosystems p152, scale 2 | 7.43 [6.92] | 5.44 [4.91] | **4.80 [4.51]** | 5.27 [5.14] |
+| vogtle p3, scale 1 | 2.14 [1.94] | 1.22 [1.11] | 1.44 [1.18] | 1.23 [1.16] |
+| vogtle p3, scale 2 | 3.54 [3.18] | 2.35 [1.94] | 2.40 [1.77] | 2.21 [1.85] |
+| vogtle p10, scale 1 | 1.59 [1.38] | 1.17 [1.08] | 1.57 [0.93] | 1.09 [1.06] |
+| vogtle p10, scale 2 | 2.43 [2.32] | 2.14 [1.67] | **1.75 [1.53]** | 2.48 [1.79] |
+
+The only whole-page differences that clear the noise are the 144 DPI text
+pages (xenosystems p152 −12%, vogtle p10 −18% median), consistent with the
+profile timer; the 72 DPI rows are flat within noise. Every target page
+stays ahead of hayro per core, as after round 1. The round-1 conclusions
+stand: the per-core text page is now bounded by per-glyph overhead and
+compile, not by pixel work.
+
+### Output identity
+
+`verify` mode (per-page pixel hash, 8 workers) with the new adapter build
+against the 751de415 build on the same 390 page renders as round 1
+(vogtle 22 pages × scale 1 and 2, xenosystems 305 × scale 1 and 17 × scale
+2, beans 3 × 2 scales, viaduct 3, Structures 5, centralpark 4, sahib 3,
+chinese-medicine 3): all identical. `cargo test -p pdf-render-cpu` (86 unit
+tests + integration suites) passes; `cargo clippy -p pdf-render-cpu
+--all-targets` reports nothing in `kernels.rs`.
+
+### Reproduce (additions)
+
+```sh
+PDF_RENDERER_KERNELS=scalar pdfium-diff profile <scale> <pdf> <page> 20 scalar.jsonl
+pdfium-diff profile <scale> <pdf> <page> 20 avx2.jsonl        # compare render.path.glyph_runs
+cargo test -p pdf-render-cpu --release blend_mask_avx2_matches_scalar_bit_exact
+```
