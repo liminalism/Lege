@@ -783,8 +783,13 @@ fn inverse_97_2d_in_place_streamed(
     if width == 0 || height == 0 || levels == 0 || data.len() != width * height {
         return;
     }
+    let kernel = if use_wide {
+        crate::simd::Kernel::Wide
+    } else {
+        crate::simd::Kernel::Scalar
+    };
     let out =
-        super::stream97::inverse_97_2d_even(data.to_vec(), width, height, levels, use_wide, None);
+        super::stream97::inverse_97_2d_even(data.to_vec(), width, height, levels, kernel, None);
     data.copy_from_slice(&out);
 }
 

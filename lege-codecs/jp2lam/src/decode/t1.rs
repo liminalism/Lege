@@ -886,7 +886,7 @@ fn sign_lut_index_packed(word: u32, west: u32, east: u32, ci: u32) -> usize {
         (word >> (T1_CHI_1_I - 4 + 3 * (ci - 1))) & T1_LUT_SGN_N
     };
     lu |= (word >> (T1_CHI_2_I - 6 + shift)) & T1_LUT_SGN_S;
-    lu as usize
+    (lu & 0xff) as usize
 }
 
 /// Record that sample `ci` of the column at `idx` became significant with
@@ -963,39 +963,86 @@ fn sigpass_decode(
     let lut = &LUT_CTXNO_ZC[orientation_index(band)];
     let stride = flags.stride();
     let stripes = height.div_ceil(4);
+    #[inline(always)]
+    #[allow(clippy::too_many_arguments)]
+    fn column(
+        decoder: &mut MqDecoder<'_>,
+        lut: &[u8; 512],
+        words: &mut [u32],
+        idx: usize,
+        stride: usize,
+        data: &mut [i32],
+        base: usize,
+        width: usize,
+        rows: u32,
+        one_plus_half: i32,
+        vertical_causal: bool,
+    ) {
+        let mut word = words[idx];
+        if word == 0 {
+            return;
+        }
+        for ci in 0..rows {
+            let shift = 3 * ci;
+            if word & ((T1_SIGMA_THIS | T1_PI_0) << shift) == 0
+                && word & (T1_SIGMA_NEIGHBOURS << shift) != 0
+            {
+                let ctx = zero_coding_context_packed(lut, word, ci);
+                if decoder.decode_with_ctx(ctx) != 0 {
+                    decode_new_significant_packed(
+                        decoder,
+                        words,
+                        idx,
+                        stride,
+                        &mut word,
+                        ci,
+                        &mut data[base + ci as usize * width],
+                        one_plus_half,
+                        vertical_causal,
+                    );
+                }
+                word |= T1_PI_0 << shift;
+            }
+        }
+        words[idx] = word;
+    }
     for stripe in 0..stripes {
         let rows = (height - 4 * stripe).min(4) as u32;
-        let mut idx = flags.column_index(0, stripe);
+        let idx0 = flags.column_index(0, stripe);
         let words = flags.words_mut();
-        for x in 0..width {
-            let mut word = words[idx];
-            if word != 0 {
-                let base = 4 * stripe * width + x;
-                for ci in 0..rows {
-                    let shift = 3 * ci;
-                    if word & ((T1_SIGMA_THIS | T1_PI_0) << shift) == 0
-                        && word & (T1_SIGMA_NEIGHBOURS << shift) != 0
-                    {
-                        let ctx = zero_coding_context_packed(lut, word, ci);
-                        if decoder.decode_with_ctx(ctx) != 0 {
-                            decode_new_significant_packed(
-                                decoder,
-                                words,
-                                idx,
-                                stride,
-                                &mut word,
-                                ci,
-                                &mut data[base + ci as usize * width],
-                                one_plus_half,
-                                vertical_causal,
-                            );
-                        }
-                        word |= T1_PI_0 << shift;
-                    }
-                }
-                words[idx] = word;
+        let base0 = 4 * stripe * width;
+        if rows == 4 {
+            for x in 0..width {
+                column(
+                    decoder,
+                    lut,
+                    words,
+                    idx0 + x,
+                    stride,
+                    data,
+                    base0 + x,
+                    width,
+                    4,
+                    one_plus_half,
+                    vertical_causal,
+                );
             }
-            idx += 1;
+        } else {
+            for x in 0..width {
+                column(
+                    decoder,
+                    lut,
+                    words,
+                    idx0 + x,
+                    stride,
+                    data,
+                    base0 + x,
+                    width,
+                    rows,
+                    one_plus_half,
+                    vertical_causal,
+                );
+            }
         }
     }
 }
@@ -1080,26 +1127,45 @@ fn refpass_decode(
 ) {
     let one = 1i32 << bitplane;
     let stripes = height.div_ceil(4);
+    #[inline(always)]
+    fn column(
+        decoder: &mut MqDecoder<'_>,
+        words: &mut [u32],
+        idx: usize,
+        data: &mut [i32],
+        base: usize,
+        width: usize,
+        rows: u32,
+        one: i32,
+    ) {
+        let mut word = words[idx];
+        if word == 0 {
+            return;
+        }
+        for ci in 0..rows {
+            let shift = 3 * ci;
+            if word & ((T1_SIGMA_THIS | T1_PI_0) << shift) == T1_SIGMA_THIS << shift {
+                let ctx = magnitude_context_packed(word, ci);
+                let bit = decoder.decode_with_ctx(ctx);
+                refine_sample(&mut data[base + ci as usize * width], bit, one);
+                word |= T1_MU_0 << shift;
+            }
+        }
+        words[idx] = word;
+    }
     for stripe in 0..stripes {
         let rows = (height - 4 * stripe).min(4) as u32;
-        let mut idx = flags.column_index(0, stripe);
+        let idx0 = flags.column_index(0, stripe);
         let words = flags.words_mut();
-        for x in 0..width {
-            let mut word = words[idx];
-            if word != 0 {
-                let base = 4 * stripe * width + x;
-                for ci in 0..rows {
-                    let shift = 3 * ci;
-                    if word & ((T1_SIGMA_THIS | T1_PI_0) << shift) == T1_SIGMA_THIS << shift {
-                        let ctx = magnitude_context_packed(word, ci);
-                        let bit = decoder.decode_with_ctx(ctx);
-                        refine_sample(&mut data[base + ci as usize * width], bit, one);
-                        word |= T1_MU_0 << shift;
-                    }
-                }
-                words[idx] = word;
+        let base0 = 4 * stripe * width;
+        if rows == 4 {
+            for x in 0..width {
+                column(decoder, words, idx0 + x, data, base0 + x, width, 4, one);
             }
-            idx += 1;
+        } else {
+            for x in 0..width {
+                column(decoder, words, idx0 + x, data, base0 + x, width, rows, one);
+            }
         }
     }
 }
@@ -1169,53 +1235,122 @@ fn cleanup_decode(
     let lut = &LUT_CTXNO_ZC[orientation_index(band)];
     let stride = flags.stride();
     let stripes = height.div_ceil(4);
+    /// Code samples `first .. rows` of one column; with `run_length` the
+    /// sample `first` is already known significant (the run-length symbols
+    /// said so) and only its sign is read.
+    #[inline(always)]
+    #[allow(clippy::too_many_arguments)]
+    fn column(
+        decoder: &mut MqDecoder<'_>,
+        lut: &[u8; 512],
+        words: &mut [u32],
+        idx: usize,
+        stride: usize,
+        data: &mut [i32],
+        base: usize,
+        width: usize,
+        word: &mut u32,
+        first: u32,
+        rows: u32,
+        run_length: bool,
+        one_plus_half: i32,
+        vertical_causal: bool,
+    ) {
+        let mut first_is_significant = run_length;
+        for ci in first..rows {
+            let shift = 3 * ci;
+            let coded = if first_is_significant {
+                first_is_significant = false;
+                true
+            } else if *word & ((T1_SIGMA_THIS | T1_PI_0) << shift) == 0 {
+                let ctx = zero_coding_context_packed(lut, *word, ci);
+                decoder.decode_with_ctx(ctx) != 0
+            } else {
+                false
+            };
+            if coded {
+                decode_new_significant_packed(
+                    decoder,
+                    words,
+                    idx,
+                    stride,
+                    word,
+                    ci,
+                    &mut data[base + ci as usize * width],
+                    one_plus_half,
+                    vertical_causal,
+                );
+            }
+        }
+    }
     for stripe in 0..stripes {
         let rows = (height - 4 * stripe).min(4) as u32;
-        let mut idx = flags.column_index(0, stripe);
+        let idx0 = flags.column_index(0, stripe);
         let words = flags.words_mut();
+        let base0 = 4 * stripe * width;
         for x in 0..width {
+            let idx = idx0 + x;
+            let base = base0 + x;
             let mut word = words[idx];
-            let base = 4 * stripe * width + x;
-            // Samples from `first` on are coded one by one; `first` itself is
-            // already known significant when the run-length symbol said so.
-            let (first, mut first_is_significant) = if word == 0 && rows == 4 {
+            if word == 0 && rows == 4 {
                 if decoder.decode_with_ctx(T1_CTXNO_AGG) == 0 {
-                    idx += 1;
                     continue;
                 }
                 let hi = u32::from(decoder.decode_with_ctx(T1_CTXNO_UNI));
                 let lo = u32::from(decoder.decode_with_ctx(T1_CTXNO_UNI));
-                ((hi << 1) | lo, true)
+                let first = (hi << 1) | lo;
+                column(
+                    decoder,
+                    lut,
+                    words,
+                    idx,
+                    stride,
+                    data,
+                    base,
+                    width,
+                    &mut word,
+                    first,
+                    4,
+                    true,
+                    one_plus_half,
+                    vertical_causal,
+                );
+            } else if rows == 4 {
+                column(
+                    decoder,
+                    lut,
+                    words,
+                    idx,
+                    stride,
+                    data,
+                    base,
+                    width,
+                    &mut word,
+                    0,
+                    4,
+                    false,
+                    one_plus_half,
+                    vertical_causal,
+                );
             } else {
-                (0, false)
-            };
-            for ci in first..rows {
-                let shift = 3 * ci;
-                let coded = if first_is_significant {
-                    first_is_significant = false;
-                    true
-                } else if word & ((T1_SIGMA_THIS | T1_PI_0) << shift) == 0 {
-                    let ctx = zero_coding_context_packed(lut, word, ci);
-                    decoder.decode_with_ctx(ctx) != 0
-                } else {
-                    false
-                };
-                if coded {
-                    decode_new_significant_packed(
-                        decoder,
-                        words,
-                        idx,
-                        stride,
-                        &mut word,
-                        ci,
-                        &mut data[base + ci as usize * width],
-                        one_plus_half,
-                        vertical_causal,
-                    );
-                }
+                column(
+                    decoder,
+                    lut,
+                    words,
+                    idx,
+                    stride,
+                    data,
+                    base,
+                    width,
+                    &mut word,
+                    0,
+                    rows,
+                    false,
+                    one_plus_half,
+                    vertical_causal,
+                );
             }
             words[idx] = word & !T1_PI_ALL;
-            idx += 1;
         }
     }
 }

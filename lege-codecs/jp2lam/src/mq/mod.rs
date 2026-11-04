@@ -69,6 +69,10 @@ impl<'a> MqDecoder<'a> {
         self.ctxs
     }
 
+    /// DECODE (C.3.2): one binary decision in context `ctx`. Inlined into
+    /// the Tier-1 pass loops, where the decoder registers then stay in
+    /// machine registers across consecutive decisions.
+    #[inline(always)]
     pub(crate) fn decode_with_ctx(&mut self, ctx: u8) -> u8 {
         let ctx_index = ctx as usize;
         let state = MQ_STATES[self.ctxs[ctx_index] as usize];
@@ -109,6 +113,7 @@ impl<'a> MqDecoder<'a> {
         self.set_state(T1_CTXNO_ZC, 0, 4);
     }
 
+    #[inline(always)]
     fn mps_exchange(&mut self, ctx_index: usize, state: MqState) -> u8 {
         if self.a < u32::from(state.qeval) {
             self.ctxs[ctx_index] = state.nlps;
@@ -119,6 +124,7 @@ impl<'a> MqDecoder<'a> {
         }
     }
 
+    #[inline(always)]
     fn lps_exchange(&mut self, ctx_index: usize, state: MqState) -> u8 {
         let post_subtraction_a = self.a;
         self.a = u32::from(state.qeval);
@@ -131,17 +137,30 @@ impl<'a> MqDecoder<'a> {
         }
     }
 
+    /// RENORMD (C.3.3). The one-bit-per-iteration loop of the standard is
+    /// batched: all shifts up to the next BYTEIN (or until `a` is
+    /// normalised) happen at once, which is the same sequence of register
+    /// values at every BYTEIN and the same final state.
+    #[inline(always)]
     fn renormd(&mut self) {
-        while self.a < 0x8000 {
+        loop {
             if self.ct == 0 {
                 self.bytein();
             }
-            self.a <<= 1;
-            self.c <<= 1;
-            self.ct -= 1;
+            // `a` is never zero here (at least `qeval >= 1`), so this is the
+            // shift count that brings bit 15 up, capped by the bits left in
+            // the current byte.
+            let shifts = (self.a.leading_zeros() - 16).min(self.ct);
+            self.a <<= shifts;
+            self.c <<= shifts;
+            self.ct -= shifts;
+            if self.a & 0x8000 != 0 {
+                break;
+            }
         }
     }
 
+    #[inline(always)]
     fn bytein(&mut self) {
         let next = self.byte_at(self.bp + 1);
         if self.byte_at(self.bp) == 0xff {
@@ -160,6 +179,7 @@ impl<'a> MqDecoder<'a> {
         }
     }
 
+    #[inline(always)]
     fn byte_at(&self, index: usize) -> u8 {
         self.bytes.get(index).copied().unwrap_or(0xff)
     }

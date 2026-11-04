@@ -26,7 +26,8 @@
 //! `wide` kernels across sizes, levels, degenerate axes and band starts.
 
 use super::InverseDwtTiming;
-use super::irrev97::{ALPHA, BETA, DELTA, GAMMA, INV_K, K, lift_row};
+use super::irrev97::{ALPHA, BETA, DELTA, GAMMA, INV_K, K};
+use crate::simd::Kernel;
 #[cfg(feature = "simd")]
 use wide::f32x8;
 
@@ -60,7 +61,7 @@ pub(crate) fn inverse_97_2d_even(
     width: usize,
     height: usize,
     levels: u8,
-    use_wide: bool,
+    kernel: Kernel,
     mut timing: Option<&mut InverseDwtTiming>,
 ) -> Vec<f32> {
     debug_assert_eq!(data.len(), width * height);
@@ -68,9 +69,9 @@ pub(crate) fn inverse_97_2d_even(
         return data;
     }
     let prefix =
-        inverse_97_2d_even_but_last(data, width, height, levels, use_wide, timing.as_deref_mut());
+        inverse_97_2d_even_but_last(data, width, height, levels, kernel, timing.as_deref_mut());
     let level_start = timing.as_ref().map(|_| std::time::Instant::now());
-    let mut synth = prefix.final_level(use_wide, 0);
+    let mut synth = prefix.final_level(kernel, 0);
     let mut out = vec![0f32; width * height];
     for y in 0..height {
         out[y * width..(y + 1) * width].copy_from_slice(synth.next_row());
@@ -109,7 +110,7 @@ pub(crate) fn inverse_97_2d_even_but_last(
     width: usize,
     height: usize,
     levels: u8,
-    use_wide: bool,
+    kernel: Kernel,
     mut timing: Option<&mut InverseDwtTiming>,
 ) -> SynthesisPrefix {
     debug_assert!(levels >= 1 && width > 0 && height > 0);
@@ -135,8 +136,7 @@ pub(crate) fn inverse_97_2d_even_but_last(
         if out.len() < rw * rh {
             out.resize(rw * rh, 0.0);
         }
-        let mut synth =
-            LevelSynth::new(source, &data, width, rw, rh, use_wide, 0, timing.is_some());
+        let mut synth = LevelSynth::new(source, &data, width, rw, rh, kernel, 0, timing.is_some());
         for y in 0..rh {
             out[y * rw..(y + 1) * rw].copy_from_slice(synth.next_row());
         }
@@ -158,7 +158,7 @@ pub(crate) fn inverse_97_2d_even_but_last(
 impl SynthesisPrefix {
     /// A producer for the finest level's rows, starting at output row
     /// `first_row`.
-    pub(crate) fn final_level(&self, use_wide: bool, first_row: usize) -> LevelSynth<'_> {
+    pub(crate) fn final_level(&self, kernel: Kernel, first_row: usize) -> LevelSynth<'_> {
         let source = match &self.ll {
             None => LlSource {
                 rows: &self.data,
@@ -175,7 +175,7 @@ impl SynthesisPrefix {
             self.width,
             self.width,
             self.height,
-            use_wide,
+            kernel,
             first_row,
             false,
         )
@@ -211,7 +211,7 @@ pub(crate) struct LevelSynth<'a> {
     /// Low-pass sample counts horizontally and vertically.
     sn: usize,
     sv: usize,
-    use_wide: bool,
+    kernel: Kernel,
     /// Padded low-pass row: one guard sample on each side.
     lo: Vec<f32>,
     /// Padded high-pass row: one guard sample on each side.
@@ -235,7 +235,7 @@ impl<'a> LevelSynth<'a> {
         band_stride: usize,
         rw: usize,
         rh: usize,
-        use_wide: bool,
+        kernel: Kernel,
         first_row: usize,
         timed: bool,
     ) -> Self {
@@ -250,7 +250,7 @@ impl<'a> LevelSynth<'a> {
             rh,
             sn,
             sv,
-            use_wide,
+            kernel,
             lo: vec![0.0; sn + 2],
             hi: vec![0.0; (rw - sn) + 2],
             ring: vec![0.0; rw * RING],
@@ -285,7 +285,7 @@ impl<'a> LevelSynth<'a> {
                 1.0,
                 &mut self.lo,
                 &mut self.hi,
-                self.use_wide,
+                self.kernel,
             );
             self.add_elapsed(row_start);
             return &self.ring[..self.rw];
@@ -339,7 +339,7 @@ impl<'a> LevelSynth<'a> {
                 row_scale,
                 &mut self.lo,
                 &mut self.hi,
-                self.use_wide,
+                self.kernel,
             );
             self.add_elapsed(row_start);
         }
@@ -366,15 +366,7 @@ impl<'a> LevelSynth<'a> {
             let target = (x as usize % RING) * rw;
             let above = (mirror(x - 1) % RING) * rw;
             let below = (mirror(x + 1) % RING) * rw;
-            lift_ring_row(
-                &mut self.ring,
-                rw,
-                target,
-                above,
-                below,
-                coeff,
-                self.use_wide,
-            );
+            lift_ring_row(&mut self.ring, rw, target, above, below, coeff, self.kernel);
         }
     }
 
@@ -398,7 +390,7 @@ fn lift_ring_row(
     above: usize,
     below: usize,
     coeff: f32,
-    use_wide: bool,
+    kernel: Kernel,
 ) {
     debug_assert_ne!(target, above);
     debug_assert_ne!(target, below);
@@ -406,12 +398,12 @@ fn lift_ring_row(
         let [t, n] = ring
             .get_disjoint_mut([target..target + rw, above..above + rw])
             .expect("target and mirrored neighbour rows are disjoint ring slots");
-        lift_row(t, n, n, coeff, use_wide);
+        lift_row(t, n, n, coeff, kernel);
     } else {
         let [t, a, b] = ring
             .get_disjoint_mut([target..target + rw, above..above + rw, below..below + rw])
             .expect("target and neighbour rows are disjoint ring slots");
-        lift_row(t, a, b, coeff, use_wide);
+        lift_row(t, a, b, coeff, kernel);
     }
 }
 
@@ -432,7 +424,7 @@ fn synth_row(
     row_scale: f32,
     lo: &mut [f32],
     hi: &mut [f32],
-    use_wide: bool,
+    kernel: Kernel,
 ) {
     let sn = lo_in.len();
     let dn = hi_in.len();
@@ -448,8 +440,8 @@ fn synth_row(
     debug_assert!(lo.len() >= sn + 2 && hi.len() >= dn + 2);
     let lo = &mut lo[..sn + 2];
     let hi = &mut hi[..dn + 2];
-    scale_into(&mut lo[1..sn + 1], lo_in, K, use_wide);
-    scale_into(&mut hi[1..dn + 1], hi_in, INV_K, use_wide);
+    scale_into(&mut lo[1..sn + 1], lo_in, K, kernel);
+    scale_into(&mut hi[1..dn + 1], hi_in, INV_K, kernel);
 
     // Even samples: X[2i] += c * (X[2i-1] + X[2i+1]) = c * (H[i-1] + H[i]),
     // with H[-1] = H[0] and, for odd n, H[sn-1] = H[dn-1].
@@ -462,7 +454,7 @@ fn synth_row(
         &hi[0..sn],
         &hi[1..sn + 1],
         -DELTA,
-        use_wide,
+        kernel,
     );
     lo[sn + 1] = lo[sn];
     lift_row(
@@ -470,7 +462,7 @@ fn synth_row(
         &lo[1..dn + 1],
         &lo[2..dn + 2],
         -GAMMA,
-        use_wide,
+        kernel,
     );
     hi[0] = hi[1];
     hi[dn + 1] = hi[dn];
@@ -479,7 +471,7 @@ fn synth_row(
         &hi[0..sn],
         &hi[1..sn + 1],
         -BETA,
-        use_wide,
+        kernel,
     );
     lo[sn + 1] = lo[sn];
     lift_row(
@@ -487,18 +479,32 @@ fn synth_row(
         &lo[1..dn + 1],
         &lo[2..dn + 2],
         -ALPHA,
-        use_wide,
+        kernel,
     );
 
-    interleave_scaled(&lo[1..sn + 1], &hi[1..dn + 1], out, row_scale, use_wide);
+    interleave_scaled(&lo[1..sn + 1], &hi[1..dn + 1], out, row_scale, kernel);
+}
+
+/// `target[i] += coeff * (left[i] + right[i])`.
+#[inline]
+fn lift_row(target: &mut [f32], left: &[f32], right: &[f32], coeff: f32, kernel: Kernel) {
+    match kernel {
+        Kernel::Scalar => super::irrev97::lift_row(target, left, right, coeff, false),
+        Kernel::Wide => super::irrev97::lift_row(target, left, right, coeff, true),
+        Kernel::Avx2 => avx2::lift_row(target, left, right, coeff),
+    }
 }
 
 /// `out[i] = input[i] * scale`.
-fn scale_into(out: &mut [f32], input: &[f32], scale: f32, use_wide: bool) {
+fn scale_into(out: &mut [f32], input: &[f32], scale: f32, kernel: Kernel) {
     debug_assert_eq!(out.len(), input.len());
+    if kernel == Kernel::Avx2 {
+        avx2::scale_into(out, input, scale);
+        return;
+    }
     let mut i = 0usize;
     #[cfg(feature = "simd")]
-    if use_wide {
+    if kernel == Kernel::Wide {
         let scale_v = f32x8::splat(scale);
         while i + 8 <= out.len() {
             let v = f32x8::new(input[i..i + 8].try_into().expect("8 lanes")) * scale_v;
@@ -506,7 +512,7 @@ fn scale_into(out: &mut [f32], input: &[f32], scale: f32, use_wide: bool) {
             i += 8;
         }
     }
-    let _ = use_wide;
+    let _ = kernel;
     while i < out.len() {
         out[i] = input[i] * scale;
         i += 1;
@@ -515,12 +521,16 @@ fn scale_into(out: &mut [f32], input: &[f32], scale: f32, use_wide: bool) {
 
 /// `out[2i] = lo[i] * scale`, `out[2i+1] = hi[i] * scale`, with the odd
 /// trailing low-pass sample when `out` has odd length.
-fn interleave_scaled(lo: &[f32], hi: &[f32], out: &mut [f32], scale: f32, use_wide: bool) {
+fn interleave_scaled(lo: &[f32], hi: &[f32], out: &mut [f32], scale: f32, kernel: Kernel) {
     let dn = hi.len();
     debug_assert_eq!(out.len(), lo.len() + dn);
+    if kernel == Kernel::Avx2 {
+        avx2::interleave_scaled(lo, hi, out, scale);
+        return;
+    }
     let mut i = 0usize;
     #[cfg(feature = "simd")]
-    if use_wide {
+    if kernel == Kernel::Wide {
         let scale_v = f32x8::splat(scale);
         while i + 8 <= dn {
             let l = (f32x8::new(lo[i..i + 8].try_into().expect("8 lanes")) * scale_v).to_array();
@@ -533,7 +543,7 @@ fn interleave_scaled(lo: &[f32], hi: &[f32], out: &mut [f32], scale: f32, use_wi
             i += 8;
         }
     }
-    let _ = use_wide;
+    let _ = kernel;
     while i < dn {
         out[2 * i] = lo[i] * scale;
         out[2 * i + 1] = hi[i] * scale;
@@ -544,9 +554,82 @@ fn interleave_scaled(lo: &[f32], hi: &[f32], out: &mut [f32], scale: f32, use_wi
     }
 }
 
+/// The row kernels compiled with AVX2 enabled: plain loops that LLVM
+/// vectorises to 256-bit lanes, with the same per-sample operation order as
+/// the scalar and `wide` paths (no fused multiply-add: only `avx2` is
+/// enabled), so the results are bit-identical.
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+mod avx2 {
+    #[target_feature(enable = "avx2")]
+    unsafe fn lift_row_impl(target: &mut [f32], left: &[f32], right: &[f32], coeff: f32) {
+        let n = target.len().min(left.len()).min(right.len());
+        let (target, left, right) = (&mut target[..n], &left[..n], &right[..n]);
+        for x in 0..n {
+            target[x] += coeff * (left[x] + right[x]);
+        }
+    }
+
+    #[target_feature(enable = "avx2")]
+    unsafe fn scale_into_impl(out: &mut [f32], input: &[f32], scale: f32) {
+        let n = out.len().min(input.len());
+        let (out, input) = (&mut out[..n], &input[..n]);
+        for x in 0..n {
+            out[x] = input[x] * scale;
+        }
+    }
+
+    #[target_feature(enable = "avx2")]
+    unsafe fn interleave_scaled_impl(lo: &[f32], hi: &[f32], out: &mut [f32], scale: f32) {
+        let dn = hi.len().min(lo.len());
+        let (pairs, tail) = out.split_at_mut((2 * dn).min(out.len()));
+        for (i, pair) in pairs.chunks_exact_mut(2).enumerate() {
+            pair[0] = lo[i] * scale;
+            pair[1] = hi[i] * scale;
+        }
+        if let (Some(last), Some(&value)) = (tail.first_mut(), lo.get(dn)) {
+            *last = value * scale;
+        }
+    }
+
+    // SAFETY (all three): `Kernel::Avx2` is only selected after runtime
+    // detection of AVX2 (`simd::x86`).
+    #[inline]
+    pub(super) fn lift_row(target: &mut [f32], left: &[f32], right: &[f32], coeff: f32) {
+        unsafe { lift_row_impl(target, left, right, coeff) }
+    }
+
+    #[inline]
+    pub(super) fn scale_into(out: &mut [f32], input: &[f32], scale: f32) {
+        unsafe { scale_into_impl(out, input, scale) }
+    }
+
+    #[inline]
+    pub(super) fn interleave_scaled(lo: &[f32], hi: &[f32], out: &mut [f32], scale: f32) {
+        unsafe { interleave_scaled_impl(lo, hi, out, scale) }
+    }
+}
+
+/// Without x86 the AVX2 flavour is never selected; route to scalar so the
+/// match arms stay total.
+#[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
+mod avx2 {
+    pub(super) fn lift_row(target: &mut [f32], left: &[f32], right: &[f32], coeff: f32) {
+        super::super::irrev97::lift_row(target, left, right, coeff, false)
+    }
+
+    pub(super) fn scale_into(out: &mut [f32], input: &[f32], scale: f32) {
+        super::scale_into(out, input, scale, crate::simd::Kernel::Scalar)
+    }
+
+    pub(super) fn interleave_scaled(lo: &[f32], hi: &[f32], out: &mut [f32], scale: f32) {
+        super::interleave_scaled(lo, hi, out, scale, crate::simd::Kernel::Scalar)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{inverse_97_2d_even, inverse_97_2d_even_but_last};
+    use crate::simd::Kernel;
 
     fn pattern(width: usize, height: usize, seed: u32) -> Vec<f32> {
         let mut state = seed.wrapping_mul(2_654_435_761).wrapping_add(12345);
@@ -563,13 +646,7 @@ mod tests {
             .collect()
     }
 
-    fn reference(
-        width: usize,
-        height: usize,
-        levels: u8,
-        use_wide: bool,
-        seed: u32,
-    ) -> (Vec<f32>, Vec<f32>) {
+    fn reference(width: usize, height: usize, levels: u8, seed: u32) -> (Vec<f32>, Vec<f32>) {
         let original = pattern(width, height, seed);
         let mut reference = original.clone();
         super::super::irrev97::inverse_97_2d_in_place_reference(
@@ -577,7 +654,7 @@ mod tests {
             width,
             height,
             levels,
-            use_wide,
+            false,
         );
         (original, reference)
     }
@@ -594,24 +671,24 @@ mod tests {
         }
     }
 
-    fn check(width: usize, height: usize, levels: u8, use_wide: bool) {
+    fn check(width: usize, height: usize, levels: u8, kernel: Kernel) {
         let seed = (width * 131 + height * 7) as u32 + levels as u32;
-        let (original, reference) = reference(width, height, levels, use_wide, seed);
-        let streamed = inverse_97_2d_even(original, width, height, levels, use_wide, None);
+        let (original, reference) = reference(width, height, levels, seed);
+        let streamed = inverse_97_2d_even(original, width, height, levels, kernel, None);
         assert_bits(
             &streamed,
             &reference,
             width,
-            &format!("{width}x{height} levels={levels} wide={use_wide}"),
+            &format!("{width}x{height} levels={levels} {kernel:?}"),
         );
     }
 
     /// Row bands started part-way down must reproduce the full run exactly.
-    fn check_banded(width: usize, height: usize, levels: u8, use_wide: bool, first_row: usize) {
+    fn check_banded(width: usize, height: usize, levels: u8, kernel: Kernel, first_row: usize) {
         let seed = (width * 17 + height * 3) as u32 + levels as u32 + first_row as u32;
-        let (original, reference) = reference(width, height, levels, use_wide, seed);
-        let prefix = inverse_97_2d_even_but_last(original, width, height, levels, use_wide, None);
-        let mut synth = prefix.final_level(use_wide, first_row);
+        let (original, reference) = reference(width, height, levels, seed);
+        let prefix = inverse_97_2d_even_but_last(original, width, height, levels, kernel, None);
+        let mut synth = prefix.final_level(kernel, first_row);
         for y in first_row..height {
             let row = synth.next_row();
             assert_bits(
@@ -619,7 +696,7 @@ mod tests {
                 &reference[y * width..(y + 1) * width],
                 width,
                 &format!(
-                    "{width}x{height} levels={levels} wide={use_wide} band from {first_row}, row {y}"
+                    "{width}x{height} levels={levels} {kernel:?} band from {first_row}, row {y}"
                 ),
             );
         }
@@ -627,12 +704,13 @@ mod tests {
 
     #[test]
     fn streaming_matches_in_place_reference_small_sizes() {
+        let kernels = Kernel::available();
         for height in 1..=19usize {
             for width in 1..=19usize {
                 for levels in 0..=4u8 {
-                    check(width, height, levels, false);
-                    #[cfg(feature = "simd")]
-                    check(width, height, levels, true);
+                    for &kernel in &kernels {
+                        check(width, height, levels, kernel);
+                    }
                 }
             }
         }
@@ -640,6 +718,7 @@ mod tests {
 
     #[test]
     fn streaming_matches_in_place_reference_larger_sizes() {
+        let kernels = Kernel::available();
         for &(width, height, levels) in &[
             (97usize, 61usize, 5u8),
             (128, 128, 5),
@@ -650,21 +729,22 @@ mod tests {
             (300, 1, 5),
             (2, 2, 1),
         ] {
-            check(width, height, levels, false);
-            #[cfg(feature = "simd")]
-            check(width, height, levels, true);
+            for &kernel in &kernels {
+                check(width, height, levels, kernel);
+            }
         }
     }
 
     #[test]
     fn banded_final_level_matches_full_run() {
+        let kernels = Kernel::available();
         for &(width, height, levels) in
             &[(37usize, 29usize, 1u8), (64, 50, 3), (13, 2, 2), (5, 9, 1)]
         {
             for first_row in 0..height {
-                check_banded(width, height, levels, false, first_row);
-                #[cfg(feature = "simd")]
-                check_banded(width, height, levels, true, first_row);
+                for &kernel in &kernels {
+                    check_banded(width, height, levels, kernel, first_row);
+                }
             }
         }
     }
@@ -673,7 +753,7 @@ mod tests {
     fn profiled_timing_reports_every_level() {
         let data = pattern(64, 48, 9);
         let mut timing = super::InverseDwtTiming::default();
-        let out = inverse_97_2d_even(data, 64, 48, 3, false, Some(&mut timing));
+        let out = inverse_97_2d_even(data, 64, 48, 3, Kernel::Scalar, Some(&mut timing));
         assert_eq!(out.len(), 64 * 48);
         assert_eq!(timing.level_ns.len(), 3);
     }

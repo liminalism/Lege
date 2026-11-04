@@ -22,6 +22,7 @@ pub(crate) fn primitives() -> Primitives {
             inverse_rct,
         },
         backend: "scalar",
+        kernel: super::Kernel::Scalar,
     }
 }
 
@@ -47,7 +48,12 @@ pub(crate) fn inverse_97_2d_owned(
     levels: u8,
 ) -> crate::error::Result<Vec<f32>> {
     Ok(crate::dwt::inverse_97_2d_even(
-        data, width, height, levels, false, None,
+        data,
+        width,
+        height,
+        levels,
+        super::Kernel::Scalar,
+        None,
     ))
 }
 

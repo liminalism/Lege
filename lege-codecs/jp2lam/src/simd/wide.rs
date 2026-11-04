@@ -18,6 +18,7 @@ pub(crate) fn setup(primitives: &mut Primitives) {
     primitives.color.inverse_rct = inverse_rct;
     primitives.dwt.inverse_53_2d = inverse_53_2d;
     primitives.backend = "wide";
+    primitives.kernel = super::Kernel::Wide;
 }
 
 /// Not part of the live [`super::PRIMITIVES`] dispatch table; see
@@ -40,7 +41,12 @@ pub(crate) fn inverse_97_2d_owned(
     levels: u8,
 ) -> crate::error::Result<Vec<f32>> {
     Ok(crate::dwt::inverse_97_2d_even(
-        data, width, height, levels, true, None,
+        data,
+        width,
+        height,
+        levels,
+        super::Kernel::Wide,
+        None,
     ))
 }
 
