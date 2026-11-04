@@ -2981,7 +2981,9 @@ fn paint_glyph_run(
     #[cfg(feature = "profiling")]
     {
         let profile = &mut stats.profile;
-        profile.add_duration("render.path", command_start.elapsed());
+        let elapsed = command_start.elapsed();
+        profile.add_duration("render.path", elapsed);
+        profile.add_duration("render.path.glyph_runs", elapsed);
         profile.increment("render.glyph_runs", 1);
         profile.increment("render.glyph_blits", gr.placements.len() as u64);
     }
@@ -3001,6 +3003,8 @@ fn paint_command(
     #[cfg(feature = "profiling")]
     let command_start = Instant::now();
     stats.commands += 1;
+    #[cfg(feature = "profiling")]
+    let mut dispatch_elapsed = std::time::Duration::ZERO;
     let mask_cid = if cmd.clip_has_mask {
         // Lowering guarantees a masked draw carries its clip id; skip the
         // draw (never panic a page) if that IR invariant broke upstream.
@@ -3059,10 +3063,16 @@ fn paint_command(
                     if y < by0 || y >= by1 {
                         return;
                     }
+                    #[cfg(feature = "profiling")]
+                    let dispatch_start = Instant::now();
                     dispatch_row(
                         surface, kernels, y, x0, x1, cov, bx0, bx1, mask, soft, rgb, alpha, opaque,
                         premul, blend, shading, stencil,
                     );
+                    #[cfg(feature = "profiling")]
+                    {
+                        dispatch_elapsed += dispatch_start.elapsed();
+                    }
                 },
             ) {
                 stats.cancelled = true;
@@ -3077,10 +3087,21 @@ fn paint_command(
     #[cfg(feature = "profiling")]
     {
         let profile = &mut stats.profile;
-        profile.add_duration("render.path", command_start.elapsed());
+        let elapsed = command_start.elapsed();
+        profile.add_duration("render.path", elapsed);
         match cmd.class {
-            DrawClass::OpaqueRect => profile.increment("render.opaque_rects", 1),
-            DrawClass::SolidPath => profile.increment("render.solid_paths", 1),
+            DrawClass::OpaqueRect => {
+                profile.add_duration("render.path.opaque_rects", elapsed);
+                profile.increment("render.opaque_rects", 1);
+            }
+            DrawClass::SolidPath => {
+                // Span classification + kernel time inside the coverage
+                // callback; the remainder of `render.path.solid_paths` is
+                // edge build + coverage accumulation in `RasterKernel`.
+                profile.add_duration("render.path.solid_paths", elapsed);
+                profile.add_duration("render.path.solid_dispatch", dispatch_elapsed);
+                profile.increment("render.solid_paths", 1);
+            }
         }
     }
 }
@@ -3423,15 +3444,29 @@ fn dispatch_row(
         BlendChoice::Normal => {}
     }
 
+    // Span classification. Runs of empty or full coverage are the common case
+    // (the interior of any shape wider than a few pixels), so both are walked
+    // eight bytes at a time before the per-byte tail.
+    const CHUNK: usize = 8;
     let mut x = cxa;
     while x <= cxb {
         let c = cov[x];
         if c == 0 {
             x += 1;
+            while x + CHUNK <= cxb + 1 && cov[x..x + CHUNK] == [0u8; CHUNK] {
+                x += CHUNK;
+            }
+            while x <= cxb && cov[x] == 0 {
+                x += 1;
+            }
             continue;
         }
         if c == 255 {
             let start = x;
+            x += 1;
+            while x + CHUNK <= cxb + 1 && cov[x..x + CHUNK] == [255u8; CHUNK] {
+                x += CHUNK;
+            }
             while x <= cxb && cov[x] == 255 {
                 x += 1;
             }
