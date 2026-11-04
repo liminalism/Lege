@@ -2263,26 +2263,118 @@ fn upsample_component_row(
                 *d = ((near[x] as u16 * 3 + far[x] as u16 + bias) >> 2) as u8;
             }
         }
-        Upsample::FancyH2V2 => {
-            for (x, d) in dst.iter_mut().enumerate() {
-                let sx = (x / 2).min(source_w - 1);
-                let this = near[sx] as u16 * 3 + far[sx] as u16;
-                *d = if x & 1 == 0 {
-                    if sx == 0 {
-                        ((this * 4 + 8) >> 4) as u8
-                    } else {
-                        let prev = near[sx - 1] as u16 * 3 + far[sx - 1] as u16;
-                        ((this * 3 + prev + 8) >> 4) as u8
-                    }
-                } else if sx + 1 == source_w {
-                    ((this * 4 + 7) >> 4) as u8
-                } else {
-                    let next = near[sx + 1] as u16 * 3 + far[sx + 1] as u16;
-                    ((this * 3 + next + 7) >> 4) as u8
-                };
-            }
+        Upsample::FancyH2V2 => upsample_h2v2_row(dst, near, far, source_w),
+    }
+}
+
+/// The 4:2:0 triangle filter for one output row (`h2v2_fancy_upsample`): the
+/// decoder's dominant per-pixel loop on a 4:2:0 scan, two chroma rows per
+/// output row each the full output width. Runtime-dispatched to AVX2; the
+/// scalar reference and the vector kernel are bit-for-bit identical, verified
+/// by `upsample_tests::h2v2_avx2_matches_scalar_bit_exact`.
+#[inline]
+#[allow(
+    unsafe_code,
+    reason = "dispatches the AVX2 upsampling kernel behind a runtime probe; see SAFETY comment"
+)]
+fn upsample_h2v2_row(dst: &mut [u8], near: &[u8], far: &[u8], source_w: usize) {
+    // Slice the sources once, here, so the vector kernel's bounds are slice
+    // invariants rather than caller promises (the scalar loop indexes the
+    // same range and would panic on the same inputs).
+    let near = &near[..source_w];
+    let far = &far[..source_w];
+    #[cfg(target_arch = "x86_64")]
+    {
+        if is_x86_feature_detected!("avx2") {
+            // SAFETY: AVX2 is present (runtime probe above); `near` and `far`
+            // are exactly `source_w` bytes and the kernel bounds every load
+            // and store against those lengths and `dst.len()`.
+            let done = unsafe { upsample_h2v2_row_avx2(dst, near, far) };
+            // The first source texel (no left neighbour) and whatever the
+            // vector loop could not cover take the scalar reference.
+            upsample_h2v2_row_scalar(dst, near, far, 0, 2.min(dst.len()));
+            upsample_h2v2_row_scalar(dst, near, far, done, dst.len());
+            return;
         }
     }
+    upsample_h2v2_row_scalar(dst, near, far, 0, dst.len());
+}
+
+/// Scalar reference for [`upsample_h2v2_row`] over output columns
+/// `x0..x1`. The formulae and the asymmetric `+8/+7` biases are
+/// libjpeg-turbo's `h2v2_fancy_upsample`.
+#[inline]
+fn upsample_h2v2_row_scalar(dst: &mut [u8], near: &[u8], far: &[u8], x0: usize, x1: usize) {
+    let source_w = near.len();
+    for (x, d) in dst[..x1].iter_mut().enumerate().skip(x0) {
+        let sx = (x / 2).min(source_w - 1);
+        let this = near[sx] as u16 * 3 + far[sx] as u16;
+        *d = if x & 1 == 0 {
+            if sx == 0 {
+                ((this * 4 + 8) >> 4) as u8
+            } else {
+                let prev = near[sx - 1] as u16 * 3 + far[sx - 1] as u16;
+                ((this * 3 + prev + 8) >> 4) as u8
+            }
+        } else if sx + 1 == source_w {
+            ((this * 4 + 7) >> 4) as u8
+        } else {
+            let next = near[sx + 1] as u16 * 3 + far[sx + 1] as u16;
+            ((this * 3 + next + 7) >> 4) as u8
+        };
+    }
+}
+
+/// AVX2 kernel for [`upsample_h2v2_row`]: sixteen interior source texels per
+/// iteration. Each lane forms the vertical blend `near * 3 + far` for the
+/// texel and its two neighbours in u16, then the even output
+/// `(this * 3 + prev + 8) >> 4` and the odd output `(this * 3 + next + 7) >> 4`,
+/// and stores the thirty-two output bytes interleaved as `even | odd << 8`.
+/// Every intermediate fits u16 (at most `1020 * 3 + 1020 + 8`), so the lanes
+/// compute exactly what the scalar `u16` expressions do.
+///
+/// Returns the first output column it did not write; columns `0..2` (the
+/// left edge, which has no `prev`) are never written here.
+///
+/// # Safety
+/// The CPU must support AVX2. `near.len() == far.len()`; every load reads
+/// sixteen bytes at `s - 1`, `s`, `s + 1` with `s + 17 <= near.len()`, and
+/// every store writes thirty-two bytes at `2s` with `2s + 32 <= dst.len()`.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+#[allow(unsafe_code)]
+unsafe fn upsample_h2v2_row_avx2(dst: &mut [u8], near: &[u8], far: &[u8]) -> usize {
+    use core::arch::x86_64::*;
+    debug_assert_eq!(near.len(), far.len());
+    let source_w = near.len();
+    let three = _mm256_set1_epi16(3);
+    let bias_even = _mm256_set1_epi16(8);
+    let bias_odd = _mm256_set1_epi16(7);
+    let mut s = 1usize;
+    // SAFETY: the loop condition keeps every 16-byte load inside `near`/`far`
+    // (`s - 1 >= 0`, `s + 1 + 16 <= source_w`) and every 32-byte store inside
+    // `dst` (`2s + 32 <= dst.len()`).
+    unsafe {
+        let blend = |i: usize| {
+            let n = _mm256_cvtepu8_epi16(_mm_loadu_si128(near.as_ptr().add(i).cast()));
+            let f = _mm256_cvtepu8_epi16(_mm_loadu_si128(far.as_ptr().add(i).cast()));
+            _mm256_add_epi16(_mm256_mullo_epi16(n, three), f)
+        };
+        while s + 17 <= source_w && 2 * s + 32 <= dst.len() {
+            let prev = blend(s - 1);
+            let this = blend(s);
+            let next = blend(s + 1);
+            let this3 = _mm256_mullo_epi16(this, three);
+            let even =
+                _mm256_srli_epi16::<4>(_mm256_add_epi16(_mm256_add_epi16(this3, prev), bias_even));
+            let odd =
+                _mm256_srli_epi16::<4>(_mm256_add_epi16(_mm256_add_epi16(this3, next), bias_odd));
+            let out = _mm256_or_si256(even, _mm256_slli_epi16::<8>(odd));
+            _mm256_storeu_si256(dst.as_mut_ptr().add(2 * s).cast(), out);
+            s += 16;
+        }
+    }
+    2 * s
 }
 
 /// How one output row is produced from the per-component sample rows. Shared
@@ -2754,7 +2846,7 @@ mod idct_tests {
 
 #[cfg(test)]
 mod upsample_tests {
-    use super::{Upsample, upsample_component_row};
+    use super::{Upsample, upsample_component_row, upsample_h2v2_row_scalar};
 
     #[test]
     fn h2v1_matches_libjpeg_triangle_and_edge_replication() {
@@ -2819,6 +2911,42 @@ mod upsample_tests {
             2,
         );
         assert_eq!(out, [15, 25, 45, 65, 85, 95]);
+    }
+
+    /// The AVX2 4:2:0 row kernel must equal the scalar reference bit for bit
+    /// over fuzzed chroma rows of every width class: narrower than one vector,
+    /// exact multiples, ragged tails, and odd output widths.
+    #[test]
+    fn h2v2_avx2_matches_scalar_bit_exact() {
+        let mut seed = 0x5eed_c0de_u64;
+        let mut next = || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            (seed >> 24) as u8
+        };
+        for source_w in (1..40).chain([63, 64, 65, 100, 127, 128, 129, 837]) {
+            for &out_w in &[2 * source_w, 2 * source_w - 1] {
+                for _ in 0..4 {
+                    let near: Vec<u8> = (0..source_w).map(|_| next()).collect();
+                    let far: Vec<u8> = (0..source_w).map(|_| next()).collect();
+                    let mut expected = vec![0u8; out_w];
+                    upsample_h2v2_row_scalar(&mut expected, &near, &far, 0, out_w);
+                    let mut got = vec![0xAAu8; out_w];
+                    upsample_component_row(
+                        Upsample::FancyH2V2,
+                        &mut got,
+                        0,
+                        &near,
+                        &far,
+                        source_w,
+                        1,
+                        2,
+                    );
+                    assert_eq!(got, expected, "source_w={source_w} out_w={out_w}");
+                }
+            }
+        }
     }
 
     #[test]

@@ -668,6 +668,116 @@ impl PreparedImage {
         Some(out)
     }
 
+    /// The palette entry a raw Indexed sample selects: `/Decode` (when
+    /// present) remaps the normalised sample into index units, then rounds and
+    /// clamps to `hival`; otherwise the raw sample is the index. This is the
+    /// single definition `pixel()` and [`Self::indexed_source_as_rgb8`] share.
+    #[inline]
+    fn indexed_palette_index(&self, raw: u32, hival: u32) -> usize {
+        if self.decode.is_some() {
+            let maxv = ((1u64 << self.bpc.min(16)) - 1).max(1) as f32;
+            let normalized = raw as f32 / maxv;
+            let decoded = match self.decode.as_ref().and_then(|d| d.first()) {
+                Some([lo, hi]) => lo + normalized * (hi - lo),
+                None => normalized,
+            };
+            decoded.round().clamp(0.0, hival as f32) as u32 as usize
+        } else {
+            raw.min(hival) as usize
+        }
+    }
+
+    /// An Indexed (palette) image re-expressed as RGB8: the palette is resolved
+    /// once into a `2^bpc`-entry table through the *exact* same index
+    /// resolution (`/Decode` included) and base-space conversion `pixel()`
+    /// uses, then every sample becomes a table lookup. `pixel()` on the
+    /// promoted image answers the identical `[r, g, b, 255]` for every texel,
+    /// so sampling it — nearest, bilinear, or box-averaged, with or without a
+    /// soft mask — is byte-identical to sampling the original by construction,
+    /// whether the original's path read the prepared `sample_lut` (2/4 bpc) or
+    /// resolved each tap through `pixel()` (8 bpc). What the promotion buys is
+    /// eligibility for the executor's axis-aligned RGB8 fast paths, and the
+    /// RGB8 byte-sum branch of the generic sampler elsewhere: an 8-bit Indexed
+    /// cover minified onto a page resolved its palette entry through `pixel()`
+    /// for every one of millions of taps.
+    ///
+    /// Colour-key masks test the *raw* samples (palette indices) and are not
+    /// promoted; that is the caller's check. `None` if the image is not that
+    /// shape (stencil, 1 or 16 bpc, or not Indexed) or exceeds the size cap;
+    /// then the generic path runs unchanged. One-bit Indexed images are
+    /// served by the bilevel summed-area path and are deliberately excluded.
+    pub(crate) fn indexed_promoted_to_rgb8(&self) -> Option<PreparedImage> {
+        let samples = self.indexed_source_as_rgb8()?;
+        Some(PreparedImage {
+            color_space: ImageColorSpace::Rgb,
+            bpc: 8,
+            decode: None,
+            sample_lut: None,
+            samples,
+            ..self.clone()
+        })
+    }
+
+    /// The packed RGB8 expansion behind [`Self::indexed_promoted_to_rgb8`].
+    fn indexed_source_as_rgb8(&self) -> Option<Arc<[u8]>> {
+        // 64 Mpx -> 192 MiB of RGB8, the same ceiling as the CMYK conversion.
+        const MAX_EXPAND_PIXELS: usize = 64 * 1024 * 1024;
+        let ImageColorSpace::Indexed {
+            base,
+            hival,
+            lookup,
+        } = &self.color_space
+        else {
+            return None;
+        };
+        if self.is_stencil || !matches!(self.bpc, 2 | 4 | 8) {
+            return None;
+        }
+        let (w, h) = (self.width as usize, self.height as usize);
+        let n = w.checked_mul(h)?;
+        let row_bits = self.row_bits();
+        let source_bytes = row_bits.checked_mul(h)? / 8;
+        if n == 0 || n > MAX_EXPAND_PIXELS || self.samples.len() < source_bytes {
+            return None;
+        }
+        let entries = 1usize << self.bpc;
+        let palette: Vec<[u8; 3]> = (0..entries as u32)
+            .map(|raw| {
+                let rgb = indexed_rgb(
+                    base,
+                    *hival,
+                    lookup,
+                    self.indexed_palette_index(raw, *hival),
+                );
+                [to_u8(rgb[0]), to_u8(rgb[1]), to_u8(rgb[2])]
+            })
+            .collect();
+        let mut out_arc = zeroed_arc(n * 3);
+        let out = unique_arc_mut(&mut out_arc);
+        if self.bpc == 8 {
+            // Rows are byte-aligned already (stride == width).
+            for (&raw, rgb) in self.samples[..n].iter().zip(out.chunks_exact_mut(3)) {
+                rgb.copy_from_slice(&palette[raw as usize]);
+            }
+        } else {
+            let bpc = self.bpc as usize;
+            let mask = (entries - 1) as u8;
+            let per_byte = 8 / bpc;
+            let row_bytes = row_bits / 8;
+            for (row, out_row) in out.chunks_exact_mut(w * 3).enumerate() {
+                let src_row = &self.samples[row * row_bytes..row * row_bytes + row_bytes];
+                for (col, rgb) in out_row.chunks_exact_mut(3).enumerate() {
+                    // MSB-first packing, as `read_bits` unpacks it.
+                    let byte = src_row[col / per_byte];
+                    let shift = 8 - bpc * (col % per_byte + 1);
+                    let raw = (byte >> shift) & mask;
+                    rgb.copy_from_slice(&palette[raw as usize]);
+                }
+            }
+        }
+        Some(out_arc)
+    }
+
     /// Weighted box average of a prepared one-bit image over one destination
     /// pixel's fractional source footprint.
     ///
@@ -1266,14 +1376,11 @@ impl PreparedImage {
                 // `/Decode` remaps the sample to a palette *index* (default is
                 // identity `[0, 2^bpc-1]`). When present — e.g. `[0 255]` on a
                 // 1-bit image, where sample 1 must select index 255, not 1 —
-                // `comp(0)` yields the index directly (its remap is in index
+                // the remap yields the index directly (its units are index
                 // units here); ignoring it reads the wrong palette entry and
-                // inverts bilevel scans.
-                let idx = if self.decode.is_some() {
-                    comp(0).round().clamp(0.0, *hival as f32) as u32 as usize
-                } else {
-                    read(0).min(*hival) as usize
-                };
+                // inverts bilevel scans. Shared with the executor's one-shot
+                // palette expansion so both resolve a raw sample identically.
+                let idx = self.indexed_palette_index(read(0), *hival);
                 indexed_rgb(base, *hival, lookup, idx)
             }
             ImageColorSpace::TintLut { rgb } => tint_lut_rgb(rgb, comp(0)),
@@ -1815,6 +1922,29 @@ pub(crate) fn bilevel_smask_coverage(sm: &ImageSMask, tx: &AxisTaps, ty: &AxisTa
         ones_w = ones_w.saturating_add(ty.weight_at(row).saturating_mul(row_ones));
     }
     ones_w as f32 / weight as f32
+}
+
+/// Box-filtered coverage of an 8-bit `/SMask` over the prepared tap ranges:
+/// the arithmetic of [`sample_smask`]'s multi-bit branch term for term — each
+/// tap's `(wy * wx) * sample` accumulated in f64 in row-major order, divided
+/// by the total weight, narrowed to f32 — so the executor's prepared masked
+/// path paints the same alpha the generic per-pixel sampler does. `sm.samples`
+/// must hold `width * height` bytes (the caller's eligibility check).
+pub(crate) fn gray8_smask_coverage(sm: &ImageSMask, tx: &AxisTaps, ty: &AxisTaps) -> f32 {
+    let row_bytes = smask_row_bits(sm) / 8;
+    let weight = tx.total.saturating_mul(ty.total).max(1);
+    let maxv = 255.0f64;
+    let mut acc = 0.0f64;
+    for row in ty.lo..=ty.hi {
+        let wy = ty.weight_at(row) as f64;
+        let base = row as usize * row_bytes;
+        let texels = &sm.samples[base + tx.lo as usize..=base + tx.hi as usize];
+        for (col, &texel) in (tx.lo..).zip(texels) {
+            let sample = texel as f64 / maxv;
+            acc += wy * tx.weight_at(col) as f64 * sample;
+        }
+    }
+    (acc / weight as f64) as f32
 }
 
 /// Apply a soft mask's `/Decode` remap to a normalised sample.
