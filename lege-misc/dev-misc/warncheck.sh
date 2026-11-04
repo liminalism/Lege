@@ -44,7 +44,7 @@ if [ "$FORCED" = 1 ]; then
 fi
 
 # Vendored trees are reported but never gate the build.
-VENDORED_RE='^(freya-main/|lege-process/GUI/rfd/)'
+VENDORED_RE='^(lege-process/GUI/rfd/)'
 
 fail=0
 total=0

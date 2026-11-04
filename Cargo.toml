@@ -35,7 +35,6 @@ members = [
     "lege-android",             # JNI cdylib for the Android APK
 ]
 # Kept out of the workspace on purpose:
-#   freya-main               — vendored upstream fork with its own workspace
 #   lege-codecs/*            — separate build graphs / licenses (patched in below)
 #   lege-pdf/pdf-integrity   — nested forensic-triage workspace (own lockfile)
 #   lege-docwrite            — retained migration copy; active reader and
@@ -44,7 +43,6 @@ members = [
 #   jbig2enc-rust, built with maturin from its python/ directory; the C ABI
 #   binding under lege-misc/bindings is a normal member below.)
 exclude = [
-    "freya-main",
     "lege-codecs",
     "lege-pdf/pdf-integrity",
     "lege-docwrite",

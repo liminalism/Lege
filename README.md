@@ -38,10 +38,6 @@ JNI library and Gradle host for arm64 Android 9 and later, aimed at e-ink device
 
 Icons, the HTML pages the desktop app opens from About, Linux and macOS packaging notes, the `xtask` AppImage helper, the C ABI over the renderer, and the Python JBIG2 binding. [lege-misc/README.md](lege-misc/README.md).
 
-### freya-main
-
-Vendored fork of the Freya UI toolkit. The desktop app no longer links it. `cargo build` does not build this tree; the workspace excludes it. The liminalUI GUI still embeds Noto Sans from `freya-main/crates/freya-edit/tests/NotoSans-Regular.ttf`. [freya-main/README.md](freya-main/README.md).
-
 The native reader and writer build from the sibling `../liminaldoc` checkout. They use these PDF crates through path dependencies.
 
 ## Build

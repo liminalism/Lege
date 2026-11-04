@@ -18,4 +18,4 @@ Paths inside an old note may still name the directory it was written in. The mov
 | `lege-document-ocr/WINDOWS-BENCHMARK.md` | `lege-document-ocr/WINDOWS-BENCHMARK.md` |
 | `artifacts/opj_bench.obj` | `opj_bench.obj` (repo root) |
 
-Left next to the code on purpose: codec design notes that source comments and examples still open by a path beside the crate (`jbig2decplan.md`, `jp2lam/decode-fix-plan/`, DjVu `llm-docs/`), renderer tool notes (`lege-pdf/render/tools/HAYRO-INTEGRATION.md`, `ATTRIBUTION-HANDOFF.md`), and the Freya fork's own renderer plans under `freya-main/`. Forward-looking scopes stay in `to-do-plans/`.
+Left next to the code on purpose: codec design notes that source comments and examples still open by a path beside the crate (`jbig2decplan.md`, `jp2lam/decode-fix-plan/`, DjVu `llm-docs/`), and renderer tool notes (`lege-pdf/render/tools/HAYRO-INTEGRATION.md`, `ATTRIBUTION-HANDOFF.md`). Forward-looking scopes stay in `to-do-plans/`.

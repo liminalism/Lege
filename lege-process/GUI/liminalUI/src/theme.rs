@@ -8,8 +8,7 @@ pub const FACE: FaceId = FaceId(0);
 pub fn fonts() -> &'static FontSet {
     static FONTS: OnceLock<FontSet> = OnceLock::new();
     FONTS.get_or_init(|| {
-        let bytes =
-            include_bytes!("../../../../freya-main/crates/freya-edit/tests/NotoSans-Regular.ttf");
+        let bytes = include_bytes!("../fonts/NotoSans-Regular.ttf");
         let face = Face::from_bytes(bytes).expect("bundled Noto Sans must parse");
         let mut fonts = FontSet::new();
         fonts.add(Box::leak(Box::new(face)));

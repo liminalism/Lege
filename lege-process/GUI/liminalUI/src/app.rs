@@ -1121,6 +1121,21 @@ fn choice_label(ui: &mut Ui<'_>, area: Rect, text: &str) {
         ui.label_styled(area, text, style, ui.theme.text, Align::Centre);
     }
 }
+fn arrow_button(ui: &mut Ui<'_>, area: Rect, direction: i32) -> bool {
+    let clicked = ui.button(area, "");
+    let half = ui.scale.f(4.0);
+    let (cx, cy) = (
+        area.x as f32 + area.w as f32 / 2.0,
+        area.y as f32 + area.h as f32 / 2.0,
+    );
+    let tip = cx + half * direction as f32 / 2.0;
+    let tail = cx - half * direction as f32 / 2.0;
+    let points = [[tail, cy - half], [tip, cy], [tail, cy + half]];
+    let colour = ui.theme.text;
+    ui.painter
+        .stroke_polyline_aa(ui.kernel, &points, ui.scale.f(1.5), colour, 255);
+    clicked
+}
 fn choices(ui: &mut Ui<'_>, area: Rect, texts: &[&str], selected: usize) -> Option<usize> {
     let gap = ui.px(4);
     let count = texts.len() as i32;
@@ -1284,8 +1299,27 @@ impl Dashboard {
                 Align::Centre,
             );
         }
+        // The status panel's first line shares its height with the utilities
+        // (and, in debug builds, the Debug button left of them).
+        #[cfg(feature = "debug-logging")]
+        let debug = Rect::new(
+            actions.utilities[0].x - ui.px(66),
+            status.y,
+            ui.px(60),
+            actions.utilities[0].h,
+        );
+        #[cfg(feature = "debug-logging")]
+        let header_right = debug.x;
+        #[cfg(not(feature = "debug-logging"))]
+        let header_right = actions.utilities[0].x;
+        let header = Rect::new(
+            status.x,
+            status.y,
+            header_right - status.x - ui.px(8),
+            actions.utilities[0].h,
+        );
         if self.running() {
-            label(ui, row(status, 0, ui.px(22)), &self.status.0);
+            label(ui, header, &self.status.0);
             small(ui, row(status, 1, ui.px(20)), &self.status.1);
             let eta = self
                 .metrics
@@ -1337,7 +1371,12 @@ impl Dashboard {
                     None => format!("{} {}", self.queue.len(), tr("queued")),
                 }
             };
-            ui.label(status, &summary, ui.theme.text_dim, Align::Centre);
+            if self.queue.is_empty() {
+                ui.label(status, &summary, ui.theme.text_dim, Align::Centre);
+            } else {
+                // Centred over the panel, the summary lands on the queue rows.
+                ui.label(header, &summary, ui.theme.text_dim, Align::Left);
+            }
             if let Some(output) = &self.options.output_path {
                 small(
                     ui,
@@ -1351,10 +1390,7 @@ impl Dashboard {
             }
         }
         #[cfg(feature = "debug-logging")]
-        if ui.button(
-            Rect::new(status.right() - ui.px(60), status.y, ui.px(60), ui.px(22)),
-            &t.queue.debug_button,
-        ) {
+        if ui.button(debug, &t.queue.debug_button) {
             self.modal = Some(Modal::Debug);
         }
         // At most two timed, click-to-dismiss cards, anchored bottom-right.
@@ -1550,7 +1586,11 @@ impl Dashboard {
                 note,
             );
         }
-        let buttons = cells(card.geometry, 3, ui.px(4));
+        // Same columns and narrow-panel font as the checkbox grid above.
+        if a.w < ui.px(360) {
+            ui.theme.body.size = ui.scale.font(11.0);
+        }
+        let buttons = cells(card.geometry, 3, ui.px(2));
         for (index, text, selected, tooltip) in [
             (
                 0,
@@ -1571,19 +1611,14 @@ impl Dashboard {
                 t.tooltips.reflow.as_str(),
             ),
         ] {
-            let base = buttons[index];
-            let rect = Rect::new(
-                base.x + ui.px(index as i32 * 5),
-                base.y,
-                base.w - ui.px(index as i32 * 5),
-                base.h,
-            );
+            let rect = buttons[index];
             let mut checked = selected;
             if ui.checkbox(rect, &mut checked, text) {
                 self.select_geometry(index);
             }
             hover(ui, rect, tooltip, true, note);
         }
+        ui.theme.body = body;
     }
 
     fn select_geometry(&mut self, index: usize) {
@@ -1856,6 +1891,10 @@ impl Dashboard {
             w,
             h,
         );
+        // Dim the dashboard: the dialog shares the cards' fill and would
+        // otherwise read as one more panel among them.
+        let window = Rect::new(0, 0, ui.painter.width(), ui.painter.height());
+        ui.painter.blend_rect(window, 0x000000, 72);
         let a = ui.panel(area);
         let row_h = ui.px(30);
         let title = match modal {
@@ -1929,26 +1968,24 @@ impl Dashboard {
                         small(ui, row(body, 1, row_h), &theme.colors.join(", "));
                     }
                 }
-                let r = row(body, 2, row_h);
-                let w = (r.w - ui.px(12)) / 4;
-                for (index, text) in ["←", "→", tr("light"), tr("dark")].into_iter().enumerate()
-                {
-                    if ui.button(
-                        Rect::new(r.x + index as i32 * (w + ui.px(4)), r.y, w, r.h),
-                        text,
-                    ) {
-                        match index {
-                            0 => self.step_theme(-1),
-                            1 => self.step_theme(1),
-                            _ => {
-                                if self.theme_index == 0 {
-                                    self.theme_index = 1;
-                                }
-                                let combo = (self.theme_index - 1) / 2;
-                                self.theme_index = 1 + combo * 2 + usize::from(index == 3);
-                                self.preview_theme();
-                            }
+                // The bundled face has no arrow glyphs; draw the steppers as
+                // chevrons. Light/Dark show which variant is being previewed.
+                let buttons = cells(row(body, 2, row_h), 4, ui.px(4));
+                if arrow_button(ui, buttons[0], -1) {
+                    self.step_theme(-1);
+                }
+                if arrow_button(ui, buttons[1], 1) {
+                    self.step_theme(1);
+                }
+                let dark = (self.theme_index > 0).then(|| (self.theme_index - 1) % 2 == 1);
+                for (index, text) in [(2, tr("light")), (3, tr("dark"))] {
+                    if choice(ui, buttons[index], text, dark == Some(index == 3)) {
+                        if self.theme_index == 0 {
+                            self.theme_index = 1;
                         }
+                        let combo = (self.theme_index - 1) / 2;
+                        self.theme_index = 1 + combo * 2 + usize::from(index == 3);
+                        self.preview_theme();
                     }
                 }
                 if ui.button(row(body, 4, row_h), tr("accept")) {
@@ -1993,6 +2030,9 @@ impl Dashboard {
             Modal::Log => {
                 let list = Rect::new(body.x, body.y, body.w, body.h - row_h - ui.px(6));
                 let entries: Vec<_> = self.log.iter().rev().take(30).collect();
+                if entries.is_empty() {
+                    ui.label(list, tr("log_empty"), ui.theme.text_dim, Align::Centre);
+                }
                 let heights = vec![ui.px(48); entries.len()];
                 let mut open = None;
                 ui.scroll_list(&mut self.modal_scroll, list, &heights, |ui, index, rect| {

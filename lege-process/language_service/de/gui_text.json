@@ -161,7 +161,8 @@
       "text_short": "Text",
       "layout_short": "Layout",
       "images_short": "Bilder",
-      "queue_short": "Liste"
+      "queue_short": "Liste",
+      "log_empty": "Noch keine verarbeiteten Dokumente."
     }
   }
 }

@@ -93,7 +93,7 @@
     </ul>
 
     <h2>Main Distributed and Linked Components</h2>
-    <p>This is a focused notice for components central to a standard Lege processor/Freya build. It is not a dump of every transitive Rust utility crate.</p>
+    <p>This is a focused notice for components central to a standard Lege processor and desktop GUI build. It is not a dump of every transitive Rust utility crate.</p>
     <table>
       <thead>
         <tr>
@@ -104,7 +104,8 @@
         </tr>
       </thead>
       <tbody>
-        <tr><td>Freya</td><td>Desktop GUI framework</td><td>MIT</td><td>Frontend used by the standard <code>lege-gui</code> build.</td></tr>
+        <tr><td>liminalkit</td><td>Desktop GUI toolkit</td><td>MIT OR Apache-2.0</td><td>Windowing, raster, text and widget crates used by the standard <code>lege-gui</code> build.</td></tr>
+        <tr><td>Noto Sans</td><td>GUI typeface</td><td>OFL-1.1</td><td>Copyright 2022 The Noto Project Authors. Embedded in <code>lege-gui</code>; the license text ships beside the font in the GUI source tree.</td></tr>
         <tr><td>PaddleOCR / PP-OCRv6</td><td>Embedded OCR detector, recognizer, and character dictionary</td><td>Apache-2.0</td><td>Derived from the PaddlePaddle/PaddleOCR project; the shipped ONNX models are embedded into <code>lege</code>.</td></tr>
         <tr><td>wgpu</td><td>Cross-platform GPU compute used for OCR, layout analysis, and image processing</td><td>MIT OR Apache-2.0</td><td>Lege uses its own native inference implementation; it does not ship PaddlePaddle or ONNX Runtime as an execution library.</td></tr>
         <tr><td>Lege native PDF engine / Hayro-derived code</td><td>PDF reading and rendering</td><td>Apache-2.0 and/or MIT OR Apache-2.0, by component</td><td>Preserves the upstream notices in the PDF source tree.</td></tr>

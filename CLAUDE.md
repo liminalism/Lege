@@ -28,7 +28,6 @@ Lege is a fully-automatic PDF processor for E-Ink ebook readers. It renders PDF 
 
 The workspace default members are `lege-process` and
 `lege-process/GUI/liminalUI`, so plain `cargo build` builds the CLI and the GUI.
-`freya-main` is excluded from the workspace and is not linked by the GUI.
 Standalone codec projects retain their own build graphs; root patches make the
 processor use the in-tree linked codecs.
 
@@ -211,7 +210,7 @@ vars → `/usr/share/lege/models` (Linux). Models required:
 
 ## Desktop GUI
 
-The only processor GUI is liminalUI (`lege-process/GUI/liminalUI`, package `lege-gui-liminalui`, binary `lege-gui`). It does not link Freya or Skia. `freya-main` stays in the tree and is excluded from the workspace; the GUI embeds Noto Sans from that tree at compile time. File dialogs use the vendored `rfd` crate at `lege-process/GUI/rfd`.
+The only processor GUI is liminalUI (`lege-process/GUI/liminalUI`, package `lege-gui-liminalui`, binary `lege-gui`). It does not link Freya or Skia; the Freya GUI and the vendored `freya-main` tree have been removed. The GUI embeds Noto Sans from `lege-process/GUI/liminalUI/fonts/` at compile time. File dialogs use the vendored `rfd` crate at `lege-process/GUI/rfd`.
 
 ## Debug tracing
 

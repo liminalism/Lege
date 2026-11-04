@@ -18,7 +18,6 @@ status. Inherited workspace fields were resolved where present.
 
 Missing manifest declarations were observed in:
 
-- `freya-main` (its license file and member declarations remain separate evidence).
 - `lege-gpu`, `lege-ocr`, `lege-misc/xtask`, `lege-pdf/write`, and
   `lege-document-ocr/installer-winsafe`.
 - The JBIG2, JPEG2000 and PDF renderer fuzz packages.
