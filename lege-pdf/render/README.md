@@ -205,7 +205,7 @@ placement is small; and the scheduler's deterministic reordering, which lets
 slow pages overlap without changing output order. Tuning knobs are
 environment variables prefixed `PDF_RENDERER_` (`IMAGECACHE`, `FONTCACHE`,
 `GLYPHCACHE`, `GLYPH_SUBPIXEL`, `IMAGE_ROW_PAR`, `JPX_CONCURRENCY`,
-`JPX_REDUCE`, `SURFACE_REUSE`, each with a `_STATS` companion where it caches).
+`JPX_REDUCE`, `JPX_HEADROOM`, `SURFACE_REUSE`, each with a `_STATS` companion where it caches).
 
 The reproducible head-to-head against hayro, pdf-toolkit, PDFium, and MuPDF
 is phase 1 of `../CRATES-IO-PLAN.md`; until it has run, no cross-engine ratio

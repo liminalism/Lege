@@ -5039,18 +5039,36 @@ fn codec_target_size(ctm: Matrix) -> Option<(u32, u32)> {
     if !w.is_finite() || !h.is_finite() || w < 1.0 || h < 1.0 {
         return None;
     }
-    // Ask the codec for a full extra octave above the device footprint. The
-    // codecs reduce to the smallest scale that still covers the hint, so
-    // hinting the bare footprint can hand the resampler as little as ~1 source
-    // texel per device pixel — near point-sampling. PDFium always decoded at
-    // full resolution and box-filtered down; 2x headroom restores that edge
-    // detail (visibly sharper binarized text at moderate target heights) while
-    // keeping the reduced-decode savings for heavily minified draws.
-    const SUPERSAMPLE_HEADROOM: u32 = 2;
+    // The codecs reduce to the smallest wavelet scale that still covers the
+    // hint, so hinting the bare footprint hands the resampler between 1 and 2
+    // source texels per device pixel. An earlier 2x headroom asked for a full
+    // extra octave; on the MRC scan corpus that rejected the one-level
+    // reduction at viewer resolution (a 2929x4424 layer drawn at 1240x2020 was
+    // decoded in full, 300-380 ms per layer against ~45 ms reduced) and cost
+    // more than every renderer-side image optimisation combined, while PDFium
+    // itself decodes JPX at the reduced level for such draws. The headroom is
+    // therefore 1.0 by default; `PDF_RENDERER_JPX_HEADROOM=<f32 >= 1>` restores
+    // the extra octave for paired quality A/B on one binary.
+    let headroom = jpx_headroom() as f64;
     Some((
-        (w as u32).saturating_mul(SUPERSAMPLE_HEADROOM),
-        (h as u32).saturating_mul(SUPERSAMPLE_HEADROOM),
+        (w * headroom).ceil().min(u32::MAX as f64) as u32,
+        (h * headroom).ceil().min(u32::MAX as f64) as u32,
     ))
+}
+
+/// Multiplier applied to the device footprint before it is handed to the codec
+/// as a reduced-resolution hint. Read once from `PDF_RENDERER_JPX_HEADROOM`;
+/// values below 1 or non-finite fall back to the default of 1.0.
+fn jpx_headroom() -> f32 {
+    use std::sync::OnceLock;
+    static HEADROOM: OnceLock<f32> = OnceLock::new();
+    *HEADROOM.get_or_init(|| {
+        std::env::var("PDF_RENDERER_JPX_HEADROOM")
+            .ok()
+            .and_then(|v| v.trim().parse::<f32>().ok())
+            .filter(|h| h.is_finite() && *h >= 1.0)
+            .unwrap_or(1.0)
+    })
 }
 
 /// Device-space integer bounds of `points`, culled to the output size.
