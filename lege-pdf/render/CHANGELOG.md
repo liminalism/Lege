@@ -10,6 +10,75 @@ work since the native renderer was promoted on 2026-07-26: three performance
 passes with byte-identical output, a hardened codec boundary, and the read,
 print and agent surfaces built on it.
 
+### Performance, 2026-11-04, round 4 (follow-ups to round 3)
+
+Byte-identical to round 3 on the full private corpus except where noted;
+the one output change is the glyph outline flattening, which is kept
+reproducible through an override.
+
+- Scheduler: the reorder window now scales with the worker counts
+  (`SchedulerOptions::reorder_window_for`, four slots per worker, floor 12)
+  instead of a fixed 12. A finished page waits in the reorder buffer holding
+  a window slot, so a window near the worker count starved the render
+  workers on short documents: a 22-page book at eight workers went from
+  0.62× hayro to level with it (best of three: 45 → 38 ms against hayro's
+  39 ms). Long documents are unaffected. The page feed is sized to the
+  window too, and the window's unbudgeted reorder-buffer memory is
+  documented on the option.
+- Fonts: the document-scoped font resource cache resolves each font once
+  even when several compile workers reach it at the same time (a per-font
+  slot with an in-flight lock), where before every compile worker starting
+  on a different page of the same book parsed the same programs in
+  parallel. Type 3 fonts take no slot.
+- Glyphs: outline curves are flattened adaptively — the fewest uniform
+  segments whose chords stay within 1/16 px of the curve (FreeType's smooth
+  rasterizer threshold) — instead of a fixed eight per curve. Body text at
+  screen resolution rasterises one or two segments per curve, display sizes
+  more than eight. The miss path of the glyph coverage cache, which was
+  about 7 µs per glyph at 72 DPI with 200 edges for a 7-pixel glyph, drives
+  the three-page beans document from 22.7 to 14.7 ms serially at 72 DPI
+  (0.77× → 1.31× hayro). Output changes at anti-aliased glyph edges only:
+  on the text documents 2–7% of pixels move by 4 levels on average, none by
+  more than 28, and no image document changes.
+  `PDF_RENDERER_OUTLINE_SEGMENTS=8` restores the previous fixed subdivision
+  byte for byte (every other change in this pass verifies identical under
+  it).
+- Masked area minification: the alpha pass walks the mask union row's set
+  texels and fills whole runs of clear boxes at once, a box known to reach
+  a set texel takes only the all-set half of the uniform test, and the
+  mixed-box filter reads prepared row offsets and weights. Structures'
+  masked draw: 7.7 → 7.3 ms per page serially (the alpha pass 2.66 → 2.33 s
+  over the 632 pages). Profiling showed the horizontal pass named in the
+  round-3 hand-off at 2% of the draw, so it was left alone; the remaining
+  cost is per visible pixel (mask coverage, box average, composite) and
+  memory-bound.
+- Low-bit-depth images: a 1-, 2- or 4-bit single-component image drawn
+  axis-aligned at or above its own resolution — the bilevel JBIG2 or CCITT
+  page of a scan, an MRC producer or Lege's own output — now reads its
+  packed source row through the image's prepared lookup table
+  (`paint_axis_aligned_lut_nearest_opaque`), where before it fell into the
+  generic per-pixel loop at ~30 ns a pixel. Lege 1.5.1's own JBIG2 output
+  (737×1200 text layers): 105 → 5.5 ms per page serially at 144 DPI (hayro
+  8.3) and 27.5 → 1.9 ms at 72 DPI (hayro 3.9); its halftone-region pages
+  175–205 → 9–10 ms (hayro 12.5–14.5). Byte-identical: a unit test holds the
+  path to the generic sampler at 1:1, magnified, fractionally placed and
+  partly off the surface, at 1, 2 and 4 bits, with and without an inverting
+  `/Decode`, and the corpus hashes are unchanged.
+- JBIG2 halftone regions, exercised rather than changed: a halftone-region
+  PDF made with Lege 1.5.1 (`--halftone --text-format jbig2`; 4×4 cells, 16
+  patterns, arithmetic gray planes) renders identically to hayro, and
+  synthetic HENSKIP=1 streams (T.88 §6.6.5.1 skipped cells) decode
+  identically to hayro too. The one defect found was in jbig2enc-rust's
+  test-only stream writer, which fed the values of skipped cells into later
+  contexts where the standard has 0 (fixed there; the decoder is
+  unchanged). Lege's own encoder never sets HENSKIP and no corpus stream
+  has a halftone region.
+- Examined and left unchanged: the JPEG Huffman decoder already carries a
+  10-bit lookahead, a combined code-and-magnitude AC table and batched
+  refills, and the residual against zune-jpeg needs a stream-level harness
+  to attribute; page composition already works a word at a time with
+  full-cover regions swapped in without a copy.
+
 ### Performance, 2026-11-04, round 3 (per-core, byte-identical)
 
 - Glyph blit: one `blend_mask_rect` call per glyph (AVX2 with a scalar

@@ -573,6 +573,25 @@ impl PreparedImage {
             && self.inv.c.abs() < 1e-12
     }
 
+    /// The lookup table of a 1-, 2- or 4-bit single-component image whose
+    /// every entry is opaque, for the executor's axis-aligned nearest fast
+    /// path. `pixel()` resolves such an image as `lut[read_bits(..)]`, so the
+    /// table must be complete (one entry per sample value, else a value with
+    /// no entry would paint nothing) and the sample data must cover every
+    /// packed row (else `read_bits` reads the missing bytes as zero). `None`
+    /// sends the draw down the generic path.
+    pub(crate) fn lut_nearest_opaque(&self) -> Option<&[[u8; 4]]> {
+        if self.is_stencil || !matches!(self.bpc, 1 | 2 | 4) || self.components() != 1 {
+            return None;
+        }
+        let lut = self.sample_lut.as_ref()?;
+        if lut.len() != 1usize << self.bpc || lut.iter().any(|c| c[3] != 255) {
+            return None;
+        }
+        let needed = (self.row_bits() / 8).checked_mul(self.height as usize)?;
+        (self.samples.len() >= needed).then_some(&lut[..])
+    }
+
     /// The two prepared RGBA entries (zero-bit, one-bit) of a bilevel image's
     /// lookup table, for the executor's summed-area box-filter path.
     pub(crate) fn binary_box_lut(&self) -> Option<([u8; 4], [u8; 4])> {

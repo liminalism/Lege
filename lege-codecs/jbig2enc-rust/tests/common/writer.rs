@@ -1120,11 +1120,16 @@ pub fn halftone_skip_page(
 
     // Gray plane (HBPP=1): pixel (ng, mg) = pattern index; skipped cells omitted.
     let mut coder = Jbig2ArithCoder::new();
-    // Build the plane bitmap so causal context reads see the coded values.
+    // Build the plane bitmap so causal context reads see the coded values. A
+    // skipped cell is 0 in the decoder's plane (T.88 §6.2.5.7 step 3c: the
+    // pixel is set to 0 and not decoded), so its `cell_values` entry must not
+    // reach the context of later pixels either.
     let mut plane = TestBitmap::new(hgw, hgh);
     for mg in 0..hgh {
         for ng in 0..hgw {
-            if cell_values[mg as usize][ng as usize] {
+            if cell_values[mg as usize][ng as usize]
+                && !cell_skipped(ng, mg, hgx, hgy, hrx, hry, hpw, hph, hbw, hbh)
+            {
                 plane.set(ng, mg, true);
             }
         }

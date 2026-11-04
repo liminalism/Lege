@@ -772,6 +772,28 @@ fn paint_image(
     // as nearest, with bilinear taps matching `PreparedImage::bilinear`.
     let fast_rgb8_bilinear =
         fast_rgb8_base && img.interpolation == pdf_page_ir::InterpolationMode::Bilinear;
+    // The low-bit-depth twin of `fast_rgb8`: a 1-, 2- or 4-bit single-component
+    // image — the bilevel JBIG2 or CCITT page of a scan, an MRC producer or
+    // Lege's own output — drawn axis-aligned at or above its own resolution,
+    // sampled through its prepared lookup table. Without it such a draw took
+    // the generic per-pixel loop (~30 ns a pixel, 100 ms for a 1474×2400
+    // page). Minified draws keep the summed-area `fast_binary` path below.
+    let lut_nearest = if blend_is_normal
+        && cmask.is_none()
+        && soft.is_none()
+        && img.alpha == 255
+        && img.smask.is_none()
+        && img.mask.is_none()
+        && img.footprint[0] <= 1.0
+        && img.footprint[1] <= 1.0
+        && img.inv.b.abs() < 1e-12
+        && img.inv.c.abs() < 1e-12
+        && img.interpolation == pdf_page_ir::InterpolationMode::Nearest
+    {
+        img.lut_nearest_opaque()
+    } else {
+        None
+    };
     // The area-minified twin of `fast_rgb8`: same eligibility, but the image is
     // minified on at least one axis (footprint > 1), so each destination pixel
     // box-averages its source footprint (what the generic path's
@@ -832,6 +854,14 @@ fn paint_image(
         }
     } else if fast_rgb8_bilinear {
         let result = paint_axis_aligned_rgb8_bilinear_opaque(img, surface, x0, y0, x1, y1);
+        covered = result.0;
+        #[cfg(feature = "profiling")]
+        {
+            sample_attempts = (x1 - x0) as u64 * (y1 - y0) as u64;
+            sample_taps = result.1;
+        }
+    } else if let Some(lut) = lut_nearest {
+        let result = paint_axis_aligned_lut_nearest_opaque(img, lut, surface, x0, y0, x1, y1);
         covered = result.0;
         #[cfg(feature = "profiling")]
         {
@@ -994,6 +1024,9 @@ fn paint_image(
         }
         if fast_rgb8_bilinear {
             profile.increment("image.fast_rgb8_bilinear_pixels", covered);
+        }
+        if lut_nearest.is_some() {
+            profile.increment("image.fast_lut_nearest_pixels", covered);
         }
         if fast_rgb8_area {
             profile.increment("image.fast_rgb8_area_min_pixels", covered);
@@ -1597,6 +1630,75 @@ fn paint_axis_aligned_rgb8_nearest_opaque(
         for &(start, len) in &runs {
             let src_off = source_base + columns[start] as usize * 3;
             widen_rgb8_to_rgba8_opaque(kernel, samples, src_off, &mut dst[start * 4..][..len * 4]);
+        }
+        painted += n as u64;
+    }
+    (painted, painted)
+}
+
+/// Fast path for an axis-aligned magnified or 1:1 low-bit-depth image that
+/// samples through a prepared lookup table (`PreparedImage::sample_lut`): the
+/// one-bit JBIG2 or CCITT page a scanner, an MRC producer or Lege itself
+/// writes, drawn at or above its own resolution. The generic per-pixel loop
+/// paid an inverse map, an edge test and a `shade()` per destination pixel
+/// for it (~30 ns each, 100 ms for a 1474×2400 page). Device X and Y map to a
+/// source column and row independently once the placement is axis-aligned,
+/// so the column → texel table is built once and each destination row reads
+/// its packed source row through the lookup table. Nearest sampling,
+/// byte-identical to `PreparedImage::shade` (`nearest` → `pixel` →
+/// `lut[read_bits(..)]`); the caller has checked the table is complete and
+/// opaque and the sample data covers every row (`lut_nearest_opaque`).
+fn paint_axis_aligned_lut_nearest_opaque(
+    img: &crate::image::PreparedImage,
+    lut: &[[u8; 4]],
+    surface: &mut Surface,
+    x0: usize,
+    y0: usize,
+    x1: usize,
+    y1: usize,
+) -> (u64, u64) {
+    // Same column mapping as `paint_axis_aligned_rgb8_nearest_opaque`.
+    let mut first_x = None;
+    let mut columns: Vec<u32> = Vec::with_capacity(x1 - x0);
+    for x in x0..x1 {
+        let u = img.inv.a * (x as f64 + 0.5) + img.inv.e;
+        if !(0.0..1.0).contains(&u) {
+            if first_x.is_some() {
+                break;
+            }
+            continue;
+        }
+        first_x.get_or_insert(x);
+        let fx = u * img.width as f64 - 0.5;
+        columns.push((fx.round() as i64).clamp(0, img.width.saturating_sub(1) as i64) as u32);
+    }
+    let Some(first_x) = first_x else {
+        return (0, 0);
+    };
+    let n = columns.len();
+
+    let bpc = img.bpc as usize;
+    let mask = ((1u16 << bpc) - 1) as u8;
+    // Packed rows are byte-aligned (`row_bits` is a multiple of 8), and every
+    // column index is below the width, so `bit >> 3` stays inside the row.
+    let row_bytes = img.packed_row_bits() / 8;
+    let samples: &[u8] = &img.samples;
+    let output_origin = surface.origin_x;
+    let mut painted = 0u64;
+    for y in y0..y1 {
+        let v = img.inv.d * (y as f64 + 0.5) + img.inv.f;
+        if !(0.0..1.0).contains(&v) {
+            continue;
+        }
+        let fy = (1.0 - v) * img.height as f64 - 0.5;
+        let source_row = (fy.round() as i64).clamp(0, img.height.saturating_sub(1) as i64) as usize;
+        let source = &samples[source_row * row_bytes..][..row_bytes];
+        let row = surface.row_mut(y);
+        let dst = &mut row[(first_x - output_origin) * 4..][..n * 4];
+        for (&col, out) in columns.iter().zip(dst.chunks_exact_mut(4)) {
+            let bit = col as usize * bpc;
+            let value = (source[bit >> 3] >> (8 - bpc - (bit & 7))) & mask;
+            out.copy_from_slice(&lut[value as usize]);
         }
         painted += n as u64;
     }
@@ -2537,6 +2639,13 @@ fn paint_axis_aligned_rgb8_area_min_masked(
         (span, MaskAxis::Texel(_)) => span,
     });
     let body_col_taps: u64 = body_taps.iter().map(|t| (t.hi - t.lo + 1) as u64).sum();
+    // Whether the body's soft-mask boxes advance with x (an unmirrored draw;
+    // `u` is monotonic in `x`, so a mirrored one descends). The alpha pass
+    // skips clear runs only in that order.
+    let masks_ascending = body_masks.windows(2).all(|pair| match (pair[0], pair[1]) {
+        (MaskAxis::Taps(a), MaskAxis::Taps(b)) => a.lo <= b.lo,
+        _ => false,
+    });
 
     // A border-band pixel, or one whose center maps outside the image: the
     // generic per-pixel treatment, minus the clip and soft-clip terms this
@@ -2617,6 +2726,14 @@ fn paint_axis_aligned_rgb8_area_min_masked(
                 }
                 _ => None,
             };
+            // The one-bit mask rows this row's boxes span, with their bit
+            // offsets and weights laid out once for the mixed-box filter.
+            let mask_rows = match (mask, row_axes) {
+                (AreaMinMask::Soft(sm), Some((_, MaskAxis::Taps(mty)))) => {
+                    BilevelMaskRows::new(sm, &mty)
+                }
+                _ => None,
+            };
             // Every body box of this row clear, and clear means transparent
             // (no inverting `/Decode`): the body paints nothing, so only the
             // border band remains — the blank lines and margins of a scanned
@@ -2657,9 +2774,64 @@ fn paint_axis_aligned_rgb8_area_min_masked(
 
             // Pass 1: each body pixel's mask alpha, first — a transparent
             // pixel skips the box average.
+            //
+            // A scanned page's foreground mask is clear over most of every
+            // row, so the pass walks the union row's set texels: every box
+            // that ends before the next set texel is clear, and a whole run
+            // of them takes one fill instead of a window test each. Only a
+            // box that reaches a set texel is classified per column. The
+            // alpha of a clear box is `alpha_clear` either way (a clear
+            // window is `uniform == Some(false)`; a box too wide to test
+            // filters to coverage 0.0, which decodes to the same byte), so
+            // the row's alphas are unchanged.
             let mut visible = 0usize;
-            for (a, &mx) in alphas.iter_mut().zip(&body_masks) {
+            // The first set texel at or after the last queried `lo`, once
+            // known; valid for every later box because `lo` only grows.
+            let mut next_set: Option<Option<usize>> = None;
+            let mut k = 0usize;
+            while k < body_masks.len() {
+                let mx = body_masks[k];
+                if masks_ascending && let (Some(s), MaskAxis::Taps(mtx)) = (&summary, mx) {
+                    let lo = mtx.lo as usize;
+                    let ns = match next_set {
+                        Some(ns) if ns.is_none_or(|p| p >= lo) => ns,
+                        _ => {
+                            let ns = s.next_set(lo);
+                            next_set = Some(ns);
+                            ns
+                        }
+                    };
+                    let run_end = match ns {
+                        // No set texel from here on: every remaining box is
+                        // clear.
+                        None => body_masks.len(),
+                        Some(p) if p > mtx.hi as usize => {
+                            // Every box ending before `p` is clear.
+                            k + body_masks[k..]
+                                .iter()
+                                .take_while(
+                                    |m| matches!(m, MaskAxis::Taps(t) if (t.hi as usize) < p),
+                                )
+                                .count()
+                        }
+                        Some(_) => k,
+                    };
+                    if run_end > k {
+                        alphas[k..run_end].fill(alpha_clear);
+                        if alpha_clear != 0 {
+                            visible += run_end - k;
+                        }
+                        k = run_end;
+                        continue;
+                    }
+                }
+                let a = &mut alphas[k];
+                k += 1;
+                // After the run walk the box is known to reach a set texel,
+                // so only the all-set test remains of the uniform check.
+                let known_set = masks_ascending && next_set.is_some();
                 let uniform = summary.as_ref().and_then(|s| match mx {
+                    MaskAxis::Taps(mtx) if known_set => s.all_set(&mtx).then_some(true),
                     MaskAxis::Taps(mtx) => s.uniform(&mtx),
                     MaskAxis::Texel(_) => None,
                 });
@@ -2672,7 +2844,12 @@ fn paint_axis_aligned_rgb8_area_min_masked(
                         }
                     }
                     (AreaMinMask::Soft(sm), MaskAxis::Taps(mtx), MaskAxis::Taps(mty)) => {
-                        let coverage = bilevel_smask_coverage_windowed(sm, &mtx, &mty);
+                        let coverage = match &mask_rows {
+                            Some(rows) if mtx.hi - mtx.lo < 57 => {
+                                bilevel_coverage_prepared(sm, rows, &mtx)
+                            }
+                            _ => bilevel_smask_coverage_windowed(sm, &mtx, &mty),
+                        };
                         (255.0 * crate::image::apply_smask_decode(sm, coverage)) as u8
                     }
                     (AreaMinMask::Soft8(sm), MaskAxis::Taps(mtx), MaskAxis::Taps(mty)) => {
@@ -3313,6 +3490,39 @@ impl MaskRowSummary {
             && self.any[first + 1..last].iter().all(|&v| v == 0)
     }
 
+    /// The first texel at or after `from` that is set in any spanned row, or
+    /// `None` when the rest of the row is clear.
+    #[inline]
+    fn next_set(&self, from: usize) -> Option<usize> {
+        if !self.one_bit {
+            let rest = self.any.get(from..)?;
+            return rest.iter().position(|&v| v != 0).map(|i| from + i);
+        }
+        let byte = from / 8;
+        let head = self.any.get(byte)? & (0xffu8 >> (from % 8));
+        if head != 0 {
+            return Some(byte * 8 + head.leading_zeros() as usize);
+        }
+        let rest = self.any.get(byte + 1..)?;
+        let i = rest.iter().position(|&v| v != 0)?;
+        Some((byte + 1 + i) * 8 + rest[i].leading_zeros() as usize)
+    }
+
+    /// Whether every texel of the box is set, for a box already known to
+    /// hold a set texel: the second half of [`Self::uniform`], with the same
+    /// width limit (a wider box reads as not all set, and filters).
+    #[inline]
+    fn all_set(&self, cols: &crate::image::AxisTaps) -> bool {
+        if self.one_bit {
+            let width = (cols.hi - cols.lo + 1) as usize;
+            width <= 57 && bit_window(&self.all, cols.lo as usize, width) == (1u64 << width) - 1
+        } else {
+            self.all[cols.lo as usize..=cols.hi as usize]
+                .iter()
+                .all(|&v| v == 0xff)
+        }
+    }
+
     /// `Some(false)` when every texel of the box is clear, `Some(true)` when
     /// every one is set, `None` when it is mixed (or too wide to test in one
     /// window, which only costs the shortcut).
@@ -3361,6 +3571,69 @@ fn bit_window(data: &[u8], bit: usize, width: usize) -> u64 {
         }
     };
     (word << (bit & 7)) >> (64 - width)
+}
+
+/// The one-bit mask rows one destination row's boxes span: each row's first
+/// bit offset and weight, prepared once per destination row so the mixed-box
+/// filter walks them without recomputing the row stride or the weight of
+/// every row for every column.
+struct BilevelMaskRows {
+    n: usize,
+    bit_offset: [usize; Self::MAX_ROWS],
+    weight: [u64; Self::MAX_ROWS],
+    total: u64,
+}
+
+impl BilevelMaskRows {
+    /// Tallest box prepared; a taller one (a minification of more than ~15×
+    /// on Y) takes the per-column filter.
+    const MAX_ROWS: usize = 16;
+
+    fn new(sm: &pdf_page_ir::ImageSMask, rows: &crate::image::AxisTaps) -> Option<Self> {
+        let n = (rows.hi - rows.lo) as usize + 1;
+        if n > Self::MAX_ROWS {
+            return None;
+        }
+        let row_bits = crate::image::smask_row_bits(sm);
+        let mut prepared = Self {
+            n,
+            bit_offset: [0; Self::MAX_ROWS],
+            weight: [0; Self::MAX_ROWS],
+            total: rows.total,
+        };
+        for (i, row) in (rows.lo..=rows.hi).enumerate() {
+            prepared.bit_offset[i] = row as usize * row_bits;
+            prepared.weight[i] = rows.weight_at(row);
+        }
+        Some(prepared)
+    }
+}
+
+/// [`bilevel_smask_coverage_windowed`] over prepared rows: the same window
+/// per row, the same `w_lo·first + w_hi·last + S·popcount(interior)`, the
+/// same saturating row-weighted sum in the same row order, the same `f32`
+/// division — so the identical coverage. The box must be at most 57 wide.
+#[inline]
+fn bilevel_coverage_prepared(
+    sm: &pdf_page_ir::ImageSMask,
+    rows: &BilevelMaskRows,
+    tx: &crate::image::AxisTaps,
+) -> f32 {
+    const S: u64 = crate::image::AXIS_TAP_SCALE;
+    let width = (tx.hi - tx.lo + 1) as usize;
+    let weight = tx.total.saturating_mul(rows.total).max(1);
+    let mut ones_w = 0u64;
+    for i in 0..rows.n {
+        let win = bit_window(&sm.samples, rows.bit_offset[i] + tx.lo as usize, width);
+        let row_ones = if width == 1 {
+            tx.w_lo * win
+        } else {
+            let interior = (win >> 1) & ((1u64 << (width - 2)) - 1);
+            tx.w_lo * (win >> (width - 1)) + tx.w_hi * (win & 1) + S * interior.count_ones() as u64
+        };
+        ones_w = ones_w.saturating_add(rows.weight[i].saturating_mul(row_ones));
+    }
+    ones_w as f32 / weight as f32
 }
 
 /// [`crate::image::bilevel_smask_coverage`] with each mask row's taps read as
@@ -5849,6 +6122,60 @@ mod rgb8_area_min_tests {
                 );
                 assert_eq!(painted, ref_painted, "{what}: painted count");
                 assert_surfaces_equal(&mut fast, &mut reference, &what);
+            }
+        }
+    }
+
+    /// The lookup-table nearest path — a packed 1-, 2- or 4-bit
+    /// single-component source read through its prepared table — must match
+    /// generic `shade()` byte for byte at 1:1, magnified, fractionally placed
+    /// and partly off the surface, with and without an inverting `/Decode`.
+    #[test]
+    fn lut_nearest_fast_path_matches_generic_shade() {
+        let mut rng = Rng(0x1b17_4ea7_0000_0011);
+        let cases: [(u32, u32, u32, u32, f64, f64, u32, u32); 6] = [
+            (64, 8, 64, 8, 0.0, 0.0, 64, 8),
+            (37, 5, 37, 5, 3.0, 2.0, 48, 9),
+            (64, 8, 64, 8, 0.5, 0.25, 80, 12),
+            (33, 9, 66, 18, -7.0, -3.0, 50, 12),
+            (40, 7, 97, 13, 2.0, 1.0, 101, 15),
+            (21, 4, 63, 12, 0.0, 0.0, 63, 12),
+        ];
+        let inverting = [[1.0f32, 0.0]];
+        for &(sw, sh, dev_w, dev_h, tx, ty, surf_w, surf_h) in &cases {
+            for bpc in [1u8, 2, 4] {
+                for invert in [false, true] {
+                    let row_bytes = (sw as usize * bpc as usize).div_ceil(8);
+                    let samples: Vec<u8> =
+                        (0..row_bytes * sh as usize).map(|_| rng.byte()).collect();
+                    let mut img = make_image_placed(sw, sh, dev_w, dev_h, tx, ty, samples);
+                    img.bpc = bpc;
+                    img.color_space = ImageColorSpace::Gray;
+                    img.sample_lut = crate::image::build_sample_lut(
+                        bpc,
+                        &ImageColorSpace::Gray,
+                        invert.then_some(&inverting[..]),
+                        false,
+                    );
+                    let what = format!(
+                        "lut nearest bpc={bpc} invert={invert} sw={sw} sh={sh} dev={dev_w}x{dev_h} at ({tx},{ty})"
+                    );
+                    let lut = img.lut_nearest_opaque().expect("complete opaque table");
+                    let (mut reference, ref_painted) = generic_reference(&img, surf_w, surf_h);
+                    let mut fast =
+                        Surface::new(surf_w as usize, surf_h as usize, Background::Transparent);
+                    let (painted, _) = paint_axis_aligned_lut_nearest_opaque(
+                        &img,
+                        lut,
+                        &mut fast,
+                        0,
+                        0,
+                        surf_w as usize,
+                        surf_h as usize,
+                    );
+                    assert_eq!(painted, ref_painted, "{what}: painted count");
+                    assert_surfaces_equal(&mut fast, &mut reference, &what);
+                }
             }
         }
     }

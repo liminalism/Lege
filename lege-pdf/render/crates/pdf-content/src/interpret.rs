@@ -2484,19 +2484,41 @@ impl<'a> Interpreter<'a> {
             object,
             provider: self.system_fonts_identity(),
         });
-        if let Some(key) = &cache_key
-            && let Some(cached) = self.font_resources.get(key)
-        {
-            let mut sem = (*cached).clone();
-            sem.resource_name = name;
-            return sem;
-        }
+        // Resolve each font once per document even when several compile
+        // workers reach it at the same time: the slot's lock makes the
+        // second worker wait for the first worker's result instead of
+        // redoing the parse. Pipelines start every compile worker on a
+        // different page of the same book at once, so without this the
+        // first N pages each paid the full resolution for the same fonts.
+        // Type 3 fonts are never cached (see `FontResourceCache`), so they
+        // take no slot and never wait on one.
         if let Some(sub) = dict
             .get(self.names.known.subtype)
             .and_then(PdfObject::as_name)
         {
             sem.subtype = self.names.resolve(sub).to_vec();
         }
+        let slot = cache_key
+            .as_ref()
+            .filter(|_| sem.subtype != b"Type3")
+            .map(|key| self.font_resources.slot(key.clone()));
+        let _resolving = match &slot {
+            Some(slot) => {
+                if let Some(cached) = slot.get() {
+                    let mut sem = SemFont::clone(cached);
+                    sem.resource_name = name;
+                    return sem;
+                }
+                let guard = slot.resolving();
+                if let Some(cached) = slot.get() {
+                    let mut sem = SemFont::clone(cached);
+                    sem.resource_name = name;
+                    return sem;
+                }
+                Some(guard)
+            }
+            None => None,
+        };
         let base_key = self.intern(b"BaseFont");
         if let Some(base) = dict.get(base_key).and_then(PdfObject::as_name) {
             sem.base_font = self.names.resolve(base).to_vec();
@@ -2609,8 +2631,8 @@ impl<'a> Interpreter<'a> {
             }
         }
         sem.unicode_map = Arc::new(unicode_map);
-        if let Some(key) = cache_key {
-            self.font_resources.insert(key, &sem);
+        if let (Some(key), Some(slot)) = (cache_key, &slot) {
+            self.font_resources.insert(key, slot, &sem);
         }
         sem
     }
@@ -5826,9 +5848,34 @@ pub(crate) struct FontResourceCache {
 
 #[derive(Debug, Default)]
 struct FontResourceCacheInner {
-    fonts: HashMap<FontCacheKey, Arc<SemFont>>,
+    fonts: HashMap<FontCacheKey, Arc<FontSlot>>,
     /// Retained embedded-program bytes plus a per-entry allowance.
     bytes: usize,
+}
+
+/// One font's cache entry: empty while its first resolver works, then set
+/// once. `resolving` is held across that resolution so a concurrent compiler
+/// of the same font waits for the result (a few milliseconds) rather than
+/// parsing the program a second time; the map lock itself is never held
+/// while resolving.
+#[derive(Debug, Default)]
+struct FontSlot {
+    font: std::sync::OnceLock<Arc<SemFont>>,
+    resolving: std::sync::Mutex<()>,
+}
+
+impl FontSlot {
+    fn get(&self) -> Option<&Arc<SemFont>> {
+        self.font.get()
+    }
+
+    /// Serialise resolvers of this font. A panic in a resolver poisons the
+    /// lock; the next resolver simply takes over.
+    fn resolving(&self) -> std::sync::MutexGuard<'_, ()> {
+        self.resolving
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
 }
 
 impl FontResourceCache {
@@ -5839,15 +5886,23 @@ impl FontResourceCache {
     /// program bytes.
     const ENTRY_OVERHEAD: usize = 16 << 10;
 
-    fn get(&self, key: &FontCacheKey) -> Option<Arc<SemFont>> {
-        let inner = self
+    /// The entry for `key`, created empty if absent. The caller checks
+    /// [`FontSlot::get`], otherwise resolves under [`FontSlot::resolving`]
+    /// and publishes with [`FontResourceCache::insert`].
+    fn slot(&self, key: FontCacheKey) -> Arc<FontSlot> {
+        let mut inner = self
             .inner
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        inner.fonts.get(key).cloned()
+        Arc::clone(inner.fonts.entry(key).or_default())
     }
 
-    fn insert(&self, key: FontCacheKey, font: &SemFont) {
+    /// Publish a resolved font into its slot and charge its bytes. Type 3
+    /// fonts are never published, so their (empty) slot stays resolvable by
+    /// every page. On overflow the whole map is dropped; a slot an in-flight
+    /// resolver still holds is published into that detached slot only, and
+    /// the next page re-resolves the font into a fresh one.
+    fn insert(&self, key: FontCacheKey, slot: &Arc<FontSlot>, font: &SemFont) {
         if font.subtype == b"Type3" {
             return;
         }
@@ -5861,7 +5916,12 @@ impl FontResourceCache {
             inner.fonts.clear();
             inner.bytes = 0;
         }
-        if inner.fonts.insert(key, Arc::new(font.clone())).is_none() {
+        let published = slot.font.set(Arc::new(font.clone())).is_ok();
+        let mapped = inner
+            .fonts
+            .get(&key)
+            .is_some_and(|current| Arc::ptr_eq(current, slot));
+        if published && mapped {
             inner.bytes += charge;
         }
     }

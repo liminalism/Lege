@@ -4495,8 +4495,9 @@ fn rasterize_glyph_bitmap(
 }
 
 /// Flatten `outline` into local `points`/`subpaths`, mapping each point through
-/// `dev`. Curve subdivision matches [`emit_outline_points`] (`OUTLINE_SEGMENTS`),
-/// so a cached glyph's coverage is identical to the outline path's at the same
+/// `dev`. Curve subdivision matches [`emit_outline_points`] (the same
+/// [`OutlineFlatness`] policy over the same device-space control points), so
+/// a cached glyph's coverage is identical to the outline path's at the same
 /// transform up to the origin snap.
 fn flatten_outline_into(
     outline: &pdf_font::Outline,
@@ -4504,6 +4505,7 @@ fn flatten_outline_into(
     points: &mut Vec<[f32; 2]>,
     subpaths: &mut Vec<(usize, usize)>,
 ) {
+    let flatness = outline_flatness();
     let mut pt = 0usize;
     let mut start = points.len();
     let mut cur = [0f32; 2];
@@ -4527,7 +4529,7 @@ fn flatten_outline_into(
                 let c = dev(outline.points[pt]);
                 let e = dev(outline.points[pt + 1]);
                 pt += 2;
-                flatten_quad(points, cur, c, e);
+                flatten_quad(points, cur, c, e, flatness);
                 cur = e;
             }
             pdf_font::OutlineVerb::CurveTo => {
@@ -4535,7 +4537,7 @@ fn flatten_outline_into(
                 let c2 = dev(outline.points[pt + 1]);
                 let e = dev(outline.points[pt + 2]);
                 pt += 3;
-                flatten_cubic(points, cur, c1, c2, e);
+                flatten_cubic(points, cur, c1, c2, e, flatness);
                 cur = e;
             }
             pdf_font::OutlineVerb::Close => {
@@ -4817,6 +4819,7 @@ fn append_glyph_stroke_path(
             y: gy + o[1] as f64 * scale,
         })
     };
+    let flatness = outline_flatness();
     let mut pt = 0usize;
     let mut cur = Point::default();
     for verb in &outline.verbs {
@@ -4837,8 +4840,13 @@ fn append_glyph_stroke_path(
                 let c = map(outline.points[pt]);
                 let e = map(outline.points[pt + 1]);
                 pt += 2;
-                for i in 1..=OUTLINE_SEGMENTS {
-                    let t = i as f64 / OUTLINE_SEGMENTS as f64;
+                let n = curve_segments(
+                    flatness,
+                    quad_deviation([cur.x, cur.y], [c.x, c.y], [e.x, e.y]),
+                    0.25,
+                );
+                for i in 1..=n {
+                    let t = i as f64 / n as f64;
                     let u = 1.0 - t;
                     verbs.push(PathVerb::LineTo);
                     points.push(Point {
@@ -4853,8 +4861,13 @@ fn append_glyph_stroke_path(
                 let c2 = map(outline.points[pt + 1]);
                 let e = map(outline.points[pt + 2]);
                 pt += 3;
-                for i in 1..=OUTLINE_SEGMENTS {
-                    let t = i as f64 / OUTLINE_SEGMENTS as f64;
+                let n = curve_segments(
+                    flatness,
+                    cubic_deviation([cur.x, cur.y], [c1.x, c1.y], [c2.x, c2.y], [e.x, e.y]),
+                    0.75,
+                );
+                for i in 1..=n {
+                    let t = i as f64 / n as f64;
                     let u = 1.0 - t;
                     let (w0, w1, w2, w3) = (u * u * u, 3.0 * u * u * t, 3.0 * u * t * t, t * t * t);
                     verbs.push(PathVerb::LineTo);
@@ -4968,6 +4981,7 @@ fn emit_outline_points(
     dev: impl Fn(&[f32; 2]) -> [f32; 2],
 ) {
     let dev = |p: [f32; 2]| dev(&p);
+    let flatness = outline_flatness();
     let mut pt = 0usize;
     let mut start = out.points.len();
     let mut cur = [0f32; 2];
@@ -4991,7 +5005,7 @@ fn emit_outline_points(
                 let c = dev(outline.points[pt]);
                 let e = dev(outline.points[pt + 1]);
                 pt += 2;
-                flatten_quad(&mut out.points, cur, c, e);
+                flatten_quad(&mut out.points, cur, c, e, flatness);
                 cur = e;
             }
             pdf_font::OutlineVerb::CurveTo => {
@@ -4999,7 +5013,7 @@ fn emit_outline_points(
                 let c2 = dev(outline.points[pt + 1]);
                 let e = dev(outline.points[pt + 2]);
                 pt += 3;
-                flatten_cubic(&mut out.points, cur, c1, c2, e);
+                flatten_cubic(&mut out.points, cur, c1, c2, e, flatness);
                 cur = e;
             }
             pdf_font::OutlineVerb::Close => {
@@ -5015,11 +5029,88 @@ fn emit_outline_points(
     }
 }
 
-const OUTLINE_SEGMENTS: usize = 8;
+/// How glyph outline curves are flattened into line segments, in device
+/// pixels. Adaptive by default: a curve gets the fewest uniform segments
+/// that keep every chord within [`OUTLINE_FLATNESS_PX`] of it, which is one
+/// or two segments for the curves of body text at screen resolution and
+/// more than the old fixed eight for display sizes. The old behaviour (every
+/// curve cut into the same number of segments regardless of size) is kept
+/// behind `PDF_RENDERER_OUTLINE_SEGMENTS=<n>` for paired A/B runs; `8`
+/// reproduces the previous output exactly.
+#[derive(Clone, Copy)]
+enum OutlineFlatness {
+    /// Every curve into this many segments.
+    Fixed(usize),
+    /// Segments from the curve's control-polygon deviation.
+    Adaptive,
+}
 
-fn flatten_quad(points: &mut Vec<[f32; 2]>, p: [f32; 2], c: [f32; 2], e: [f32; 2]) {
-    for i in 1..=OUTLINE_SEGMENTS {
-        let t = i as f32 / OUTLINE_SEGMENTS as f32;
+/// Largest chord-to-curve deviation the adaptive flattener allows: one
+/// sixteenth of a pixel, FreeType's smooth-rasterizer threshold
+/// (`ONE_PIXEL / 4` on the second-difference measure, which bounds the
+/// deviation at a quarter of that).
+const OUTLINE_FLATNESS_PX: f64 = 1.0 / 16.0;
+
+/// Most segments one curve is cut into.
+const OUTLINE_MAX_SEGMENTS: usize = 64;
+
+fn outline_flatness() -> OutlineFlatness {
+    use std::sync::OnceLock;
+    static POLICY: OnceLock<OutlineFlatness> = OnceLock::new();
+    *POLICY.get_or_init(|| {
+        match std::env::var("PDF_RENDERER_OUTLINE_SEGMENTS")
+            .ok()
+            .and_then(|v| v.trim().parse::<usize>().ok())
+        {
+            Some(n) if n > 0 => OutlineFlatness::Fixed(n.min(OUTLINE_MAX_SEGMENTS)),
+            _ => OutlineFlatness::Adaptive,
+        }
+    })
+}
+
+/// Segments for a curve whose second-difference measure (the control
+/// polygon's deviation from a straight line, max-norm, device pixels) is
+/// `deviation`, scaled so `scale · deviation / n²` bounds the chord error:
+/// `1/4` for a quadratic (`|B''| = 2·deviation`), `3/4` for a cubic
+/// (`|B''| ≤ 6·deviation`).
+#[inline]
+fn curve_segments(flatness: OutlineFlatness, deviation: f64, scale: f64) -> usize {
+    match flatness {
+        OutlineFlatness::Fixed(n) => n,
+        OutlineFlatness::Adaptive => {
+            let n = (scale * deviation / OUTLINE_FLATNESS_PX).sqrt().ceil();
+            if n.is_finite() {
+                (n as usize).clamp(1, OUTLINE_MAX_SEGMENTS)
+            } else {
+                OUTLINE_MAX_SEGMENTS
+            }
+        }
+    }
+}
+
+#[inline]
+fn quad_deviation(p: [f64; 2], c: [f64; 2], e: [f64; 2]) -> f64 {
+    (p[0] - 2.0 * c[0] + e[0])
+        .abs()
+        .max((p[1] - 2.0 * c[1] + e[1]).abs())
+}
+
+#[inline]
+fn cubic_deviation(p: [f64; 2], c1: [f64; 2], c2: [f64; 2], e: [f64; 2]) -> f64 {
+    quad_deviation(p, c1, c2).max(quad_deviation(c1, c2, e))
+}
+
+fn flatten_quad(
+    points: &mut Vec<[f32; 2]>,
+    p: [f32; 2],
+    c: [f32; 2],
+    e: [f32; 2],
+    flatness: OutlineFlatness,
+) {
+    let wide = |v: [f32; 2]| [v[0] as f64, v[1] as f64];
+    let n = curve_segments(flatness, quad_deviation(wide(p), wide(c), wide(e)), 0.25);
+    for i in 1..=n {
+        let t = i as f32 / n as f32;
         let u = 1.0 - t;
         let x = u * u * p[0] + 2.0 * u * t * c[0] + t * t * e[0];
         let y = u * u * p[1] + 2.0 * u * t * c[1] + t * t * e[1];
@@ -5027,9 +5118,22 @@ fn flatten_quad(points: &mut Vec<[f32; 2]>, p: [f32; 2], c: [f32; 2], e: [f32; 2
     }
 }
 
-fn flatten_cubic(points: &mut Vec<[f32; 2]>, p: [f32; 2], c1: [f32; 2], c2: [f32; 2], e: [f32; 2]) {
-    for i in 1..=OUTLINE_SEGMENTS {
-        let t = i as f32 / OUTLINE_SEGMENTS as f32;
+fn flatten_cubic(
+    points: &mut Vec<[f32; 2]>,
+    p: [f32; 2],
+    c1: [f32; 2],
+    c2: [f32; 2],
+    e: [f32; 2],
+    flatness: OutlineFlatness,
+) {
+    let wide = |v: [f32; 2]| [v[0] as f64, v[1] as f64];
+    let n = curve_segments(
+        flatness,
+        cubic_deviation(wide(p), wide(c1), wide(c2), wide(e)),
+        0.75,
+    );
+    for i in 1..=n {
+        let t = i as f32 / n as f32;
         let u = 1.0 - t;
         let (w0, w1, w2, w3) = (u * u * u, 3.0 * u * u * t, 3.0 * u * t * t, t * t * t);
         let x = w0 * p[0] + w1 * c1[0] + w2 * c2[0] + w3 * e[0];

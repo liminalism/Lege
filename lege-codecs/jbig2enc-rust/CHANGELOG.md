@@ -19,6 +19,16 @@ are unchanged.
   The halftone skip path still forms contexts per pixel and gains only the
   faster DECODE.
 
+### Tests
+
+- The test-only halftone stream writer (`tests/common/writer.rs`,
+  `halftone_skip_page`) left the values of skipped grid cells in the plane
+  it formed contexts from; T.88 §6.2.5.7 sets a skipped pixel to 0 before
+  any later context reads it, and this decoder and hayro-jbig2 both decode
+  so. The `halftone_enable_skip` test passed only because its 5×4 stream
+  was too short for the contexts to diverge; streams up to 10×6 cells of
+  40×40 patterns now round-trip. The decoder is unchanged.
+
 ## 0.6.0 — 2026-11-02
 
 Changes since the last published version, 0.5.4. Published to crates.io on
