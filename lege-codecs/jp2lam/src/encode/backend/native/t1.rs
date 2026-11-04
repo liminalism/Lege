@@ -630,7 +630,20 @@ pub(crate) fn encode_codeblock_styled(
             distortion_hint: distortion_hint(bitplane, newly_significant, block.max_magnitude),
             mse_numerator,
         });
-        open_segment.push((passes.len() - 1, coder.numbytes()));
+        // At a pass boundary inside an open segment the coder still holds
+        // the last symbols in its registers (and the byte at the write
+        // position may take a carry), so the bytes a decoder needs to
+        // reproduce this pass end up to three bytes past the count; the
+        // segment's last pass takes the exact remainder (`close_segment`).
+        let pending = if terminated {
+            0
+        } else {
+            match mode {
+                NativeTier1PassCodingMode::Mq => MQ_PASS_PENDING_BYTES,
+                NativeTier1PassCodingMode::Raw => RAW_PASS_PENDING_BYTES,
+            }
+        };
+        open_segment.push((passes.len() - 1, coder.numbytes() + pending));
 
         if terminated {
             let bytes = match mode {
@@ -663,6 +676,14 @@ pub(crate) fn encode_codeblock_styled(
         passes,
     }
 }
+
+/// Bytes an MQ coder may still owe for the symbols of a pass at a boundary
+/// without termination: the byte at the write position plus the two bytes
+/// of the code register window (OpenJPEG uses the same correction).
+const MQ_PASS_PENDING_BYTES: usize = 3;
+/// The raw (bypass) coder holds at most one partial byte, plus a stuffed
+/// byte after 0xff.
+const RAW_PASS_PENDING_BYTES: usize = 2;
 
 /// Give the passes of a just-terminated codeword segment their byte lengths:
 /// the coder's running byte count at each pass, with the final pass absorbing

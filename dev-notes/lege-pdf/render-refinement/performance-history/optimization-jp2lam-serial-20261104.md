@@ -191,3 +191,109 @@ runtime dispatch keeps the baseline build portable).
   enabling `simd` in the root manifest once measured.
 - Clippy on the new code adds two `manual_is_multiple_of` and one loop-counter lint, in line
   with the crate's existing style lints (62 before this change); none were fixed here.
+
+## Round 2 (2026-11-04, later): segmentation symbols, Tier-1 indexing, `simd`, Structures profile
+
+Same branch, second commit. The host ran an Android Studio index at ~40 % load for the whole
+round, so the absolute numbers here are 20–25 % above the quiet tables; every comparison is
+interleaved (A, B, C, A, B, C, …) and judged on minima and on arms measured in the same minutes.
+Raw numbers: `lege-misc/dev-misc/jpxbench/results/tier1-bounds-and-simd-20261104.txt`.
+
+### 1. Segmentation symbols: pass lengths now cover the coder's pending bytes
+
+`encode/backend/native/t1.rs` (`encode_codeblock_styled`): at a pass boundary inside an open
+codeword segment the MQ coder still holds the last symbols in its registers and may still carry
+into the byte at the write position, so a pass's byte count taken as `numbytes()` is up to three
+bytes short of what a decoder needs to reproduce that pass. Without segmentation symbols this
+only blurs the last few symbols of a truncated layer; with them the decoder *checks* the marker
+after every cleanup pass that is not the stream's last, so a layer ending one or two passes
+after a cleanup pass failed with "segmentation symbol mismatch". Non-terminated passes now
+snapshot `numbytes() + 3` (MQ) or `+ 2` (raw/bypass), capped at the segment length by
+`close_segment` (OpenJPEG applies the same correction). The segment's final pass still takes
+the exact remainder, so totals and terminated-pass lengths are unchanged.
+
+Test `decode::t1::stripe_equivalence_tests::segmentation_symbol_prefixes_decode_at_every_pass`:
+five styles with segmentation symbols (plain, +reset, +vertical causal, +bypass, bypass+VSC+
+reset), four coefficient flavours, 64×64 / 128×128 / 61×59 / 5×7 blocks, every pass prefix
+(over a thousand prefixes) must decode without error and the full prefix must reproduce the
+source coefficients. It failed on the first prefix before the fix.
+
+Not changed: the default single-segment path (`encode_codeblock_single_term`) keeps its exact
+snapshots. It carries no marker to trip over, and widening its lengths would change every
+multi-layer stream's packet headers; whether layer-truncated decodes gain from the same +3 is a
+separate (rate-control) question.
+
+### 2. Tier-1 indexing: slices of visible length instead of a padded index
+
+There was no unchecked indexing to replace: the round-1 kernels index the padded flag grid and
+the sample plane with plain `[]` (checked). The question was what those checks cost. Three
+arms, interleaved on the two reference layers, min ms over 2×15 and 4×9 iterations:
+
+| layer | lvl | A: round-1 kernels | B: `get_unchecked` everywhere (experiment) | C: `StripeRows` (committed) |
+|---|---:|---:|---:|---:|
+| cm p0 layer 0 | 0 | 191.6 / 214.7 | 196.9 / 205.6 | 205.7 / 206.0 |
+| | 1 | 102.3 / 106.1 | 104.7 / 100.7 | 103.5 / 104.4 |
+| structures p0 layer 0 | 0 | 126.8 / 107.2 | 110.5 / 115.4 | 106.7 / 120.8 |
+| | 1 | 72.9 / 67.6 | 69.6 / 70.2 | 65.3 / 67.3 |
+
+No arm is consistently ahead; the spread between arms (±5 %) is smaller than the spread between
+rounds of the same arm. Bounds checks are not a measurable cost in this kernel: the MQ decoder's
+serial dependency chain is, and the checks sit in its shadow. The committed form is C
+(`decode/t1.rs`, `StripeRows`): each stripe hands the kernels three flag rows of exactly
+`width + 2` words (the stripe above, the stripe, the stripe below, from `split_at_mut`) and four
+sample rows of exactly `width`, so column `x < width` and its neighbours index slices whose
+length the compiler can see, and the manual `idx`/`stride` arithmetic of round 1 is gone. Hashes
+20/20 identical; the packed-vs-reference equivalence tests cover it.
+
+### 3. `simd` feature for the renderer build: neutral, left off
+
+Root `Cargo.toml` line 148 (`jp2lam = { path = …, default-features = false }`) was given
+`features = ["simd"]` and the adapter rebuilt; the micro-benchmark compared the bench crate's
+jp2lam with and without the feature (3×9 iterations), the adapter the two renderer builds on
+pages 0–99 (two interleaved rounds each):
+
+| | without `simd` | with `simd` |
+|---|---:|---:|
+| cm p0 layer 0, full / one level (min ms) | 186.2 / 93.6 | 200.2 / 101.7 |
+| structures p0 layer 0, full / one level | 99.7 / 62.8 | 109.1 / 66.8 |
+| adapter chinese-medicine, median ms/page | 158.4, 157.4 | 164.3, 154.1 |
+| adapter Structures | 115.2, 116.5 | 117.9, 115.0 |
+
+Expected: with the AVX2 kernels selected independently of the feature, the only `wide` code the
+decode could still reach is the 5/3 path and the encoder, neither of which these streams use.
+The feature adds the `wide` dependency to the renderer build for no measured gain (the
+micro-benchmark minima are nominally worse with it, inside the noise), so the line is reverted
+to its committed form and the renderer keeps building jp2lam without `simd`.
+
+### 4. Structures: where a page goes now (profile, not fixed)
+
+Adapter built with `pdf-render-cpu/profiling` (`render_profiled_with`), serial, P-cores, 144 DPI,
+loaded host; the first visit decodes, later visits draw with the decoded images cached
+(`codec.*` keys are per decode, `render.image` is the image draw time, `jpx-trace` the two
+layers):
+
+| Structures page, ms | JBIG2 decode | JPX decode (2 layers) | lower (decode + prepare) | image draw | first visit | cached visit |
+|---|---:|---:|---:|---:|---:|---:|
+| p1 (2157×3189 layers → 1079×1595, mask 2157×3189) | 41.4 | 48.4 (24.8 + 23.0) | 89.9 | 52.8–62.5 | 145 | 52–63 |
+| p100 (698×1018 + 2096×3056 layers, mask 2096×3056) | 36.0 | 23.2 | 59.3 | 41.9–54.5 | 106 | 42–55 |
+
+Scaled to the quiet host (×0.8) that is roughly JPX 20–40, JBIG2 30–33, draw 35–45 ms of the
+88 ms/page. Two things stand out:
+
+- **The JBIG2 mask decode costs as much as both JPX layers.** 36–41 ms for a 2157×3189 bilevel
+  generic region is ~6 ns per pixel; hayro renders the whole page in 62 ms. That is the next
+  codec target (`pdf-image/src/jbig2.rs` / `jbig2enc-rust` decode).
+- **The masked foreground draw misses the fast path.** Each page has two image draws: the
+  background layer (`image.fast_rgb8_area_min_pixels` ≈ 1.1 M, the unmasked area-minification
+  fast path) and the foreground layer through the JBIG2 stencil
+  (`image.resource_masked_draws = 1`), of which only 80–140 k pixels went through
+  `fast_rgb8_area_min_masked`. The two draws together take 43–62 ms for 2.2 M destination
+  pixels (~25 ns/px), so the masked draw is running the generic per-tap sampler for most of
+  the page. The image-blit branch (`optimization-image-blit-simd-20261104.md`) added a soft-mask
+  area-min variant; a stencil-mask variant of the same shape is the draw-side fix.
+
+### Verification (round 2)
+
+`cargo test --manifest-path lege-codecs/jp2lam/Cargo.toml` in release and debug, and
+`--no-default-features` in release; `check.sh`: 20/20 raster hashes identical to the round-1
+baseline; clippy adds no new lint classes (the usual `too_many_arguments`).

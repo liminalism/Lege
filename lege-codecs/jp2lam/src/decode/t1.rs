@@ -889,61 +889,123 @@ fn sign_lut_index_packed(word: u32, west: u32, east: u32, ci: u32) -> usize {
     (lu & 0xff) as usize
 }
 
-/// Record that sample `ci` of the column at `idx` became significant with
-/// sign `sign` (1 = negative): its own word (kept in `word`) and the
-/// neighbouring columns' words learn about it. In vertically causal mode the
-/// stripe above never learns about row 0 (Annex D.7).
+/// The flag words and samples one stripe's column walk touches, as slices
+/// whose lengths the compiler can see: the three flag rows (the stripe
+/// above, the stripe itself, the stripe below) are exactly `width + 2` words
+/// each and the four sample rows exactly `width` each (empty past the
+/// block's last row), so indexing column `x < width` and its neighbours
+/// needs no bounds checks in the full-stripe kernels.
+struct StripeRows<'a> {
+    north: &'a mut [u32],
+    mid: &'a mut [u32],
+    south: &'a mut [u32],
+    samples: [&'a mut [i32]; 4],
+}
+
+impl<'a> StripeRows<'a> {
+    #[inline(always)]
+    fn new(
+        flags: &'a mut StripeFlags,
+        data: &'a mut [i32],
+        stripe: usize,
+        width: usize,
+        height: usize,
+    ) -> Self {
+        let stride = width + 2;
+        debug_assert_eq!(stride, flags.stride());
+        let words = flags.words_mut();
+        let (_, rest) = words.split_at_mut(stripe * stride);
+        let (north, rest) = rest.split_at_mut(stride);
+        let (mid, rest) = rest.split_at_mut(stride);
+        let south = &mut rest[..stride];
+        let rows = (height - 4 * stripe).min(4);
+        let samples = &mut data[4 * stripe * width..(4 * stripe + rows) * width];
+        let samples = if rows == 4 {
+            let (r0, rest) = samples.split_at_mut(width);
+            let (r1, rest) = rest.split_at_mut(width);
+            let (r2, r3) = rest.split_at_mut(width);
+            [r0, r1, r2, r3]
+        } else {
+            let (r0, rest) = samples.split_at_mut(width.min(samples.len()));
+            let (r1, rest) = rest.split_at_mut(width.min(rest.len()));
+            let (r2, r3) = rest.split_at_mut(width.min(rest.len()));
+            [r0, r1, r2, r3]
+        };
+        Self {
+            north,
+            mid,
+            south,
+            samples,
+        }
+    }
+
+    /// The packed word of column `x`.
+    #[inline(always)]
+    fn word(&self, x: usize) -> u32 {
+        self.mid[x + 1]
+    }
+
+    #[inline(always)]
+    fn set_word(&mut self, x: usize, word: u32) {
+        self.mid[x + 1] = word;
+    }
+
+    /// Sample `ci` of column `x`.
+    #[inline(always)]
+    fn sample(&mut self, ci: u32, x: usize) -> &mut i32 {
+        &mut self.samples[ci as usize][x]
+    }
+}
+
+/// Record that sample `ci` of column `x` became significant with sign `sign`
+/// (1 = negative): its own word (kept in `word`) and the neighbouring
+/// columns' words learn about it. In vertically causal mode the stripe above
+/// never learns about row 0 (Annex D.7).
 #[inline(always)]
 fn mark_significant_packed(
-    words: &mut [u32],
-    idx: usize,
-    stride: usize,
+    s: &mut StripeRows<'_>,
+    x: usize,
     word: &mut u32,
     ci: u32,
     sign: u32,
     vertical_causal: bool,
 ) {
     let shift = 3 * ci;
-    words[idx - 1] |= T1_SIGMA_E << shift;
+    s.mid[x] |= T1_SIGMA_E << shift;
     *word |= ((sign << T1_CHI_1_I) | T1_SIGMA_THIS) << shift;
-    words[idx + 1] |= T1_SIGMA_W << shift;
+    s.mid[x + 2] |= T1_SIGMA_W << shift;
     if ci == 0 && !vertical_causal {
-        let north = idx - stride;
-        words[north] |= (sign << T1_CHI_5_I) | T1_SIGMA_16;
-        words[north - 1] |= T1_SIGMA_17;
-        words[north + 1] |= T1_SIGMA_15;
+        s.north[x + 1] |= (sign << T1_CHI_5_I) | T1_SIGMA_16;
+        s.north[x] |= T1_SIGMA_17;
+        s.north[x + 2] |= T1_SIGMA_15;
     }
     if ci == 3 {
-        let south = idx + stride;
-        words[south] |= (sign << T1_CHI_0_I) | T1_SIGMA_N;
-        words[south - 1] |= T1_SIGMA_NE;
-        words[south + 1] |= T1_SIGMA_NW;
+        s.south[x + 1] |= (sign << T1_CHI_0_I) | T1_SIGMA_N;
+        s.south[x] |= T1_SIGMA_NE;
+        s.south[x + 2] |= T1_SIGMA_NW;
     }
 }
 
 /// Decode the sign of a sample that just became significant and store its
 /// midpoint value.
 #[inline(always)]
-#[allow(clippy::too_many_arguments)]
 fn decode_new_significant_packed(
     decoder: &mut MqDecoder<'_>,
-    words: &mut [u32],
-    idx: usize,
-    stride: usize,
+    s: &mut StripeRows<'_>,
+    x: usize,
     word: &mut u32,
     ci: u32,
-    data: &mut i32,
     one_plus_half: i32,
     vertical_causal: bool,
 ) {
-    let lu = sign_lut_index_packed(*word, words[idx - 1], words[idx + 1], ci);
+    let lu = sign_lut_index_packed(*word, s.mid[x], s.mid[x + 2], ci);
     let sign = u32::from(decoder.decode_with_ctx(LUT_CTXNO_SC[lu]) ^ LUT_SPB[lu]);
-    *data = if sign != 0 {
+    *s.sample(ci, x) = if sign != 0 {
         -one_plus_half
     } else {
         one_plus_half
     };
-    mark_significant_packed(words, idx, stride, word, ci, sign, vertical_causal);
+    mark_significant_packed(s, x, word, ci, sign, vertical_causal);
 }
 
 /// Significance propagation pass (D.3.1) over the whole block.
@@ -961,24 +1023,18 @@ fn sigpass_decode(
     let one = 1i32 << bitplane;
     let one_plus_half = one | (one >> 1);
     let lut = &LUT_CTXNO_ZC[orientation_index(band)];
-    let stride = flags.stride();
     let stripes = height.div_ceil(4);
     #[inline(always)]
-    #[allow(clippy::too_many_arguments)]
     fn column(
         decoder: &mut MqDecoder<'_>,
         lut: &[u8; 512],
-        words: &mut [u32],
-        idx: usize,
-        stride: usize,
-        data: &mut [i32],
-        base: usize,
-        width: usize,
+        s: &mut StripeRows<'_>,
+        x: usize,
         rows: u32,
         one_plus_half: i32,
         vertical_causal: bool,
     ) {
-        let mut word = words[idx];
+        let mut word = s.word(x);
         if word == 0 {
             return;
         }
@@ -991,12 +1047,10 @@ fn sigpass_decode(
                 if decoder.decode_with_ctx(ctx) != 0 {
                     decode_new_significant_packed(
                         decoder,
-                        words,
-                        idx,
-                        stride,
+                        s,
+                        x,
                         &mut word,
                         ci,
-                        &mut data[base + ci as usize * width],
                         one_plus_half,
                         vertical_causal,
                     );
@@ -1004,40 +1058,22 @@ fn sigpass_decode(
                 word |= T1_PI_0 << shift;
             }
         }
-        words[idx] = word;
+        s.set_word(x, word);
     }
     for stripe in 0..stripes {
         let rows = (height - 4 * stripe).min(4) as u32;
-        let idx0 = flags.column_index(0, stripe);
-        let words = flags.words_mut();
-        let base0 = 4 * stripe * width;
+        let mut s = StripeRows::new(flags, data, stripe, width, height);
         if rows == 4 {
             for x in 0..width {
-                column(
-                    decoder,
-                    lut,
-                    words,
-                    idx0 + x,
-                    stride,
-                    data,
-                    base0 + x,
-                    width,
-                    4,
-                    one_plus_half,
-                    vertical_causal,
-                );
+                column(decoder, lut, &mut s, x, 4, one_plus_half, vertical_causal);
             }
         } else {
             for x in 0..width {
                 column(
                     decoder,
                     lut,
-                    words,
-                    idx0 + x,
-                    stride,
-                    data,
-                    base0 + x,
-                    width,
+                    &mut s,
+                    x,
                     rows,
                     one_plus_half,
                     vertical_causal,
@@ -1061,16 +1097,13 @@ fn sigpass_decode_raw(
 ) {
     let one = 1i32 << bitplane;
     let one_plus_half = one | (one >> 1);
-    let stride = flags.stride();
     let stripes = height.div_ceil(4);
     for stripe in 0..stripes {
         let rows = (height - 4 * stripe).min(4) as u32;
-        let mut idx = flags.column_index(0, stripe);
-        let words = flags.words_mut();
+        let mut s = StripeRows::new(flags, data, stripe, width, height);
         for x in 0..width {
-            let mut word = words[idx];
+            let mut word = s.word(x);
             if word != 0 {
-                let base = 4 * stripe * width + x;
                 for ci in 0..rows {
                     let shift = 3 * ci;
                     if word & ((T1_SIGMA_THIS | T1_PI_0) << shift) == 0
@@ -1078,15 +1111,14 @@ fn sigpass_decode_raw(
                     {
                         if raw.decode_bit() != 0 {
                             let sign = u32::from(raw.decode_bit());
-                            data[base + ci as usize * width] = if sign != 0 {
+                            *s.sample(ci, x) = if sign != 0 {
                                 -one_plus_half
                             } else {
                                 one_plus_half
                             };
                             mark_significant_packed(
-                                words,
-                                idx,
-                                stride,
+                                &mut s,
+                                x,
                                 &mut word,
                                 ci,
                                 sign,
@@ -1096,9 +1128,8 @@ fn sigpass_decode_raw(
                         word |= T1_PI_0 << shift;
                     }
                 }
-                words[idx] = word;
+                s.set_word(x, word);
             }
-            idx += 1;
         }
     }
 }
@@ -1106,8 +1137,8 @@ fn sigpass_decode_raw(
 /// Midpoint update for a refined sample. Entering MR at plane b the magnitude
 /// carries a 2^b offset (midpoint of the previous uncertainty interval
 /// [0, 2^(b+1))). Learning bit b halves the interval: offset becomes 2^(b-1).
-///   bit=1: known += 2^b            â†’ mag += 2^(b-1)
-///   bit=0: known unchanged         â†’ mag -= 2^b - 2^(b-1)
+///   bit=1: known += 2^b            → mag += 2^(b-1)
+///   bit=0: known unchanged         → mag -= 2^b - 2^(b-1)
 /// At b=0 this reduces to bit=1: exact, bit=0: mag -= 1 (exact).
 #[inline(always)]
 fn refine_sample(value: &mut i32, bit: u8, one: i32) {
@@ -1128,17 +1159,8 @@ fn refpass_decode(
     let one = 1i32 << bitplane;
     let stripes = height.div_ceil(4);
     #[inline(always)]
-    fn column(
-        decoder: &mut MqDecoder<'_>,
-        words: &mut [u32],
-        idx: usize,
-        data: &mut [i32],
-        base: usize,
-        width: usize,
-        rows: u32,
-        one: i32,
-    ) {
-        let mut word = words[idx];
+    fn column(decoder: &mut MqDecoder<'_>, s: &mut StripeRows<'_>, x: usize, rows: u32, one: i32) {
+        let mut word = s.word(x);
         if word == 0 {
             return;
         }
@@ -1147,24 +1169,22 @@ fn refpass_decode(
             if word & ((T1_SIGMA_THIS | T1_PI_0) << shift) == T1_SIGMA_THIS << shift {
                 let ctx = magnitude_context_packed(word, ci);
                 let bit = decoder.decode_with_ctx(ctx);
-                refine_sample(&mut data[base + ci as usize * width], bit, one);
+                refine_sample(s.sample(ci, x), bit, one);
                 word |= T1_MU_0 << shift;
             }
         }
-        words[idx] = word;
+        s.set_word(x, word);
     }
     for stripe in 0..stripes {
         let rows = (height - 4 * stripe).min(4) as u32;
-        let idx0 = flags.column_index(0, stripe);
-        let words = flags.words_mut();
-        let base0 = 4 * stripe * width;
+        let mut s = StripeRows::new(flags, data, stripe, width, height);
         if rows == 4 {
             for x in 0..width {
-                column(decoder, words, idx0 + x, data, base0 + x, width, 4, one);
+                column(decoder, &mut s, x, 4, one);
             }
         } else {
             for x in 0..width {
-                column(decoder, words, idx0 + x, data, base0 + x, width, rows, one);
+                column(decoder, &mut s, x, rows, one);
             }
         }
     }
@@ -1184,23 +1204,20 @@ fn refpass_decode_raw(
     let stripes = height.div_ceil(4);
     for stripe in 0..stripes {
         let rows = (height - 4 * stripe).min(4) as u32;
-        let mut idx = flags.column_index(0, stripe);
-        let words = flags.words_mut();
+        let mut s = StripeRows::new(flags, data, stripe, width, height);
         for x in 0..width {
-            let mut word = words[idx];
+            let mut word = s.word(x);
             if word != 0 {
-                let base = 4 * stripe * width + x;
                 for ci in 0..rows {
                     let shift = 3 * ci;
                     if word & ((T1_SIGMA_THIS | T1_PI_0) << shift) == T1_SIGMA_THIS << shift {
                         let bit = raw.decode_bit();
-                        refine_sample(&mut data[base + ci as usize * width], bit, one);
+                        refine_sample(s.sample(ci, x), bit, one);
                         word |= T1_MU_0 << shift;
                     }
                 }
-                words[idx] = word;
+                s.set_word(x, word);
             }
-            idx += 1;
         }
     }
 }
@@ -1233,7 +1250,6 @@ fn cleanup_decode(
     let one = 1i32 << bitplane;
     let one_plus_half = one | (one >> 1);
     let lut = &LUT_CTXNO_ZC[orientation_index(band)];
-    let stride = flags.stride();
     let stripes = height.div_ceil(4);
     /// Code samples `first .. rows` of one column; with `run_length` the
     /// sample `first` is already known significant (the run-length symbols
@@ -1243,12 +1259,8 @@ fn cleanup_decode(
     fn column(
         decoder: &mut MqDecoder<'_>,
         lut: &[u8; 512],
-        words: &mut [u32],
-        idx: usize,
-        stride: usize,
-        data: &mut [i32],
-        base: usize,
-        width: usize,
+        s: &mut StripeRows<'_>,
+        x: usize,
         word: &mut u32,
         first: u32,
         rows: u32,
@@ -1271,12 +1283,10 @@ fn cleanup_decode(
             if coded {
                 decode_new_significant_packed(
                     decoder,
-                    words,
-                    idx,
-                    stride,
+                    s,
+                    x,
                     word,
                     ci,
-                    &mut data[base + ci as usize * width],
                     one_plus_half,
                     vertical_causal,
                 );
@@ -1285,13 +1295,9 @@ fn cleanup_decode(
     }
     for stripe in 0..stripes {
         let rows = (height - 4 * stripe).min(4) as u32;
-        let idx0 = flags.column_index(0, stripe);
-        let words = flags.words_mut();
-        let base0 = 4 * stripe * width;
+        let mut s = StripeRows::new(flags, data, stripe, width, height);
         for x in 0..width {
-            let idx = idx0 + x;
-            let base = base0 + x;
-            let mut word = words[idx];
+            let mut word = s.word(x);
             if word == 0 && rows == 4 {
                 if decoder.decode_with_ctx(T1_CTXNO_AGG) == 0 {
                     continue;
@@ -1302,12 +1308,8 @@ fn cleanup_decode(
                 column(
                     decoder,
                     lut,
-                    words,
-                    idx,
-                    stride,
-                    data,
-                    base,
-                    width,
+                    &mut s,
+                    x,
                     &mut word,
                     first,
                     4,
@@ -1319,12 +1321,8 @@ fn cleanup_decode(
                 column(
                     decoder,
                     lut,
-                    words,
-                    idx,
-                    stride,
-                    data,
-                    base,
-                    width,
+                    &mut s,
+                    x,
                     &mut word,
                     0,
                     4,
@@ -1336,12 +1334,8 @@ fn cleanup_decode(
                 column(
                     decoder,
                     lut,
-                    words,
-                    idx,
-                    stride,
-                    data,
-                    base,
-                    width,
+                    &mut s,
+                    x,
                     &mut word,
                     0,
                     rows,
@@ -1350,7 +1344,7 @@ fn cleanup_decode(
                     vertical_causal,
                 );
             }
-            words[idx] = word & !T1_PI_ALL;
+            s.set_word(x, word & !T1_PI_ALL);
         }
     }
 }
@@ -1790,6 +1784,85 @@ mod stripe_equivalence_tests {
                 );
             }
         }
+    }
+
+    /// With segmentation symbols every cleanup pass ends in a marker the
+    /// decoder verifies, so every pass prefix a layer can end on must decode
+    /// without a marker error: the per-pass lengths have to cover the bytes
+    /// the MQ coder still holds in its registers at the pass boundary.
+    #[test]
+    fn segmentation_symbol_prefixes_decode_at_every_pass() {
+        let d = CodeBlockStyle::default();
+        let styles = [
+            CodeBlockStyle {
+                segmentation_symbols: true,
+                ..d
+            },
+            CodeBlockStyle {
+                segmentation_symbols: true,
+                reset_contexts: true,
+                ..d
+            },
+            CodeBlockStyle {
+                segmentation_symbols: true,
+                vertical_causal: true,
+                ..d
+            },
+            CodeBlockStyle {
+                segmentation_symbols: true,
+                bypass: true,
+                ..d
+            },
+            CodeBlockStyle {
+                segmentation_symbols: true,
+                bypass: true,
+                vertical_causal: true,
+                reset_contexts: true,
+                ..d
+            },
+        ];
+        let mut checked = 0usize;
+        for (i, style) in styles.into_iter().enumerate() {
+            for &(w, h, levels) in &[
+                (64usize, 64usize, 0u8),
+                (128, 128, 1),
+                (61, 59, 1),
+                (5, 7, 0),
+            ] {
+                for flavour in 0..4u32 {
+                    let mut rng = Lcg(5000 + i as u64 * 100 + (w * h) as u64 + flavour as u64);
+                    let coefficients = field(&mut rng, w * h, flavour);
+                    for (block, encoded) in encoded_blocks(w, h, levels, coefficients, style) {
+                        let total = encoded.passes.len();
+                        let max_bitplanes = block.zero_bitplanes + block.magnitude_bitplanes;
+                        for pass_count in 1..=total {
+                            let segments = segments(&encoded, pass_count);
+                            let decoded = decode_codeblock_segments(
+                                block.width,
+                                block.height,
+                                block.band,
+                                max_bitplanes,
+                                u32::from(block.zero_bitplanes),
+                                pass_count as u32,
+                                style,
+                                &segments,
+                            )
+                            .unwrap_or_else(|error| {
+                                panic!(
+                                    "{style:?} {}x{} {:?} flavour {flavour} passes {pass_count}/{total}: {error}",
+                                    block.width, block.height, block.band
+                                )
+                            });
+                            if pass_count == total {
+                                assert_eq!(decoded.coefficients, block.coefficients);
+                            }
+                            checked += 1;
+                        }
+                    }
+                }
+            }
+        }
+        assert!(checked > 1000, "{checked} prefixes checked");
     }
 
     #[test]

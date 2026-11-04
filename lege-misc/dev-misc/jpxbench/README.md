@@ -10,6 +10,21 @@ reduction level, and prints per-layer milliseconds (min and median over
 The reference numbers and the optimisation history are in
 `dev-notes/lege-pdf/render-refinement/performance-history/optimization-jp2lam-serial-20261104.md`.
 
+## Results
+
+`results/` keeps the bench output the note quotes:
+
+| file | what |
+|---|---|
+| `serial-before-20261104.txt` | jp2lam before the round-1 rewrite vs hayro, 12 layer/level rows |
+| `serial-20261104.txt` | jp2lam after round 1 vs hayro, all 20 streams × 2 levels, min/median of 7 |
+| `raster-hashes-20261104.txt` | the 20 raster hashes `check.sh` compares against |
+| `tier1-bounds-and-simd-20261104.txt` | round 2: checked vs unchecked vs sliced Tier-1 indexing, and the `simd` feature on/off (loaded host, interleaved) |
+
+Headline (serial, P-cores, min ms per layer, after round 1): cm p0 layer 0 full 167 vs hayro
+247, one level 82 vs 91; Structures p0 layer 0 full 92 vs 133, one level 52 vs 56. Round 2
+changed none of these within noise (its arms are all within ±5 % of each other).
+
 ## Streams
 
 The benchmark corpus is not checked in. Extract it from the test books

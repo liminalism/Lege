@@ -20,7 +20,7 @@
 //! which is exactly the cleanup pass's run-length condition and lets the
 //! significance and refinement passes skip the column with one test. The
 //! grid has one padding column on each side and one padding stripe above
-//! and below, so neighbour updates never bounds-check.
+//! and below, so neighbour updates never leave the grid.
 
 /// The sample itself, for `ci = 0`.
 pub(crate) const T1_SIGMA_THIS: u32 = 1 << 4;
@@ -68,13 +68,6 @@ impl StripeFlags {
     #[inline(always)]
     pub(crate) fn stride(&self) -> usize {
         self.stride
-    }
-
-    /// Index of the word for column `x` of stripe `stripe` (rows `4 stripe ..
-    /// 4 stripe + 4`).
-    #[inline(always)]
-    pub(crate) fn column_index(&self, x: usize, stripe: usize) -> usize {
-        (stripe + 1) * self.stride + x + 1
     }
 
     #[inline(always)]
