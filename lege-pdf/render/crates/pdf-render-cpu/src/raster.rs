@@ -69,6 +69,19 @@ const CACHE_WINDOW_CELLS: usize = 1 << 13; // 8 Ki cells (32 KiB f32) ≈ L1
 /// this constant; the sequential prefix-sum precludes a bit-exact SIMD sum.
 const AVX2_MIN_SPAN: usize = usize::MAX;
 
+/// One run of an emitted coverage row, over device columns `[x0, x1)`, for
+/// the run-aware fill entry [`RasterKernel::fill_runs_cancellable`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct CovRun {
+    pub x0: u32,
+    pub x1: u32,
+    /// `None`: the row buffer holds this run's coverage bytes. `Some(b)`: every
+    /// column of the run has coverage `b`, and the row buffer was **not**
+    /// written there (it still holds `0`) — a constant gap between edge
+    /// crossings, such as the interior of a page-sized rectangle.
+    pub fill: Option<u8>,
+}
+
 #[derive(Debug, Default)]
 pub struct RasterKernel {
     edges: Vec<Edge>,
@@ -104,6 +117,8 @@ pub struct RasterKernel {
     /// Per-row cell intervals `[start, end)` of `acc_row` written by this row's
     /// deposits, one per contributing edge (see `convert_row_sparse`).
     aet_touched: Vec<(u32, u32)>,
+    /// The current row's runs in run-aware mode (see [`CovRun`]).
+    row_runs: Vec<CovRun>,
     pub last_edges: u64,
     pub last_rows: u64,
     pub last_covered: u64,
@@ -137,7 +152,70 @@ impl RasterKernel {
         height: usize,
         rule: FillRule,
         should_cancel: Option<&(dyn Fn() -> bool + Send + Sync)>,
-        row: impl FnMut(usize, usize, usize, &mut [u8]),
+        mut row: impl FnMut(usize, usize, usize, &mut [u8]),
+    ) -> bool {
+        self.fill_impl(
+            points,
+            subpaths,
+            width,
+            height,
+            rule,
+            should_cancel,
+            false,
+            |y, x0, x1, cov, _| {
+                row(y, x0, x1, cov);
+                true
+            },
+        )
+    }
+
+    /// [`Self::fill_cancellable`] with the row handed over as runs: `row(y,
+    /// first, last, cov, runs)` receives, besides the coverage buffer, the
+    /// row's [`CovRun`]s in increasing column order. Columns in no run have
+    /// zero coverage; a `fill: Some(b)` run was **not** written into `cov`, so
+    /// a consumer that only needs spans (a solid Normal fill) can paint a
+    /// page-wide interior without the buffer being filled, scanned and reset.
+    /// A consumer that wants the plain buffer writes the constant runs into
+    /// `cov` itself (within `first..=last`) and returns `true`, so the
+    /// buffer is reset over the whole span; returning `false` promises `cov`
+    /// was not written outside the `None` runs. The coverage is byte-identical
+    /// to [`Self::fill_cancellable`]'s; only the hand-over differs.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn fill_runs_cancellable(
+        &mut self,
+        points: &[[f32; 2]],
+        subpaths: &[(usize, usize)],
+        width: usize,
+        height: usize,
+        rule: FillRule,
+        should_cancel: Option<&(dyn Fn() -> bool + Send + Sync)>,
+        row: impl FnMut(usize, usize, usize, &mut [u8], &[CovRun]) -> bool,
+    ) -> bool {
+        self.fill_impl(
+            points,
+            subpaths,
+            width,
+            height,
+            rule,
+            should_cancel,
+            true,
+            row,
+        )
+    }
+
+    /// The fill driver behind both entries; `runs_mode` selects the
+    /// run-aware hand-over of the scanline (AET) path.
+    #[allow(clippy::too_many_arguments)]
+    fn fill_impl(
+        &mut self,
+        points: &[[f32; 2]],
+        subpaths: &[(usize, usize)],
+        width: usize,
+        height: usize,
+        rule: FillRule,
+        should_cancel: Option<&(dyn Fn() -> bool + Send + Sync)>,
+        runs_mode: bool,
+        row: impl FnMut(usize, usize, usize, &mut [u8], &[CovRun]) -> bool,
     ) -> bool {
         if width == 0 || height == 0 {
             return true;
@@ -223,8 +301,16 @@ impl RasterKernel {
             // `fill_scanline_ref` (asserted by `aet_matches_reference_bit_exact`)
             // but O(edges + Σ active) instead of O(edges × rows), which is the
             // whole win on edge-dense sparse-window pages (map contours, etc.).
-            let completed =
-                self.fill_scanline_aet(width, height, rule, row_start, row_end, should_cancel, row);
+            let completed = self.fill_scanline_aet(
+                width,
+                height,
+                rule,
+                row_start,
+                row_end,
+                should_cancel,
+                runs_mode,
+                row,
+            );
             if !completed {
                 self.reset_cancelled_fill();
             }
@@ -380,7 +466,12 @@ impl RasterKernel {
             if first <= last {
                 self.last_covered += (last - first + 1) as u64;
                 let y = row_start + lr;
-                row(y, first, last, &mut self.cov);
+                let whole = [CovRun {
+                    x0: first as u32,
+                    x1: last as u32 + 1,
+                    fill: None,
+                }];
+                row(y, first, last, &mut self.cov, &whole);
                 for c in &mut self.cov[first..=last] {
                     *c = 0;
                 }
@@ -491,7 +582,8 @@ impl RasterKernel {
         row_start: usize,
         row_end: usize,
         should_cancel: Option<&(dyn Fn() -> bool + Send + Sync)>,
-        mut row: impl FnMut(usize, usize, usize, &mut [u8]),
+        runs_mode: bool,
+        mut row: impl FnMut(usize, usize, usize, &mut [u8], &[CovRun]) -> bool,
     ) -> bool {
         if self.acc_row.len() < width + 1 {
             self.acc_row.resize(width + 1, 0.0);
@@ -549,6 +641,21 @@ impl RasterKernel {
         }
 
         // --- Sweep rows, maintaining the index-sorted active list. ---
+        //
+        // Row repetition (run-aware mode only): when every active edge of a
+        // row is vertical and spans the whole row, each deposit is
+        // `accumulate(x, yf, x, yf + 1, dir)` — the same columns, the same
+        // `cover = ((yf + 1) - yf) * dir = dir` (exact for `y < 2^24`) and the
+        // same `x = x_at_top + (yf - y_top) * 0.0` (a zero of fixed sign, or
+        // NaN in every row alike) — so the next row with the same active set,
+        // still spanning it, accumulates bit-identical values in the same
+        // order and converts to the same cells, runs and span. Its cells are
+        // then kept in `cov` (`held`) and re-emitted instead of re-deposited
+        // and re-converted: the interior rows of a page-sized rectangle or of
+        // a stroked frame. Any change (an edge activating or retiring, an
+        // edge ending inside the row, a consumer that wrote the buffer)
+        // releases the held cells and computes the row normally.
+        let mut held: Option<(usize, usize)> = None;
         self.aet_active.clear();
         for lr in 0..bh {
             if lr & 0x0f == 0 && should_cancel.is_some_and(|cancel| cancel()) {
@@ -557,6 +664,7 @@ impl RasterKernel {
             let y = row_start + lr;
             let yf = y as f32;
             let yu = y as u32;
+            let prev_active = self.aet_active.len();
 
             // Merge row `lr`'s newly-activating edges into the active list,
             // dropping retired ones (er_end <= y), all order-preserving. Bucket
@@ -595,11 +703,40 @@ impl RasterKernel {
             }
             std::mem::swap(&mut self.aet_active, &mut self.aet_active_next);
 
+            if let Some((first, last)) = held {
+                // No activation and no retirement leaves the (index-sorted)
+                // active set unchanged; each edge must still span this row.
+                let repeat = b0 == b1
+                    && self.aet_active.len() == prev_active
+                    && self
+                        .aet_active
+                        .iter()
+                        .all(|&ei| self.edges[ei as usize].y_bot >= yf + 1.0);
+                if repeat {
+                    self.last_covered += (last - first + 1) as u64;
+                    if row(y, first, last, &mut self.cov, &self.row_runs) {
+                        for c in &mut self.cov[first..=last] {
+                            *c = 0;
+                        }
+                        held = None;
+                    }
+                    continue;
+                }
+                for r in &self.row_runs {
+                    if r.fill.is_none() {
+                        self.cov[r.x0 as usize..r.x1 as usize].fill(0);
+                    }
+                }
+                held = None;
+            }
+
             // Accumulate active edges in edge-index order — identical operands
             // and order to the reference's `for e in &self.edges` filtered loop.
             let active = std::mem::take(&mut self.aet_active);
             let mut col_min = width;
             let mut col_max = 0usize;
+            // Whether this row may be held for repetition (see above).
+            let mut all_vertical_full = runs_mode && y < (1 << 24);
             self.aet_touched.clear();
             for (active_index, &ei) in active.iter().enumerate() {
                 if active_index & 0xfff == 0 && should_cancel.is_some_and(|cancel| cancel()) {
@@ -609,6 +746,7 @@ impl RasterKernel {
                 let e = self.edges[ei as usize];
                 let ya = e.y_top.max(yf);
                 let yb = e.y_bot.min(yf + 1.0);
+                all_vertical_full &= e.dxdy == 0.0 && ya == yf && yb == yf + 1.0;
                 if yb <= ya {
                     continue;
                 }
@@ -641,6 +779,7 @@ impl RasterKernel {
             if col_min > col_max {
                 continue;
             }
+            self.row_runs.clear();
             let (first, last) = convert_row_sparse(
                 &mut self.acc_row,
                 &mut self.cov,
@@ -648,12 +787,31 @@ impl RasterKernel {
                 col_min,
                 col_max,
                 rule,
+                runs_mode.then_some(&mut self.row_runs),
             );
             if first <= last {
                 self.last_covered += (last - first + 1) as u64;
-                row(y, first, last, &mut self.cov);
-                for c in &mut self.cov[first..=last] {
-                    *c = 0;
+                let dirty = row(y, first, last, &mut self.cov, &self.row_runs);
+                if !runs_mode || dirty {
+                    for c in &mut self.cov[first..=last] {
+                        *c = 0;
+                    }
+                } else if all_vertical_full {
+                    held = Some((first, last));
+                } else {
+                    // Only the cell runs were written (and may hold coverage).
+                    for r in &self.row_runs {
+                        if r.fill.is_none() {
+                            self.cov[r.x0 as usize..r.x1 as usize].fill(0);
+                        }
+                    }
+                }
+            }
+        }
+        if held.is_some() {
+            for r in &self.row_runs {
+                if r.fill.is_none() {
+                    self.cov[r.x0 as usize..r.x1 as usize].fill(0);
                 }
             }
         }
@@ -685,6 +843,11 @@ const SPARSE_MIN_SPAN: usize = 64;
 /// one, cost a few cells per row instead of a full-width float walk; the
 /// output is byte-identical to the dense sweep (`aet_sparse_rows_match_dense`).
 /// A row with many edges or a short span runs the dense sweep unchanged.
+///
+/// With `runs` (run-aware mode) the constant non-zero gaps are recorded as
+/// `fill: Some(byte)` runs instead of being written into `cov`, and the
+/// converted cells as `fill: None` runs; zero gaps are omitted. `first` /
+/// `last` and every written cell are the same in both modes.
 fn convert_row_sparse(
     acc: &mut [f32],
     cov: &mut [u8],
@@ -692,13 +855,31 @@ fn convert_row_sparse(
     col_min: usize,
     col_max: usize,
     rule: FillRule,
+    mut runs: Option<&mut Vec<CovRun>>,
 ) -> (usize, usize) {
     let width = cov.len();
     let mut running = 0.0f32;
     let mut first = width;
     let mut last = 0usize;
 
+    // Append a written-cells run, merging with an adjacent one.
+    fn push_cells(runs: &mut Option<&mut Vec<CovRun>>, x0: usize, x1: usize) {
+        if let Some(runs) = runs.as_deref_mut()
+            && x0 < x1
+        {
+            match runs.last_mut() {
+                Some(prev) if prev.fill.is_none() && prev.x1 as usize == x0 => prev.x1 = x1 as u32,
+                _ => runs.push(CovRun {
+                    x0: x0 as u32,
+                    x1: x1 as u32,
+                    fill: None,
+                }),
+            }
+        }
+    }
+
     if touched.len() > SPARSE_MAX_INTERVALS || col_max - col_min + 1 < SPARSE_MIN_SPAN {
+        push_cells(&mut runs, col_min, col_max + 1);
         for x in col_min..=col_max {
             running += acc[x];
             acc[x] = 0.0;
@@ -732,13 +913,21 @@ fn convert_row_sparse(
         if start > x {
             let byte = coverage_byte(running, rule);
             if byte != 0 {
-                cov[x..start].fill(byte);
+                match runs.as_deref_mut() {
+                    Some(runs) => runs.push(CovRun {
+                        x0: x as u32,
+                        x1: start as u32,
+                        fill: Some(byte),
+                    }),
+                    None => cov[x..start].fill(byte),
+                }
                 first = first.min(x);
                 last = start - 1;
             }
             x = start;
         }
         let stop = end.min(convert_end);
+        push_cells(&mut runs, x, stop);
         while x < stop {
             running += acc[x];
             acc[x] = 0.0;
@@ -757,7 +946,14 @@ fn convert_row_sparse(
     if x < convert_end {
         let byte = coverage_byte(running, rule);
         if byte != 0 {
-            cov[x..convert_end].fill(byte);
+            match runs.as_deref_mut() {
+                Some(runs) => runs.push(CovRun {
+                    x0: x as u32,
+                    x1: convert_end as u32,
+                    fill: Some(byte),
+                }),
+                None => cov[x..convert_end].fill(byte),
+            }
             first = first.min(x);
             last = col_max;
         }
@@ -1355,6 +1551,141 @@ mod tests {
         }
     }
 
+    /// The run-aware hand-over (`fill_runs_cancellable`) must describe exactly
+    /// the coverage `fill` produces: cell runs read from the buffer plus
+    /// constant runs, every other column zero, runs ordered and disjoint, and
+    /// constant runs never written into the buffer. Both consumer contracts
+    /// are exercised (`false`: buffer untouched outside cell runs; `true`:
+    /// constant runs materialized into the buffer), each over a sequence of
+    /// fills on one kernel so a missed reset shows up in the next fill.
+    #[test]
+    fn fill_runs_match_fill() {
+        let w = 1193usize;
+        let h = 24usize;
+        let mut cases: Vec<Geometry> = vec![
+            rect(0.0, 0.0, w as f32, h as f32),
+            rect(0.37, 0.61, 1190.91, 23.4),
+            rect(-5.0, -3.0, 1300.0, 40.0),
+            rect(3.5, 2.0, 4.2, 20.0),
+            (
+                vec![
+                    [1.3, 1.2],
+                    [1191.7, 1.2],
+                    [1191.7, 22.8],
+                    [1.3, 22.8],
+                    [3.3, 3.2],
+                    [3.3, 20.8],
+                    [1189.7, 20.8],
+                    [1189.7, 3.2],
+                ],
+                vec![(0, 4), (4, 8)],
+            ),
+            // Overlapping rects: a constant run of partial (non-0/255) coverage
+            // under even-odd, and of 255 under nonzero.
+            (
+                vec![
+                    [10.0, 2.5],
+                    [900.5, 2.5],
+                    [900.5, 21.5],
+                    [10.0, 21.5],
+                    [300.25, 4.0],
+                    [1180.0, 4.0],
+                    [1180.0, 19.0],
+                    [300.25, 19.0],
+                ],
+                vec![(0, 4), (4, 8)],
+            ),
+            // A half-covered wide band: constant 128-ish coverage across a row.
+            rect(2.0, 5.5, 1150.0, 6.0),
+            (vec![[0.0, 0.0], [1193.0, 24.0], [0.0, 24.0]], vec![(0, 3)]),
+            // Compact window (fast path): one cell run per row.
+            rect(3.25, 2.5, 40.75, 9.5),
+            // Row repetition: nested rects activating and retiring inside the
+            // band (integral and fractional), and a diagonal that interrupts
+            // the vertical-only rows for a while.
+            (
+                vec![
+                    [0.5, 0.0],
+                    [1192.5, 0.0],
+                    [1192.5, 24.0],
+                    [0.5, 24.0],
+                    [100.0, 5.0],
+                    [600.0, 5.0],
+                    [600.0, 12.3],
+                    [100.0, 12.3],
+                    [700.7, 9.0],
+                    [701.2, 9.0],
+                    [701.2, 17.0],
+                    [700.7, 17.0],
+                ],
+                vec![(0, 4), (4, 8), (8, 12)],
+            ),
+            (
+                vec![
+                    [2.0, 1.0],
+                    [1100.0, 1.0],
+                    [1100.0, 23.0],
+                    [2.0, 23.0],
+                    [300.0, 6.0],
+                    [340.0, 14.0],
+                    [320.0, 14.0],
+                ],
+                vec![(0, 4), (4, 7)],
+            ),
+        ];
+        let mut rng = Lcg(0x0BAD_C0DE_1357_9BDF);
+        for _ in 0..40 {
+            cases.push(random_path(&mut rng, w as f32, h as f32));
+        }
+        for materialize in [false, true] {
+            let mut k = RasterKernel::default();
+            for (p, s) in &cases {
+                for rule in [FillRule::NonZero, FillRule::EvenOdd] {
+                    let expect = coverage_grid(p, s, w, h, rule);
+                    let mut grid = vec![0u8; w * h];
+                    let mut spans = Vec::new();
+                    k.fill_runs_cancellable(p, s, w, h, rule, None, |y, x0, x1, cov, runs| {
+                        spans.push((y, x0, x1));
+                        let mut prev_end = 0u32;
+                        for r in runs {
+                            assert!(r.x0 < r.x1 && r.x0 >= prev_end, "runs ordered: {runs:?}");
+                            prev_end = r.x1;
+                            let row = &mut grid[y * w..(y + 1) * w];
+                            match r.fill {
+                                None => row[r.x0 as usize..r.x1 as usize]
+                                    .copy_from_slice(&cov[r.x0 as usize..r.x1 as usize]),
+                                Some(c) => {
+                                    assert!(
+                                        cov[r.x0 as usize..r.x1 as usize].iter().all(|&b| b == 0),
+                                        "constant run written into the buffer"
+                                    );
+                                    row[r.x0 as usize..r.x1 as usize].fill(c);
+                                }
+                            }
+                        }
+                        if materialize {
+                            for r in runs {
+                                if let Some(c) = r.fill {
+                                    cov[r.x0 as usize..r.x1 as usize].fill(c);
+                                }
+                            }
+                        }
+                        materialize
+                    });
+                    assert_eq!(
+                        grid, expect,
+                        "runs vs fill, rule {rule:?} materialize {materialize}"
+                    );
+                    // The row bounds handed over match `fill`'s.
+                    let mut plain = Vec::new();
+                    RasterKernel::default()
+                        .fill(p, s, w, h, rule, |y, x0, x1, _| plain.push((y, x0, x1)));
+                    assert_eq!(spans, plain, "row spans, rule {rule:?}");
+                }
+            }
+        }
+    }
+
     /// AET bit-exactness on the boundary geometry the activation/retirement
     /// bookkeeping is most likely to get wrong.
     #[test]
@@ -1491,7 +1822,20 @@ impl RasterKernel {
             return;
         }
         if aet {
-            let _ = self.fill_scanline_aet(width, height, rule, row_start, row_end, None, row);
+            let mut row = row;
+            let _ = self.fill_scanline_aet(
+                width,
+                height,
+                rule,
+                row_start,
+                row_end,
+                None,
+                false,
+                |y, x0, x1, cov, _| {
+                    row(y, x0, x1, cov);
+                    true
+                },
+            );
         } else {
             self.fill_scanline_ref(width, height, rule, row_start, row_end, row);
         }

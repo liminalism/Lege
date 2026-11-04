@@ -53,23 +53,266 @@ pub fn blend_const(dst: &mut [u8], rgb: [u8; 3], a: u8) {
 pub fn blend_mask(dst: &mut [u8], cov: &[u8], rgb: [u8; 3], alpha: u8) {
     debug_assert_eq!(dst.len(), cov.len() * 4);
     for (px, &c) in dst.chunks_exact_mut(4).zip(cov) {
-        if c == 0 {
-            continue;
-        }
-        let a = if alpha == 255 {
-            c as u16
-        } else {
-            mul_div_255(c as u16, alpha as u16)
-        };
-        if a == 0 {
-            continue;
-        }
-        let ia = 255 - a;
-        px[0] = (mul_div_255(rgb[0] as u16, a) + mul_div_255(px[0] as u16, ia)) as u8;
-        px[1] = (mul_div_255(rgb[1] as u16, a) + mul_div_255(px[1] as u16, ia)) as u8;
-        px[2] = (mul_div_255(rgb[2] as u16, a) + mul_div_255(px[2] as u16, ia)) as u8;
-        px[3] = (a + mul_div_255(px[3] as u16, ia)) as u8;
+        blend_mask_px(px, c, rgb, alpha);
     }
+}
+
+/// The per-pixel body of [`blend_mask`], shared with [`blend_mask_rect`] so the
+/// two scalar references cannot drift apart.
+#[inline(always)]
+fn blend_mask_px(px: &mut [u8], c: u8, rgb: [u8; 3], alpha: u8) {
+    if c == 0 {
+        return;
+    }
+    let a = if alpha == 255 {
+        c as u16
+    } else {
+        mul_div_255(c as u16, alpha as u16)
+    };
+    if a == 0 {
+        return;
+    }
+    let ia = 255 - a;
+    px[0] = (mul_div_255(rgb[0] as u16, a) + mul_div_255(px[0] as u16, ia)) as u8;
+    px[1] = (mul_div_255(rgb[1] as u16, a) + mul_div_255(px[1] as u16, ia)) as u8;
+    px[2] = (mul_div_255(rgb[2] as u16, a) + mul_div_255(px[2] as u16, ia)) as u8;
+    px[3] = (a + mul_div_255(px[3] as u16, ia)) as u8;
+}
+
+/// [`blend_mask`] over a whole coverage rectangle — one glyph bitmap per call
+/// instead of one call per row. Row `r` of `height` blends the `width`
+/// coverage bytes at `cov[r * cov_stride..]` onto the `width` pixels at
+/// `dst[r * dst_stride..]`. Returns the number of non-zero coverage bytes
+/// (the glyph blit's `covered_pixels` statistic), counted in the same pass so
+/// the caller needs no second walk over the coverage.
+///
+/// Panics (slice bounds) if either buffer is shorter than the rectangle.
+#[allow(clippy::too_many_arguments)]
+pub fn blend_mask_rect(
+    dst: &mut [u8],
+    dst_stride: usize,
+    cov: &[u8],
+    cov_stride: usize,
+    width: usize,
+    height: usize,
+    rgb: [u8; 3],
+    alpha: u8,
+) -> u64 {
+    let mut covered = 0u64;
+    for r in 0..height {
+        let d = &mut dst[r * dst_stride..r * dst_stride + width * 4];
+        let c = &cov[r * cov_stride..r * cov_stride + width];
+        for (px, &c) in d.chunks_exact_mut(4).zip(c) {
+            covered += (c != 0) as u64;
+            blend_mask_px(px, c, rgb, alpha);
+        }
+    }
+    covered
+}
+
+/// [`blend_mask_rect`] with every row run eight pixels at a time (AVX2), the
+/// constants set up once per rectangle, and a row remainder of one to seven
+/// pixels done as one masked eight-pixel step (`vpmaskmovd` load/store, so the
+/// pixels past the row are neither read nor written) instead of a scalar
+/// tail — glyph rows are mostly 3–16 pixels, so the remainder is most of the
+/// work. The non-zero coverage count comes from a byte compare + `movemask` +
+/// `popcnt` on the coverage already in a register.
+///
+/// Bit-for-bit identical to [`blend_mask_rect`] (same lane arithmetic as
+/// [`blend_mask_avx2`]); verified by
+/// `tests::blend_mask_rect_avx2_matches_scalar_bit_exact`. Re-probes AVX2 on
+/// call (a cached atomic load) and falls back to the scalar kernel without it.
+#[cfg(target_arch = "x86_64")]
+#[allow(
+    unsafe_code,
+    clippy::too_many_arguments,
+    reason = "dispatches the AVX2 rectangle blend behind a runtime probe; see SAFETY comment"
+)]
+pub fn blend_mask_rect_avx2(
+    dst: &mut [u8],
+    dst_stride: usize,
+    cov: &[u8],
+    cov_stride: usize,
+    width: usize,
+    height: usize,
+    rgb: [u8; 3],
+    alpha: u8,
+) -> u64 {
+    if width == 0 || height == 0 {
+        return 0;
+    }
+    if !(is_x86_feature_detected!("avx2") && is_x86_feature_detected!("popcnt")) {
+        return blend_mask_rect(dst, dst_stride, cov, cov_stride, width, height, rgb, alpha);
+    }
+    // Establish the rectangle's extent with checked slicing, once: the last
+    // row ends furthest into each buffer, so every row lies inside these.
+    let dst_end = (height - 1)
+        .checked_mul(dst_stride)
+        .and_then(|v| v.checked_add(width.checked_mul(4)?));
+    let cov_end = (height - 1)
+        .checked_mul(cov_stride)
+        .and_then(|v| v.checked_add(width));
+    let (Some(dst_end), Some(cov_end)) = (dst_end, cov_end) else {
+        panic!("blend_mask_rect_avx2: rectangle extent overflows usize");
+    };
+    let dst = &mut dst[..dst_end];
+    // `cov` keeps its full length: bytes past `cov_end` may be *read* (never
+    // used) by a masked remainder step, which is cheaper than assembling it.
+    assert!(
+        cov_end <= cov.len(),
+        "blend_mask_rect_avx2: coverage too short"
+    );
+    // SAFETY: AVX2 and POPCNT are present (runtime probe above); `dst` and `cov` cover
+    // every row of the rectangle (checked just above), which is the body's
+    // precondition.
+    unsafe {
+        blend_mask_rect_avx2_body(dst, dst_stride, cov, cov_stride, width, height, rgb, alpha)
+    }
+}
+
+/// The AVX2 body of [`blend_mask_rect_avx2`].
+///
+/// # Safety
+/// * The CPU must support AVX2 and POPCNT.
+/// * `width >= 1`, `height >= 1`, and for every row `r < height`:
+///   `r * dst_stride + width * 4 <= dst.len()` and
+///   `r * cov_stride + width <= cov.len()`.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,popcnt")]
+#[allow(unsafe_code, clippy::too_many_arguments)]
+unsafe fn blend_mask_rect_avx2_body(
+    dst: &mut [u8],
+    dst_stride: usize,
+    cov: &[u8],
+    cov_stride: usize,
+    width: usize,
+    height: usize,
+    rgb: [u8; 3],
+    alpha: u8,
+) -> u64 {
+    use core::arch::x86_64::*;
+
+    let (r, g, b) = (rgb[0] as i16, rgb[1] as i16, rgb[2] as i16);
+    let src = _mm256_setr_epi16(r, g, b, 255, r, g, b, 255, r, g, b, 255, r, g, b, 255);
+    let c128 = _mm256_set1_epi16(128);
+    let c255 = _mm256_set1_epi16(255);
+    let byte_mask = _mm256_set1_epi16(0x00FF);
+    let alpha8 = _mm_set1_epi16(alpha as i16);
+    let half8 = _mm_set1_epi16(128);
+    let zero = _mm_setzero_si128();
+    let idx_lo = _mm256_setr_epi8(
+        0, 1, 0, 1, 0, 1, 0, 1, 2, 3, 2, 3, 2, 3, 2, 3, 4, 5, 4, 5, 4, 5, 4, 5, 6, 7, 6, 7, 6, 7,
+        6, 7,
+    );
+    let idx_hi = _mm256_setr_epi8(
+        8, 9, 8, 9, 8, 9, 8, 9, 10, 11, 10, 11, 10, 11, 10, 11, 12, 13, 12, 13, 12, 13, 12, 13, 14,
+        15, 14, 15, 14, 15, 14, 15,
+    );
+    let lane_ids = _mm256_setr_epi32(0, 1, 2, 3, 4, 5, 6, 7);
+
+    #[inline(always)]
+    fn mul_div_255_x16(a: __m256i, b: __m256i, c128: __m256i) -> __m256i {
+        // SAFETY: plain AVX2 register arithmetic, no memory access; only
+        // inlined into the AVX2-enabled body below.
+        unsafe {
+            let t = _mm256_add_epi16(_mm256_mullo_epi16(a, b), c128);
+            _mm256_srli_epi16::<8>(_mm256_add_epi16(t, _mm256_srli_epi16::<8>(t)))
+        }
+    }
+
+    // Eight pixels `px` blended under the eight coverage bytes in the low
+    // half of `c`: the exact lane arithmetic of `blend_mask_avx2`'s `blend8`.
+    // Register arithmetic only; the intrinsics are safe in this AVX2 context.
+    let blend = |c: __m128i, px: __m256i| -> __m256i {
+        let mut a = _mm_cvtepu8_epi16(c);
+        if alpha != 255 {
+            let t = _mm_add_epi16(_mm_mullo_epi16(a, alpha8), half8);
+            a = _mm_srli_epi16::<8>(_mm_add_epi16(t, _mm_srli_epi16::<8>(t)));
+        }
+        let a_both = _mm256_broadcastsi128_si256(a);
+        let a_lo = _mm256_shuffle_epi8(a_both, idx_lo);
+        let a_hi = _mm256_shuffle_epi8(a_both, idx_hi);
+        let d_lo = _mm256_cvtepu8_epi16(_mm256_castsi256_si128(px));
+        let d_hi = _mm256_cvtepu8_epi16(_mm256_extracti128_si256::<1>(px));
+        let out_lo = _mm256_and_si256(
+            _mm256_add_epi16(
+                mul_div_255_x16(src, a_lo, c128),
+                mul_div_255_x16(d_lo, _mm256_sub_epi16(c255, a_lo), c128),
+            ),
+            byte_mask,
+        );
+        let out_hi = _mm256_and_si256(
+            _mm256_add_epi16(
+                mul_div_255_x16(src, a_hi, c128),
+                mul_div_255_x16(d_hi, _mm256_sub_epi16(c255, a_hi), c128),
+            ),
+            byte_mask,
+        );
+        _mm256_permute4x64_epi64::<0b11_01_10_00>(_mm256_packus_epi16(out_lo, out_hi))
+    };
+    // Bit `k` set for each non-zero byte among the low eight of `c`.
+    let nonzero8 =
+        |c: __m128i| -> u32 { !(_mm_movemask_epi8(_mm_cmpeq_epi8(c, zero)) as u32) & 0xFF };
+
+    let full = width & !7;
+    let rem = width - full;
+    // Lanes `0..rem` of the masked remainder step.
+    let rem_mask = _mm256_cmpgt_epi32(_mm256_set1_epi32(rem as i32), lane_ids);
+    let rem_bits = (1u32 << rem) - 1;
+    let cov_len = cov.len();
+    let mut covered = 0u64;
+
+    for row in 0..height {
+        let d = row * dst_stride;
+        let s = row * cov_stride;
+        let mut row_covered = 0u32;
+        let mut i = 0usize;
+        while i < full {
+            // SAFETY: `i + 8 <= width`, so the 8 coverage bytes at `s + i` and
+            // the 32 pixel bytes at `d + 4i` lie inside this row (precondition).
+            unsafe {
+                let c = _mm_loadl_epi64(cov.as_ptr().add(s + i) as *const __m128i);
+                let p = dst.as_mut_ptr().add(d + i * 4) as *mut __m256i;
+                _mm256_storeu_si256(p, blend(c, _mm256_loadu_si256(p)));
+                row_covered += nonzero8(c).count_ones();
+            }
+            i += 8;
+        }
+        if rem != 0 {
+            let at = s + full;
+            // Coverage for the remainder: one 8-byte load when the slice has
+            // eight bytes from `at` (the extra bytes feed only masked-off
+            // lanes); at the end of the bitmap, the eight bytes ending at
+            // `cov_len` shifted down; a byte loop only for a bitmap under
+            // eight bytes.
+            let c = if at + 8 <= cov_len {
+                // SAFETY: `at + 8 <= cov.len()`.
+                unsafe { _mm_loadl_epi64(cov.as_ptr().add(at) as *const __m128i) }
+            } else if cov_len >= 8 {
+                let mut w = [0u8; 8];
+                w.copy_from_slice(&cov[cov_len - 8..]);
+                let v = u64::from_le_bytes(w) >> (8 * (at + 8 - cov_len));
+                _mm_cvtsi64_si128(v as i64)
+            } else {
+                let mut v = 0u64;
+                for k in 0..rem {
+                    v |= (cov[at + k] as u64) << (8 * k);
+                }
+                _mm_cvtsi64_si128(v as i64)
+            };
+            // SAFETY: lanes `0..rem` address pixels `full..width` of this row,
+            // inside `dst` (precondition); masked-off lanes are neither read
+            // nor written by `vpmaskmovd`.
+            unsafe {
+                let p = dst.as_mut_ptr().add(d + full * 4) as *mut i32;
+                let px = _mm256_maskload_epi32(p, rem_mask);
+                _mm256_maskstore_epi32(p, rem_mask, blend(c, px));
+            }
+            row_covered += (nonzero8(c) & rem_bits).count_ones();
+        }
+        covered += row_covered as u64;
+    }
+    covered
 }
 
 /// [`blend_mask`] with the body vectorized eight pixels at a time (AVX2) and
@@ -471,6 +714,10 @@ pub struct KernelSet {
     pub fill_opaque: fn(&mut [u8], [u8; 4]),
     pub blend_const: fn(&mut [u8], [u8; 3], u8),
     pub blend_mask: fn(&mut [u8], &[u8], [u8; 3], u8),
+    /// [`blend_mask_rect`]: a whole coverage rectangle (one glyph) per call,
+    /// returning its non-zero coverage count.
+    #[allow(clippy::type_complexity)]
+    pub blend_mask_rect: fn(&mut [u8], usize, &[u8], usize, usize, usize, [u8; 3], u8) -> u64,
 }
 
 impl KernelSet {
@@ -480,11 +727,13 @@ impl KernelSet {
             fill_opaque,
             blend_const,
             blend_mask,
+            blend_mask_rect,
         }
     }
 
     /// Choose the best kernel set for this CPU: the scalar table, with the
-    /// mask blend swapped for [`blend_mask_avx2`] when the CPU has AVX2.
+    /// mask blends swapped for [`blend_mask_avx2`] / [`blend_mask_rect_avx2`]
+    /// when the CPU has AVX2.
     /// `PDF_RENDERER_KERNELS=scalar` keeps the scalar table, for paired A/B
     /// isolation; every SIMD kernel is bit-identical to its scalar reference,
     /// so the switch only ever changes speed.
@@ -494,6 +743,7 @@ impl KernelSet {
         if simd_kernels_enabled() && is_x86_feature_detected!("avx2") {
             return Self {
                 blend_mask: blend_mask_avx2,
+                blend_mask_rect: blend_mask_rect_avx2,
                 ..set
             };
         }
@@ -618,6 +868,131 @@ mod tests {
                 blend_mask(&mut reference, &cov, rgb, alpha);
                 blend_mask_avx2(&mut dst, &cov, rgb, alpha);
                 assert_eq!(dst, reference, "len {len} alpha {alpha} rgb {rgb:?}");
+            }
+        }
+    }
+
+    /// The whole-glyph rectangle blend, scalar and AVX2, must equal the
+    /// per-row reference the glyph blit used before (one `blend_mask` per row
+    /// plus a separate non-zero count), byte for byte and count for count:
+    /// widths 0..=41 (vector body, masked remainder, both), several heights,
+    /// padded and tight strides, and coverage buffers that end exactly at the
+    /// last row (the end-of-bitmap remainder paths, including bitmaps under
+    /// eight bytes). Pixels outside the rectangle must be untouched.
+    #[test]
+    fn blend_mask_rect_avx2_matches_scalar_bit_exact() {
+        let mut rng = Rng(0xD1B5_4A32_D192_ED03);
+        for width in 0..=41usize {
+            for height in [0usize, 1, 2, 3, 5, 9] {
+                for _ in 0..12 {
+                    let alpha = match rng.next() % 4 {
+                        0 => 255,
+                        1 => 0,
+                        _ => rng.byte(),
+                    };
+                    let rgb = [rng.byte(), rng.byte(), rng.byte()];
+                    let cov_stride = width + (rng.next() % 3) as usize * (rng.next() % 9) as usize;
+                    let dst_stride = width * 4 + 4 * (rng.next() % 6) as usize;
+                    let cov_len = if height == 0 {
+                        (rng.next() % 4) as usize
+                    } else {
+                        (height - 1) * cov_stride + width + (rng.next() % 2) as usize * 5
+                    };
+                    let cov: Vec<u8> = (0..cov_len)
+                        .map(|_| match rng.next() % 3 {
+                            0 => 0,
+                            1 => 255,
+                            _ => rng.byte(),
+                        })
+                        .collect();
+                    let dst_len = height * dst_stride + 12;
+                    let dst0: Vec<u8> = (0..dst_len)
+                        .map(|k| {
+                            if k % 4 == 3 || rng.next() & 1 == 0 {
+                                255
+                            } else {
+                                rng.byte()
+                            }
+                        })
+                        .collect();
+
+                    // Per-row reference, exactly as the blit did it before.
+                    let mut reference = dst0.clone();
+                    let mut ref_count = 0u64;
+                    for r in 0..height {
+                        let src = &cov[r * cov_stride..r * cov_stride + width];
+                        blend_mask(
+                            &mut reference[r * dst_stride..r * dst_stride + width * 4],
+                            src,
+                            rgb,
+                            alpha,
+                        );
+                        ref_count += src.iter().filter(|&&c| c != 0).count() as u64;
+                    }
+
+                    let mut scalar = dst0.clone();
+                    let n = blend_mask_rect(
+                        &mut scalar,
+                        dst_stride,
+                        &cov,
+                        cov_stride,
+                        width,
+                        height,
+                        rgb,
+                        alpha,
+                    );
+                    assert_eq!(scalar, reference, "scalar w{width} h{height} a{alpha}");
+                    assert_eq!(n, ref_count, "scalar count w{width} h{height}");
+
+                    #[cfg(target_arch = "x86_64")]
+                    {
+                        let mut simd = dst0.clone();
+                        let n = blend_mask_rect_avx2(
+                            &mut simd, dst_stride, &cov, cov_stride, width, height, rgb, alpha,
+                        );
+                        assert_eq!(
+                            simd, reference,
+                            "avx2 w{width} h{height} a{alpha} cs{cov_stride} ds{dst_stride}"
+                        );
+                        assert_eq!(n, ref_count, "avx2 count w{width} h{height}");
+                    }
+                }
+            }
+        }
+    }
+
+    /// The vector fill paints a constant-coverage run `c` with
+    /// `blend_const(rgb, c·alpha)` instead of `blend_mask` over a buffer of
+    /// `c`s; the two must agree byte for byte for every coverage, alpha,
+    /// colour channel value and premultiplied backdrop.
+    #[test]
+    fn blend_const_matches_blend_mask_at_constant_coverage() {
+        let mut rng = Rng(0x2545_F491_4F6C_DD1D);
+        for c in 1..=255u8 {
+            for alpha in 0..=255u8 {
+                let a = if alpha == 255 {
+                    c
+                } else {
+                    mul_div_255(c as u16, alpha as u16) as u8
+                };
+                let rgb = [rng.byte(), rng.byte(), rng.byte()];
+                let mut dst: Vec<u8> = (0..32).map(|_| rng.byte()).collect();
+                // Include the extremes of every channel.
+                dst[..4].copy_from_slice(&[0, 0, 0, 0]);
+                dst[4..8].copy_from_slice(&[255, 255, 255, 255]);
+                let mut via_mask = dst.clone();
+                blend_mask(&mut via_mask, &[c; 8], rgb, alpha);
+                blend_const(&mut dst, rgb, a);
+                assert_eq!(dst, via_mask, "c {c} alpha {alpha} rgb {rgb:?}");
+            }
+        }
+        for v in [0u8, 255] {
+            for c in 1..=255u8 {
+                let mut dst = vec![rng.byte(); 4];
+                let mut via_mask = dst.clone();
+                blend_mask(&mut via_mask, &[c], [v, v, v], 255);
+                blend_const(&mut dst, [v, v, v], c);
+                assert_eq!(dst, via_mask, "c {c} v {v}");
             }
         }
     }

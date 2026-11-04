@@ -322,3 +322,272 @@ PDF_RENDERER_KERNELS=scalar pdfium-diff profile <scale> <pdf> <page> 20 scalar.j
 pdfium-diff profile <scale> <pdf> <page> 20 avx2.jsonl        # compare render.path.glyph_runs
 cargo test -p pdf-render-cpu --release blend_mask_avx2_matches_scalar_bit_exact
 ```
+
+## Round 3 (2026-11-04) — whole-glyph blit, run-aware page fills, viaduct attribution
+
+Brief: (1) remove the glyph blit's per-row overhead (one indirect kernel call
+per coverage row, and the non-profiling `covered` count that walked every
+coverage byte a second time); (2) profile viaduct ("pure vector", 33 vs
+hayro's 22 ms/page at 144 DPI) and fix its largest item; (3) a further lever
+in `kernels.rs` / `raster.rs` / the text and path-fill parts of `exec.rs`.
+Same ground rules: byte-identical output, scalar fallback and
+`PDF_RENDERER_KERNELS=scalar` kept, no dependency or version changes.
+
+### Method
+
+- Timing: the heads-up adapter (`headsup-lege-final`, `sample` / `time` /
+  `verify` modes) rebuilt against the round-3 branch, against the retained
+  main-checkout build at `035660da` ("base", same code as this round's
+  starting point `9c93b580` apart from a test-only cfg gate) and the
+  retained `headsup-rust-bench hayro` adapter. Serial, process affinity
+  `0xFFF` (P-cores), `RAYON_NUM_THREADS=1 PDF_RENDERER_JPX_CONCURRENCY=serial
+  PDF_RENDERER_IMAGE_ROW_PAR=0`; arms interleaved per case with the order
+  reversed every round, three rounds; each value per round is the median of
+  20 warm re-renders (sample mode) or one whole-document pass (time mode);
+  tables give median [min] over the rounds.
+- Structured profile: a small profiling adapter (`compile_profiled` +
+  `render_profiled_with`, `pdf-render-cpu/profiling`), the same
+  `warm_document` shape as `pdfium-diff profile` (compile + render per
+  sample, 6 warm-ups, medians of 20), plus a whole-document mode (every page
+  once, summed report) and a cold mode (fresh backend per sample).
+- **Load.** Two other workers were building and benchmarking throughout,
+  plus two JVMs: total CPU sampled at 15–98% (mostly 40–80%) during the
+  runs. hayro read 1.3–1.7× slower than in round 1 on the same pages, as in
+  round 2. Absolute numbers are therefore not comparable with the round-1
+  table; arms inside one interleaved run are, and the minima are the
+  steadier figure.
+
+### 1. Glyph blit: one kernel call per glyph, coverage counted in-kernel
+
+`KernelSet::blend_mask_rect(dst, dst_stride, cov, cov_stride, width,
+height, rgb, alpha) -> u64` blends a whole clamped glyph bitmap and returns
+its non-zero coverage count. `paint_glyph_run`'s simple path (Normal blend,
+no clip mask, no soft mask, solid colour — the only path the target pages
+take) now takes the surface rows of the glyph's clamped box once
+(`Surface::rows_mut_abs`) and makes one call per glyph; the separate
+`src.iter().filter(c != 0).count()` pass is gone. Masked, soft-masked,
+non-Normal and shaded runs keep the per-row path unchanged.
+
+- Scalar `blend_mask_rect`: the per-pixel body of `blend_mask` (factored
+  into a shared `blend_mask_px` so the two references cannot drift) with
+  the count fused into the loop.
+- `blend_mask_rect_avx2`: the same lane arithmetic as round 2's
+  `blend_mask_avx2` (eight pixels in two 16-lane `u16` registers), with the
+  constants set up once per glyph rather than once per row, and the one to
+  seven pixel row remainder done as **one masked eight-pixel step**
+  (`vpmaskmovd` load/store, so pixels past the row are neither read nor
+  written) instead of the half step plus scalar tail — glyph rows are 3–16
+  px, so the remainder is most of the work. Remainder coverage is one 8-byte
+  load when the bitmap has eight bytes from there (the extra bytes feed only
+  masked-off lanes), else the eight bytes ending at the bitmap end shifted
+  down, else (a bitmap under eight bytes) a byte loop. The count is
+  `cmpeq` + `movemask` + `popcnt` on the coverage already in a register. The
+  extent of the rectangle is checked once with slicing before the unsafe
+  body. Installed by `KernelSet::select()` with AVX2 (+POPCNT, both probed);
+  `PDF_RENDERER_KERNELS=scalar` keeps the scalar table.
+- Gate: `kernels::tests::blend_mask_rect_avx2_matches_scalar_bit_exact` —
+  widths 0..=41 × heights {0,1,2,3,5,9} × padded and tight strides ×
+  coverage buffers ending exactly at the last row (all three remainder
+  sources), random colour/alpha/backdrop: scalar and AVX2 both equal the old
+  per-row reference (`blend_mask` per row + separate count) byte for byte
+  and count for count, and pixels outside the rectangle stay untouched.
+
+`render.path.glyph_runs` (ms, profile adapter, three interleaved rounds,
+median [min]; load ~40%):
+
+| page | glyph blits | round 2 note | start (`9c93b580`) | round 3 | change vs start (min) |
+|---|---:|---:|---:|---:|---:|
+| xenosystems p152, scale 2 | 2,096 | 0.860 | 1.255 [0.911] | 0.475 [0.377] | −59% |
+| vogtle p3, scale 2 | 1,497 | 0.347 | 0.371 [0.358] | 0.173 [0.162] | −55% |
+| vogtle p10, scale 2 | 738 | 0.191 | 0.197 [0.170] | 0.086 [0.086] | −49% |
+| xenosystems p152, scale 1 | 2,096 | 0.396 | 0.424 [0.407] | 0.167 [0.160] | −61% |
+| vogtle p3, scale 1 | 1,497 | 0.183 | 0.212 [0.184] | 0.079 [0.078] | −58% |
+| vogtle p10, scale 1 | 738 | 0.085 | 0.098 [0.097] | 0.062 [0.039] | −60% |
+
+The 144 DPI target (≥20% below the round-2 numbers 0.860 / 0.347 / 0.191)
+is met by a wide margin even against the round-2 figures measured on an
+idle machine: 0.377 / 0.162 / 0.086 ms. Forced scalar
+(`PDF_RENDERER_KERNELS=scalar`), the fused scalar kernel measures about
+where the old per-row AVX2 path did (xenosystems p152 scale 2 1.14 [1.04],
+vogtle p3 scale 2 0.40 [0.35]). The glyph blit is now ~0.18 µs per glyph at
+144 DPI on a loaded machine.
+
+### 2. viaduct is not a vector document: it is three JPEG decodes
+
+The brief's premise did not hold. `viaduct.pdf`'s three pages each paint one
+`DCTDecode` RGB image through a Form XObject (1000×599, 1274×1024 and
+2067×2880 px, baseline 4:2:0, 0.32 / 0.36 / 1.45 MB of entropy data); there
+is no path fill or stroke on any page (`render.solid_paths` = 0,
+`render.commands` = 1). Per page at 144 DPI, cold (fresh backend per sample,
+which is what the whole-document run sees on its single visit):
+
+| page | total | `codec.dct.decode` | image draw (`render.image`) | surface | compile |
+|---|---:|---:|---:|---:|---:|
+| 0 | 11.6 ms | 6.7 (58%) | 2.4 | 1.8 | 0.4 |
+| 1 | 17.4 ms | 11.6 (66%) | 3.4 | 1.9 | 0.4 |
+| 2 | 47.9 ms | 41.2 (86%) | 4.6 | 1.8 | 1.5 |
+
+Warm (decoded image cached) the same pages take 3.1 / 3.4 / 7.8 ms. The
+whole-document gap to hayro (30–32 vs 37–40 pages/s at 144 DPI in this
+round's runs; per page 14.5–15.6 / 24–27 / 52–56 ms against hayro's 11.1 /
+16–22 / 45–46) is therefore the JPEG decode in `pdf-image` (the remaining
+JPEG Huffman residual named in `variance-investigation.md` §10) plus the
+area-average minification draw — both owned by the image-path session, so
+nothing was changed for it here. Lege's own share of the page outside those
+two is the 1.8 ms cold surface allocation and the 0.4 ms compile. Nothing in
+the text/vector area can close it; the gap is not structural, it is in the
+codec.
+
+### 3. Page-sized solid fills: run-aware rows and row repetition
+
+With the glyph blit fixed, the largest text/vector item left in the corpus
+is xenosystems' per-page background: every page paints a near-black
+page-sized rectangle (fractional right/bottom edges, so not `OpaqueRect`)
+and a border stroke clipped to the same rectangle. In the whole-document
+profile at 144 DPI these two fills were `render.path.solid_paths` 528–606 ms
+of 1,526–1,701 ms (~35%), more than the 2,096-glyph pages' blits.
+
+Both go through the scanline (AET) path. Per row, the sparse conversion
+from round 1 wrote the rectangle's constant interior into the coverage row
+(a 1,190-byte memset), `dispatch_row` scanned the row again for its 255-run,
+`fill_opaque` painted it, and the driver zeroed the row; the stroked ring's
+rows were scanned and zeroed across the page width for a few partial cells
+at each end. And every interior row re-ran the edge deposits and the
+conversion, although the rows are identical.
+
+- **Run-aware hand-over.** `RasterKernel::fill_runs_cancellable` gives the
+  row callback the row as `CovRun`s: cell runs (bytes in the buffer) and
+  constant runs that were never written into it; zero gaps are omitted.
+  `paint_command`'s solid Normal fills without clip mask, soft mask,
+  stencil or shading use `dispatch_runs`: a constant 255 run is one
+  `fill_opaque` (or `blend_const` at the fill alpha), a partial constant run
+  `c` one `blend_const` at `a = c·alpha` (exactly `blend_mask`'s arithmetic
+  at constant coverage — gated by
+  `kernels::tests::blend_const_matches_blend_mask_at_constant_coverage`,
+  every `c` × every alpha), and only cell runs go through the unchanged span
+  classifier (factored out of `dispatch_row` as `classify_spans`). The
+  driver then zeroes only the cell runs. Every other fill writes the
+  constant runs into the buffer, takes `dispatch_row` as before and reports
+  the buffer dirty. `fill` / `fill_cancellable` (clip masks, glyph
+  rasterization, attribution) are unchanged and still materialize in
+  `convert_row_sparse` exactly as before.
+- **Row repetition** (run-aware mode only). If every active edge of a row
+  is vertical and spans the whole row, each deposit is `accumulate(x, yf, x,
+  yf + 1, dir)`: same columns, `cover = ((yf + 1) − yf)·dir = dir` (exact
+  below 2^24 rows), `x = x_at_top + (yf − y_top)·0.0` (a zero of fixed sign,
+  or NaN alike). The next row with the same active set — no activation, no
+  retirement, every edge still reaching `yf + 1` — accumulates bit-identical
+  values in the same order and converts to the same cells, runs and span, so
+  those cells are kept in the buffer and the row is re-emitted without
+  deposits or conversion. Anything else (an edge starting or ending inside
+  the row, a non-vertical edge, a consumer that wrote the buffer) releases
+  the held cells and computes the row normally.
+- Gates: `raster::tests::fill_runs_match_fill` — the run hand-over, rebuilt
+  into a grid, equals `fill`'s coverage and row spans on page-wide rects
+  (integral, fractional, overhanging, sub-pixel), a stroked ring, overlapping
+  rects giving partial constant runs under even-odd, a half-covered band,
+  nested rects activating and retiring mid-band, a diagonal interrupting the
+  vertical rows, a compact-window fill and 40 random wide paths; both rules;
+  both consumer contracts (untouched buffer / materialized and dirty); one
+  kernel reused across all fills so a missed reset surfaces in the next
+  fill; constant runs asserted unwritten. A deliberately wrong repeat
+  emission makes it fail. `aet_sparse_rows_match_dense`,
+  `aet_matches_reference_bit_exact` and `aet_matches_reference_on_edge_cases`
+  still pass.
+
+Profile timers, xenosystems page 152 (ms, three interleaved rounds, median
+[min]; `solid_dispatch` includes two `Instant::now()` per row, so it reads
+high in absolute terms):
+
+| scale | timer | start | run-aware only | + row repetition |
+|---|---|---:|---:|---:|
+| 2 | `solid_paths` | 1.788 [1.323] | 1.360 [1.162] | 0.986 [0.835] |
+| 2 | `solid_dispatch` | 1.064 [0.723] | 0.677 [0.556] | 0.718 [0.614] |
+| 1 | `solid_paths` | 0.711 [0.433] | 0.570 [0.559] | 0.303 [0.224] |
+
+(The "run-aware only" column is from the run that paired it with row
+repetition: 1.360 [1.162] → 0.879 [0.804] at scale 2, 0.570 → 0.307 at
+scale 1.) The edge/conversion share of the two fills (`solid_paths` −
+`solid_dispatch`) went from ~0.6–0.7 to ~0.25 ms at 144 DPI; what remains in
+dispatch is mostly `fill_opaque` writing 8 MB, which a stand-alone
+microbenchmark puts at 0.24–0.27 ms per page-sized fill whether written as
+32-bit splats, 64-bit words or explicit 32-byte AVX2 stores — it is
+store-bandwidth bound, so no SIMD fill kernel was added.
+
+Whole-document profile, xenosystems at 144 DPI (two passes each, summed
+report): `solid_paths` 528–606 → 260–272 ms, `benchmark.total` 1,526–1,701
+→ 1,164–1,248 ms.
+
+### Results
+
+Target pages, warm, serial, P-cores (ms, median [min] of three interleaved
+rounds; final measurement run, load 40–98%):
+
+| page | hayro 0.9.0 | base (`035660da`) | round 3 | round 3 / base (median) |
+|---|---:|---:|---:|---:|
+| xenosystems p152, scale 2 | 8.57 [7.83] | 6.05 [5.92] | **4.38 [4.27]** | 0.72× |
+| xenosystems p152, scale 1 | 4.31 [4.11] | 2.70 [2.66] | **2.41 [1.92]** | 0.89× |
+| vogtle p3, scale 2 | 3.83 [3.64] | 2.50 [1.96] | 2.04 [1.95] | 0.82× |
+| vogtle p3, scale 1 | 3.02 [2.02] | 1.39 [1.22] | 1.44 [1.16] | noise |
+| vogtle p10, scale 2 | 3.31 [2.82] | 2.02 [1.79] | 2.00 [1.86] | noise |
+| vogtle p10, scale 1 | 1.46 [1.42] | 1.23 [1.12] | 1.56 [1.12] | noise |
+
+An earlier run under lighter load (run-aware fills, before row repetition)
+gave xenosystems p152 scale 2 hayro 7.06 [6.80], base 4.73 [4.44], round 3
+4.02 [3.87]. As in round 2, only the xenosystems page clears the noise in
+whole-page timing; the vogtle pages are compile-bound (~0.5–0.9 ms of their
+~1–2 ms) and their glyph saving (0.1–0.2 ms) is within the run-to-run
+spread under this load. Every target page stays ahead of hayro.
+
+Whole document, serial, P-cores (pages/s, best of three interleaved):
+
+| document | hayro | base | round 3 | round 3 / base |
+|---|---:|---:|---:|---:|
+| xenosystems, 144 DPI | 119.1 (150.8) | 198.5 | **242.0** | 1.22× |
+| xenosystems, 72 DPI | 277.3 (283.5) | 404.7 | **468.2** | 1.16× |
+| vogtle, 144 DPI | 116.9 (169.5) | 126.6 | 138.4 | 1.09× |
+| vogtle, 72 DPI | 204.9 (207.8) | 229.7 | 218.3 | noise |
+| beans, 144 DPI | 59.7 (64.0) | 76.0 | 83.7 | 1.10× |
+| viaduct, 144 DPI | 36.6 (40.4) | 32.2 | 30.4 | untouched (JPEG) |
+| viaduct, 72 DPI | 52.0 (53.9) | 52.1 | 50.7 | untouched (JPEG) |
+
+hayro in brackets: the same cases from the lighter-load run earlier in the
+session; hayro was hit harder by the load of the final run than Lege was,
+so the hayro ratios of the final run flatter Lege. vogtle's remaining
+whole-document gap to hayro under light load (144 vs 170 pages/s) is its
+scanned-image pages (`codec.dct.decode` 44–78 ms of the 22-page document),
+as round 1 found.
+
+### Output identity
+
+`verify` mode (per-page pixel hash, 8 workers), final build against the base
+build, each document at scale 1 and 2, default kernels and
+`PDF_RENDERER_KERNELS=scalar`: vogtle 22 + 22, viaduct 3 + 3, beans 3 + 3,
+xenosystems 305 + 305 pages — 1,332 page renders, all identical. The two
+intermediate builds were verified the same way (1,320 and 1,332 renders,
+all identical).
+
+### Tried, measured, not pursued
+
+- Precomputing the non-zero count per cached `GlyphBitmap` (zero per-blit
+  work) would touch `prepared.rs`, which another session owns; the in-kernel
+  count costs one `popcnt` per eight pixels.
+- An AVX2 `fill_opaque`: 0.237 vs 0.274 ms per page-sized fill in isolation,
+  bandwidth bound; not worth a kernel-table entry.
+- Glyph cache misses (temporary, uncommitted timers in the lowering): the
+  outline rasterization itself (`RasterKernel::fill`, compact window) is
+  7.3 ms of vogtle's 142 ms, 15.8 of xenosystems' 955 ms, but 8.6 of beans'
+  36 ms at 144 DPI (892 misses, ~10 µs each — large display glyphs through
+  the dense compact-window sweep). That is the next text-side lever on short
+  documents: a sparse/row-repeating pass 2 for the compact window, the same
+  idea as above applied to glyph-sized windows.
+
+### Reproduce (additions)
+
+```sh
+cargo test -p pdf-render-cpu --lib blend_mask_rect_avx2_matches_scalar_bit_exact
+cargo test -p pdf-render-cpu --lib fill_runs_match_fill
+cargo test -p pdf-render-cpu --lib blend_const_matches_blend_mask_at_constant_coverage
+# profile adapter: warm per page, or `all` (whole document), or `cold`
+headsup-lege-prof <pdf> <scale> <page|all> [runs] [cold]
+```
