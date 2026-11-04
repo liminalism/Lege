@@ -710,39 +710,53 @@ fn decode_windowed<const T: u8, const GENERAL: bool>(
 
             let mut pixels = 0u32;
             let mut i = 0u32;
-            if !GENERAL && (ctx == 0 || ctx == full) {
-                // Uniform-run entry: the context and every incoming window bit
-                // of this block equal `v`, so the context stays `ctx` while
-                // the decoded pixels equal `v`.
-                let v = ctx != 0;
-                let fill = if v { u32::MAX } else { 0 };
-                if (above1 >> 32) as u32 == fill && (!g.has_p2 || (above2 >> 32) as u32 == fill) {
-                    let state = &mut ctxs[ctx as usize & 0xFFFF];
-                    let mut differs = false;
-                    loop {
-                        i += dec.decode_mps_run(*state, v, count - i);
-                        if i == count {
-                            break;
-                        }
-                        let bit = dec.decode_bit(state);
-                        i += 1;
-                        if bit != v {
-                            differs = true;
-                            break;
-                        }
-                        if i == count {
-                            break;
-                        }
-                    }
-                    pixels = if v { ((1u64 << i) - 1) as u32 } else { 0 } ^ differs as u32;
-                    ctx ^= differs as u32;
-                    above1 <<= i;
-                    above2 <<= i;
-                }
-            }
-
             while i < count {
-                let idx = if GENERAL {
+                if !GENERAL && (ctx == 0 || ctx == full) {
+                    // Uniform-run entry: the context is all `v`, and so are
+                    // the next `rest` incoming window bits, so the context
+                    // stays `ctx` for `rest` pixels while they decode as `v`.
+                    let v = ctx != 0;
+                    let fill = if v { u64::MAX } else { 0 };
+                    let diff = (above1 ^ fill) | if g.has_p2 { above2 ^ fill } else { 0 };
+                    let rest = (count - i).min(diff.leading_zeros());
+                    if rest != 0 {
+                        let slot = &mut ctxs[ctx as usize & 0xFFFF];
+                        let mut k = 0u32;
+                        let mut differs = false;
+                        loop {
+                            k += dec.decode_mps_run(*slot, v, rest - k);
+                            if k == rest {
+                                break;
+                            }
+                            let bit = dec.decode_bit(slot);
+                            k += 1;
+                            if bit != v {
+                                differs = true;
+                                break;
+                            }
+                            if k == rest {
+                                break;
+                            }
+                        }
+                        // `k` is 1..=32.
+                        let run = if v { (1u64 << k) - 1 } else { 0 } ^ differs as u64;
+                        pixels = (((pixels as u64) << k) | run) as u32;
+                        ctx ^= differs as u32;
+                        above1 <<= k;
+                        above2 <<= k;
+                        i += k;
+                        continue;
+                    }
+                }
+                // The next context is `base | bit`.
+                let base = ((ctx << 1) & keep)
+                    | (((above1 >> 63) as u32) << g.p1_lsb)
+                    | if g.has_p2 {
+                        ((above2 >> 63) as u32) << g.p2_lsb
+                    } else {
+                        0
+                    };
+                let bit = if GENERAL {
                     let mut a = 0u32;
                     for k in 0..g.at_count {
                         let bit = match at_src[k] {
@@ -752,20 +766,13 @@ fn decode_windowed<const T: u8, const GENERAL: bool>(
                         };
                         a |= bit << g.at_bits[k];
                     }
-                    (ctx & !at_mask) | a
+                    let idx = (ctx & !at_mask) | a;
+                    dec.decode_bit(&mut ctxs[idx as usize & 0xFFFF]) as u32
                 } else {
-                    ctx
+                    dec.decode_bit(&mut ctxs[ctx as usize & 0xFFFF]) as u32
                 };
-                let bit = dec.decode_bit(&mut ctxs[idx as usize & 0xFFFF]) as u32;
                 pixels = (pixels << 1) | bit;
-                ctx = ((ctx << 1) & keep)
-                    | (((above1 >> 63) as u32) << g.p1_lsb)
-                    | if g.has_p2 {
-                        ((above2 >> 63) as u32) << g.p2_lsb
-                    } else {
-                        0
-                    }
-                    | bit;
+                ctx = base | bit;
                 above1 <<= 1;
                 above2 <<= 1;
                 if GENERAL {
