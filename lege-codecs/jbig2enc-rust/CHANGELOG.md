@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.6.1 — Unreleased
+
+Changes since 0.6.0. Decoded bitmaps, decoder state and context states are
+bit-identical to 0.6.0; the public API and the `decode`-only feature build
+are unchanged.
+
+### Decoding
+
+- Generic-region decoding is 3.7–11× faster on page-sized PDF masks
+  (Structures p0, 2222×3191: 28.8 → 7.8 ms, 4.1 → 1.1 ns per pixel). One
+  windowed decoder now serves templates 0–3, nominal and non-nominal AT
+  pixels, and TPGDON. It shifts a packed-word context window fed from
+  per-block row look-ahead registers, folds uniform background runs into a
+  single arithmetic-register update, and tests the MQ DECODE fast path
+  first. The previous decoder is kept under `cfg(test)` as the equivalence
+  reference; `examples/generic_decode_timing.rs` reproduces the measurement.
+  The halftone skip path still forms contexts per pixel and gains only the
+  faster DECODE.
+
 ## 0.6.0 — 2026-11-02
 
 Changes since the last published version, 0.5.4. Published to crates.io on
