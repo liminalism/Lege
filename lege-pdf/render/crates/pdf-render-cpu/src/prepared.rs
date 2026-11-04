@@ -2571,7 +2571,131 @@ fn lower_image(
         alpha: to_u8(alpha),
         blend,
     });
+    let prepared = promote_through_cache(out, prepared);
     Some((prepared, bounds))
+}
+
+/// Sentinel `codec` byte of a promotion entry in the image cache (the real
+/// codecs use `0..=3`), so a resolved-RGB8 payload can never be served as a
+/// decode and vice versa.
+const PROMOTION_CACHE_CODEC: u8 = 0x80;
+
+/// Resolve a per-pixel-transform image (non-sRGB ICC, Lab, tint tables; see
+/// `PreparedImage::generic_promotion_eligible`) to RGB8 once and keep the
+/// result in the image cache by content, so every later draw of it — in this
+/// render and the next — takes the executor's RGB8 fast paths instead of
+/// running the transform per tap. Byte-identical by construction: the stored
+/// triples are exactly what `pixel()` computes for each texel.
+///
+/// The key is the 128-bit hash of the *source samples* plus a hash of
+/// everything that shapes the per-texel result (the colour space's tables and
+/// the `/Decode` array), so two draws of one object, or two objects with the
+/// same bytes, share one conversion, and nothing else can match it.
+fn promote_through_cache(
+    out: &CpuPreparedPage,
+    prepared: Box<crate::image::PreparedImage>,
+) -> Box<crate::image::PreparedImage> {
+    if !prepared.generic_promotion_eligible() {
+        return prepared;
+    }
+    let cache = out
+        .image_cache
+        .as_ref()
+        .map(|cache| (cache, promotion_cache_key(&prepared)));
+    let expected = prepared.width as usize * prepared.height as usize * 3;
+    if let Some((cache, key)) = &cache
+        && let Some(hit) = cache.get(key)
+        && hit.samples.len() == expected
+    {
+        return Box::new(prepared.with_rgb8_samples(hit.samples));
+    }
+    let Some(samples) = prepared.generic_source_as_rgb8() else {
+        return prepared;
+    };
+    if let Some((cache, key)) = cache {
+        cache.insert(
+            key,
+            CodecSamples {
+                samples: samples.clone(),
+                width: prepared.width,
+                height: prepared.height,
+                bpc: 8,
+                color_space: pdf_page_ir::ImageColorSpace::Rgb,
+                format: pdf_image::DecodedFormat::Rgb8,
+                alpha: None,
+            },
+        );
+    }
+    Box::new(prepared.with_rgb8_samples(samples))
+}
+
+/// The cache identity of a promoted image: see [`promote_through_cache`].
+fn promotion_cache_key(img: &crate::image::PreparedImage) -> ImageCacheKey {
+    use pdf_page_ir::ImageColorSpace;
+    let (h0, h1) = content_hash_128(&img.samples);
+    // Fold the colour space's tables and the /Decode array into `parms`.
+    let mut h: u64 = 0x9E37_79B9_7F4A_7C15;
+    let mut mix = |bytes: &[u8]| {
+        let (a, b) = content_hash_128(bytes);
+        h = (h ^ a).wrapping_mul(0xC2B2_AE3D_27D4_EB4F).rotate_left(29) ^ b;
+    };
+    let f32s =
+        |v: &[f32]| -> Vec<u8> { v.iter().flat_map(|x| x.to_bits().to_le_bytes()).collect() };
+    match &img.color_space {
+        ImageColorSpace::IccRgb { trc, matrix } => {
+            mix(b"iccrgb");
+            mix(&f32s(trc));
+            mix(&f32s(matrix));
+        }
+        ImageColorSpace::IccCmyk { transform } => {
+            mix(b"icccmyk");
+            mix(&[transform.grid]);
+            for t in &transform.input_tables {
+                mix(&f32s(t));
+            }
+            mix(&f32s(
+                &transform
+                    .clut
+                    .iter()
+                    .flatten()
+                    .copied()
+                    .collect::<Vec<f32>>(),
+            ));
+            for t in &transform.output_tables {
+                mix(&f32s(t));
+            }
+        }
+        ImageColorSpace::Lab { white_point, range } => {
+            mix(b"lab");
+            mix(&f32s(white_point));
+            mix(&f32s(range));
+        }
+        ImageColorSpace::TintLut { rgb } => {
+            mix(b"tint");
+            mix(rgb);
+        }
+        ImageColorSpace::TintLut2 { rgb } => {
+            mix(b"tint2");
+            mix(rgb);
+        }
+        _ => {}
+    }
+    if let Some(d) = &img.decode {
+        mix(b"decode");
+        mix(&f32s(&d.iter().flatten().copied().collect::<Vec<f32>>()));
+    }
+    ImageCacheKey {
+        h0,
+        h1,
+        len: img.samples.len(),
+        codec: PROMOTION_CACHE_CODEC,
+        width: img.width,
+        height: img.height,
+        bpc: img.bpc,
+        is_mask: false,
+        target: None,
+        parms: h | 1,
+    }
 }
 
 /// Resolve an image's soft mask, decoding it through the registry when it is

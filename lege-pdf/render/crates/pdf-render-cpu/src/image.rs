@@ -626,6 +626,115 @@ impl PreparedImage {
         })
     }
 
+    /// Images whose texels resolve through a per-pixel colour transform — a
+    /// non-sRGB `/ICCBased` RGB profile, an ICC CMYK lookup transform,
+    /// `/Lab`, or a pre-resolved `/Separation` / `/DeviceN` tint table — have
+    /// no fast path of their own: every tap of every draw ran the transform
+    /// (a 1317×882 ICC scan cost ~60 ns per source texel per draw). Each
+    /// texel's result is a pure function of that texel's own samples, so the
+    /// whole image can be resolved to RGB8 *once* (and, in `prepared.rs`,
+    /// cached by content across renders), after which the RGB8 fast paths
+    /// apply and the output is byte-identical: the box average, the bilinear
+    /// lerp and the nearest fetch all consume exactly the per-texel RGB that
+    /// `pixel()` yields, whether it is computed on the fly or stored.
+    ///
+    /// Only the shapes `pixel()` resolves without `None` qualify: 8- or 16-bit
+    /// samples, not a stencil, no colour-key mask (that tests the *raw*
+    /// samples), no prepared LUT, complete sample data, at most 64 Mpx.
+    pub(crate) fn generic_promotion_eligible(&self) -> bool {
+        // 64 Mpx -> 192 MiB of RGB8, the same ceiling as the other promotions.
+        const MAX_PROMOTE_PIXELS: usize = 64 * 1024 * 1024;
+        if self.is_stencil
+            || !matches!(self.bpc, 8 | 16)
+            || self.sample_lut.is_some()
+            || matches!(self.mask, Some(ImageMask::ColorKey(_)))
+            || !matches!(
+                self.color_space,
+                ImageColorSpace::IccRgb { .. }
+                    | ImageColorSpace::IccCmyk { .. }
+                    | ImageColorSpace::Lab { .. }
+                    | ImageColorSpace::TintLut { .. }
+                    | ImageColorSpace::TintLut2 { .. }
+            )
+        {
+            return false;
+        }
+        let Some(n) = (self.width as usize).checked_mul(self.height as usize) else {
+            return false;
+        };
+        n > 0
+            && n <= MAX_PROMOTE_PIXELS
+            && self.samples.len() >= self.row_bits() / 8 * self.height as usize
+    }
+
+    /// The image with its samples resolved to RGB8 (see
+    /// [`Self::generic_promotion_eligible`]); `None` when not eligible.
+    pub(crate) fn generic_promoted_to_rgb8(&self) -> Option<PreparedImage> {
+        let samples = self.generic_source_as_rgb8()?;
+        Some(self.with_rgb8_samples(samples))
+    }
+
+    /// `self` re-described over resolved RGB8 samples: colour space `Rgb`,
+    /// 8 bits, no `/Decode` (already applied), no LUT. Everything else — the
+    /// placement, the masks, interpolation, alpha — is unchanged.
+    pub(crate) fn with_rgb8_samples(&self, samples: Arc<[u8]>) -> PreparedImage {
+        PreparedImage {
+            color_space: ImageColorSpace::Rgb,
+            bpc: 8,
+            decode: None,
+            sample_lut: None,
+            samples,
+            ..self.clone()
+        }
+    }
+
+    /// Resolve every texel through the path `pixel()` takes and pack the RGB
+    /// triples. The 8-bit `/ICCBased` RGB image without `/Decode` (the
+    /// scanned-page shape) calls the profile transform on the byte triple
+    /// directly — the identical computation `pixel()` performs once its
+    /// generic bit reads and absent `/Decode` reduce to `byte / 255`; every
+    /// other shape goes through `pixel()` itself.
+    pub(crate) fn generic_source_as_rgb8(&self) -> Option<Arc<[u8]>> {
+        if !self.generic_promotion_eligible() {
+            return None;
+        }
+        let (w, h) = (self.width as usize, self.height as usize);
+        let n = w * h;
+        let mut out = zeroed_arc(n * 3);
+        let dst = unique_arc_mut(&mut out);
+        if let ImageColorSpace::IccRgb { trc, matrix } = &self.color_space
+            && self.bpc == 8
+            && self.decode.is_none()
+        {
+            for (src, px) in self.samples[..n * 3]
+                .chunks_exact(3)
+                .zip(dst.chunks_exact_mut(3))
+            {
+                let rgb = pdf_color::icc::to_srgb_with(
+                    trc,
+                    matrix,
+                    [
+                        src[0] as f32 / 255.0,
+                        src[1] as f32 / 255.0,
+                        src[2] as f32 / 255.0,
+                    ],
+                );
+                px[0] = to_u8(rgb[0]);
+                px[1] = to_u8(rgb[1]);
+                px[2] = to_u8(rgb[2]);
+            }
+            return Some(out);
+        }
+        for row in 0..h {
+            for col in 0..w {
+                let p = self.pixel(col as u32, row as u32)?;
+                let o = (row * w + col) * 3;
+                dst[o..o + 3].copy_from_slice(&p[..3]);
+            }
+        }
+        Some(out)
+    }
+
     /// Convert an opaque 8-bit CMYK source (no `/Decode`) to a packed RGB8
     /// buffer, one pixel through the *exact* same `cmyk_to_rgb` + `to_u8` path
     /// `pixel()` uses. Box-averaging this buffer is byte-identical to the

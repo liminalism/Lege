@@ -4570,6 +4570,108 @@ mod rgb8_area_min_tests {
         }
     }
 
+    /// A per-pixel-transform image (non-sRGB ICC RGB, Lab, one- and
+    /// two-colorant tint tables), with and without `/Decode`, resolved to
+    /// RGB8 once must draw byte-identically to the generic per-tap
+    /// transform: the promoted image through the generic sampler and through
+    /// the RGB8 area-min fast path, each against the original image through
+    /// the generic sampler.
+    #[test]
+    fn generic_promotion_matches_generic_shade() {
+        let mut rng = Rng(0x1cc0_1cc0_5eed_0003);
+        let cases = [
+            (7u32, 5u32, 3u32, 3u32),
+            (16, 16, 5, 7),
+            (33, 9, 8, 4),
+            (40, 30, 13, 11),
+        ];
+        for variant in 0..4 {
+            for &(sw, sh, dev_w, dev_h) in &cases {
+                for &with_decode in &[false, true] {
+                    let (color_space, ncomp) = match variant {
+                        0 => {
+                            let trc: Vec<f32> =
+                                (0..768).map(|_| rng.byte() as f32 / 255.0).collect();
+                            let mut matrix = [0f32; 9];
+                            for m in matrix.iter_mut() {
+                                *m = rng.byte() as f32 / 255.0;
+                            }
+                            (
+                                ImageColorSpace::IccRgb {
+                                    trc: Arc::from(trc),
+                                    matrix,
+                                },
+                                3,
+                            )
+                        }
+                        1 => (
+                            ImageColorSpace::Lab {
+                                white_point: [0.9505, 1.0, 1.089],
+                                range: [-100.0, 100.0, -100.0, 100.0],
+                            },
+                            3,
+                        ),
+                        2 => {
+                            let rgb: Vec<u8> = (0..768).map(|_| rng.byte()).collect();
+                            (
+                                ImageColorSpace::TintLut {
+                                    rgb: Arc::from(rgb),
+                                },
+                                1,
+                            )
+                        }
+                        _ => {
+                            let rgb: Vec<u8> = (0..256 * 256 * 3).map(|_| rng.byte()).collect();
+                            (
+                                ImageColorSpace::TintLut2 {
+                                    rgb: Arc::from(rgb),
+                                },
+                                2,
+                            )
+                        }
+                    };
+                    let samples: Vec<u8> = (0..(sw * sh) as usize * ncomp)
+                        .map(|_| rng.byte())
+                        .collect();
+                    let mut img = make_image_cs(sw, sh, dev_w, dev_h, color_space, samples);
+                    img.decode = with_decode.then(|| {
+                        Arc::from((0..ncomp).map(|_| [1.0f32, 0.0f32]).collect::<Vec<_>>())
+                    });
+                    assert!(img.generic_promotion_eligible());
+                    let promoted = img.generic_promoted_to_rgb8().expect("eligible");
+                    let what = format!(
+                        "variant {variant} decode={with_decode} sw={sw} sh={sh} dev={dev_w}x{dev_h}"
+                    );
+                    let (mut reference, ref_painted) = generic_reference(&img, dev_w, dev_h);
+                    let (mut via_promoted, promoted_painted) =
+                        generic_reference(&promoted, dev_w, dev_h);
+                    assert_eq!(promoted_painted, ref_painted, "{what}: painted (generic)");
+                    assert_surfaces_equal(
+                        &mut via_promoted,
+                        &mut reference,
+                        &format!("{what} (generic over promoted)"),
+                    );
+                    let mut fast =
+                        Surface::new(dev_w as usize, dev_h as usize, Background::Transparent);
+                    let (painted, _taps) = paint_axis_aligned_rgb8_area_min_opaque(
+                        &promoted,
+                        &mut fast,
+                        0,
+                        0,
+                        dev_w as usize,
+                        dev_h as usize,
+                    );
+                    assert_eq!(painted, ref_painted, "{what}: painted (fast)");
+                    assert_surfaces_equal(
+                        &mut fast,
+                        &mut reference,
+                        &format!("{what} (fast over promoted)"),
+                    );
+                }
+            }
+        }
+    }
+
     /// An image placed at `(tx, ty)` device pixels, magnifying/1:1 by
     /// `dev_w / sw` on X and `dev_h / sh` on Y, inside a `surf_w x surf_h`
     /// surface. Off-diagonals exactly zero, as lowering computes them.

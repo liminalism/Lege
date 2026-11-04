@@ -189,3 +189,177 @@ is the entropy decoder (7.5–8 ms), which is a separate piece of work.
 - AKR: `akr start` fails on this worktree with AKR-C031 (neither working-tree
   nor HEAD knowledge validates, 10,996 errors), so no planning read or record
   update was possible for this change. Logged here as a papercut.
+
+---
+
+# Round 2 — 2026-11-04 (later the same day)
+
+Follow-ups from the first round, in the order the orchestrating session set:
+the JPEG entropy decoder, AVX2 for the two remaining chroma upsampling modes,
+and the vogtle scanned-image pages the text/vector session flagged. Same
+ground rules: byte-identical output, paired P-core-pinned warm timings, the
+corpus hashes, both fan-out modes.
+
+**Previous binary is `183f0501`** (the first-round result above); the new
+binary is this round's tree. The machine carried other sessions' builds
+during these runs, so absolute numbers sit ~15 % above the first-round
+table (sahib @1 reads 10.5 ms for the *same* previous binary that read 9.1
+earlier); the pairing is what counts.
+
+### Whole-page render, previous binary vs new binary (warm min / median ms, 60 renders each, 3 interleaved rounds)
+
+| page | previous | new | speedup | hash |
+|---|---:|---:|---:|---|
+| `vogtle` p14 @1 | 24.2 / 27.8 | **4.9 / 5.6** | **4.9×** | identical |
+| `vogtle` p14 @2 (144 DPI) | 95.5 / 104.2 | **11.3 / 13.5** | **8.5×** | identical |
+| `vogtle` p16 @1 | 9.3 / 11.7 | **4.0 / 4.8** | **2.3×** | identical |
+| `vogtle` p16 @2 | 28.1 / 31.9 | **6.3 / 7.4** | **4.5×** | identical |
+| `vogtle` p6 @2 | 8.9 / 10.8 | 9.1 / 10.9 | 1.0× | identical |
+| `vogtle` p0 @2 | 18.2 / 20.9 | 18.3 / 21.0 | 1.0× | identical |
+| `sahib` p178 @1 | 10.5 / 12.1 | 10.9 / 12.1 | 1.0× | identical |
+| `sahib` p178 @2 | 31.7 / 36.3 | 32.3 / 38.1 | 1.0× | identical |
+| `xenosystems` p0 @1 | 62.1 / 71.1 | 62.8 / 71.3 | 1.0× | identical |
+
+vogtle p14 at 144 DPI was 68 ms of image draw against hayro's 11.2 ms in
+the text session's measurement; it is now at parity. The pages whose image is
+a plain RGB JPEG (p6, p0) and the first-round targets are unchanged on the
+warm draw, as expected — their change is in the decode, which the "first"
+render carries: sahib @1 first render 51.9 → 46.5 ms.
+
+Corpus: 60/60 hashes equal to the `183f0501` binary with row fan-out off,
+and 60/60 with `PDF_RENDERER_IMAGE_ROW_PAR=1`.
+
+## Change 5 — vogtle's scans are `/ICCBased` RGB: resolve once, cache by content (`image.rs`, `prepared.rs`)
+
+The flagged images are not an exotic draw path but an exotic *colour space*:
+`ImageColorSpace::IccRgb` (a non-sRGB profile with a 256-point TRC per
+channel and a profile→XYZ matrix). None of the RGB8 fast paths accept it, so
+every tap of every draw went through `pixel()` → `to_srgb_with` — three curve
+samples, two 3×3 matrices and the sampled sRGB transfer — ~60 ns per source
+texel per draw, 1317×882 texels, every render.
+
+Each texel's result is a pure function of its own samples, so the image is
+now resolved to RGB8 **once** and the executor's existing RGB8 paths (area-min,
+bilinear, nearest, the soft-masked variants) take it from there:
+
+- `PreparedImage::generic_promotion_eligible` names the family: `IccRgb`,
+  `IccCmyk`, `Lab`, `TintLut`, `TintLut2`; 8- or 16-bit samples; not a
+  stencil; no colour-key mask (it tests the *raw* samples); no prepared LUT;
+  complete sample data; ≤ 64 Mpx.
+- `generic_source_as_rgb8` resolves every texel. The 8-bit ICC-RGB shape
+  without `/Decode` calls `to_srgb_with` on the byte triple directly — the
+  identical computation `pixel()` performs once its generic bit reads and the
+  absent `/Decode` reduce to `byte / 255` — and every other shape goes through
+  `pixel()` itself, so identity is by construction.
+- `prepared.rs::promote_through_cache` runs after `lower_image` builds the
+  `PreparedImage` and keeps the resolved RGB8 in the production
+  `SharedImageCache`, keyed by the 128-bit content hash of the *source
+  samples* plus a hash of everything that shapes a texel's result (the
+  profile's tables and matrix, the CMYK transform's tables and CLUT, Lab's
+  white point and range, the tint tables, the `/Decode` array), under a
+  sentinel `codec` byte so it can never alias a real decode. The first render
+  pays the conversion (p14 @2 first render 119 → 37 ms, since the one-shot
+  loop is also cheaper than per-tap resolution); every later draw of the same
+  bytes — this render, the next, the other scale — is a cache hit and an RGB8
+  draw. Hashing the 3.5 MB of p14's samples costs ~0.5 ms per draw; that is
+  the price of an exact key with no reliance on object identity across
+  documents.
+
+Why this is byte-identical: the generic box average sums `pixel()`'s RGB per
+tap with integer weights; the RGB8 area-min path sums the stored bytes with
+the same weights; the bilinear and nearest samplers call `pixel()`, which on
+an RGB8 image returns the stored bytes. `exec::rgb8_area_min_tests::
+generic_promotion_matches_generic_shade` checks all four spaces (IccRgb with
+random curves and matrix, Lab, both tint tables), with and without `/Decode`,
+promoted-through-generic and promoted-through-fast against the original
+through generic.
+
+## Change 6 — JPEG decoder: colour stores, lookahead tables, refill (`pdf-image/src/jpeg/mod.rs`)
+
+`jpegbench` on the sahib p178 stream, 40 decodes each, four interleaved
+rounds of the `183f0501` decoder (B) against this round's (N), both pinned,
+with zune-jpeg 0.5 on the same stream in the same process for reference
+(min / median ms):
+
+| round | B: Lege | N: Lege | zune (same run) |
+|---|---:|---:|---:|
+| 1 | 18.39 / 20.77 | **14.95 / 17.09** | 13.1 / 15.3 |
+| 2 | 17.95 / 20.84 | **14.66 / 16.90** | 12.1–13.3 / 14.2–15.0 |
+| 3 | 17.16 / 19.68 | **13.47 / 15.82** | 11.9–12.2 / 14.0–14.5 |
+| 4 | 18.28 / 21.56 | **14.37 / 16.54** | 11.8–12.6 / 13.7–15.4 |
+
+Lege's decode drops by ~3.5 ms (≈20 %); the gap to zune-jpeg goes from
+~5.5 ms to ~1.8 ms, about two thirds closed. (The machine was loaded; on the
+idle first-round host the same B binary read 15.1 ms and zune 11.3.)
+
+What the stages actually cost was established with two temporary env-gated
+skips (removed before commit) that left only the entropy loop running, or
+entropy + IDCT: **entropy ≈ 7.3 ms, IDCT ≈ 3 ms, upsample + colour + assemble
+≈ 7–8 ms** on the B decoder. The first-round attribution (entropy 7, colour
+16) had been inflated by per-block timers; the colour stage, not entropy,
+was the larger of the two after the H2V2 kernel, and it was the easier win:
+
+1. **Colour stores** (−2 ms). `rgb_ycc_row_avx2` computed eight pixels in
+   AVX2 and then wrote the 24 output bytes with 24 bounds-checked scalar
+   stores. The three eight-byte channel runs are now interleaved with two
+   `pshufb` pairs and written with one 16-byte and one 8-byte store. The lane
+   values are untouched, and `rgb_simd_tests::avx2_ycc_rgb_is_exhaustively_
+   byte_exact` still proves every (Y, Cb, Cr) triple against the scalar path.
+2. **Lookahead tables** (−0.3 ms). `HuffTable` now peeks 10 bits instead of
+   8 (`HUFF_LOOKAHEAD`), and carries a combined `fast_ac` table: for every
+   prefix whose code *and* magnitude bits fit the lookahead, the fully
+   decoded `(run, coefficient, total length)`, built with the same `extend`
+   the symbol path applies. Most AC coefficients of a photographic scan are
+   resolved from one peek with no second bit extraction. `extend` is
+   branch-free.
+3. **Refill** (−0.5 ms). The per-symbol `fill()` asked "are ≤ 56 bits
+   buffered?" — a branch the entropy stream makes unpredictable. `top_up()`
+   reads the next eight bytes and, when they hold no `0xFF`, inserts as many
+   whole bytes as fit unconditionally (zero when the buffer is full); only
+   stuffing, markers and the input tail reach `fill`, the unchanged exact
+   arbiter. After a coefficient resolved through `fast_ac` (≤ 10 bits), the
+   next coefficient is decoded without another top-up (≥ 47 bits remain,
+   enough for the worst case of 16 + 15).
+
+The remaining entropy cost (~6 ms) is the serial dependency of a table-driven
+decoder — peek, load, shift — at ~5 ns per symbol; zune-jpeg's is of the same
+order, and the residual gap to it is spread over the IDCT and the colour
+stage rather than in any one place.
+
+`entropy_tests::lookahead_decoder_matches_bit_serial_reference` decodes
+random streams (stuffed bytes, embedded markers, truncation) with 400
+random Kraft-valid table pairs through the production decoder and through a
+bit-serial T.81 F.2.2 reference written without any lookahead, and requires
+identical coefficients, DC predictions, `any_ac` flags and bit positions.
+`fast_ac_covers_exactly_the_short_pairs` pins the table's coverage.
+
+## Change 7 — AVX2 for the 4:2:2 and 4:4:0 chroma modes (`jpeg/mod.rs`)
+
+`FancyH2V1` (horizontal triangle, biases 1/2, shift 2) and `FancyH1V2`
+(vertical blend with the row-parity bias) now dispatch to AVX2 kernels of the
+same shape as the first round's H2V2 one — sixteen interior texels per
+iteration in `u16` lanes for H2V1, thirty-two texels per iteration for H1V2
+(two `u16` halves packed back with the saturating pack, exact since every
+value is ≤ 255) — with the scalar references kept for the edges, the tails
+and non-AVX2 hosts. `upsample_tests::h2v1_avx2_matches_scalar_bit_exact` and
+`h1v2_avx2_matches_scalar_bit_exact` fuzz every width class on both row
+parities. No corpus page uses either mode at a size that shows in a table,
+so no timing is claimed for this change.
+
+## Not done / follow-ups
+
+- **Indexed promotion cap (item 4, not changed).** The 64 Mpx cap bounds the
+  per-draw transient at 192 MiB of RGB8, the same ceiling the Gray and CMYK
+  promotions use; above it the generic per-tap path, whose work is bounded
+  by the *device* footprint rather than the source area, is the right
+  choice for a minified draw. A budgeted decision would need the
+  renderer's memory budget plumbed into `paint_image`, which neither
+  promotion has today. What would pay off sooner is moving the Indexed
+  expansion behind the same content-keyed cache as Change 5 — xenosystems
+  re-expands its 7 Mpx palette image on every draw (≈ 10 of its 62 ms).
+- JPEG: the IDCT (f32 AVX2, ~3 ms) and the colour stage's f32 arithmetic
+  are the next decode costs; an integer AVX2 IDCT would not be byte-identical
+  to the current one and needs the oracle comparison rather than a hash.
+- The in-data (`/SMaskInData`) and colour-keyed images stay on the generic
+  path by design.
+- AKR remains unusable on this worktree (AKR-C031); no record was written.
