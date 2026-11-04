@@ -101,6 +101,9 @@ pub struct RasterKernel {
     aet_active: Vec<u32>,
     /// Double-buffer for the per-row merge of `aet_active` with a new bucket.
     aet_active_next: Vec<u32>,
+    /// Per-row cell intervals `[start, end)` of `acc_row` written by this row's
+    /// deposits, one per contributing edge (see `convert_row_sparse`).
+    aet_touched: Vec<(u32, u32)>,
     pub last_edges: u64,
     pub last_rows: u64,
     pub last_covered: u64,
@@ -394,6 +397,7 @@ impl RasterKernel {
         self.cov.fill(0);
         self.aet_active.clear();
         self.aet_active_next.clear();
+        self.aet_touched.clear();
     }
 
     /// Original per-scanline implementation: for each row, every edge is clipped
@@ -596,6 +600,7 @@ impl RasterKernel {
             let active = std::mem::take(&mut self.aet_active);
             let mut col_min = width;
             let mut col_max = 0usize;
+            self.aet_touched.clear();
             for (active_index, &ei) in active.iter().enumerate() {
                 if active_index & 0xfff == 0 && should_cancel.is_some_and(|cancel| cancel()) {
                     self.aet_active = active;
@@ -609,6 +614,10 @@ impl RasterKernel {
                 }
                 let xa = e.x_at_top + (ya - e.y_top) * e.dxdy;
                 let xb = e.x_at_top + (yb - e.y_top) * e.dxdy;
+                // Per-edge touched range: `deposit_partial` writes cells
+                // `c` and `c + 1` for every column `c` it reports.
+                let mut edge_min = width;
+                let mut edge_max = 0usize;
                 accumulate(
                     &mut self.acc_row,
                     xa,
@@ -617,29 +626,29 @@ impl RasterKernel {
                     yb,
                     e.dir,
                     fwidth,
-                    &mut col_min,
-                    &mut col_max,
+                    &mut edge_min,
+                    &mut edge_max,
                 );
+                if edge_min <= edge_max {
+                    col_min = col_min.min(edge_min);
+                    col_max = col_max.max(edge_max);
+                    self.aet_touched
+                        .push((edge_min as u32, edge_max as u32 + 2));
+                }
             }
             self.aet_active = active;
 
             if col_min > col_max {
                 continue;
             }
-            let mut running = 0.0f32;
-            let mut first = width;
-            let mut last = 0usize;
-            for x in col_min..=col_max {
-                running += self.acc_row[x];
-                self.acc_row[x] = 0.0;
-                let byte = coverage_byte(running, rule);
-                self.cov[x] = byte;
-                if byte != 0 {
-                    first = first.min(x);
-                    last = x;
-                }
-            }
-            self.acc_row[col_max + 1] = 0.0;
+            let (first, last) = convert_row_sparse(
+                &mut self.acc_row,
+                &mut self.cov,
+                &mut self.aet_touched,
+                col_min,
+                col_max,
+                rule,
+            );
             if first <= last {
                 self.last_covered += (last - first + 1) as u64;
                 row(y, first, last, &mut self.cov);
@@ -655,6 +664,108 @@ impl RasterKernel {
 /// Convert a run of prefix-summed signed-area values (`running[i]`) into coverage
 /// bytes written at `cov[dst_start + i]`. Runtime-dispatched to AVX2 when
 /// available; the scalar reference and the AVX2 path are bit-for-bit identical.
+/// Above this many contributing edges on one row the touched intervals are
+/// dense enough that sorting them costs more than the cells they would skip;
+/// the row takes the plain dense sweep instead.
+const SPARSE_MAX_INTERVALS: usize = 48;
+/// Below this row span the dense sweep is already a handful of cells.
+const SPARSE_MIN_SPAN: usize = 64;
+
+/// Pass 2 for one scanline of the scanline (AET) path: prefix-sum the signed
+/// areas in `acc[col_min..=col_max]` into coverage bytes in `cov`, reset the
+/// touched cells, and return the first and last column with non-zero coverage
+/// (`first > last` when none).
+///
+/// `touched` lists the `[start, end)` cell ranges the row's deposits wrote,
+/// one per contributing edge. Cells outside every range still hold `0.0`, so
+/// adding them leaves the running sum unchanged (up to the sign of zero, which
+/// `coverage_byte` does not see): the running coverage is constant across each
+/// gap and is written with one `fill` instead of a per-cell sum, convert, and
+/// reset. This is what makes a page-sized rectangle, or the stroked border of
+/// one, cost a few cells per row instead of a full-width float walk; the
+/// output is byte-identical to the dense sweep (`aet_sparse_rows_match_dense`).
+/// A row with many edges or a short span runs the dense sweep unchanged.
+fn convert_row_sparse(
+    acc: &mut [f32],
+    cov: &mut [u8],
+    touched: &mut Vec<(u32, u32)>,
+    col_min: usize,
+    col_max: usize,
+    rule: FillRule,
+) -> (usize, usize) {
+    let width = cov.len();
+    let mut running = 0.0f32;
+    let mut first = width;
+    let mut last = 0usize;
+
+    if touched.len() > SPARSE_MAX_INTERVALS || col_max - col_min + 1 < SPARSE_MIN_SPAN {
+        for x in col_min..=col_max {
+            running += acc[x];
+            acc[x] = 0.0;
+            let byte = coverage_byte(running, rule);
+            cov[x] = byte;
+            if byte != 0 {
+                first = first.min(x);
+                last = x;
+            }
+        }
+        acc[col_max + 1] = 0.0;
+        return (first, last);
+    }
+
+    touched.sort_unstable_by_key(|range| range.0);
+    // Cells are converted through `col_max` (as the dense sweep does); the
+    // carry cell `col_max + 1` is only reset.
+    let convert_end = col_max + 1;
+    let mut x = col_min;
+    let mut i = 0;
+    while i < touched.len() {
+        let (start, mut end) = touched[i];
+        i += 1;
+        while i < touched.len() && touched[i].0 <= end {
+            end = end.max(touched[i].1);
+            i += 1;
+        }
+        let start = (start as usize).max(x);
+        let end = end as usize;
+        // Gap before this interval: untouched cells, constant coverage.
+        if start > x {
+            let byte = coverage_byte(running, rule);
+            if byte != 0 {
+                cov[x..start].fill(byte);
+                first = first.min(x);
+                last = start - 1;
+            }
+            x = start;
+        }
+        let stop = end.min(convert_end);
+        while x < stop {
+            running += acc[x];
+            acc[x] = 0.0;
+            let byte = coverage_byte(running, rule);
+            cov[x] = byte;
+            if byte != 0 {
+                first = first.min(x);
+                last = x;
+            }
+            x += 1;
+        }
+        for cell in &mut acc[stop..end] {
+            *cell = 0.0;
+        }
+    }
+    if x < convert_end {
+        let byte = coverage_byte(running, rule);
+        if byte != 0 {
+            cov[x..convert_end].fill(byte);
+            first = first.min(x);
+            last = col_max;
+        }
+    }
+    acc[col_max + 1] = 0.0;
+    (first, last)
+}
+
 /// Whether the AVX2 coverage-conversion path is available. The feature probe is
 /// cached by the intrinsic, so this is a cheap load.
 #[inline]
@@ -995,7 +1106,10 @@ mod tests {
         grid
     }
 
-    fn rect(x0: f32, y0: f32, x1: f32, y1: f32) -> (Vec<[f32; 2]>, Vec<(usize, usize)>) {
+    /// Flattened device-space geometry: points plus `(start, end)` subpaths.
+    type Geometry = (Vec<[f32; 2]>, Vec<(usize, usize)>);
+
+    fn rect(x0: f32, y0: f32, x1: f32, y1: f32) -> Geometry {
         (vec![[x0, y0], [x1, y0], [x1, y1], [x0, y1]], vec![(0, 4)])
     }
 
@@ -1180,11 +1294,72 @@ mod tests {
         }
     }
 
+    /// The sparse row conversion (gaps between touched cells written as a
+    /// constant run) must be byte-identical to the dense sweep on the wide
+    /// rows it exists for: page-sized rectangles, a stroked border ring,
+    /// diagonals, and random geometry over a wide device.
+    #[test]
+    fn aet_sparse_rows_match_dense() {
+        let w = 1193usize;
+        let h = 24usize;
+        let mut cases: Vec<Geometry> = vec![
+            rect(0.0, 0.0, w as f32, h as f32),
+            rect(0.37, 0.61, 1190.91, 23.4),
+            rect(-5.0, -3.0, 1300.0, 40.0),
+            rect(3.0, 2.0, 1100.0, 20.0),
+            rect(3.5, 2.0, 4.2, 20.0), // sub-pixel wide
+            // Stroked-border ring: outer rect plus reversed inner rect.
+            (
+                vec![
+                    [1.3, 1.2],
+                    [1191.7, 1.2],
+                    [1191.7, 22.8],
+                    [1.3, 22.8],
+                    [3.3, 3.2],
+                    [3.3, 20.8],
+                    [1189.7, 20.8],
+                    [1189.7, 3.2],
+                ],
+                vec![(0, 4), (4, 8)],
+            ),
+            // Two separate rects on one row, then a long diagonal.
+            (
+                vec![
+                    [10.0, 2.5],
+                    [300.5, 2.5],
+                    [300.5, 21.5],
+                    [10.0, 21.5],
+                    [700.25, 4.0],
+                    [1180.0, 4.0],
+                    [1180.0, 19.0],
+                    [700.25, 19.0],
+                ],
+                vec![(0, 4), (4, 8)],
+            ),
+            (vec![[0.0, 0.0], [1193.0, 24.0], [0.0, 24.0]], vec![(0, 3)]),
+        ];
+        let mut rng = Lcg(0x5A5A_1234_8765_4321);
+        for _ in 0..60 {
+            cases.push(random_path(&mut rng, w as f32, h as f32));
+        }
+        for (p, s) in &cases {
+            for rule in [FillRule::NonZero, FillRule::EvenOdd] {
+                let aet = coverage_grid_aet(p, s, w, h, rule);
+                let refr = coverage_grid_ref(p, s, w, h, rule);
+                assert_eq!(aet, refr, "sparse AET vs reference mismatch, rule {rule:?}");
+                // The production entry point routes these wide sparse windows
+                // through the AET too.
+                let prod = coverage_grid(p, s, w, h, rule);
+                assert_eq!(prod, refr, "fill vs reference mismatch, rule {rule:?}");
+            }
+        }
+    }
+
     /// AET bit-exactness on the boundary geometry the activation/retirement
     /// bookkeeping is most likely to get wrong.
     #[test]
     fn aet_matches_reference_on_edge_cases() {
-        let cases: Vec<(Vec<[f32; 2]>, Vec<(usize, usize)>)> = vec![
+        let cases: Vec<Geometry> = vec![
             rect(1.0, 2.0, 5.0, 6.0),   // integral y_top/y_bot
             rect(0.5, 2.3, 4.5, 5.7),   // fractional band
             rect(-3.0, -2.0, 4.0, 5.0), // negative y, row_start clamp

@@ -128,10 +128,7 @@ fn form_invocation_nests_stream_stack_and_origin() {
     assert!(trace.entries[4].synthesized);
     assert_eq!(trace.entries[4].stream, None);
     assert_eq!(trace.entries[4].stack.len(), 1);
-    assert_eq!(
-        trace.entries[4].stack[0].object,
-        Some(ObjectId::new(5, 0))
-    );
+    assert_eq!(trace.entries[4].stack[0].object, Some(ObjectId::new(5, 0)));
 
     // After the form, provenance returns to the page stream.
     assert_eq!(trace.entries[9].operator, b"Q");

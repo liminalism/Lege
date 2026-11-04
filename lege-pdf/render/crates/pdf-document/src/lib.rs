@@ -448,6 +448,31 @@ struct SnapshotInner {
     /// The `/OCProperties /D` default optional-content configuration
     /// (default: everything visible).
     ocg: OcgConfig,
+    /// Document-scoped side caches owned by higher layers (see
+    /// [`DocumentSnapshot::extension`]).
+    extensions: ExtensionMap,
+}
+
+/// Type-erased, lazily created document-scoped slots. A higher layer (the
+/// content compiler, a renderer) keys a cache by its own private type and gets
+/// one instance per snapshot, shared by every worker and page of that
+/// document, without this crate learning what the cache holds.
+#[derive(Default)]
+struct ExtensionMap {
+    slots: std::sync::Mutex<HashMap<std::any::TypeId, Arc<dyn std::any::Any + Send + Sync>>>,
+}
+
+impl std::fmt::Debug for ExtensionMap {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let count = self
+            .slots
+            .lock()
+            .map(|slots| slots.len())
+            .unwrap_or_else(|poisoned| poisoned.into_inner().len());
+        f.debug_struct("ExtensionMap")
+            .field("slots", &count)
+            .finish()
+    }
 }
 
 impl DocumentSnapshot {
@@ -710,7 +735,41 @@ impl DocumentSnapshot {
                 security,
                 limits,
                 ocg: OcgConfig::default(),
+                extensions: ExtensionMap::default(),
             }),
+        }
+    }
+
+    /// The document-scoped slot for `T`, created with `T::default()` on first
+    /// use and shared (by `Arc`) with every later caller on any thread for as
+    /// long as this snapshot lives.
+    ///
+    /// This is how a layer above the document keeps per-document state that
+    /// outlives one page compile — a resolved-font cache, say — when callers
+    /// construct a fresh compiler and [`ParseContext`] per page (the scheduler's
+    /// `make` closure does exactly that). The slot is keyed by `T`'s type, so
+    /// a private newtype gives a crate a slot nothing else can reach; the
+    /// snapshot stays immutable document structure and never interprets the
+    /// contents.
+    pub fn extension<T: Default + Send + Sync + 'static>(&self) -> Arc<T> {
+        let mut slots = self
+            .inner
+            .extensions
+            .slots
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let slot = slots
+            .entry(std::any::TypeId::of::<T>())
+            .or_insert_with(|| Arc::new(T::default()));
+        match Arc::clone(slot).downcast::<T>() {
+            Ok(typed) => typed,
+            // Unreachable: the slot was inserted under `TypeId::of::<T>()`.
+            // Replace rather than panic so a page can never fail here.
+            Err(_) => {
+                let fresh: Arc<T> = Arc::new(T::default());
+                *slot = Arc::clone(&fresh) as Arc<dyn std::any::Any + Send + Sync>;
+                fresh
+            }
         }
     }
 

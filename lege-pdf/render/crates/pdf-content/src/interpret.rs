@@ -218,6 +218,8 @@ pub(crate) struct Interpreter<'a> {
     images: Vec<SemImage>,
     fonts: Vec<SemFont>,
     font_cache: HashMap<NameId, FontId>,
+    /// Document-scoped resolved-font cache (see [`FontResourceCache`]).
+    font_resources: Arc<FontResourceCache>,
     shadings: Vec<SemShading>,
     tilings: Vec<SemTiling>,
     /// Resolved pattern resources, keyed by resource name, so a pattern used
@@ -537,6 +539,7 @@ impl<'a> Interpreter<'a> {
             images: Vec::new(),
             fonts: Vec::new(),
             font_cache: HashMap::new(),
+            font_resources: snapshot.extension::<FontResourceCache>(),
             shadings: Vec::new(),
             tilings: Vec::new(),
             pattern_cache: HashMap::new(),
@@ -2472,6 +2475,22 @@ impl<'a> Interpreter<'a> {
         let Some(dict) = font_obj.as_dict() else {
             return sem;
         };
+        // Everything below depends only on the font dictionary object (and the
+        // system-font provider for substitution), never on the page, so a font
+        // reached by reference is resolved once per document and reused by
+        // every later page compile — the per-page interpreter otherwise
+        // re-inflates and re-parses each embedded program on every page.
+        let cache_key = sem.object.map(|object| FontCacheKey {
+            object,
+            provider: self.system_fonts_identity(),
+        });
+        if let Some(key) = &cache_key
+            && let Some(cached) = self.font_resources.get(key)
+        {
+            let mut sem = (*cached).clone();
+            sem.resource_name = name;
+            return sem;
+        }
         if let Some(sub) = dict
             .get(self.names.known.subtype)
             .and_then(PdfObject::as_name)
@@ -2590,7 +2609,19 @@ impl<'a> Interpreter<'a> {
             }
         }
         sem.unicode_map = Arc::new(unicode_map);
+        if let Some(key) = cache_key {
+            self.font_resources.insert(key, &sem);
+        }
         sem
+    }
+
+    /// Identity of the system-font provider for the resolved-font cache key: a
+    /// substituted font depends on which provider answered, so two compilers
+    /// with different providers must not share entries.
+    fn system_fonts_identity(&self) -> usize {
+        self.system_fonts
+            .as_ref()
+            .map_or(0, |provider| Arc::as_ptr(provider) as *const () as usize)
     }
 
     fn resolve_font_bbox(&mut self, font: &Dictionary, composite: bool) -> Option<[f64; 4]> {
@@ -5759,6 +5790,79 @@ impl<'a> Interpreter<'a> {
                 .resolve(self.snapshot, *id, self.ctx)
                 .ok(),
             direct => Some(Arc::new(direct.clone())),
+        }
+    }
+}
+
+/// Key of one resolved font resource: the font dictionary object plus the
+/// system-font provider that would answer a substitution for it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct FontCacheKey {
+    object: ObjectId,
+    provider: usize,
+}
+
+/// Document-scoped cache of resolved font resources, held in the snapshot's
+/// extension slot (`DocumentSnapshot::extension`) so it outlives the per-page
+/// interpreter and parse context.
+///
+/// Resolving a simple embedded font means inflating its `/FontFile` stream,
+/// parsing the program (Type 1 charstrings, CFF, TrueType tables), and walking
+/// all 256 codes of its encoding through the program's name and cmap lookups;
+/// a composite font parses its CMap and `/W` arrays. None of that depends on
+/// the page, yet every page compile used to redo it for every font it
+/// selected — on a text-only page that was most of the compile time. The
+/// cached `SemFont` carries only shared `Arc`s and small vectors, so a hit is
+/// a clone. Type 3 fonts are not cached (their CharProcs are interpreted
+/// inline and tracked per page); a font reached through a direct dictionary
+/// has no object identity and is resolved as before.
+///
+/// Bounded by retained program bytes; on overflow the whole map is dropped,
+/// which only costs the next page one re-resolution per font.
+#[derive(Debug, Default)]
+pub(crate) struct FontResourceCache {
+    inner: std::sync::Mutex<FontResourceCacheInner>,
+}
+
+#[derive(Debug, Default)]
+struct FontResourceCacheInner {
+    fonts: HashMap<FontCacheKey, Arc<SemFont>>,
+    /// Retained embedded-program bytes plus a per-entry allowance.
+    bytes: usize,
+}
+
+impl FontResourceCache {
+    /// Retained-bytes ceiling: a 300-page book of per-page subset fonts stays
+    /// well under this; a pathological document merely cycles the map.
+    const MAX_BYTES: usize = 64 << 20;
+    /// Per-entry allowance for the metrics, maps, and tables beside the
+    /// program bytes.
+    const ENTRY_OVERHEAD: usize = 16 << 10;
+
+    fn get(&self, key: &FontCacheKey) -> Option<Arc<SemFont>> {
+        let inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        inner.fonts.get(key).cloned()
+    }
+
+    fn insert(&self, key: FontCacheKey, font: &SemFont) {
+        if font.subtype == b"Type3" {
+            return;
+        }
+        let charge =
+            font.program.as_ref().map_or(0, |program| program.len()) + Self::ENTRY_OVERHEAD;
+        let mut inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if inner.bytes.saturating_add(charge) > Self::MAX_BYTES {
+            inner.fonts.clear();
+            inner.bytes = 0;
+        }
+        if inner.fonts.insert(key, Arc::new(font.clone())).is_none() {
+            inner.bytes += charge;
         }
     }
 }

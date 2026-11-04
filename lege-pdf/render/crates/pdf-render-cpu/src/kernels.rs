@@ -22,11 +22,10 @@ pub fn mul_div_255(a: u16, b: u16) -> u16 {
 /// Overwrite `dst` (one span, `len*4` bytes) with an opaque premultiplied
 /// pixel. No destination read — the fast path for opaque, fully-covered spans.
 pub fn fill_opaque(dst: &mut [u8], premul: [u8; 4]) {
+    // One whole-pixel copy per step (not four byte stores) so the loop lowers
+    // to a 32-bit splat the compiler vectorizes.
     for px in dst.chunks_exact_mut(4) {
-        px[0] = premul[0];
-        px[1] = premul[1];
-        px[2] = premul[2];
-        px[3] = premul[3];
+        px.copy_from_slice(&premul);
     }
 }
 
