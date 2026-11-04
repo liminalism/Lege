@@ -13,7 +13,7 @@ Cargo manifest and license files. In particular:
   implementation has been replaced; see its PROVENANCE.md and NOTICE.
 - lege-codecs/jp2lam: MIT OR Apache-2.0
 - lege-process/GUI/rfd: MIT
-- lege-process/GUI/liminalUI/fonts/NotoSans-Regular.ttf: OFL-1.1 (see OFL.txt
+- lege-process/GUI/liminalUI/fonts/Inter-Regular.ttf: OFL-1.1 (see OFL.txt
   beside it)
 - lege-pdf/read and other explicitly licensed PDF components: the licenses
   declared in their own manifests and source notices

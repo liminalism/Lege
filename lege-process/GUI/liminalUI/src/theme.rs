@@ -8,13 +8,36 @@ pub const FACE: FaceId = FaceId(0);
 pub fn fonts() -> &'static FontSet {
     static FONTS: OnceLock<FontSet> = OnceLock::new();
     FONTS.get_or_init(|| {
-        let bytes = include_bytes!("../fonts/NotoSans-Regular.ttf");
-        let face = Face::from_bytes(bytes).expect("bundled Noto Sans must parse");
+        let bytes = include_bytes!("../fonts/Inter-Regular.ttf");
+        let face = Face::from_bytes(bytes).expect("bundled Inter must parse");
         let mut fonts = FontSet::new();
         fonts.add(Box::leak(Box::new(face)));
         fonts
     })
 }
+
+/// Inter's x-height as a fraction of its em (1536 of 2816 units).
+const X_HEIGHT: f32 = 1536.0 / 2816.0;
+
+/// The physical pixel size nearest `px` whose x-height is a whole number of
+/// pixels. The rasterizer is unhinted and every baseline is on a pixel row,
+/// so at such a size the tops of lowercase letters land on a row too instead
+/// of smearing across two. This is most of the sharpness hinting would give.
+pub fn crisp(px: f32) -> f32 {
+    (px * X_HEIGHT).round().max(1.0) / X_HEIGHT
+}
+
+/// [`crisp`], never larger than `px`: for text shrunk to fit a width.
+pub fn crisp_down(px: f32) -> f32 {
+    (px * X_HEIGHT).floor().max(1.0) / X_HEIGHT
+}
+
+/// Snap a `Ui`'s theme fonts once it has scaled them to physical pixels.
+pub fn snap_fonts(theme: &mut Theme) {
+    theme.body.size = crisp(theme.body.size);
+    theme.heading.size = crisp(theme.heading.size);
+}
+
 pub fn rgb(c: Rgb) -> u32 {
     (u32::from(c.0) << 16) | (u32::from(c.1) << 8) | u32::from(c.2)
 }
@@ -34,13 +57,31 @@ pub fn theme(p: Palette, scale: Scale) -> Theme {
         accent_soft: rgb(p.selected_bg),
         hover: rgb(p.hover_bg),
         selection: rgb(p.selected_bg),
-        body: TextStyle::new(FACE, 13.0),
-        heading: TextStyle::new(FACE, 15.0),
+        // 7px and 8px x-heights at 1x; `snap_fonts` keeps them whole at
+        // other scales.
+        body: TextStyle::new(FACE, 12.83),
+        heading: TextStyle::new(FACE, 14.67),
         row_height: scale.px(27),
         padding: scale.px(8),
         corner_radius: scale.px(5),
         border_width: scale.hairline(),
         focus_width: 1,
         ..Theme::default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn crisp_sizes_have_whole_pixel_x_heights() {
+        let face = fonts().face(FACE);
+        let ratio = 1536.0 / face.units_per_em();
+        assert!((ratio - X_HEIGHT).abs() < 1e-6, "bundled face changed");
+        for px in [11.0, 12.83, 14.67, 16.5, 19.25, 22.0] {
+            let x = crisp(px) * X_HEIGHT;
+            assert!((x - x.round()).abs() < 1e-3, "{px}: {x}");
+            assert!(crisp_down(px) <= px + 1e-3);
+        }
     }
 }

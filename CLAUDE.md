@@ -210,7 +210,7 @@ vars → `/usr/share/lege/models` (Linux). Models required:
 
 ## Desktop GUI
 
-The only processor GUI is liminalUI (`lege-process/GUI/liminalUI`, package `lege-gui-liminalui`, binary `lege-gui`). It does not link Freya or Skia; the Freya GUI and the vendored `freya-main` tree have been removed. The GUI embeds Noto Sans from `lege-process/GUI/liminalUI/fonts/` at compile time. File dialogs use the vendored `rfd` crate at `lege-process/GUI/rfd`.
+The only processor GUI is liminalUI (`lege-process/GUI/liminalUI`, package `lege-gui-liminalui`, binary `lege-gui`). It does not link Freya or Skia; the Freya GUI and the vendored `freya-main` tree have been removed. The GUI embeds Inter from `lege-process/GUI/liminalUI/fonts/` at compile time. File dialogs use the vendored `rfd` crate at `lege-process/GUI/rfd`.
 
 ## Debug tracing
 

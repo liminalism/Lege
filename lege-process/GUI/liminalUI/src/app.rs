@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, SyncSender};
 use std::time::{Duration, Instant};
 
-use liminalkit_raster::{Painter, RasterKernel, Rect, WindowBuffer};
+use liminalkit_raster::{FillRule, Painter, Path, RasterKernel, Rect, WindowBuffer};
 use liminalkit_shell::{Input, KeyInput, Modifiers, MouseButton, Scale};
 use liminalkit_text::{Align, TextCache};
 use liminalkit_ui::{Focus, ScrollState, TextFieldState, Ui};
@@ -242,6 +242,7 @@ impl PixelApp for LegeApp {
                 &mut self.kernel,
             )
             .with_focus(&mut self.focus);
+            crate::theme::snap_fonts(&mut ui.theme);
             ui.painter.clear(crate::theme::rgb(palette.app_bg));
             self.dashboard.draw(&mut ui, &bands, self.snapshot_mode);
         }
@@ -255,6 +256,7 @@ impl PixelApp for LegeApp {
                 &mut self.kernel,
             )
             .with_focus(&mut self.modal_focus);
+            crate::theme::snap_fonts(&mut ui.theme);
             self.dashboard.draw_modal(&mut ui);
         }
         self.input.end_frame();
@@ -1071,9 +1073,13 @@ fn row(area: Rect, index: i32, height: i32) -> Rect {
 fn label(ui: &mut Ui<'_>, area: Rect, text: &str) {
     ui.label(area, text, ui.theme.text, Align::Left);
 }
+/// A logical font size in physical pixels, snapped for crisp rendering.
+fn font(ui: &Ui<'_>, logical: f32) -> f32 {
+    crate::theme::crisp(ui.scale.font(logical))
+}
 fn small(ui: &mut Ui<'_>, area: Rect, text: &str) {
     let mut style = ui.theme.body;
-    style.size *= 0.86;
+    style.size = crate::theme::crisp(style.size * 0.86);
     ui.label_styled(area, text, style, ui.theme.text_dim, Align::Left);
 }
 fn choice(ui: &mut Ui<'_>, area: Rect, text: &str, selected: bool) -> bool {
@@ -1096,13 +1102,13 @@ fn choice_label(ui: &mut Ui<'_>, area: Rect, text: &str) {
     // Keep equal hit areas at small widths. Two short lines are preferable to
     // clipping a mode name or assigning it a larger button than its siblings.
     if let Some((first, last)) = text.split_once(' ') {
-        style.size = ui.scale.font(11.0);
+        style.size = font(ui, 11.0);
         let width = ui
             .text
             .measure(first, style)
             .max(ui.text.measure(last, style));
         if width > available {
-            style.size *= available as f32 / width as f32;
+            style.size = crate::theme::crisp_down(style.size * available as f32 / width as f32);
         }
         let h = ui.text.line_height(style).min(area.h / 2);
         let y = area.y + (area.h - 2 * h) / 2;
@@ -1117,9 +1123,36 @@ fn choice_label(ui: &mut Ui<'_>, area: Rect, text: &str) {
         }
     } else {
         let width = ui.text.measure(text, style).max(1);
-        style.size *= available as f32 / width as f32;
+        style.size = crate::theme::crisp_down(style.size * available as f32 / width as f32);
         ui.label_styled(area, text, style, ui.theme.text, Align::Centre);
     }
+}
+/// A dashboard card, returning the area inside its padding. Its edge is a
+/// little heavier than the controls' hairlines, and anti-aliased.
+fn card(ui: &mut Ui<'_>, area: Rect) -> Rect {
+    let theme = ui.theme;
+    let radius = theme.corner_radius as f32;
+    let edge = ui.scale.f(1.5);
+    ui.painter
+        .fill_rounded_rect(area.inset(1), theme.corner_radius - 1, theme.panel);
+    let (x, y, w, h) = (area.x as f32, area.y as f32, area.w as f32, area.h as f32);
+    let mut ring = Path::new();
+    ring.rounded_rect(x, y, w, h, radius);
+    ring.rounded_rect(
+        x + edge,
+        y + edge,
+        w - 2.0 * edge,
+        h - 2.0 * edge,
+        (radius - edge).max(0.0),
+    );
+    ui.painter.fill_path_rule(
+        ui.kernel,
+        &mut ring,
+        FillRule::EvenOdd,
+        theme.panel_edge,
+        255,
+    );
+    area.inset(theme.padding)
 }
 fn arrow_button(ui: &mut Ui<'_>, area: Rect, direction: i32) -> bool {
     let clicked = ui.button(area, "");
@@ -1135,6 +1168,53 @@ fn arrow_button(ui: &mut Ui<'_>, area: Rect, direction: i32) -> bool {
     ui.painter
         .stroke_polyline_aa(ui.kernel, &points, ui.scale.f(1.5), colour, 255);
     clicked
+}
+/// `None` when every label fits a checkbox in `columns` equal columns of
+/// `width` at body size; otherwise the largest crisp size at which they do.
+fn checkbox_font(ui: &mut Ui<'_>, width: i32, columns: i32, labels: &[&str]) -> Option<f32> {
+    let column = (width - ui.px(2) * (columns - 1)) / columns;
+    let available = column - ui.px(liminalkit_ui::CHECKBOX_SIZE) - ui.theme.padding / 2;
+    let style = ui.theme.body;
+    let widest = labels
+        .iter()
+        .map(|label| ui.text.measure(label, style))
+        .max()
+        .unwrap_or(0);
+    (widest > available)
+        .then(|| crate::theme::crisp_down(style.size * available.max(1) as f32 / widest as f32))
+}
+/// The center/crop/reflow row. Equal columns, aligned with a three-column
+/// grid above, while the labels fit them; otherwise columns sized to their
+/// labels, which are shrunk only if even that is too narrow. May lower
+/// `ui.theme.body.size`; the caller restores it.
+fn geometry_cells(ui: &mut Ui<'_>, area: Rect, labels: [&str; 3]) -> Vec<Rect> {
+    let gap = ui.px(2);
+    if checkbox_font(ui, area.w, 3, &labels).is_none() {
+        return cells(area, 3, gap);
+    }
+    let chrome = ui.px(liminalkit_ui::CHECKBOX_SIZE) + ui.theme.padding / 2 + ui.px(6);
+    let style = ui.theme.body;
+    let text: Vec<i32> = labels.iter().map(|l| ui.text.measure(l, style)).collect();
+    let fixed = 3 * chrome + 2 * gap;
+    let total: i32 = text.iter().sum();
+    let room = (area.w - fixed).max(1);
+    if total > room {
+        ui.theme.body.size = crate::theme::crisp_down(style.size * room as f32 / total as f32);
+    }
+    // Spare width is shared equally; text widths shrink in proportion.
+    let spare = (room - total).max(0) / 3;
+    let mut x = area.x;
+    let mut rects = Vec::with_capacity(3);
+    for (i, width) in text.iter().enumerate() {
+        let w = if i == 2 {
+            area.right() - x
+        } else {
+            chrome + spare + (*width as i64 * room.min(total) as i64 / total as i64) as i32
+        };
+        rects.push(Rect::new(x, area.y, w, area.h));
+        x += w + gap;
+    }
+    rects
 }
 fn choices(ui: &mut Ui<'_>, area: Rect, texts: &[&str], selected: usize) -> Option<usize> {
     let gap = ui.px(4);
@@ -1173,7 +1253,7 @@ impl Dashboard {
         // but route no editing input to file/settings controls until it ends.
         let frozen = self.running() || self.input_busy();
         let saved_input = frozen.then(|| std::mem::take(ui.input));
-        let files = ui.panel(bands.files);
+        let files = card(ui, bands.files);
         let gap = ui.px(6);
         let w = (files.w - gap * 2) / 3;
         for (i, text, tooltip) in [
@@ -1208,10 +1288,10 @@ impl Dashboard {
         if let Some(input) = saved_input {
             *ui.input = input;
         }
-        let status = ui.panel(bands.status);
-        let actions = Actions::new(bands.process, status, ui.scale);
+        let status = card(ui, bands.status);
+        let actions = Actions::new(status, ui.scale);
         let original_theme = ui.theme;
-        ui.theme.body.size = ui.scale.font(16.0);
+        ui.theme.body.size = font(ui, 16.0);
         ui.theme.panel = ui.theme.selection;
         ui.theme.panel_edge = crate::theme::rgb(appearance::active_palette().border_focus);
         let start = ui.button(
@@ -1226,7 +1306,7 @@ impl Dashboard {
         if start && !snapshot {
             self.start();
         }
-        ui.theme.body.size = ui.scale.font(12.0);
+        ui.theme.body.size = font(ui, 11.0);
         let utilities = [
             (t.queue.about_button.clone(), Modal::About),
             (
@@ -1336,7 +1416,7 @@ impl Dashboard {
             small(ui, row(status, 2, ui.px(20)), &eta);
             {
                 ui.meter(
-                    Rect::new(status.x, status.bottom() - ui.px(22), status.w, ui.px(18)),
+                    Rect::new(status.x, actions.primary.y - ui.px(24), status.w, ui.px(18)),
                     self.batch_progress(),
                     tr("progress"),
                     ui.theme.selection,
@@ -1371,16 +1451,19 @@ impl Dashboard {
                     None => format!("{} {}", self.queue.len(), tr("queued")),
                 }
             };
-            if self.queue.is_empty() {
-                ui.label(status, &summary, ui.theme.text_dim, Align::Centre);
-            } else {
-                // Centred over the panel, the summary lands on the queue rows.
-                ui.label(header, &summary, ui.theme.text_dim, Align::Left);
-            }
+            // Centred over the panel, the summary would land on the queue rows
+            // or the empty-queue message.
+            ui.label(header, &summary, ui.theme.text_dim, Align::Left);
             if let Some(output) = &self.options.output_path {
+                // Left of the process button, on its row.
                 small(
                     ui,
-                    Rect::new(status.x, status.bottom() - ui.px(20), status.w, ui.px(18)),
+                    Rect::new(
+                        status.x,
+                        actions.primary.y,
+                        actions.primary.x - status.x - ui.px(8),
+                        actions.primary.h,
+                    ),
                     &format!(
                         "{} {}",
                         t.buttons.output_directory,
@@ -1393,16 +1476,17 @@ impl Dashboard {
         if ui.button(debug, &t.queue.debug_button) {
             self.modal = Some(Modal::Debug);
         }
-        // At most two timed, click-to-dismiss cards, anchored bottom-right.
+        // At most two timed, click-to-dismiss cards, anchored bottom-right,
+        // and above the process button when a narrow window puts it beneath.
         let mut remove = None;
-        let mut bottom = ui.painter.height() - ui.px(12);
+        let notice_x = ui.painter.width() - ui.px(340);
+        let mut bottom = if notice_x < actions.primary.right() {
+            actions.primary.y - ui.px(6)
+        } else {
+            ui.painter.height() - ui.px(12)
+        };
         for (index, notice) in self.notices.iter().enumerate().rev() {
-            let area = Rect::new(
-                ui.painter.width() - ui.px(340),
-                bottom - ui.px(68),
-                ui.px(328),
-                ui.px(68),
-            );
+            let area = Rect::new(notice_x, bottom - ui.px(68), ui.px(328), ui.px(68));
             ui.surface(
                 area,
                 crate::theme::rgb(appearance::active_palette().info_bg),
@@ -1426,15 +1510,8 @@ impl Dashboard {
         snapshot: bool,
     ) {
         let t = &GUI_TEXT.interactive;
-        let a = ui.panel(area);
+        let a = card(ui, area);
         let card = LeftCard::new(a, ui.scale);
-        ui.label_styled(
-            card.heading,
-            tr("options"),
-            ui.theme.heading,
-            ui.theme.text,
-            Align::Left,
-        );
         small(ui, card.range_label, &t.labels.page_range);
         small(ui, card.resolution_label, tr("resolution_short"));
         let (_, range_focused) = ui.text_field_input(&mut self.range, card.range, false, false);
@@ -1446,7 +1523,6 @@ impl Dashboard {
             false,
         );
         let body = ui.theme.body;
-        ui.theme.body.size = ui.scale.font(12.0);
         let (_, focused) = ui.text_field_input(&mut self.resolution, card.resolution, false, false);
         self.resolution_focus(focused, snapshot);
         ui.paint_text_field(
@@ -1467,25 +1543,43 @@ impl Dashboard {
         }
         hover(ui, card.resolution, &t.tooltips.target_height, true, note);
 
-        // Preserve the reading order, filling rows across two columns. The
-        // geometry tray and OCR slot stay anchored when conditional controls hide.
-        let mut index = 0;
-        if a.w < ui.px(360) {
-            ui.theme.body.size = ui.scale.font(11.0);
+        // Preserve the reading order, filling rows across the columns. The
+        // geometry tray and OCR slot stay anchored when conditional controls
+        // hide. Every possible label is measured, not only the visible ones,
+        // so toggling an option never reflows the grid.
+        let labels = [
+            t.labels.inverted_colors.as_str(),
+            &t.labels.ocr_text_layer,
+            &t.labels.make_epub_also,
+            &t.labels.high_quality_output,
+            &t.labels.truetyping_text,
+            &t.labels.jbig2_symbol_mode,
+            &t.labels.jpeg_compatibility,
+        ];
+        let columns: i32 = if checkbox_font(ui, card.checks.w, 3, &labels).is_none() {
+            3
+        } else {
+            2
+        };
+        // Two columns can still be too narrow for a long translation: shrink
+        // the labels rather than cut them off.
+        if let Some(size) = checkbox_font(ui, card.checks.w, columns, &labels) {
+            ui.theme.body.size = size;
         }
+        let mut index = 0;
         macro_rules! check {
             ($value:expr,$label:expr,$tip:expr,$changed:expr) => {{
-                let columns = cells(
+                let row = cells(
                     Rect::new(
                         card.checks.x,
-                        card.checks.y + (index / 3) * ui.px(25),
+                        card.checks.y + (index / columns) * card.check_row,
                         card.checks.w,
-                        ui.px(25),
+                        card.check_row,
                     ),
-                    3,
+                    columns as usize,
                     ui.px(2),
                 );
-                let rect = columns[(index % 3) as usize];
+                let rect = row[(index % columns) as usize];
                 let mut value = $value;
                 if ui.checkbox(rect, &mut value, $label) {
                     $changed(value);
@@ -1586,11 +1680,11 @@ impl Dashboard {
                 note,
             );
         }
-        // Same columns and narrow-panel font as the checkbox grid above.
-        if a.w < ui.px(360) {
-            ui.theme.body.size = ui.scale.font(11.0);
-        }
-        let buttons = cells(card.geometry, 3, ui.px(2));
+        let buttons = geometry_cells(
+            ui,
+            card.geometry,
+            [tr("center_margins"), tr("crop_margins"), &t.labels.reflow],
+        );
         for (index, text, selected, tooltip) in [
             (
                 0,
@@ -1648,15 +1742,8 @@ impl Dashboard {
 
     fn draw_right(&mut self, ui: &mut Ui<'_>, area: Rect, note: &mut Option<(bool, &'static str)>) {
         let t = &GUI_TEXT.interactive;
-        let a = ui.panel(area);
+        let a = card(ui, area);
         let card = RightCard::new(a, ui.scale);
-        ui.label_styled(
-            card.heading,
-            tr("output"),
-            ui.theme.heading,
-            ui.theme.text,
-            Align::Left,
-        );
         for (index, caption) in [
             (0, tr("mode_short")),
             (1, tr("format_short")),
@@ -1806,7 +1893,12 @@ impl Dashboard {
             let (modes, caption, value) = card.binarization_fields();
             small(
                 ui,
-                Rect::new(card.binarization.x, modes.y, ui.px(64), modes.h),
+                Rect::new(
+                    card.binarization.x,
+                    modes.y,
+                    modes.x - card.binarization.x,
+                    modes.h,
+                ),
                 &t.controls.binarization,
             );
             let selected = if self.options.use_fixed_threshold {
@@ -1833,7 +1925,7 @@ impl Dashboard {
             if !heavy {
                 small(ui, caption, if fixed { "0–255" } else { "K" });
                 let body = ui.theme.body;
-                ui.theme.body.size = ui.scale.font(12.0);
+                ui.theme.body.size = font(ui, 12.0);
                 if fixed {
                     ui.text_field(&mut self.threshold, value, "180", false, false);
                 } else {
@@ -2570,8 +2662,9 @@ mod tests {
     #[test]
     fn compact_resolution_field_fits_height_and_width() {
         let mut text = TextCache::new(crate::theme::fonts());
-        let style = liminalkit_text::TextStyle::new(crate::theme::FACE, 12.0);
-        assert!(text.measure("1200x800", style) <= 64 - 8);
+        let style = crate::theme::theme(appearance::active_palette(), Scale::ONE).body;
+        let field = LeftCard::new(Rect::new(0, 0, 340, 236), Scale::ONE).resolution;
+        assert!(text.measure("1200x800", style) <= field.w - 8);
     }
     fn real_worker(cancel: bool, batch: bool) {
         let input =

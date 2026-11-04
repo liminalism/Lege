@@ -16,7 +16,7 @@ its executable. Its dependency graph contains liminalkit and `lege-ipc`, without
 the processor or a Freya/Skia crate.
 
 Settings, the worker supervisor, localization, and the Sanzo palettes live in
-this crate. The bundled Noto Sans face lives in `fonts/` with its
+this crate. The bundled Inter face lives in `fonts/` with its
 OFL-1.1 license and is embedded at compile time.
 
 The text raster cache is bounded to 512 entries and 2 MiB of bitmap payload.

@@ -6,7 +6,6 @@ pub struct Bands {
     pub files: Rect,
     pub left: Rect,
     pub right: Rect,
-    pub process: Rect,
     pub status: Rect,
 }
 
@@ -14,69 +13,66 @@ impl Bands {
     pub fn new(width: i32, height: i32, s: Scale) -> Self {
         let p = s.px(8);
         let gap = s.px(8);
+        // Between the rows of cards; the columns keep the narrower `gap`.
+        let row_gap = s.px(10);
         let w = (width - p * 2).max(1);
         let files = Rect::new(p, p, w, s.px(48));
         // Two equal settings columns expand with the window. No aspect-ratio
         // lock or maximum size; surplus height goes to status/queue information.
-        let y = files.bottom() + gap;
-        let settings_h = s.px(280);
+        let y = files.bottom() + row_gap;
+        let settings_h = s.px(252);
         let col = (w - gap) / 2;
         let left = Rect::new(p, y, col, settings_h);
         let right = Rect::new(p + col + gap, y, w - col - gap, settings_h);
-        // Give all 110px recovered from settings to the queue beneath actions.
-        let process = Rect::new(p, left.bottom() + gap, w, s.px(44));
-        let status = Rect::new(
-            p,
-            process.bottom() + gap,
-            w,
-            (height - process.bottom() - gap - p).max(1),
-        );
+        // The process button sits inside the status card's bottom edge.
+        let status_y = left.bottom() + row_gap;
+        let status = Rect::new(p, status_y, w, (height - status_y - p).max(1));
         Self {
             files,
             left,
             right,
-            process,
             status,
         }
     }
 }
 
 pub struct LeftCard {
-    pub heading: Rect,
     pub range_label: Rect,
     pub range: Rect,
     pub resolution_label: Rect,
     pub resolution: Rect,
     pub checks: Rect,
+    /// Height of one checkbox row in `checks`; four rows fit.
+    pub check_row: i32,
     pub ocr: Rect,
     pub geometry: Rect,
 }
 
 impl LeftCard {
     pub fn new(a: Rect, s: Scale) -> Self {
-        let resolution_w = s.px(64);
-        let field_y = a.y + s.px(40);
-        let range_w = a.w - resolution_w - s.px(10);
+        // Wide enough for a range like "1-12, 40-9999", and no wider.
+        let range_w = s.px(140).min(a.w / 2);
+        let resolution_w = s.px(80);
+        let resolution_x = a.x + range_w + s.px(12);
+        let label_h = s.px(15);
+        let field_y = a.y + s.px(16);
         Self {
-            heading: Rect::new(a.x, a.y, a.w, s.px(24)),
-            range_label: Rect::new(a.x, a.y + s.px(25), range_w, s.px(15)),
+            range_label: Rect::new(a.x, a.y, range_w, label_h),
             range: Rect::new(a.x, field_y, range_w, s.px(28)),
-            resolution_label: Rect::new(
-                a.right() - resolution_w,
-                a.y + s.px(25),
-                resolution_w,
-                s.px(15),
-            ),
-            resolution: Rect::new(a.right() - resolution_w, field_y, resolution_w, s.px(28)),
-            checks: Rect::new(a.x, field_y + s.px(34), a.w, s.px(75)),
-            ocr: Rect::new(a.x, a.bottom() - s.px(74), a.w, s.px(30)),
-            geometry: Rect::new(a.x, a.bottom() - s.px(34), a.w, s.px(30)),
+            resolution_label: Rect::new(resolution_x, a.y, resolution_w, label_h),
+            resolution: Rect::new(resolution_x, field_y, resolution_w, s.px(28)),
+            checks: Rect::new(a.x, field_y + s.px(34), a.w, s.px(96)),
+            check_row: s.px(24),
+            ocr: Rect::new(a.x, a.bottom() - s.px(89), a.w, s.px(30)),
+            geometry: Rect::new(a.x, a.bottom() - s.px(49), a.w, s.px(30)),
         }
     }
 }
 
+/// The Output card's caption column: fits "Binarisierung" at the small size.
+const LABEL_W: i32 = 84;
+
 pub struct RightCard {
-    pub heading: Rect,
     pub rows: Rect,
     pub binarization: Rect,
     scale: Scale,
@@ -85,15 +81,14 @@ pub struct RightCard {
 impl RightCard {
     pub fn new(a: Rect, s: Scale) -> Self {
         Self {
-            heading: Rect::new(a.x, a.y, a.w, s.px(24)),
-            rows: Rect::new(a.x, a.y + s.px(26), a.w, s.px(160)),
+            rows: Rect::new(a.x, a.y, a.w, s.px(160)),
             binarization: Rect::new(a.x, a.bottom() - s.px(68), a.w, s.px(68)),
             scale: s,
         }
     }
     pub fn setting(&self, index: i32) -> (Rect, Rect) {
         let y = self.rows.y + self.scale.px(index * 32);
-        let label_w = self.scale.px(64);
+        let label_w = self.scale.px(LABEL_W);
         (
             Rect::new(self.rows.x, y, label_w, self.scale.px(30)),
             Rect::new(
@@ -106,7 +101,7 @@ impl RightCard {
     }
     pub fn binarization_fields(&self) -> (Rect, Rect, Rect) {
         let a = self.binarization;
-        let label_w = self.scale.px(64);
+        let label_w = self.scale.px(LABEL_W);
         let modes = Rect::new(
             a.x + label_w + self.scale.px(8),
             a.y,
@@ -142,13 +137,15 @@ pub struct Actions {
     pub queue: Rect,
 }
 impl Actions {
-    pub fn new(process: Rect, status: Rect, s: Scale) -> Self {
-        let primary_w = s.px(320).min(process.w);
+    /// `status` is the status section's content area.
+    pub fn new(status: Rect, s: Scale) -> Self {
+        let primary_w = s.px(320).min(status.w);
+        let primary_h = s.px(44);
         let primary = Rect::new(
-            process.x + (process.w - primary_w) / 2,
-            process.y,
+            status.x + (status.w - primary_w) / 2,
+            status.bottom() - primary_h,
             primary_w,
-            process.h,
+            primary_h,
         );
         let group_w = s.px(228).min(status.w);
         let utilities = cells(
@@ -156,11 +153,14 @@ impl Actions {
             3,
             s.px(6),
         );
+        // Above the queue: up to three running-status lines. Below it: the
+        // progress meter, then the button row.
+        let queue_y = status.y + s.px(78);
         let queue = Rect::new(
             status.x,
-            status.y + s.px(78),
+            queue_y,
             status.w,
-            (status.h - s.px(108)).max(1),
+            (primary.y - s.px(30) - queue_y).max(1),
         );
         Self {
             primary,
@@ -180,6 +180,8 @@ mod tests {
                 let s = Scale(factor);
                 let b = Bands::new(s.px(w), s.px(h), s);
                 assert!(b.left.right() < b.right.x);
+                assert_eq!(b.left.y - b.files.bottom(), s.px(10));
+                assert_eq!(b.status.y - b.left.bottom(), s.px(10));
                 assert_eq!(b.left.bottom(), b.right.bottom());
                 assert!(b.status.h >= s.px(40));
                 assert!(b.status.bottom() <= s.px(h));
@@ -193,13 +195,17 @@ mod tests {
             let bands = Bands::new(width, 700, s);
             let options = LeftCard::new(bands.right.inset(8), s);
             assert!(options.checks.bottom() <= options.ocr.y);
+            assert_eq!(options.checks.h, options.check_row * 4);
+            assert!(options.resolution.right() <= options.checks.right());
             assert!(options.ocr.bottom() <= options.geometry.y);
             let output = RightCard::new(bands.left.inset(8), s);
             let (modes, caption, value) = output.binarization_fields();
             assert!(output.setting(4).1.bottom() <= modes.y);
             assert!(modes.bottom() <= caption.y && value.right() <= output.binarization.right());
-            let actions = Actions::new(bands.process, bands.status.inset(8), s);
-            assert!(actions.queue.bottom() <= bands.status.bottom());
+            let actions = Actions::new(bands.status.inset(8), s);
+            assert!(actions.queue.bottom() <= actions.primary.y);
+            assert!(actions.primary.bottom() <= bands.status.bottom());
+            assert!(options.geometry.bottom() <= bands.right.bottom());
         }
     }
 }
