@@ -3256,7 +3256,8 @@ fn soft_mask_outside(kind: pdf_page_ir::MaskKind) -> u8 {
 /// Blit a run of cached glyph coverage bitmaps (PDFium's per-run
 /// accumulate-and-blit). Each placement's bbox-tight `u8` coverage is composited
 /// at its snapped device position: the fast case (Normal blend, no non-rect clip
-/// mask, no soft mask) is a single `blend_mask` per row; masked or non-Normal
+/// mask, no soft mask, solid colour) is a single `blend_mask_rect` per glyph,
+/// which also counts the covered pixels in the same pass; masked or non-Normal
 /// runs take a per-row scratch that applies the clip/soft coverage before the
 /// general compositor. No rasterization happens here — that was memoized at
 /// lowering time.
@@ -3329,6 +3330,28 @@ fn paint_glyph_run(
         let src_off = (rx0 - pl.dx) as usize;
         let dst0 = (rx0 as usize - ox) * 4;
         let dst1 = (rx1 as usize - ox) * 4;
+
+        if simple && gr.shading.is_none() {
+            // The common case: the whole clamped bitmap in one kernel call,
+            // which also returns its non-zero coverage count (no second pass).
+            let rows = (ry1 - ry0) as usize;
+            let (buf, first_y, stride) = surface.rows_mut_abs(ry0 as usize, ry1 as usize);
+            if first_y == ry0 as usize && buf.len() == rows * stride {
+                let src0 = (ry0 - pl.dy) as usize * bw + src_off;
+                covered += (kernels.blend_mask_rect)(
+                    &mut buf[dst0..],
+                    stride,
+                    &bmp.cov[src0..],
+                    bw,
+                    span,
+                    rows,
+                    gr.rgb,
+                    gr.alpha,
+                );
+                continue;
+            }
+            // Rows outside the surface: keep the per-row path's behaviour.
+        }
 
         for y in ry0..ry1 {
             let ly = (y - pl.dy) as usize;
