@@ -77,28 +77,34 @@ fn jpx_quality_margin() -> f32 {
 }
 
 /// A fixed concurrency override from `PDF_RENDERER_JPX_CONCURRENCY` (`serial`,
-/// `budgeted:N`, or `auto`), read once. `None` selects the load-aware policy.
-/// Keeps the concurrency sweep and pinning reproducible on the shipping binary.
+/// `budgeted:N`, a bare `N`, or `auto`), read once. `None` selects the
+/// load-aware policy. Keeps the concurrency sweep and pinning reproducible on
+/// the shipping binary.
 fn jpx_concurrency_override() -> Option<DecodeConcurrency> {
     use std::sync::OnceLock;
     static C: OnceLock<Option<DecodeConcurrency>> = OnceLock::new();
-    *C.get_or_init(|| match std::env::var("PDF_RENDERER_JPX_CONCURRENCY") {
-        Ok(v) => {
-            let v = v.trim().to_ascii_lowercase();
-            if let Some(n) = v.strip_prefix("budgeted:") {
-                n.parse::<usize>()
-                    .ok()
-                    .filter(|n| *n >= 1)
-                    .map(DecodeConcurrency::Budgeted)
-            } else if v == "serial" {
-                Some(DecodeConcurrency::Serial)
-            } else {
-                // "auto" or anything unrecognised falls through to load-aware.
-                None
-            }
-        }
-        Err(_) => None,
+    *C.get_or_init(|| {
+        std::env::var("PDF_RENDERER_JPX_CONCURRENCY")
+            .ok()
+            .and_then(|v| parse_jpx_concurrency(&v))
     })
+}
+
+/// Parses a `PDF_RENDERER_JPX_CONCURRENCY` value. A bare `1` means `serial`
+/// and a bare `N > 1` means `budgeted:N`, so the single-thread benchmark
+/// protocol's `=1` pins the decode rather than silently selecting the
+/// load-aware policy. `auto` and anything unrecognised return `None`.
+fn parse_jpx_concurrency(value: &str) -> Option<DecodeConcurrency> {
+    let v = value.trim().to_ascii_lowercase();
+    if v == "serial" {
+        return Some(DecodeConcurrency::Serial);
+    }
+    let n = v.strip_prefix("budgeted:").unwrap_or(&v);
+    match n.parse::<usize>().ok()? {
+        0 => None,
+        1 if n.len() == v.len() => Some(DecodeConcurrency::Serial),
+        n => Some(DecodeConcurrency::Budgeted(n)),
+    }
 }
 
 /// Optional one-line stderr telemetry per JPX decode when `JP2LAM_DECODE_TRACE`
@@ -605,9 +611,37 @@ fn component_sample_to_u8(
 
 #[cfg(test)]
 mod tests {
-    use super::{component_sample_to_u8, decoder_limits, load_aware_budget};
+    use super::{component_sample_to_u8, decoder_limits, load_aware_budget, parse_jpx_concurrency};
     use crate::codec::DecodeLimits;
     use jp2lam::DecodeConcurrency;
+
+    #[test]
+    fn jpx_concurrency_override_accepts_bare_counts() {
+        assert_eq!(
+            parse_jpx_concurrency("serial"),
+            Some(DecodeConcurrency::Serial)
+        );
+        assert_eq!(
+            parse_jpx_concurrency(" 1 "),
+            Some(DecodeConcurrency::Serial)
+        );
+        assert_eq!(
+            parse_jpx_concurrency("4"),
+            Some(DecodeConcurrency::Budgeted(4))
+        );
+        assert_eq!(
+            parse_jpx_concurrency("budgeted:1"),
+            Some(DecodeConcurrency::Budgeted(1))
+        );
+        assert_eq!(
+            parse_jpx_concurrency("Budgeted:3"),
+            Some(DecodeConcurrency::Budgeted(3))
+        );
+        assert_eq!(parse_jpx_concurrency("0"), None);
+        assert_eq!(parse_jpx_concurrency("budgeted:0"), None);
+        assert_eq!(parse_jpx_concurrency("auto"), None);
+        assert_eq!(parse_jpx_concurrency("fast"), None);
+    }
 
     #[test]
     fn saturated_load_can_fall_back_to_one_decode_worker() {
