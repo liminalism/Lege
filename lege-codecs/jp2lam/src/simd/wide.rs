@@ -7,6 +7,7 @@ use wide::{f32x8, i32x8, u32x8};
 
 pub(crate) fn setup(primitives: &mut Primitives) {
     primitives.dwt.inverse_97_2d = inverse_97_2d;
+    primitives.dwt.inverse_97_2d_owned = inverse_97_2d_owned;
     primitives.analyze.i32_max_magnitude_and_nnz = i32_max_magnitude_and_nnz;
     primitives.quant.quantize_f32_rect = quantize_f32_rect;
     primitives.color.level_shift_f32 = level_shift_f32;
@@ -17,6 +18,7 @@ pub(crate) fn setup(primitives: &mut Primitives) {
     primitives.color.inverse_rct = inverse_rct;
     primitives.dwt.inverse_53_2d = inverse_53_2d;
     primitives.backend = "wide";
+    primitives.kernel = super::Kernel::Wide;
 }
 
 /// Not part of the live [`super::PRIMITIVES`] dispatch table; see
@@ -30,6 +32,22 @@ pub(crate) fn forward_97_2d(
     levels: u8,
 ) -> crate::error::Result<()> {
     crate::dwt::forward_97_2d_in_place_wide(data, width, height, levels)
+}
+
+pub(crate) fn inverse_97_2d_owned(
+    data: Vec<f32>,
+    width: usize,
+    height: usize,
+    levels: u8,
+) -> crate::error::Result<Vec<f32>> {
+    Ok(crate::dwt::inverse_97_2d_even(
+        data,
+        width,
+        height,
+        levels,
+        super::Kernel::Wide,
+        None,
+    ))
 }
 
 pub(crate) fn inverse_97_2d(

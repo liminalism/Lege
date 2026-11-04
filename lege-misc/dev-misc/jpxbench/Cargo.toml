@@ -1,0 +1,26 @@
+[package]
+name = "jpxbench"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "Paired serial micro-benchmark: jp2lam vs hayro-jpeg2000 on raw JPX streams"
+
+# Standalone: not a member of the ecosystem workspace (hayro-jpeg2000 is a
+# benchmark-only dependency).
+[workspace]
+
+[features]
+default = []
+# Print hayro's per-stage timings next to jp2lam's. Needs the patched
+# hayro-jpeg2000 copy described in README.md (`hayro-trace.patch`).
+hayro-trace = []
+
+[dependencies]
+jp2lam = { path = "../../../lege-codecs/jp2lam", default-features = false, features = ["simd"] }
+hayro-jpeg2000 = { version = "=0.5.0", default-features = false, features = ["std", "simd"] }
+
+[profile.release]
+opt-level = 3
+debug = true
+codegen-units = 1
+lto = "fat"

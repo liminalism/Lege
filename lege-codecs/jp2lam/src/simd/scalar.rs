@@ -6,6 +6,7 @@ pub(crate) fn primitives() -> Primitives {
     Primitives {
         dwt: DwtPrimitives {
             inverse_97_2d,
+            inverse_97_2d_owned,
             inverse_53_2d,
         },
         analyze: AnalyzePrimitives {
@@ -21,6 +22,7 @@ pub(crate) fn primitives() -> Primitives {
             inverse_rct,
         },
         backend: "scalar",
+        kernel: super::Kernel::Scalar,
     }
 }
 
@@ -37,6 +39,22 @@ pub(crate) fn forward_97_2d(
     levels: u8,
 ) -> Result<()> {
     crate::dwt::forward_97_2d_in_place(data, width, height, levels)
+}
+
+pub(crate) fn inverse_97_2d_owned(
+    data: Vec<f32>,
+    width: usize,
+    height: usize,
+    levels: u8,
+) -> crate::error::Result<Vec<f32>> {
+    Ok(crate::dwt::inverse_97_2d_even(
+        data,
+        width,
+        height,
+        levels,
+        super::Kernel::Scalar,
+        None,
+    ))
 }
 
 pub(crate) fn inverse_97_2d(

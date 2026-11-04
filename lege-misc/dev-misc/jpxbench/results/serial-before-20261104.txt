@@ -1,0 +1,43 @@
+stream                 lvl         out   jp2min   jp2med   haymin   haymed  jp2MB/s  hayMB/s  ratio
+# cm-p0-l0: 2929x4424 in=483072B CodSegment { progression_order: Rlcp, layers: 1, use_mct: true, decomposition_levels: 5, code_block_width: 64, code_block_height: 64, code_block_style: CodeBlockStyle { bypass: false, reset_contexts: false, terminate_each_pass: false, vertical_causal: false, predictable_termination: false, segmentation_symbols: false }, transform: Irreversible97, uses_precincts: false, sop_markers: false, eph_markers: false, precinct_sizes: [] }
+cm-p0-l0                 0  2929x4424    384.57   394.51   249.46   258.81     98.5    150.2  1.524
+#   hayro lvl0 (per run): parse 0.0 t2 2.1 t1 137.5 idwt 102.4 store 33.3 mct 8.1 shift 9.2
+#   jp2lam lvl0 (packed): total 396.8 | t2 setup 0.2 hdr 0.3 | t1 168.0 (mq 0.0 sig 60.6 ref 19.7 cln 63.1 out 16.6) | deq 0.0 dwt 152.0 (h 96.3 v 55.7) mct 0.0 fin 66.9 pack 0.0 | blocks 3209 passes s/r/c 2680/2680/5889 cw 476567B
+cm-p0-l0                 1  1465x2212    158.27   161.93    91.42    95.13     60.0    102.2  1.702
+#   hayro lvl1 (per run): parse 0.0 t2 2.3 t1 76.6 idwt 18.8 store 7.2 mct 1.9 shift 2.2
+#   jp2lam lvl1 (packed): total 162.5 | t2 setup 0.2 hdr 0.3 | t1 111.3 (mq 0.0 sig 45.2 ref 15.6 cln 42.3 out 4.5) | deq 0.0 dwt 33.4 (h 22.7 v 10.6) mct 0.0 fin 15.1 pack 0.0 | blocks 966 passes s/r/c 1861/1861/2827 cw 476567B
+# cm-p0-l1: 2929x4424 in=392201B CodSegment { progression_order: Rlcp, layers: 1, use_mct: true, decomposition_levels: 5, code_block_width: 64, code_block_height: 64, code_block_style: CodeBlockStyle { bypass: false, reset_contexts: false, terminate_each_pass: false, vertical_causal: false, predictable_termination: false, segmentation_symbols: false }, transform: Irreversible97, uses_precincts: false, sop_markers: false, eph_markers: false, precinct_sizes: [] }
+cm-p0-l1                 0  2929x4424    345.06   346.93   235.39   238.67    112.1    162.9  1.454
+#   hayro lvl0 (per run): parse 0.0 t2 2.1 t1 120.7 idwt 96.2 store 33.0 mct 7.8 shift 9.4
+#   jp2lam lvl0 (packed): total 344.5 | t2 setup 0.2 hdr 0.3 | t1 128.9 (mq 0.0 sig 40.8 ref 12.2 cln 51.3 out 17.9) | deq 0.0 dwt 142.2 (h 93.9 v 48.2) mct 0.0 fin 63.9 pack 0.0 | blocks 2704 passes s/r/c 2107/2107/4811 cw 386779B
+cm-p0-l1                 1  1465x2212    149.69   156.06    85.65    88.24     62.3    110.2  1.769
+#   hayro lvl1 (per run): parse 0.0 t2 2.0 t1 68.3 idwt 19.2 store 7.3 mct 1.9 shift 2.1
+#   jp2lam lvl1 (packed): total 154.0 | t2 setup 0.2 hdr 0.3 | t1 102.5 (mq 0.0 sig 38.1 ref 11.4 cln 42.3 out 6.8) | deq 0.0 dwt 33.9 (h 22.5 v 11.4) mct 0.0 fin 14.6 pack 0.0 | blocks 1171 passes s/r/c 1836/1836/3007 cw 386779B
+# structures-p0-l0: 2222x3191 in=301464B CodSegment { progression_order: Lrcp, layers: 1, use_mct: true, decomposition_levels: 5, code_block_width: 64, code_block_height: 64, code_block_style: CodeBlockStyle { bypass: false, reset_contexts: false, terminate_each_pass: false, vertical_causal: false, predictable_termination: false, segmentation_symbols: false }, transform: Irreversible97, uses_precincts: false, sop_markers: false, eph_markers: false, precinct_sizes: [] }
+structures-p0-l0         0  2222x3191    199.51   202.11   133.68   135.01    105.2    157.6  1.497
+#   hayro lvl0 (per run): parse 0.0 t2 0.9 t1 75.2 idwt 48.7 store 18.1 mct 4.2 shift 5.1
+#   jp2lam lvl0 (packed): total 202.1 | t2 setup 0.1 hdr 0.1 | t1 86.2 (mq 0.0 sig 38.6 ref 7.9 cln 30.4 out 6.3) | deq 0.0 dwt 76.7 (h 51.4 v 25.2) mct 0.0 fin 33.1 pack 0.0 | blocks 783 passes s/r/c 1704/1492/2179 cw 298916B
+structures-p0-l0         1  1111x1596    104.73   107.43    57.47    59.51     49.5     89.4  1.805
+#   hayro lvl1 (per run): parse 0.0 t2 0.8 t1 52.1 idwt 9.8 store 4.1 mct 1.1 shift 0.9
+#   jp2lam lvl1 (packed): total 110.3 | t2 setup 0.1 hdr 0.2 | t1 83.0 (mq 0.0 sig 38.7 ref 8.3 cln 30.5 out 2.7) | deq 0.0 dwt 17.8 (h 11.8 v 6.0) mct 0.0 fin 7.8 pack 0.0 | blocks 680 passes s/r/c 1604/1431/2029 cw 298916B
+# structures-p0-l1: 2222x3191 in=20969B CodSegment { progression_order: Lrcp, layers: 1, use_mct: true, decomposition_levels: 5, code_block_width: 64, code_block_height: 64, code_block_style: CodeBlockStyle { bypass: false, reset_contexts: false, terminate_each_pass: false, vertical_causal: false, predictable_termination: false, segmentation_symbols: false }, transform: Irreversible97, uses_precincts: false, sop_markers: false, eph_markers: false, precinct_sizes: [] }
+structures-p0-l1         0  2222x3191    124.67   128.41    99.11    99.94    165.7    212.8  1.285
+#   hayro lvl0 (per run): parse 0.0 t2 0.6 t1 33.3 idwt 49.3 store 18.5 mct 4.7 shift 5.1
+#   jp2lam lvl0 (packed): total 125.7 | t2 setup 0.1 hdr 0.2 | t1 9.6 (mq 0.0 sig 3.6 ref 1.4 cln 2.6 out 1.7) | deq 0.0 dwt 74.9 (h 52.6 v 22.3) mct 0.0 fin 34.9 pack 0.0 | blocks 127 passes s/r/c 262/237/338 cw 20277B
+structures-p0-l1         1  1111x1596     33.87    34.45    22.98    23.74    154.4    224.1  1.452
+#   hayro lvl1 (per run): parse 0.0 t2 0.6 t1 11.2 idwt 9.3 store 3.9 mct 1.0 shift 0.8
+#   jp2lam lvl1 (packed): total 34.7 | t2 setup 0.1 hdr 0.1 | t1 8.5 (mq 0.0 sig 3.5 ref 1.2 cln 2.6 out 1.1) | deq 0.0 dwt 16.8 (h 11.6 v 5.2) mct 0.0 fin 8.2 pack 0.0 | blocks 127 passes s/r/c 262/237/338 cw 20277B
+# cm-p1-l0: 2364x4162 in=35167B CodSegment { progression_order: Rlcp, layers: 1, use_mct: true, decomposition_levels: 5, code_block_width: 64, code_block_height: 64, code_block_style: CodeBlockStyle { bypass: false, reset_contexts: false, terminate_each_pass: false, vertical_causal: false, predictable_termination: false, segmentation_symbols: false }, transform: Irreversible97, uses_precincts: false, sop_markers: false, eph_markers: false, precinct_sizes: [] }
+cm-p1-l0                 0  2364x4162    172.47   178.35   141.67   144.54    165.5    204.2  1.234
+#   hayro lvl0 (per run): parse 0.0 t2 1.3 t1 47.9 idwt 70.6 store 27.0 mct 5.9 shift 6.7
+#   jp2lam lvl0 (packed): total 176.2 | t2 setup 0.1 hdr 0.1 | t1 9.6 (mq 0.0 sig 1.3 ref 3.3 cln 2.4 out 2.3) | deq 0.0 dwt 109.3 (h 75.5 v 33.7) mct 0.0 fin 50.6 pack 0.0 | blocks 180 passes s/r/c 235/235/415 cw 34467B
+cm-p1-l0                 1  1182x2081     47.21    48.45    34.56    35.88    152.3    205.7  1.350
+#   hayro lvl1 (per run): parse 0.0 t2 1.3 t1 15.2 idwt 14.3 store 5.5 mct 1.5 shift 1.5
+#   jp2lam lvl1 (packed): total 47.9 | t2 setup 0.1 hdr 0.1 | t1 9.3 (mq 0.0 sig 1.3 ref 3.5 cln 2.5 out 1.8) | deq 0.0 dwt 25.4 (h 17.1 v 8.3) mct 0.0 fin 11.5 pack 0.0 | blocks 180 passes s/r/c 235/235/415 cw 34467B
+# structures-p1-l0: 2157x3189 in=40242B CodSegment { progression_order: Lrcp, layers: 1, use_mct: true, decomposition_levels: 5, code_block_width: 64, code_block_height: 64, code_block_style: CodeBlockStyle { bypass: false, reset_contexts: false, terminate_each_pass: false, vertical_causal: false, predictable_termination: false, segmentation_symbols: false }, transform: Irreversible97, uses_precincts: false, sop_markers: false, eph_markers: false, precinct_sizes: [] }
+structures-p1-l0         0  2157x3189    131.54   133.13    96.09    97.26    155.0    212.2  1.369
+#   hayro lvl0 (per run): parse 0.0 t2 0.7 t1 35.3 idwt 47.3 store 17.3 mct 4.1 shift 4.8
+#   jp2lam lvl0 (packed): total 131.5 | t2 setup 0.1 hdr 0.1 | t1 18.8 (mq 0.0 sig 6.6 ref 2.0 cln 6.0 out 3.4) | deq 0.0 dwt 74.4 (h 51.0 v 23.4) mct 0.0 fin 33.4 pack 0.0 | blocks 275 passes s/r/c 438/407/608 cw 39189B
+structures-p1-l0         1  1079x1595     39.90    42.01    24.56    25.15    122.9    205.3  1.671
+#   hayro lvl1 (per run): parse 0.0 t2 0.6 t1 13.8 idwt 8.6 store 3.6 mct 1.1 shift 0.8
+#   jp2lam lvl1 (packed): total 42.4 | t2 setup 0.1 hdr 0.1 | t1 16.2 (mq 0.0 sig 6.2 ref 2.0 cln 6.0 out 1.4) | deq 0.0 dwt 15.9 (h 11.2 v 4.7) mct 0.0 fin 9.0 pack 0.0 | blocks 264 passes s/r/c 427/397/596 cw 39189B

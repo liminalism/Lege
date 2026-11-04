@@ -10,7 +10,9 @@ pub(crate) mod scalar;
 #[cfg(feature = "simd")]
 pub(crate) mod wide;
 
-#[cfg(all(feature = "simd", any(target_arch = "x86", target_arch = "x86_64")))]
+/// The x86 overrides use `std::arch` only, so they are available without the
+/// `simd` feature (the renderer builds this crate with default features off).
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 pub(crate) mod x86;
 
 pub(crate) type AnalyzeI32Fn = fn(&[i32]) -> (u32, usize);
@@ -22,6 +24,7 @@ pub(crate) type RctComponentFn = fn(&[i32], &[i32], &[i32], usize, i32, &mut [i3
 pub(crate) type InverseIctFn = fn(&mut [f32], &mut [f32], &mut [f32]);
 pub(crate) type InverseRctFn = fn(&mut [i32], &mut [i32], &mut [i32]);
 pub(crate) type DwtF32Fn = fn(&mut [f32], usize, usize, u8) -> crate::error::Result<()>;
+pub(crate) type DwtF32OwnedFn = fn(Vec<f32>, usize, usize, u8) -> crate::error::Result<Vec<f32>>;
 pub(crate) type DwtI32Fn = fn(&mut [i32], usize, usize, u8) -> crate::error::Result<()>;
 
 #[derive(Clone, Copy)]
@@ -31,6 +34,38 @@ pub(crate) struct Primitives {
     pub quant: QuantPrimitives,
     pub color: ColorPrimitives,
     pub backend: &'static str,
+    /// Row-kernel flavour for the streaming inverse DWT and the packed row
+    /// packer, which dispatch per row rather than through this table.
+    pub kernel: Kernel,
+}
+
+/// Which implementation of the per-row kernels (DWT lifting, scaling,
+/// interleave, colour pack) runs. Every flavour produces bit-identical
+/// results; they differ only in vector width.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Kernel {
+    Scalar,
+    /// Portable `wide` kernels (two 128-bit halves on a baseline x86 build).
+    Wide,
+    /// `#[target_feature(enable = "avx2")]` kernels, selected at runtime on
+    /// x86 after feature detection.
+    Avx2,
+}
+
+impl Kernel {
+    /// Every flavour this build can run on this machine, for equivalence
+    /// tests.
+    #[cfg(test)]
+    pub(crate) fn available() -> Vec<Kernel> {
+        let mut kernels = vec![Kernel::Scalar];
+        #[cfg(feature = "simd")]
+        kernels.push(Kernel::Wide);
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        if std::arch::is_x86_feature_detected!("avx2") {
+            kernels.push(Kernel::Avx2);
+        }
+        kernels
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -41,6 +76,8 @@ pub(crate) struct AnalyzePrimitives {
 #[derive(Clone, Copy)]
 pub(crate) struct DwtPrimitives {
     pub inverse_97_2d: DwtF32Fn,
+    /// Streaming inverse 9/7 over an owned plane (no copy back).
+    pub inverse_97_2d_owned: DwtF32OwnedFn,
     pub inverse_53_2d: DwtI32Fn,
 }
 
@@ -67,10 +104,8 @@ pub(crate) fn active_backend() -> &'static str {
 }
 
 fn select_primitives() -> Primitives {
-    #[cfg(feature = "simd")]
+    #[allow(unused_mut)]
     let mut primitives = scalar::primitives();
-    #[cfg(not(feature = "simd"))]
-    let primitives = scalar::primitives();
     let mode = std::env::var("JP2LAM_PRIMITIVES")
         .unwrap_or_else(|_| "auto".to_string())
         .to_ascii_lowercase();
@@ -84,7 +119,7 @@ fn select_primitives() -> Primitives {
         wide::setup(&mut primitives);
     }
 
-    #[cfg(all(feature = "simd", any(target_arch = "x86", target_arch = "x86_64")))]
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     if matches!(mode.as_str(), "auto" | "simd" | "x86" | "avx2") {
         x86::setup(&mut primitives, &mode);
     }

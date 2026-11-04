@@ -1,0 +1,52 @@
+# Round 2 (2026-11-04, later the same day): Tier-1 indexing arms and the `simd` feature.
+# Host under load (Android Studio indexing at ~40 % of the machine throughout; the quiet
+# baselines of serial-20261104.txt are ~20 % lower). Serial, P-core pinned,
+# RAYON_NUM_THREADS=1, min ms per layer over interleaved rounds (A, B, C, A, B, C, ...).
+#
+# A = committed 377ee045 kernels (checked indexing on the padded flag grid)
+# B = A with get_unchecked on every hot flag/sample access (experiment, not committed)
+# C = StripeRows: per-stripe slices of exact length (committed)
+
+## 2 rounds x 15 iterations
+cm-p0-l0 lvl0 A min 191.55 runs: 191.55 207.77
+cm-p0-l0 lvl0 B min 196.85 runs: 214.90 196.85
+cm-p0-l0 lvl0 C min 205.66 runs: 348.63 205.66
+cm-p0-l0 lvl1 A min 102.33 runs: 102.33 107.48
+cm-p0-l0 lvl1 B min 104.74 runs: 108.06 104.74
+cm-p0-l0 lvl1 C min 103.53 runs: 149.29 103.53
+structures-p0-l0 lvl0 A min 126.81 runs: 131.55 126.81
+structures-p0-l0 lvl0 B min 110.48 runs: 134.07 110.48
+structures-p0-l0 lvl0 C min 106.71 runs: 122.81 106.71
+structures-p0-l0 lvl1 A min 72.87 runs: 93.68 72.87
+structures-p0-l0 lvl1 B min 69.56 runs: 113.13 69.56
+structures-p0-l0 lvl1 C min 65.31 runs: 72.42 65.31
+
+## 4 rounds x 9 iterations
+cm-p0-l0 lvl0 A min 214.69 runs: 214.69 220.51 230.72 225.50
+cm-p0-l0 lvl0 B min 205.57 runs: 205.57 224.38 230.35 221.39
+cm-p0-l0 lvl0 C min 206.01 runs: 206.01 223.70 219.66 224.67
+cm-p0-l0 lvl1 A min 106.14 runs: 106.14 109.23 114.05 109.31
+cm-p0-l0 lvl1 B min 100.68 runs: 100.68 107.31 111.29 104.01
+cm-p0-l0 lvl1 C min 104.37 runs: 109.31 106.68 107.14 104.37
+structures-p0-l0 lvl0 A min 107.21 runs: 107.21 119.49 129.46 125.45
+structures-p0-l0 lvl0 B min 115.37 runs: 115.37 125.27 128.45 122.09
+structures-p0-l0 lvl0 C min 120.77 runs: 133.44 122.00 120.77 124.64
+structures-p0-l0 lvl1 A min 67.56 runs: 67.56 70.53 72.46 68.52
+structures-p0-l0 lvl1 B min 70.24 runs: 70.24 73.90 72.36 70.92
+structures-p0-l0 lvl1 C min 67.34 runs: 71.90 67.34 69.90 70.69
+
+# `simd` feature: C = jp2lam with `simd` (bench default), D = without. 3 rounds x 9 iterations.
+cm-p0-l0 lvl0 C min 200.19 runs: 200.19 205.49 204.51
+cm-p0-l0 lvl0 D min 186.15 runs: 215.47 210.56 186.15
+cm-p0-l0 lvl1 C min 101.73 runs: 105.68 101.73 104.79
+cm-p0-l0 lvl1 D min 93.62 runs: 110.97 105.41 93.62
+structures-p0-l0 lvl0 C min 109.13 runs: 142.31 109.13 110.26
+structures-p0-l0 lvl0 D min 99.72 runs: 113.79 117.00 99.72
+structures-p0-l0 lvl1 C min 66.76 runs: 100.72 68.12 66.76
+structures-p0-l0 lvl1 D min 62.80 runs: 71.23 68.12 62.80
+
+# Adapter, 144 DPI serial, harness env, pages 0-99, median ms/page (first page cold in brackets),
+# renderer built with the root manifest's jp2lam line with / without `features = ["simd"]`,
+# interleaved nosimd, simd, nosimd, simd:
+nosimd chinese-medicine 158.4 (376) / 157.4 (364)     simd 164.3 (407) / 154.1 (368)
+nosimd Structures       115.2 (207) / 116.5 (197)     simd 117.9 (195) / 115.0 (191)

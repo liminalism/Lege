@@ -1,0 +1,81 @@
+stream                 lvl         out   jp2min   jp2med   haymin   haymed  jp2MB/s  hayMB/s  ratio
+# cm-p0-l0 lvl0: jp2lam raster hash b7b3edd7b51500fa
+cm-p0-l0                 0  2929x4424    166.51   169.91   246.49   252.42    228.8    154.0  0.673
+# cm-p0-l0 lvl1: jp2lam raster hash d19f1e207af55fcc
+cm-p0-l0                 1  1465x2212     82.35    84.37    91.48    94.14    115.2    103.3  0.896
+# cm-p0-l1 lvl0: jp2lam raster hash 494a8756365d83bd
+cm-p0-l1                 0  2929x4424    151.58   153.79   235.75   237.95    252.8    163.4  0.646
+# cm-p0-l1 lvl1: jp2lam raster hash 115f82499ae0cc13
+cm-p0-l1                 1  1465x2212     75.40    76.75    87.81    88.67    126.7    109.6  0.865
+# cm-p1-l0 lvl0: jp2lam raster hash 8341191103f195ca
+cm-p1-l0                 0  2364x4162     72.44    72.85   141.97   148.49    405.2    198.8  0.491
+# cm-p1-l0 lvl1: jp2lam raster hash 58b4a7b88af8efdf
+cm-p1-l0                 1  1182x2081     19.50    20.17    33.73    34.74    365.8    212.4  0.581
+# cm-p1-l1 lvl0: jp2lam raster hash 8f99e3c76492164d
+cm-p1-l1                 0  2364x4162     68.24    69.73   143.68   144.55    423.3    204.2  0.482
+# cm-p1-l1 lvl1: jp2lam raster hash 720ddceb858ad7e7
+cm-p1-l1                 1  1182x2081     15.52    16.29    29.56    31.70    452.9    232.8  0.514
+# cm-p100-l0 lvl0: jp2lam raster hash 82d5c6efe28e8a34
+cm-p100-l0               0  2586x4212     93.16    98.16   168.46   178.09    332.9    183.5  0.551
+# cm-p100-l0 lvl1: jp2lam raster hash 61d6f5ecc8fb6e66
+cm-p100-l0               1  1293x2106     33.76    33.99    46.76    47.08    240.3    173.5  0.722
+# cm-p100-l1 lvl0: jp2lam raster hash 8ceb9a0fa356dfd7
+cm-p100-l1               0  2586x4212     86.66    87.84   168.16   170.72    372.0    191.4  0.515
+# cm-p100-l1 lvl1: jp2lam raster hash fb0eeb63042cc499
+cm-p100-l1               1  1293x2106     26.61    27.35    41.09    41.86    298.7    195.2  0.653
+# cm-p2-l0 lvl0: jp2lam raster hash e758b1efbcf47ec3
+cm-p2-l0                 0  2364x4162     69.74    72.81   146.13   147.76    405.4    199.8  0.493
+# cm-p2-l0 lvl1: jp2lam raster hash f9e7b5fda234142c
+cm-p2-l0                 1  1182x2081     18.04    18.54    32.62    33.03    398.1    223.4  0.561
+# cm-p2-l1 lvl0: jp2lam raster hash 3bf5c4795e7f1624
+cm-p2-l1                 0  2364x4162    137.21   140.41   198.72   202.83    210.2    145.5  0.692
+# cm-p2-l1 lvl1: jp2lam raster hash ade0c17c3e70b6bd
+cm-p2-l1                 1  1182x2081     82.32    84.08    84.12    85.90     87.8     85.9  0.979
+# cm-p300-l0 lvl0: jp2lam raster hash 449081e798c4681e
+cm-p300-l0               0  2586x4212     84.81    88.49   162.77   166.85    369.3    195.8  0.530
+# cm-p300-l0 lvl1: jp2lam raster hash 4bc735b67f122f4f
+cm-p300-l0               1  1293x2106     26.96    27.58    40.98    42.16    296.2    193.8  0.654
+# cm-p300-l1 lvl0: jp2lam raster hash 9a296efbd0ac9caa
+cm-p300-l1               0  2586x4212     92.02    97.69   174.96   177.90    334.5    183.7  0.549
+# cm-p300-l1 lvl1: jp2lam raster hash ebe44571368a6ba5
+cm-p300-l1               1  1293x2106     32.18    32.90    44.87    45.75    248.3    178.5  0.719
+# structures-p0-l0 lvl0: jp2lam raster hash e2b43cd1f8bbf879
+structures-p0-l0         0  2222x3191     92.33    93.20   133.33   137.04    228.2    155.2  0.680
+# structures-p0-l0 lvl1: jp2lam raster hash 87c6a263f68283a9
+structures-p0-l0         1  1111x1596     52.49    52.91    56.19    57.27    100.5     92.9  0.924
+# structures-p0-l1 lvl0: jp2lam raster hash 0c3f5ebd9425dde6
+structures-p0-l1         0  2222x3191     50.44    51.82    99.77   102.23    410.5    208.1  0.507
+# structures-p0-l1 lvl1: jp2lam raster hash 3ffbf99cf26f6ba0
+structures-p0-l1         1  1111x1596     14.14    14.50    23.57    24.93    366.8    213.4  0.582
+# structures-p1-l0 lvl0: jp2lam raster hash 7dc7e2ba987d0e7b
+structures-p1-l0         0  2157x3189     51.96    53.03    98.67   100.26    389.2    205.8  0.529
+# structures-p1-l0 lvl1: jp2lam raster hash d9150984404a6d76
+structures-p1-l0         1  1079x1595     16.37    16.65    24.97    26.45    310.1    195.2  0.629
+# structures-p1-l1 lvl0: jp2lam raster hash 786511f52a03e3a6
+structures-p1-l1         0  2157x3189     50.62    51.42    98.39    99.96    401.3    206.4  0.514
+# structures-p1-l1 lvl1: jp2lam raster hash ea71dd2089d7418f
+structures-p1-l1         1  1079x1595     14.31    14.83    23.70    24.35    348.0    212.0  0.609
+# structures-p100-l0 lvl0: jp2lam raster hash 6cab56d1cc06fd37
+structures-p100-l0       0   698x1018      4.25     4.36     7.82     8.06    489.3    264.5  0.541
+# structures-p100-l0 lvl1: jp2lam raster hash 71f51639c7824de5
+structures-p100-l0       1   349x509       1.08     1.32     1.74     1.96    402.2    271.9  0.676
+# structures-p100-l1 lvl0: jp2lam raster hash 47486288b470425d
+structures-p100-l1       0  2096x3056     41.81    42.47    87.29    88.37    452.5    217.5  0.481
+# structures-p100-l1 lvl1: jp2lam raster hash 01d4ba2ba4548567
+structures-p100-l1       1  1048x1528     11.49    11.66    20.00    21.37    412.2    224.8  0.545
+# structures-p2-l0 lvl0: jp2lam raster hash c28af472b989b74d
+structures-p2-l0         0  2202x3082     52.27    53.88    98.36   100.23    377.8    203.1  0.538
+# structures-p2-l0 lvl1: jp2lam raster hash 84d8a5b6aa2dea6e
+structures-p2-l0         1  1101x1541     16.36    16.82    25.25    25.94    302.5    196.2  0.649
+# structures-p2-l1 lvl0: jp2lam raster hash b1d5e3da82e69cc9
+structures-p2-l1         0  2202x3082     48.06    49.39    95.44    97.91    412.2    207.9  0.504
+# structures-p2-l1 lvl1: jp2lam raster hash 8e33ae77b93f873b
+structures-p2-l1         1  1101x1541     12.54    12.68    22.10    22.58    401.3    225.4  0.562
+# structures-p300-l0 lvl0: jp2lam raster hash 6f367daae9d03d4e
+structures-p300-l0       0   699x1017      4.34     4.51     7.73     8.04    472.7    265.1  0.561
+# structures-p300-l0 lvl1: jp2lam raster hash dc2775f19da82865
+structures-p300-l0       1   350x509       1.33     1.45     1.97     2.25    369.1    237.7  0.644
+# structures-p300-l1 lvl0: jp2lam raster hash 3b0d938cf08aa704
+structures-p300-l1       0  2099x3055     43.26    44.62    89.80    91.84    431.2    209.5  0.486
+# structures-p300-l1 lvl1: jp2lam raster hash 97eefd0456da0010
+structures-p300-l1       1  1050x1528     11.17    11.59    20.62    21.17    415.3    227.4  0.548

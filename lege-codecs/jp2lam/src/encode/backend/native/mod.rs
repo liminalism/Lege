@@ -5,9 +5,9 @@ mod backend;
 // under `#[cfg(test)]` as a tested reference implementation of the
 // pre-Phase-5 layout/analyze/encode/packet path.
 #[cfg(test)]
-mod layout;
+pub(crate) mod layout;
 mod rate;
-mod t1;
+pub(crate) mod t1;
 mod t2;
 
 pub(crate) use backend::{

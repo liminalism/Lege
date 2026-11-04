@@ -1,10 +1,12 @@
 //! x86 runtime dispatch layer for primitive kernels.
 //!
-//! This mirrors the bpg-rs shape: portable `wide` kernels are installed first,
-//! then x86-specific kernels may overwrite individual entries when runtime CPU
-//! feature detection proves they are available. No AVX2 overrides are installed
-//! yet because the current measured `wide` kernels did not beat scalar on the
-//! synthetic benchmark.
+//! This mirrors the bpg-rs shape: portable `wide` kernels are installed first
+//! (with the `simd` feature), then x86-specific kernels may overwrite
+//! individual entries when runtime CPU feature detection proves they are
+//! available. The AVX2 overrides are the per-row kernels of the streaming
+//! inverse 9/7 and the packed row packer (`Kernel::Avx2`), where 256-bit lanes
+//! are a measured win over `wide`'s two 128-bit halves; they depend only on
+//! `std::arch`, so they are installed with or without the `simd` feature.
 
 use super::Primitives;
 
@@ -30,9 +32,27 @@ fn avx2_available() -> bool {
 
 mod avx2 {
     use super::Primitives;
+    use crate::simd::Kernel;
 
-    pub(super) fn setup(_primitives: &mut Primitives) {
-        // Intentionally empty until a post-wide flamegraph identifies a kernel
-        // where hand-written AVX2 is a measured win.
+    pub(super) fn setup(primitives: &mut Primitives) {
+        primitives.dwt.inverse_97_2d_owned = inverse_97_2d_owned;
+        primitives.kernel = Kernel::Avx2;
+        primitives.backend = "avx2";
+    }
+
+    fn inverse_97_2d_owned(
+        data: Vec<f32>,
+        width: usize,
+        height: usize,
+        levels: u8,
+    ) -> crate::error::Result<Vec<f32>> {
+        Ok(crate::dwt::inverse_97_2d_even(
+            data,
+            width,
+            height,
+            levels,
+            Kernel::Avx2,
+            None,
+        ))
     }
 }

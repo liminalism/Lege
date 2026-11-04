@@ -9,6 +9,8 @@ mod jp2_parse;
 pub(crate) mod reconstruct;
 mod stats;
 pub(crate) mod t1;
+#[cfg(test)]
+mod t1_reference;
 pub(crate) mod t2;
 
 use crate::error::Result;
@@ -349,8 +351,33 @@ impl Jp2Decoder {
         let thread_count = decode_thread_count(request.concurrency)?;
         run_with_decode_workers(thread_count, |worker_count| {
             self.scratch.tier1_workers = worker_count;
-            decode_jp2_request_with_scratch(bytes, request, &mut self.scratch)
+            let mut stats = StatsSink::disabled();
+            decode_jp2_request_with_scratch(bytes, request, &mut self.scratch, &mut stats)
         })
+    }
+
+    /// [`Self::decode`] with decoder-internal stage attribution.
+    ///
+    /// Stage timers run on the request's own path (packed direct output,
+    /// reduced resolution, region), unlike [`decode_jp2_with_stats`], which
+    /// profiles the compatibility planar decode. Tier-1 runs serially while
+    /// profiling so per-pass timings form one timeline.
+    pub fn decode_with_stats(
+        &mut self,
+        bytes: &[u8],
+        request: &DecodeRequest,
+    ) -> Result<(DecodeResult, Jp2DecodeStats)> {
+        validate_decode_request(request)?;
+        validate_input_bytes(bytes.len(), &request.limits)?;
+        let mut stats = Jp2DecodeStats::default();
+        let total_start = std::time::Instant::now();
+        let result = {
+            let mut sink = StatsSink::enabled(&mut stats);
+            self.scratch.tier1_workers = 1;
+            decode_jp2_request_with_scratch(bytes, request, &mut self.scratch, &mut sink)?
+        };
+        stats.total_ns = u64::try_from(total_start.elapsed().as_nanos()).unwrap_or(u64::MAX);
+        Ok((result, stats))
     }
 
     /// Decode into a caller-owned packed buffer.
@@ -525,7 +552,8 @@ pub fn decode_jp2_request(bytes: &[u8], request: &DecodeRequest) -> Result<Decod
     let mut scratch = DecodeScratch::new();
     run_with_decode_workers(thread_count, |worker_count| {
         scratch.tier1_workers = worker_count;
-        decode_jp2_request_with_scratch(bytes, request, &mut scratch)
+        let mut stats = StatsSink::disabled();
+        decode_jp2_request_with_scratch(bytes, request, &mut scratch, &mut stats)
     })
 }
 
@@ -643,6 +671,7 @@ fn decode_jp2_request_with_scratch(
     bytes: &[u8],
     request: &DecodeRequest,
     scratch: &mut DecodeScratch,
+    stats: &mut StatsSink<'_>,
 ) -> Result<DecodeResult> {
     if request.region.is_some() {
         return decode_region_request(bytes, request, scratch);
@@ -656,26 +685,34 @@ fn decode_jp2_request_with_scratch(
             scratch,
             request.ignore_container_palette,
             &request.limits,
+            stats,
         )? {
             return Ok(DecodeResult::Raster(raster));
         }
     }
-    let mut stats = StatsSink::disabled();
     let image = decode_jp2_impl(
         bytes,
         request.resolution,
         None,
-        &mut stats,
+        stats,
         scratch,
         request.ignore_container_palette,
         &request.limits,
     )?;
     match request.output {
         DecodeOutputFormat::NativePlanarI32 => Ok(DecodeResult::Native(image)),
-        format => Ok(DecodeResult::Raster(pack_image_8bit(&image, format)?)),
+        format => {
+            let pack_start = stats.start();
+            let raster = pack_image_8bit(&image, format)?;
+            stats.finish(pack_start, |stats, elapsed| {
+                stats.output_pack_ns = stats.output_pack_ns.saturating_add(elapsed);
+            });
+            Ok(DecodeResult::Raster(raster))
+        }
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn decode_packed_direct(
     bytes: &[u8],
     resolution: DecodeResolution,
@@ -684,9 +721,9 @@ fn decode_packed_direct(
     scratch: &mut DecodeScratch,
     ignore_container_palette: bool,
     limits: &DecodeLimits,
+    stats: &mut StatsSink<'_>,
 ) -> Result<Option<DecodedRaster>> {
-    let mut stats = StatsSink::disabled();
-    let core = parse_jp2_core(bytes, &mut stats, ignore_container_palette, true, limits)?;
+    let core = parse_jp2_core(bytes, stats, ignore_container_palette, true, limits)?;
     let Some(parameters) = packed_direct_parameters(&core, resolution, format)? else {
         return Ok(None);
     };
@@ -709,7 +746,7 @@ fn decode_packed_direct(
         canvas_y0,
         &mut data,
         stride,
-        &mut stats,
+        stats,
     )?;
 
     Ok(Some(DecodedRaster {
@@ -1053,6 +1090,7 @@ fn decode_region_request(
             scratch,
             request.ignore_container_palette,
             &request.limits,
+            &mut StatsSink::disabled(),
         )? {
             return Ok(DecodeResult::Raster(raster));
         }

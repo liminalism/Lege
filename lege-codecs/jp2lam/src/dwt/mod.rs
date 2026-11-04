@@ -2,6 +2,7 @@ mod irrev97;
 pub(crate) mod norms;
 pub(crate) mod pcrd;
 mod rev53;
+mod stream97;
 
 #[derive(Debug, Default)]
 pub(crate) struct InverseDwtTiming {
@@ -37,7 +38,6 @@ pub(crate) use irrev97::forward_97_2d_in_place_at;
 pub(crate) use irrev97::forward_97_2d_in_place_wide;
 pub(crate) use irrev97::inverse_97_2d_in_place;
 pub(crate) use irrev97::inverse_97_2d_in_place_at;
-pub(crate) use irrev97::inverse_97_2d_in_place_profiled;
 #[cfg(feature = "simd")]
 pub(crate) use irrev97::inverse_97_2d_in_place_wide;
 #[cfg(all(test, feature = "simd"))]
@@ -50,3 +50,4 @@ pub(crate) use rev53::inverse_53_2d_in_place_at;
 pub(crate) use rev53::inverse_53_2d_in_place_profiled;
 #[cfg(feature = "simd")]
 pub(crate) use rev53::inverse_53_2d_in_place_wide;
+pub(crate) use stream97::{SynthesisPrefix, inverse_97_2d_even, inverse_97_2d_even_but_last};
