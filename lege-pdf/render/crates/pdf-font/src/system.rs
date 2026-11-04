@@ -259,13 +259,19 @@ struct FaceEntry {
 /// A [`SystemFontProvider`] backed by scanning font directories — the
 /// analogue of PDFium's `CFX_FolderFontInfo`.
 ///
-/// The index (family → faces) is built once at construction from the fonts'
-/// `name` tables; file *contents* are read lazily on a hit and then cached,
-/// so an engine that never needs a system font never reads one.
+/// The index (family → faces) is built once, on the first lookup, from the
+/// fonts' `name` and `OS/2` tables, and only those tables are read from each
+/// file; file *contents* are read on a hit and then cached. An engine that
+/// never asks for a system font never touches the font directories at all,
+/// and one that does pays a few small reads per installed file rather than
+/// reading every font on the machine (a Windows font directory is several
+/// hundred megabytes).
 #[derive(Debug)]
 pub struct FolderFontProvider {
-    /// Normalized family name → the faces under it.
-    families: HashMap<String, Vec<FaceEntry>>,
+    /// Directories to scan, in order.
+    roots: Vec<PathBuf>,
+    /// Normalized family name → the faces under it; built on first use.
+    families: std::sync::OnceLock<HashMap<String, Vec<FaceEntry>>>,
     /// Loaded programs, keyed by path.
     cache: RwLock<HashMap<PathBuf, Option<Arc<[u8]>>>>,
     /// Cap on a single font file, so a hostile file cannot exhaust memory.
@@ -281,36 +287,45 @@ impl FolderFontProvider {
         Self::with_paths(&default_font_paths())
     }
 
-    /// Scan explicit directories (tests, sandboxes, an app's own font dir).
+    /// Index explicit directories (tests, sandboxes, an app's own font dir).
+    /// Nothing is read until the first lookup.
     pub fn with_paths(paths: &[PathBuf]) -> FolderFontProvider {
-        let mut families: HashMap<String, Vec<FaceEntry>> = HashMap::new();
-        for root in paths {
-            scan_dir(root, 0, &mut families);
-        }
-        // Deterministic order within a family, so repeated runs on one
-        // machine pick the same face.
-        for faces in families.values_mut() {
-            faces.sort_by(|a, b| (&a.path, a.index).cmp(&(&b.path, b.index)));
-        }
         FolderFontProvider {
-            families,
+            roots: paths.to_vec(),
+            families: std::sync::OnceLock::new(),
             cache: RwLock::new(HashMap::new()),
             max_font_bytes: DEFAULT_MAX_FONT_BYTES,
         }
     }
 
-    /// Number of indexed families (diagnostics/tests).
+    /// The family index, scanning the roots on first use.
+    fn families(&self) -> &HashMap<String, Vec<FaceEntry>> {
+        self.families.get_or_init(|| {
+            let mut families: HashMap<String, Vec<FaceEntry>> = HashMap::new();
+            for root in &self.roots {
+                scan_dir(root, 0, &mut families);
+            }
+            // Deterministic order within a family, so repeated runs on one
+            // machine pick the same face.
+            for faces in families.values_mut() {
+                faces.sort_by(|a, b| (&a.path, a.index).cmp(&(&b.path, b.index)));
+            }
+            families
+        })
+    }
+
+    /// Number of indexed families (diagnostics/tests). Builds the index.
     pub fn family_count(&self) -> usize {
-        self.families.len()
+        self.families().len()
     }
 
     /// True if a family is present, by its normalized name.
     pub fn has_family(&self, name: &str) -> bool {
-        self.families.contains_key(&normalize(name.as_bytes()))
+        self.families().contains_key(&normalize(name.as_bytes()))
     }
 
     fn pick(&self, family: &str, bold: bool, italic: bool) -> Option<SystemFont> {
-        let faces = self.families.get(&normalize(family.as_bytes()))?;
+        let faces = self.families().get(&normalize(family.as_bytes()))?;
         // Prefer an exact style, then anything in the family: a wrong weight
         // beats no glyphs at all.
         let best = faces
@@ -426,17 +441,112 @@ fn scan_dir(dir: &Path, depth: u32, out: &mut HashMap<String, Vec<FaceEntry>>) {
 }
 
 /// Read a font's family/style out of its `name` table and index it.
+///
+/// Only the table directory, the `name` table and the `OS/2` table are read
+/// from the file (for a collection, those of each face). A file the sparse
+/// reader cannot make sense of is handed to the whole-file path, which
+/// accepts exactly what skrifa accepts.
 fn index_font(path: &Path, out: &mut HashMap<String, Vec<FaceEntry>>) {
-    use skrifa::MetadataProvider;
-    use skrifa::raw::TableProvider;
-    use skrifa::raw::types::NameId;
-
-    let Ok(data) = std::fs::read(path) else {
-        return;
+    let faces = match sparse::read_faces(path) {
+        Some(faces) => faces,
+        None => match std::fs::read(path) {
+            Ok(data) => faces_from_bytes(&data),
+            Err(_) => return,
+        },
     };
-    // A collection holds several faces; index each family it names.
-    let Ok(file) = skrifa::raw::FileRef::new(&data) else {
-        return;
+    for face in faces {
+        out.entry(normalize(face.family.as_bytes()))
+            .or_default()
+            .push(FaceEntry {
+                path: path.to_path_buf(),
+                index: face.index,
+                bold: face.bold,
+                italic: face.italic,
+            });
+    }
+}
+
+/// What the index keeps about one face before it is keyed by family.
+struct FaceInfo {
+    index: u32,
+    family: String,
+    bold: bool,
+    italic: bool,
+}
+
+/// Family and style from a decoded `name` table and an optional `OS/2`.
+fn face_info(
+    index: u32,
+    name: &skrifa::raw::tables::name::Name<'_>,
+    os2: Option<&skrifa::raw::tables::os2::Os2<'_>>,
+) -> Option<FaceInfo> {
+    use skrifa::raw::types::NameId;
+    let name_of = |id: NameId| english_or_first(name, id);
+    // Prefer the typographic family, so "Noto Sans CJK JP Bold" indexes
+    // under "Noto Sans CJK JP" rather than as its own family.
+    let family =
+        name_of(NameId::TYPOGRAPHIC_FAMILY_NAME).or_else(|| name_of(NameId::FAMILY_NAME))?;
+    let subfamily = name_of(NameId::TYPOGRAPHIC_SUBFAMILY_NAME)
+        .or_else(|| name_of(NameId::SUBFAMILY_NAME))
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    // OS/2 is authoritative for style; the subfamily name is the backup.
+    let (mut bold, mut italic) = (false, false);
+    if let Some(os2) = os2 {
+        let sel = os2.fs_selection().bits();
+        italic = sel & 0x01 != 0;
+        bold = sel & 0x20 != 0;
+    }
+    bold |= subfamily.contains("bold");
+    italic |= subfamily.contains("italic") || subfamily.contains("oblique");
+    Some(FaceInfo {
+        index,
+        family,
+        bold,
+        italic,
+    })
+}
+
+/// The `name` record for `id` that skrifa's `english_or_first` would pick:
+/// en-US first, then any English, then a record without a language tag, then
+/// the first record.
+fn english_or_first(
+    name: &skrifa::raw::tables::name::Name<'_>,
+    id: skrifa::raw::types::NameId,
+) -> Option<String> {
+    let data = name.string_data();
+    let mut best_rank = -1;
+    let mut best = None;
+    for (i, record) in name
+        .name_record()
+        .iter()
+        .filter(|r| r.name_id() == id)
+        .enumerate()
+    {
+        let Ok(string) = record.string(data) else {
+            continue;
+        };
+        let rank = match (i, record.platform_id(), record.language_id()) {
+            (_, 3, 0x409) => return Some(string.to_string()),
+            (_, 3, lang) if lang & 0xff == 0x09 => 2,
+            (_, 1, 0) => 2,
+            (_, 0, _) => 1,
+            (0, _, _) => 0,
+            _ => continue,
+        };
+        if rank > best_rank {
+            best_rank = rank;
+            best = Some(string.to_string());
+        }
+    }
+    best
+}
+
+/// Whole-file indexing through skrifa (the sparse reader's fallback).
+fn faces_from_bytes(data: &[u8]) -> Vec<FaceInfo> {
+    use skrifa::raw::TableProvider;
+    let Ok(file) = skrifa::raw::FileRef::new(data) else {
+        return Vec::new();
     };
     let fonts: Vec<(u32, skrifa::FontRef)> = match file {
         skrifa::raw::FileRef::Font(f) => vec![(0, f)],
@@ -444,40 +554,97 @@ fn index_font(path: &Path, out: &mut HashMap<String, Vec<FaceEntry>>) {
             .filter_map(|i| c.get(i).ok().map(|f| (i, f)))
             .collect(),
     };
-    for (face_index, font) in fonts {
-        let name_of = |id: NameId| -> Option<String> {
-            font.localized_strings(id)
-                .english_or_first()
-                .map(|s| s.to_string())
+    fonts
+        .into_iter()
+        .filter_map(|(index, font)| {
+            let name = font.name().ok()?;
+            let os2 = font.os2().ok();
+            face_info(index, &name, os2.as_ref())
+        })
+        .collect()
+}
+
+/// Sparse sfnt reading: table directory, then just the tables the index needs.
+mod sparse {
+    use super::{FaceInfo, face_info};
+    use skrifa::raw::{FontData, FontRead};
+    use std::fs::File;
+    use std::io::{Read, Seek, SeekFrom};
+    use std::path::Path;
+
+    /// Largest `name` or `OS/2` table the index will read. Real tables are a
+    /// few kilobytes; a claimed length beyond this is corrupt or hostile.
+    const MAX_TABLE_BYTES: u32 = 1 << 20;
+    /// Faces in a collection beyond this are ignored.
+    const MAX_COLLECTION_FACES: u32 = 256;
+
+    fn read_at(file: &mut File, offset: u64, len: usize) -> Option<Vec<u8>> {
+        let mut buf = vec![0u8; len];
+        file.seek(SeekFrom::Start(offset)).ok()?;
+        file.read_exact(&mut buf).ok()?;
+        Some(buf)
+    }
+
+    fn u32_at(b: &[u8], at: usize) -> Option<u32> {
+        b.get(at..at + 4)
+            .map(|x| u32::from_be_bytes([x[0], x[1], x[2], x[3]]))
+    }
+
+    fn u16_at(b: &[u8], at: usize) -> Option<u16> {
+        b.get(at..at + 2).map(|x| u16::from_be_bytes([x[0], x[1]]))
+    }
+
+    /// Every face the file holds, or `None` if the file is not an sfnt the
+    /// sparse reader understands (the caller then reads it whole).
+    pub(super) fn read_faces(path: &Path) -> Option<Vec<FaceInfo>> {
+        let mut file = File::open(path).ok()?;
+        let head = read_at(&mut file, 0, 12)?;
+        let tag = u32_at(&head, 0)?;
+        let offsets: Vec<u32> = if tag == u32::from_be_bytes(*b"ttcf") {
+            let count = u32_at(&head, 8)?.min(MAX_COLLECTION_FACES) as usize;
+            let table = read_at(&mut file, 12, count * 4)?;
+            (0..count).filter_map(|i| u32_at(&table, i * 4)).collect()
+        } else {
+            vec![0]
         };
-        // Prefer the typographic family, so "Noto Sans CJK JP Bold" indexes
-        // under "Noto Sans CJK JP" rather than as its own family.
-        let family =
-            name_of(NameId::TYPOGRAPHIC_FAMILY_NAME).or_else(|| name_of(NameId::FAMILY_NAME));
-        let Some(family) = family else { continue };
-        let subfamily = name_of(NameId::TYPOGRAPHIC_SUBFAMILY_NAME)
-            .or_else(|| name_of(NameId::SUBFAMILY_NAME))
-            .unwrap_or_default()
-            .to_ascii_lowercase();
-
-        // OS/2 is authoritative for style; the subfamily name is the backup.
-        let (mut bold, mut italic) = (false, false);
-        if let Ok(os2) = font.os2() {
-            let sel = os2.fs_selection().bits();
-            italic = sel & 0x01 != 0;
-            bold = sel & 0x20 != 0;
+        let mut faces = Vec::with_capacity(offsets.len());
+        for (index, offset) in offsets.into_iter().enumerate() {
+            if let Some(face) = read_face(&mut file, index as u32, u64::from(offset)) {
+                faces.push(face);
+            }
         }
-        bold |= subfamily.contains("bold");
-        italic |= subfamily.contains("italic") || subfamily.contains("oblique");
+        Some(faces)
+    }
 
-        out.entry(normalize(family.as_bytes()))
-            .or_default()
-            .push(FaceEntry {
-                path: path.to_path_buf(),
-                index: face_index,
-                bold,
-                italic,
-            });
+    /// One face from the table directory at `offset`.
+    fn read_face(file: &mut File, index: u32, offset: u64) -> Option<FaceInfo> {
+        let header = read_at(file, offset, 12)?;
+        let version = u32_at(&header, 0)?;
+        // 0x00010000, 'OTTO', 'true'.
+        if !matches!(version, 0x0001_0000 | 0x4F54_544F | 0x7472_7565) {
+            return None;
+        }
+        let num_tables = usize::from(u16_at(&header, 4)?);
+        let directory = read_at(file, offset + 12, num_tables * 16)?;
+        let find = |tag: &[u8; 4]| -> Option<(u64, usize)> {
+            (0..num_tables).find_map(|i| {
+                let rec = directory.get(i * 16..i * 16 + 16)?;
+                if &rec[..4] != tag {
+                    return None;
+                }
+                let off = u32_at(rec, 8)?;
+                let len = u32_at(rec, 12)?;
+                (len > 0 && len <= MAX_TABLE_BYTES).then_some((u64::from(off), len as usize))
+            })
+        };
+        let (name_off, name_len) = find(b"name")?;
+        let name_bytes = read_at(file, name_off, name_len)?;
+        let name = skrifa::raw::tables::name::Name::read(FontData::new(&name_bytes)).ok()?;
+        let os2_bytes = find(b"OS/2").and_then(|(off, len)| read_at(file, off, len));
+        let os2 = os2_bytes
+            .as_deref()
+            .and_then(|b| skrifa::raw::tables::os2::Os2::read(FontData::new(b)).ok());
+        face_info(index, &name, os2.as_ref())
     }
 }
 
@@ -537,6 +704,56 @@ mod tests {
             Charset::ChineseTraditional
         );
         assert_eq!(Charset::from_font_name(b"TimesNewRoman"), Charset::Ansi);
+    }
+
+    /// The sparse reader must index every installed font exactly as the
+    /// whole-file reader does. On a machine without font directories this
+    /// checks nothing, which is the intended CI behaviour.
+    #[test]
+    fn sparse_index_matches_whole_file_index_on_installed_fonts() {
+        let mut files = Vec::new();
+        fn collect(dir: &Path, depth: u32, out: &mut Vec<PathBuf>) {
+            if depth > 8 {
+                return;
+            }
+            let Ok(entries) = std::fs::read_dir(dir) else {
+                return;
+            };
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    collect(&path, depth + 1, out);
+                } else if path.extension().and_then(|e| e.to_str()).is_some_and(|e| {
+                    matches!(
+                        e.to_ascii_lowercase().as_str(),
+                        "ttf" | "otf" | "ttc" | "otc"
+                    )
+                }) {
+                    out.push(path);
+                }
+            }
+        }
+        for root in default_font_paths() {
+            collect(&root, 0, &mut files);
+        }
+        let mut checked = 0usize;
+        for path in files {
+            let Ok(data) = std::fs::read(&path) else {
+                continue;
+            };
+            let whole: Vec<(u32, String, bool, bool)> = faces_from_bytes(&data)
+                .into_iter()
+                .map(|f| (f.index, f.family, f.bold, f.italic))
+                .collect();
+            let sparse: Vec<(u32, String, bool, bool)> = sparse::read_faces(&path)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|f| (f.index, f.family, f.bold, f.italic))
+                .collect();
+            assert_eq!(sparse, whole, "{}", path.display());
+            checked += 1;
+        }
+        eprintln!("sparse index verified against {checked} installed font files");
     }
 
     #[test]
