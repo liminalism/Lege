@@ -142,12 +142,13 @@ impl ImageCodec for Jbig2Codec {
             return Err(ImageError::TooLarge { width, height });
         }
 
-        // The decoder's MSB-first byte view is exactly the packed Mono1 layout
-        // the engine wants: `ceil(width / 8)` bytes per row, MSB = leftmost
-        // pixel. Its `set bit = black` polarity is the opposite of PDF's, so
-        // every byte is inverted here (black -> sample 0, white -> sample 1).
-        let packed = bitmap.as_msb_bytes();
-        let stride = packed.bytes_per_row();
+        // The decoder's rows are MSB-first `u32` words, so their big-endian
+        // bytes are exactly the packed Mono1 layout the engine wants:
+        // `ceil(width / 8)` bytes per row, MSB = leftmost pixel. Its
+        // `set bit = black` polarity is the opposite of PDF's, so every byte
+        // is inverted (black -> sample 0, white -> sample 1). Both happen in
+        // one pass straight into the shared output allocation.
+        let stride = (width as usize).div_ceil(8);
         let bytes = stride
             .checked_mul(height as usize)
             .ok_or_else(|| ImageError::Decode("JBIG2: size overflow".into()))?;
@@ -155,12 +156,22 @@ impl ImageCodec for Jbig2Codec {
             return Err(ImageError::TooLarge { width, height });
         }
 
-        let mut data = packed.to_vec();
-        for (index, b) in data.iter_mut().enumerate() {
-            if index & 0xffff == 0 && limits.is_cancelled() {
+        let mut data = zeroed_arc(bytes);
+        let Some(out) = Arc::get_mut(&mut data) else {
+            return Err(ImageError::Decode(
+                "JBIG2: output allocation unexpectedly became shared".into(),
+            ));
+        };
+        for (y, dst) in out.chunks_exact_mut(stride).enumerate() {
+            if y % 256 == 0 && limits.is_cancelled() {
                 return Err(ImageError::Cancelled);
             }
-            *b = !*b;
+            // A row holds `ceil(width / 32)` words; the last byte chunk may
+            // be shorter than a word.
+            for (d, &w) in dst.chunks_mut(4).zip(bitmap.row(y as u32)) {
+                let inverted = (!w).to_be_bytes();
+                d.copy_from_slice(&inverted[..d.len()]);
+            }
         }
 
         Ok(DecodedImage {
@@ -168,7 +179,7 @@ impl ImageCodec for Jbig2Codec {
             height,
             format: DecodedFormat::Mono1,
             stride,
-            data: Arc::from(data),
+            data,
         })
     }
 }
@@ -212,6 +223,16 @@ impl Jbig2Codec {
         }
         Ok(decoded)
     }
+}
+
+#[allow(
+    unsafe_code,
+    reason = "Arc::new_zeroed_slice hands back MaybeUninit; see SAFETY comment"
+)]
+fn zeroed_arc(len: usize) -> Arc<[u8]> {
+    let data = Arc::<[u8]>::new_zeroed_slice(len);
+    // SAFETY: `new_zeroed_slice` initialized every `u8` to a valid zero value.
+    unsafe { data.assume_init() }
 }
 
 fn lock_unpoisoned<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
