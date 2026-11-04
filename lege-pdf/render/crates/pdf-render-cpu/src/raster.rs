@@ -641,6 +641,21 @@ impl RasterKernel {
         }
 
         // --- Sweep rows, maintaining the index-sorted active list. ---
+        //
+        // Row repetition (run-aware mode only): when every active edge of a
+        // row is vertical and spans the whole row, each deposit is
+        // `accumulate(x, yf, x, yf + 1, dir)` — the same columns, the same
+        // `cover = ((yf + 1) - yf) * dir = dir` (exact for `y < 2^24`) and the
+        // same `x = x_at_top + (yf - y_top) * 0.0` (a zero of fixed sign, or
+        // NaN in every row alike) — so the next row with the same active set,
+        // still spanning it, accumulates bit-identical values in the same
+        // order and converts to the same cells, runs and span. Its cells are
+        // then kept in `cov` (`held`) and re-emitted instead of re-deposited
+        // and re-converted: the interior rows of a page-sized rectangle or of
+        // a stroked frame. Any change (an edge activating or retiring, an
+        // edge ending inside the row, a consumer that wrote the buffer)
+        // releases the held cells and computes the row normally.
+        let mut held: Option<(usize, usize)> = None;
         self.aet_active.clear();
         for lr in 0..bh {
             if lr & 0x0f == 0 && should_cancel.is_some_and(|cancel| cancel()) {
@@ -649,6 +664,7 @@ impl RasterKernel {
             let y = row_start + lr;
             let yf = y as f32;
             let yu = y as u32;
+            let prev_active = self.aet_active.len();
 
             // Merge row `lr`'s newly-activating edges into the active list,
             // dropping retired ones (er_end <= y), all order-preserving. Bucket
@@ -687,11 +703,40 @@ impl RasterKernel {
             }
             std::mem::swap(&mut self.aet_active, &mut self.aet_active_next);
 
+            if let Some((first, last)) = held {
+                // No activation and no retirement leaves the (index-sorted)
+                // active set unchanged; each edge must still span this row.
+                let repeat = b0 == b1
+                    && self.aet_active.len() == prev_active
+                    && self
+                        .aet_active
+                        .iter()
+                        .all(|&ei| self.edges[ei as usize].y_bot >= yf + 1.0);
+                if repeat {
+                    self.last_covered += (last - first + 1) as u64;
+                    if row(y, first, last, &mut self.cov, &self.row_runs) {
+                        for c in &mut self.cov[first..=last] {
+                            *c = 0;
+                        }
+                        held = None;
+                    }
+                    continue;
+                }
+                for r in &self.row_runs {
+                    if r.fill.is_none() {
+                        self.cov[r.x0 as usize..r.x1 as usize].fill(0);
+                    }
+                }
+                held = None;
+            }
+
             // Accumulate active edges in edge-index order — identical operands
             // and order to the reference's `for e in &self.edges` filtered loop.
             let active = std::mem::take(&mut self.aet_active);
             let mut col_min = width;
             let mut col_max = 0usize;
+            // Whether this row may be held for repetition (see above).
+            let mut all_vertical_full = runs_mode && y < (1 << 24);
             self.aet_touched.clear();
             for (active_index, &ei) in active.iter().enumerate() {
                 if active_index & 0xfff == 0 && should_cancel.is_some_and(|cancel| cancel()) {
@@ -701,6 +746,7 @@ impl RasterKernel {
                 let e = self.edges[ei as usize];
                 let ya = e.y_top.max(yf);
                 let yb = e.y_bot.min(yf + 1.0);
+                all_vertical_full &= e.dxdy == 0.0 && ya == yf && yb == yf + 1.0;
                 if yb <= ya {
                     continue;
                 }
@@ -750,6 +796,8 @@ impl RasterKernel {
                     for c in &mut self.cov[first..=last] {
                         *c = 0;
                     }
+                } else if all_vertical_full {
+                    held = Some((first, last));
                 } else {
                     // Only the cell runs were written (and may hold coverage).
                     for r in &self.row_runs {
@@ -757,6 +805,13 @@ impl RasterKernel {
                             self.cov[r.x0 as usize..r.x1 as usize].fill(0);
                         }
                     }
+                }
+            }
+        }
+        if held.is_some() {
+            for r in &self.row_runs {
+                if r.fill.is_none() {
+                    self.cov[r.x0 as usize..r.x1 as usize].fill(0);
                 }
             }
         }
@@ -1545,6 +1600,38 @@ mod tests {
             (vec![[0.0, 0.0], [1193.0, 24.0], [0.0, 24.0]], vec![(0, 3)]),
             // Compact window (fast path): one cell run per row.
             rect(3.25, 2.5, 40.75, 9.5),
+            // Row repetition: nested rects activating and retiring inside the
+            // band (integral and fractional), and a diagonal that interrupts
+            // the vertical-only rows for a while.
+            (
+                vec![
+                    [0.5, 0.0],
+                    [1192.5, 0.0],
+                    [1192.5, 24.0],
+                    [0.5, 24.0],
+                    [100.0, 5.0],
+                    [600.0, 5.0],
+                    [600.0, 12.3],
+                    [100.0, 12.3],
+                    [700.7, 9.0],
+                    [701.2, 9.0],
+                    [701.2, 17.0],
+                    [700.7, 17.0],
+                ],
+                vec![(0, 4), (4, 8), (8, 12)],
+            ),
+            (
+                vec![
+                    [2.0, 1.0],
+                    [1100.0, 1.0],
+                    [1100.0, 23.0],
+                    [2.0, 23.0],
+                    [300.0, 6.0],
+                    [340.0, 14.0],
+                    [320.0, 14.0],
+                ],
+                vec![(0, 4), (4, 7)],
+            ),
         ];
         let mut rng = Lcg(0x0BAD_C0DE_1357_9BDF);
         for _ in 0..40 {
