@@ -11,7 +11,8 @@ use crate::simd::PRIMITIVES;
 use rayon::prelude::*;
 
 use super::stats::StatsSink;
-use super::t1::DecodedTileCoefficients;
+use super::t1::{CoefficientPlane, DecodedTileCoefficients};
+use crate::dwt::SynthesisPrefix;
 
 /// Parallelize fused pack when the plane has at least this many samples.
 const FUSED_PACK_PARALLEL_SAMPLES: usize = 256 * 1024;
@@ -867,6 +868,22 @@ fn reconstruct_fused_packed_into(
 
     match header.cod.transform {
         WaveletTransform::Irreversible97 => {
+            let aux_u8 = match aux_tile {
+                Some(tile) => Some(reconstruct_aux_component_u8(header, tile, stats)?),
+                None => None,
+            };
+            if fused_final_level_applies(header, &colour_tiles, pixel_count, target) {
+                return reconstruct_irreversible_97_fused_pack(
+                    header,
+                    colour_tiles,
+                    aux_u8.as_deref(),
+                    apply_mct,
+                    layout,
+                    channels,
+                    target,
+                    stats,
+                );
+            }
             let mut planes = Vec::with_capacity(3);
             for tile in colour_tiles {
                 let (w, h) = (tile.width, tile.height);
@@ -878,10 +895,6 @@ fn reconstruct_fused_packed_into(
                     stats,
                 )?);
             }
-            let aux_u8 = match aux_tile {
-                Some(tile) => Some(reconstruct_aux_component_u8(header, tile, stats)?),
-                None => None,
-            };
             let start = stats.start();
             fuse_pack_f32_into(
                 &planes[0],
@@ -1047,75 +1060,191 @@ fn fuse_pack_f32_into(
     }
     let w = target.width;
     let h = target.height;
+    let stride = target.stride;
     let tight = target.source_x == 0
         && target.source_y == 0
         && w * h == pixel_count
         && target.origin_x == 0
         && target.origin_y == 0
-        && target.stride == w * channels
+        && stride == w * channels
         && pixel_count >= FUSED_PACK_PARALLEL_SAMPLES;
+    let row = PackRowParams {
+        apply_ict,
+        layout,
+        channels,
+    };
 
     if tight {
-        // Contiguous destination: coarse parallel pixel jobs.
-        let pixels_per_job = (pixel_count / rayon::current_num_threads().max(1) / 2).max(1024);
-        let active = pixel_count * channels;
-        target.data[..active]
-            .par_chunks_mut(pixels_per_job * channels)
+        // Contiguous destination: coarse parallel row jobs. With a one-thread
+        // executor this is one job on the calling thread.
+        let rows_per_job = h.div_ceil(rayon::current_num_threads().max(1) * 2).max(1);
+        target.data[..h * stride]
+            .par_chunks_mut(rows_per_job * stride)
             .enumerate()
             .for_each(|(job, chunk)| {
-                let base = job * pixels_per_job;
-                let n = chunk.len() / channels;
-                for x in 0..n {
-                    let i = base + x;
-                    let (r, g, b) = if apply_ict {
-                        ict_rgb_f32(y[i], cb[i], cr[i])
-                    } else {
-                        (
-                            finalize_centered_f32_u8(y[i]),
-                            finalize_centered_f32_u8(cb[i]),
-                            finalize_centered_f32_u8(cr[i]),
-                        )
-                    };
-                    let a = aux.map(|p| p[i]).unwrap_or(255);
-                    store_rgb_layout(
-                        &mut chunk[x * channels..(x + 1) * channels],
-                        layout,
-                        channels,
-                        r,
-                        g,
-                        b,
-                        a,
+                let first_row = job * rows_per_job;
+                for (k, out_row) in chunk.chunks_exact_mut(stride).enumerate() {
+                    let i0 = (first_row + k) * w;
+                    pack_row_f32(
+                        &y[i0..i0 + w],
+                        &cb[i0..i0 + w],
+                        &cr[i0..i0 + w],
+                        aux.map(|p| &p[i0..i0 + w]),
+                        row,
+                        out_row,
                     );
                 }
             });
     } else {
         for py in 0..h {
-            for px in 0..w {
-                let i = target.source_index(px, py, plane_width);
-                let (r, g, b) = if apply_ict {
-                    ict_rgb_f32(y[i], cb[i], cr[i])
-                } else {
-                    (
-                        finalize_centered_f32_u8(y[i]),
-                        finalize_centered_f32_u8(cb[i]),
-                        finalize_centered_f32_u8(cr[i]),
-                    )
-                };
-                let a = aux.map(|p| p[i]).unwrap_or(255);
-                let off = target.pixel_offset(px, py);
-                store_rgb_layout(
-                    &mut target.data[off..off + channels],
-                    layout,
-                    channels,
-                    r,
-                    g,
-                    b,
-                    a,
-                );
-            }
+            let i0 = target.source_index(0, py, plane_width);
+            let off = target.pixel_offset(0, py);
+            pack_row_f32(
+                &y[i0..i0 + w],
+                &cb[i0..i0 + w],
+                &cr[i0..i0 + w],
+                aux.map(|p| &p[i0..i0 + w]),
+                row,
+                &mut target.data[off..off + w * channels],
+            );
         }
     }
     Ok(())
+}
+
+#[derive(Clone, Copy)]
+struct PackRowParams {
+    apply_ict: bool,
+    layout: PackedLayout,
+    channels: usize,
+}
+
+/// Pack one row of centered `f32` colour samples (optionally through the
+/// inverse ICT) into `out`, which holds exactly `width * channels` bytes.
+///
+/// The arithmetic is the scalar [`ict_rgb_f32`] / [`finalize_centered_f32_u8`]
+/// sequence, evaluated eight pixels at a time with plain IEEE single
+/// multiplies and adds in the same order, so the bytes are identical to the
+/// scalar path. Only the final RGB(A) byte interleave is scalar.
+fn pack_row_f32(
+    y: &[f32],
+    cb: &[f32],
+    cr: &[f32],
+    aux: Option<&[u8]>,
+    params: PackRowParams,
+    out: &mut [u8],
+) {
+    let channels = params.channels;
+    let width = y.len();
+    debug_assert_eq!(out.len(), width * channels);
+    let mut x = 0usize;
+    #[cfg(feature = "simd")]
+    {
+        use wide::f32x8;
+        let lanes = |s: &[f32]| f32x8::new(s.try_into().expect("8 lanes"));
+        let c_r = f32x8::splat(1.402f32);
+        let c_g1 = f32x8::splat(0.344_13f32);
+        let c_g2 = f32x8::splat(0.714_14f32);
+        let c_b = f32x8::splat(1.772f32);
+        let shift = f32x8::splat(128.0);
+        let half = f32x8::splat(0.5);
+        let zero = f32x8::splat(0.0);
+        let max = f32x8::splat(255.0);
+        // `fast_max`/`fast_min` hand back the second operand on NaN, which is
+        // what `f32::clamp` followed by `as u32` yields too (zero).
+        let finalize = |v: f32x8| -> [i32; 8] {
+            ((v + shift + half).fast_max(zero).fast_min(max))
+                .fast_trunc_int()
+                .to_array()
+        };
+        while x + 8 <= width {
+            let yy = lanes(&y[x..x + 8]);
+            let cbb = lanes(&cb[x..x + 8]);
+            let crr = lanes(&cr[x..x + 8]);
+            let (r, g, b) = if params.apply_ict {
+                (
+                    yy + c_r * crr,
+                    (yy - c_g1 * cbb) - c_g2 * crr,
+                    yy + c_b * cbb,
+                )
+            } else {
+                (yy, cbb, crr)
+            };
+            let r = finalize(r);
+            let g = finalize(g);
+            let b = finalize(b);
+            let dst = &mut out[x * channels..(x + 8) * channels];
+            match (params.layout, channels) {
+                (PackedLayout::Sequential, 3) => {
+                    for k in 0..8 {
+                        dst[3 * k] = r[k] as u8;
+                        dst[3 * k + 1] = g[k] as u8;
+                        dst[3 * k + 2] = b[k] as u8;
+                    }
+                }
+                (PackedLayout::Sequential, 4) => {
+                    for k in 0..8 {
+                        dst[4 * k] = r[k] as u8;
+                        dst[4 * k + 1] = g[k] as u8;
+                        dst[4 * k + 2] = b[k] as u8;
+                        dst[4 * k + 3] = aux.map_or(255, |p| p[x + k]);
+                    }
+                }
+                (PackedLayout::Rgbx, _) => {
+                    for k in 0..8 {
+                        dst[4 * k] = r[k] as u8;
+                        dst[4 * k + 1] = g[k] as u8;
+                        dst[4 * k + 2] = b[k] as u8;
+                        dst[4 * k + 3] = 255;
+                    }
+                }
+                (PackedLayout::Bgra, _) => {
+                    for k in 0..8 {
+                        dst[4 * k] = b[k] as u8;
+                        dst[4 * k + 1] = g[k] as u8;
+                        dst[4 * k + 2] = r[k] as u8;
+                        dst[4 * k + 3] = aux.map_or(255, |p| p[x + k]);
+                    }
+                }
+                _ => {
+                    for k in 0..8 {
+                        store_rgb_layout(
+                            &mut dst[k * channels..(k + 1) * channels],
+                            params.layout,
+                            channels,
+                            r[k] as u8,
+                            g[k] as u8,
+                            b[k] as u8,
+                            aux.map_or(255, |p| p[x + k]),
+                        );
+                    }
+                }
+            }
+            x += 8;
+        }
+    }
+    while x < width {
+        let (r, g, b) = if params.apply_ict {
+            ict_rgb_f32(y[x], cb[x], cr[x])
+        } else {
+            (
+                finalize_centered_f32_u8(y[x]),
+                finalize_centered_f32_u8(cb[x]),
+                finalize_centered_f32_u8(cr[x]),
+            )
+        };
+        let a = aux.map_or(255, |p| p[x]);
+        store_rgb_layout(
+            &mut out[x * channels..(x + 1) * channels],
+            params.layout,
+            channels,
+            r,
+            g,
+            b,
+            a,
+        );
+        x += 1;
+    }
 }
 
 fn fuse_pack_i32_into(
@@ -1607,6 +1736,166 @@ fn inverse_rct_centered(planes: &mut [Vec<i32>]) -> Result<()> {
     Ok(())
 }
 
+/// Whether the three colour planes can take the fused finest-level path:
+/// lattice-aligned origin, at least one level, and every plane exactly the
+/// packed source geometry (one tile, no subsampling), so a row of each plane
+/// maps to one row of the target.
+fn fused_final_level_applies(
+    header: &CodestreamHeader,
+    colour_tiles: &[DecodedTileCoefficients],
+    pixel_count: usize,
+    target: &PackedWriteTarget<'_>,
+) -> bool {
+    let plane_width = header.siz.width as usize;
+    header.cod.decomposition_levels >= 1
+        && use_common_even_dwt(header)
+        && colour_tiles.len() == 3
+        && colour_tiles.iter().all(|tile| {
+            tile.width == plane_width
+                && tile.width > 0
+                && tile.height > 0
+                && tile.width * tile.height == pixel_count
+                && target.source_x + target.width <= tile.width
+                && target.source_y + target.height <= tile.height
+                && matches!(tile.plane, CoefficientPlane::Real(_))
+        })
+}
+
+/// Irreversible 9/7 to packed bytes without materialising the colour planes:
+/// every level but the finest runs per component into quarter-size buffers,
+/// then the finest level of all three components is synthesised row by row in
+/// lockstep and each row triple goes through the inverse ICT and byte packing
+/// straight out of the synthesis rings. The full-resolution planes are never
+/// written or read back, which removes six plane-sized memory passes.
+///
+/// Rows are banded across the Rayon pool when the target is contiguous (each
+/// band primes its own pipelines, see `dwt::stream97`), otherwise serial.
+#[allow(clippy::too_many_arguments)]
+fn reconstruct_irreversible_97_fused_pack(
+    header: &CodestreamHeader,
+    colour_tiles: Vec<DecodedTileCoefficients>,
+    aux: Option<&[u8]>,
+    apply_ict: bool,
+    layout: PackedLayout,
+    channels: usize,
+    target: &mut PackedWriteTarget<'_>,
+    stats: &mut StatsSink<'_>,
+) -> Result<()> {
+    let levels = header.cod.decomposition_levels;
+    let use_wide = PRIMITIVES.backend != "scalar";
+    let dwt_start = stats.start();
+    let plane_width = header.siz.width as usize;
+    let prefixes: Vec<SynthesisPrefix> = if stats.is_enabled() {
+        let mut prefixes = Vec::with_capacity(3);
+        for tile in colour_tiles {
+            let (w, h) = (tile.width, tile.height);
+            let mut timing = crate::dwt::InverseDwtTiming::default();
+            prefixes.push(crate::dwt::inverse_97_2d_even_but_last(
+                tile.into_real()?,
+                w,
+                h,
+                levels,
+                use_wide,
+                Some(&mut timing),
+            ));
+            record_dwt_breakdown(stats, timing);
+        }
+        prefixes
+    } else {
+        colour_tiles
+            .into_par_iter()
+            .map(|tile| {
+                let (w, h) = (tile.width, tile.height);
+                Ok(crate::dwt::inverse_97_2d_even_but_last(
+                    tile.into_real()?,
+                    w,
+                    h,
+                    levels,
+                    use_wide,
+                    None,
+                ))
+            })
+            .collect::<Result<Vec<_>>>()?
+    };
+    record_dwt_time(stats, dwt_start);
+    let [py, pcb, pcr] = <[SynthesisPrefix; 3]>::try_from(prefixes)
+        .map_err(|_| invalid("fused reconstruction expects three colour planes"))?;
+    let pixel_count = py.width() * py.height();
+    stats.update(|stats| {
+        stats.reconstructed_pixels = stats
+            .reconstructed_pixels
+            .saturating_add(3 * pixel_count as u64);
+    });
+
+    let start = stats.start();
+    let w = target.width;
+    let h = target.height;
+    let stride = target.stride;
+    let sx = target.source_x;
+    let sy = target.source_y;
+    let params = PackRowParams {
+        apply_ict,
+        layout,
+        channels,
+    };
+    let aux_row = |py_: usize| {
+        aux.map(|p| &p[(sy + py_) * plane_width + sx..(sy + py_) * plane_width + sx + w])
+    };
+    let tight = target.origin_x == 0
+        && target.origin_y == 0
+        && stride == w * channels
+        && pixel_count >= FUSED_PACK_PARALLEL_SAMPLES
+        && rayon::current_num_threads() > 1;
+    if tight {
+        let rows_per_band = h.div_ceil(rayon::current_num_threads() * 2).max(16);
+        target.data[..h * stride]
+            .par_chunks_mut(rows_per_band * stride)
+            .enumerate()
+            .for_each(|(band, chunk)| {
+                let first = sy + band * rows_per_band;
+                let mut sy_ = py.final_level(use_wide, first);
+                let mut scb = pcb.final_level(use_wide, first);
+                let mut scr = pcr.final_level(use_wide, first);
+                for (k, out_row) in chunk.chunks_exact_mut(stride).enumerate() {
+                    let y_row = sy_.next_row();
+                    let cb_row = scb.next_row();
+                    let cr_row = scr.next_row();
+                    pack_row_f32(
+                        &y_row[sx..sx + w],
+                        &cb_row[sx..sx + w],
+                        &cr_row[sx..sx + w],
+                        aux_row(band * rows_per_band + k),
+                        params,
+                        out_row,
+                    );
+                }
+            });
+    } else {
+        let mut sy_ = py.final_level(use_wide, sy);
+        let mut scb = pcb.final_level(use_wide, sy);
+        let mut scr = pcr.final_level(use_wide, sy);
+        for py_ in 0..h {
+            let off = target.pixel_offset(0, py_);
+            let y_row = sy_.next_row();
+            let cb_row = scb.next_row();
+            let cr_row = scr.next_row();
+            pack_row_f32(
+                &y_row[sx..sx + w],
+                &cb_row[sx..sx + w],
+                &cr_row[sx..sx + w],
+                aux_row(py_),
+                params,
+                &mut target.data[off..off + w * channels],
+            );
+        }
+    }
+    record_finalize_time(stats, start);
+    stats.update(|stats| {
+        stats.output_pixels = stats.output_pixels.saturating_add((w * h) as u64);
+    });
+    Ok(())
+}
+
 fn reconstruct_irreversible_97_centered(
     header: &CodestreamHeader,
     mut data: Vec<f32>,
@@ -1621,17 +1910,19 @@ fn reconstruct_irreversible_97_centered(
     let dwt_start = stats.start();
     if use_common_even_dwt(header) {
         if stats.is_enabled() {
-            let timing = crate::dwt::inverse_97_2d_in_place_profiled(
-                &mut data,
+            let mut timing = crate::dwt::InverseDwtTiming::default();
+            data = crate::dwt::inverse_97_2d_even(
+                data,
                 width,
                 height,
                 header.cod.decomposition_levels,
                 PRIMITIVES.backend != "scalar",
+                Some(&mut timing),
             );
             record_dwt_breakdown(stats, timing);
         } else {
-            (PRIMITIVES.dwt.inverse_97_2d)(
-                &mut data,
+            data = (PRIMITIVES.dwt.inverse_97_2d_owned)(
+                data,
                 width,
                 height,
                 header.cod.decomposition_levels,

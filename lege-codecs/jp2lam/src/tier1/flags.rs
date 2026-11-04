@@ -47,14 +47,6 @@ impl FlagGrid {
         }
     }
 
-    /// Reuse the backing allocation for another code-block.
-    pub(crate) fn reset(&mut self, width: usize, height: usize) {
-        self.width = width;
-        self.height = height;
-        self.flags.resize(width.saturating_mul(height), 0);
-        self.flags.fill(0);
-    }
-
     #[inline(always)]
     fn idx(&self, x: usize, y: usize) -> usize {
         y * self.width + x
@@ -65,6 +57,7 @@ impl FlagGrid {
         (self.flags[self.idx(x, y)] & F_SIG) != 0
     }
 
+    #[cfg(test)]
     #[inline(always)]
     pub(crate) fn is_negative_idx(&self, idx: usize) -> bool {
         (self.flags[idx] & F_SIGN) != 0
@@ -106,6 +99,7 @@ impl FlagGrid {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn has_visited(&self) -> bool {
         self.flags.iter().any(|flag| (flag & F_VISITED) != 0)
     }

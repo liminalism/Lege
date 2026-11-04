@@ -507,7 +507,7 @@ fn encode_band_styled(band: &NativeTier1Band, style: CodeBlockStyle) -> NativeEn
 /// terminates after it (Table D.9), resets contexts, and appends
 /// segmentation symbols. Context states persist across segments; only the
 /// coder registers and output restart at a termination.
-fn encode_codeblock_styled(
+pub(crate) fn encode_codeblock_styled(
     block: &NativeTier1CodeBlock,
     style: CodeBlockStyle,
 ) -> NativeEncodedTier1CodeBlock {

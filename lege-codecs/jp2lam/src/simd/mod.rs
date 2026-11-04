@@ -22,6 +22,7 @@ pub(crate) type RctComponentFn = fn(&[i32], &[i32], &[i32], usize, i32, &mut [i3
 pub(crate) type InverseIctFn = fn(&mut [f32], &mut [f32], &mut [f32]);
 pub(crate) type InverseRctFn = fn(&mut [i32], &mut [i32], &mut [i32]);
 pub(crate) type DwtF32Fn = fn(&mut [f32], usize, usize, u8) -> crate::error::Result<()>;
+pub(crate) type DwtF32OwnedFn = fn(Vec<f32>, usize, usize, u8) -> crate::error::Result<Vec<f32>>;
 pub(crate) type DwtI32Fn = fn(&mut [i32], usize, usize, u8) -> crate::error::Result<()>;
 
 #[derive(Clone, Copy)]
@@ -41,6 +42,8 @@ pub(crate) struct AnalyzePrimitives {
 #[derive(Clone, Copy)]
 pub(crate) struct DwtPrimitives {
     pub inverse_97_2d: DwtF32Fn,
+    /// Streaming inverse 9/7 over an owned plane (no copy back).
+    pub inverse_97_2d_owned: DwtF32OwnedFn,
     pub inverse_53_2d: DwtI32Fn,
 }
 

@@ -1,18 +1,21 @@
 #[cfg(test)]
 use crate::encode::profile_enter;
 use crate::error::{Jp2LamError, Result};
+#[cfg(test)]
 use rayon::prelude::*;
 #[cfg(feature = "simd")]
 use wide::f32x8;
 
 // ISO/IEC 15444-1 Annex F.4.8.2 irreversible 9/7 lifting constants.
-const ALPHA: f32 = -1.586_134_342_059_924;
-const BETA: f32 = -0.052_980_118_572_961;
-const GAMMA: f32 = 0.882_911_075_530_934;
-const DELTA: f32 = 0.443_506_852_043_971;
-const K: f32 = 1.230_174_104_914_001;
-const INV_K: f32 = 1.0 / K;
+pub(super) const ALPHA: f32 = -1.586_134_342_059_924;
+pub(super) const BETA: f32 = -0.052_980_118_572_961;
+pub(super) const GAMMA: f32 = 0.882_911_075_530_934;
+pub(super) const DELTA: f32 = 0.443_506_852_043_971;
+pub(super) const K: f32 = 1.230_174_104_914_001;
+pub(super) const INV_K: f32 = 1.0 / K;
+#[cfg(test)]
 const PARALLEL_ROW_THRESHOLD: usize = 2 * 1024 * 1024;
+#[cfg(test)]
 // Disabled by default (never reached in practice — no real image resolution
 // comes anywhere near `usize::MAX / 2` pixels; not literally `usize::MAX` to
 // avoid a clippy::absurd_extreme_comparisons hard error on the `>=` check).
@@ -28,6 +31,7 @@ const PARALLEL_ROW_THRESHOLD: usize = 2 * 1024 * 1024;
 // then it should not be enabled.
 const PARALLEL_COLUMN_THRESHOLD: usize = usize::MAX / 2;
 
+#[cfg(test)]
 // Column band width for vertical 9/7 synthesis/analysis. Matches the reversible
 // 5/3 design: process independent column bands so scratch is
 // `VERTICAL_BAND_COLS * active_height` rather than a full active plane, and so
@@ -429,6 +433,7 @@ fn forward_97_vertical_in_place(
     }
 }
 
+#[cfg(test)]
 #[allow(clippy::too_many_arguments)]
 fn apply_vertical_lift(
     data: &mut [f32],
@@ -475,6 +480,7 @@ fn apply_vertical_lift(
     );
 }
 
+#[cfg(test)]
 fn apply_vertical_lift_disjoint<const WIDE: bool>(
     data: &mut [f32],
     stride: usize,
@@ -519,6 +525,7 @@ fn apply_vertical_lift_disjoint<const WIDE: bool>(
     }
 }
 
+#[cfg(test)]
 /// Same lift as the sequential loop in `apply_vertical_lift`, but splits the
 /// target-parity rows across rayon tasks. A first attempt at this used an
 /// immutable snapshot `Vec` for the reads (still correct, see git history),
@@ -571,7 +578,13 @@ fn apply_vertical_lift_parallel(
 }
 
 #[inline]
-fn lift_row(target: &mut [f32], left: &[f32], right: &[f32], coeff: f32, use_wide: bool) {
+pub(super) fn lift_row(
+    target: &mut [f32],
+    left: &[f32],
+    right: &[f32],
+    coeff: f32,
+    use_wide: bool,
+) {
     #[cfg(feature = "simd")]
     if use_wide {
         lift_row_wide(target, left, right, coeff);
@@ -603,6 +616,7 @@ fn lift_row_wide(target: &mut [f32], left: &[f32], right: &[f32], coeff: f32) {
     }
 }
 
+#[cfg(test)]
 #[inline]
 fn scale_row_with(
     data: &mut [f32],
@@ -615,6 +629,7 @@ fn scale_row_with(
     scale_slice(row_mut(data, stride, active_width, y), scale, use_wide);
 }
 
+#[cfg(test)]
 /// Scales the interleaved even/odd rows of a vertical pass in one pass:
 /// `even_scale` for even `y`, `odd_scale` for odd `y`. Unlike the lift steps,
 /// scaling has no cross-row read dependency at all (each row only reads and
@@ -647,6 +662,7 @@ fn scale_rows_interleaved(
     }
 }
 
+#[cfg(test)]
 #[inline]
 fn scale_slice(target: &mut [f32], scale: f32, use_wide: bool) {
     #[cfg(feature = "simd")]
@@ -660,6 +676,7 @@ fn scale_slice(target: &mut [f32], scale: f32, use_wide: bool) {
     }
 }
 
+#[cfg(test)]
 #[cfg(feature = "simd")]
 #[inline]
 fn scale_slice_wide(target: &mut [f32], scale: f32) {
@@ -705,11 +722,13 @@ fn deinterleave_rows_inplace(data: &mut [f32], active_width: usize, active_heigh
     data[sn * active_width..(sn + dn) * active_width].copy_from_slice(&odds);
 }
 
+#[cfg(test)]
 #[inline]
 fn row_mut(data: &mut [f32], stride: usize, active_width: usize, y: usize) -> &mut [f32] {
     &mut data[y * stride..y * stride + active_width]
 }
 
+#[cfg(test)]
 #[inline]
 fn sym_index(n: usize, i: isize) -> usize {
     if n <= 1 {
@@ -727,6 +746,7 @@ fn sym_index(n: usize, i: isize) -> usize {
     }
 }
 
+#[cfg(test)]
 fn encode_resolutions(width: usize, height: usize, levels: u8) -> Vec<(usize, usize)> {
     let mut resolutions = Vec::with_capacity(levels as usize + 1);
     let mut w = width;
@@ -745,8 +765,40 @@ fn encode_resolutions(width: usize, height: usize, levels: u8) -> Vec<(usize, us
 ///
 /// `data` must be in the deinterleaved JPEG 2000 subband layout produced by the
 /// forward transform. After this call, `data` holds the reconstructed signal.
+///
+/// This is the streaming synthesis of [`super::stream97`] followed by a copy
+/// back into `data`; callers that own their plane should use
+/// [`super::inverse_97_2d_even`] directly and skip the copy.
 pub(crate) fn inverse_97_2d_in_place(data: &mut [f32], width: usize, height: usize, levels: u8) {
-    inverse_97_2d_in_place_impl(data, width, height, levels, false, None);
+    inverse_97_2d_in_place_streamed(data, width, height, levels, false);
+}
+
+fn inverse_97_2d_in_place_streamed(
+    data: &mut [f32],
+    width: usize,
+    height: usize,
+    levels: u8,
+    use_wide: bool,
+) {
+    if width == 0 || height == 0 || levels == 0 || data.len() != width * height {
+        return;
+    }
+    let out =
+        super::stream97::inverse_97_2d_even(data.to_vec(), width, height, levels, use_wide, None);
+    data.copy_from_slice(&out);
+}
+
+/// The previous two-sweep in-place implementation (rows, then column bands),
+/// retained as the bit-exact reference for the streaming synthesis.
+#[cfg(test)]
+pub(super) fn inverse_97_2d_in_place_reference(
+    data: &mut [f32],
+    width: usize,
+    height: usize,
+    levels: u8,
+    use_wide: bool,
+) {
+    inverse_97_2d_in_place_impl(data, width, height, levels, use_wide, None);
 }
 
 pub(crate) fn inverse_97_2d_in_place_at(
@@ -795,21 +847,10 @@ pub(crate) fn inverse_97_2d_in_place_wide(
     height: usize,
     levels: u8,
 ) {
-    inverse_97_2d_in_place_impl(data, width, height, levels, true, None);
+    inverse_97_2d_in_place_streamed(data, width, height, levels, true);
 }
 
-pub(crate) fn inverse_97_2d_in_place_profiled(
-    data: &mut [f32],
-    width: usize,
-    height: usize,
-    levels: u8,
-    use_wide: bool,
-) -> crate::dwt::InverseDwtTiming {
-    let mut timing = crate::dwt::InverseDwtTiming::default();
-    inverse_97_2d_in_place_impl(data, width, height, levels, use_wide, Some(&mut timing));
-    timing
-}
-
+#[cfg(test)]
 fn inverse_97_2d_in_place_impl(
     data: &mut [f32],
     width: usize,
@@ -844,6 +885,7 @@ fn inverse_97_1d_in_place(samples: &mut [f32]) {
     inverse_97_1d_with_scratch(samples, &mut scratch, false);
 }
 
+#[cfg(test)]
 fn inverse_97_1d_with_scratch(samples: &mut [f32], inter: &mut [f32], use_wide: bool) {
     inverse_97_1d_with_scratch_phase(samples, inter, true, use_wide);
 }
@@ -924,6 +966,7 @@ fn phase_steps(
     steps
 }
 
+#[cfg(test)]
 fn inverse_97_rows_in_place(
     data: &mut [f32],
     stride: usize,
@@ -964,6 +1007,7 @@ fn inverse_97_rows_in_place(
     }
 }
 
+#[cfg(test)]
 fn inverse_97_vertical_in_place(
     data: &mut [f32],
     stride: usize,
@@ -1061,6 +1105,7 @@ fn inverse_97_vertical_in_place(
 }
 
 #[inline]
+#[cfg(test)]
 fn vertical_scratch_len(width: usize, height: usize) -> usize {
     width.min(VERTICAL_BAND_COLS).saturating_mul(height)
 }
