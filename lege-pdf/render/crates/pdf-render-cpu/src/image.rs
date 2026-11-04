@@ -669,6 +669,7 @@ impl PreparedImage {
 
     /// The image with its samples resolved to RGB8 (see
     /// [`Self::generic_promotion_eligible`]); `None` when not eligible.
+    #[cfg(test)]
     pub(crate) fn generic_promoted_to_rgb8(&self) -> Option<PreparedImage> {
         let samples = self.generic_source_as_rgb8()?;
         Some(self.with_rgb8_samples(samples))
