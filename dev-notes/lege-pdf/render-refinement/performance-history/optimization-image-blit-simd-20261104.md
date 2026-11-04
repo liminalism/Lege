@@ -363,3 +363,208 @@ so no timing is claimed for this change.
 - The in-data (`/SMaskInData`) and colour-keyed images stay on the generic
   path by design.
 - AKR remains unusable on this worktree (AKR-C031); no record was written.
+
+---
+
+# Round 3 (2026-11-04)
+
+Two levers from the round-2 follow-ups: the Indexed expansion behind the
+content-keyed image cache (xenosystems), and the masked area-minification
+draw on the Structures MRC pages, which the jp2lam note's round-2 profile
+named as a missed fast path. The JPEG Huffman residual (item 3 of the brief)
+was not started.
+
+**Previous binary** is the retained `headsup-lege-final.exe` built at
+`035660da` (identical renderer code to `9c93b580`). The new binaries are the
+same adapter rebuilt from this branch: `c1` = commit 1 alone (Indexed
+promotion), `new` = both commits.
+
+## Method
+
+Same as round 2: `headsup-lege-final.exe <pdf> <scale> 1 sample <out> <pages>`
+(1 first render, 5 warm-up, 20 warm per invocation), process pinned to the
+P-cores (logical CPUs 0–11, psutil affinity inherited by the child),
+`RAYON_NUM_THREADS=1 PDF_RENDERER_JPX_CONCURRENCY=serial
+PDF_RENDERER_IMAGE_ROW_PAR=0`, arms interleaved over three rounds, so each
+cell is 60 warm renders. Two other workers were building and benchmarking
+on the host throughout; the CPU load sampled after each configuration was
+10–42 % for the table below and up to ~100 % during development, so steps
+were judged on paired minima only. Stage splits come from the same adapter
+built with `pdf-render-cpu/profiling` and a `profile` mode that renders a
+page N times through `render_profiled_with`; this round adds
+`render.image.area_min`, `render.image.area_min_masked` (per-path draw
+time), `image.area_min_masked.{soft1,soft8,stencil}_draws` and
+`render.image.indexed_promotion` to the profile.
+
+## Paired results (warm min / median ms, whole page)
+
+| page | previous | c1 (Indexed cache only) | new (both) | speedup | hashes |
+|---|---:|---:|---:|---:|---|
+| `xenosystems` p0 @2 (144 DPI) | 88.2 / 98.4 | 82.7 / 110.5 | **46.4 / 53.4** | **1.90×** | identical |
+| `xenosystems` p0 @1 | 54.2 / 60.6 | 48.9 / 55.0 | **32.6 / 36.1** | **1.66×** | identical |
+| `Structures` p0 @2 | 56.1 / 64.1 | 54.8 / 63.5 | **20.8 / 25.9** | **2.70×** | identical |
+| `Structures` p1 @2 | 52.5 / 61.3 | 52.5 / 59.6 | **15.0 / 19.4** | **3.50×** | identical |
+| `Structures` p0 @1 | 17.9 / 20.4 | 18.1 / 21.6 | **6.3 / 7.2** | **2.86×** | identical |
+| `Structures` p1 @1 | 17.2 / 19.8 | 17.9 / 20.1 | **4.4 / 5.2** | **3.94×** | identical |
+| `sahib` p178 @1 (control) | 10.4 / 12.3 | 10.2 / 12.0 | 10.2 / 11.6 | 1.0× | identical |
+| `sahib` p178 @2 (control) | 31.0 / 35.8 | 31.3 / 36.2 | 31.0 / 35.9 | 1.0× | identical |
+
+Structures' "first" render (JBIG2 + two JPX decodes) is unchanged in
+substance (p0 @2 210 → 186 ms, of which ~35 ms is the draw).
+
+Profiled image-draw stage, `render.image`, 27 warm renders, load 11–14 %:
+
+| page @2 | previous | new | of which opaque area-min / masked area-min (new) |
+|---|---:|---:|---|
+| `Structures` p0 | 48.9 / 57.2 | **17.0 / 20.9** | 6.8 / 9.9 (was 14.6 / 34.0) |
+| `Structures` p1 | 47.0 / 51.5 | **12.2 / 14.1** | 6.4 / 5.3 (was 14.7 / 30.6) |
+| `Structures` p100 | 31.0 / 36.9 | **9.7 / 10.9** | — / 8.9 (was 30.1) |
+| `xenosystems` p0 | 56.9 / 62.4 | **16.4 / 22.1** | — / 16.4 (incl. 8–9 ms Indexed expansion before) |
+
+The Structures target (image draw from 42–63 ms to at most 20 ms per page)
+is met on minima on all three pages and on medians for p1 and p100; p0's
+median under load is 20.9 ms. The xenosystems target (p0 warm at 144 DPI at
+least 15 % faster) is met by the pair (1.90×); commit 1 on its own gives
+6 % (min) at 144 DPI and 10 % at 72 DPI — see below.
+
+## Diagnosis: the Structures mask is a one-bit `/SMask`, not a stencil
+
+The brief (and the jp2lam note) read `image.fast_rgb8_area_min_masked_pixels`
+≈ 80–210 k of 1.1 M as "the masked draw misses the fast path". That counter
+is incremented by the number of *painted* pixels; the draw itself was on
+the fast path all along (`image.area_min_masked.soft1_draws = 1` per page:
+the JBIG2 layer is a one-bit `/SMask`, `AreaMinMask::Soft`). It was simply
+slow: 31–34 ms for 1.1 M destination pixels, ~30 ns each, almost all of it
+in the per-pixel `bilevel_smask_coverage` (bit-by-bit edge reads, a
+popcount loop and an f32 division for every destination pixel, transparent
+or not), and the unmasked background draw took another ~15 ms (~13 ns per
+pixel in the per-tap box filter). No stencil-specific painter was needed;
+the `/Mask` stencil variant shares the rewritten body and gets the same row
+filter.
+
+## Change 1 — Indexed expansion behind the image cache (`prepared.rs`, `image.rs`)
+
+`promote_through_cache` (round 2's ICC/Lab/tint promotion) now also takes
+Indexed images: lowering expands them with the unchanged
+`PreparedImage::indexed_source_as_rgb8` and keeps the RGB8 payload in the
+shared image cache. The key is the 128-bit hash of the source samples plus
+the palette identity (base space with its tables, recursively; `hival`; the
+lookup bytes) and the `/Decode` array, under the promotion sentinel codec
+byte; `bpc` is in the key, so 2/4/8-bit packings of the same bytes cannot
+alias. The lowered image is exactly what `paint_image` produced at draw
+time (RGB8, `decode = None`, no LUT), so the draw is unchanged;
+`paint_image`'s own expansion stays as the path for images not built by
+lowering (tests). Eligibility moved into `indexed_promotion_eligible`
+(2/4/8 bpc, not a stencil, complete samples, ≤ 64 Mpx, no colour key) so
+the hash is paid only for images that will be expanded.
+
+What it buys is smaller than the round-2 estimate: the expansion was 8–9 ms
+of xenosystems p0's draw at 144 DPI, and the warm path now pays a 7 MB
+content hash instead (`render.lower` 0.06 → 0.97 ms), so the net is ~6 %
+of the page at 144 DPI and ~10 % at 72 DPI. The rest of the xenosystems
+gain is change 2: its cover is drawn through the eight-bit soft-mask
+path, which was 57 ms of the 66 ms draw.
+
+**The 64 Mpx cap stays.** With the cache in front, residency is already a
+budgeted decision: `SharedImageCache::insert` refuses an entry larger than
+its 96 MiB budget, so an expansion above 32 Mpx is computed per draw and
+never retained, and one between ~10 and 32 Mpx can evict most of the
+working set — the same policy every cached decode has. The cap now only
+bounds the per-draw transient (192 MiB) for images the cache would not
+keep anyway; above it the per-tap path's work is bounded by the device
+footprint, not the source. Lifting it would need the renderer's memory
+budget plumbed into lowering, which no promotion has.
+
+## Change 2 — masked and opaque area-min (`exec.rs`)
+
+Three exact accelerations, shared by `paint_axis_aligned_rgb8_area_min_masked`
+(all three mask kinds) and `area_min_box_average_opaque` (RGB8 and the
+converted CMYK):
+
+1. **Uniform mask boxes (`MaskRowSummary`).** Per destination row, the OR
+   and AND of the soft-mask rows its boxes span (packed bits or bytes,
+   padded for 64-bit window reads). A box whose texels are all clear has
+   coverage exactly `0.0` in both filters; one whose texels are all set has
+   exactly `1.0` — at one bit the weighted ones equal `tx.total · ty.total`
+   (every tap weighs ≥ 1), at eight bits the f64 accumulation sums integral
+   products `wy · wx · 1.0` exactly (< 2⁵³) and divides the total by
+   itself. So `alpha_clear` / `alpha_set` are computed once per draw with
+   the generic `apply_smask_decode` and served without the filter. When
+   every body box of a row is clear and clear is transparent (no inverting
+   `/Decode`), the row paints only its border band.
+2. **Windowed one-bit coverage.** A mixed box reads each mask row's taps as
+   one 64-bit big-endian window: `w_lo·first + w_hi·last + S·popcount(interior)`,
+   the same saturating row-weighted sum and the same f32 division as
+   `bilevel_smask_coverage` (which still serves boxes wider than 57 bits).
+3. **Row box filter (`RowBoxFilter`).** Every opaque row, and every masked
+   row with at least half its body visible, is box-averaged a whole row at
+   once: each source row's horizontal sums `Σ wx·texel` are computed once
+   per band (straight-line code for boxes of ≤ 4 texels, the tap loop
+   otherwise) and cached in a 17-slot LRU; a destination row is the
+   row-weighted sum of its cached rows and one rounding division per
+   channel over planar arrays. The arithmetic is f64 but every value is an
+   integer below 2⁴⁹ (the constructor requires `tx.total · ty.total < 2⁴⁰`),
+   so sums are exact and `trunc((acc + w/2) / w)` is the integer
+   `(acc + ⌊w/2⌋) / w`: a correctly rounded quotient below 256 is within
+   2⁻⁴⁶ of the true one, and a non-integer quotient is at least
+   `1/w > 2⁻⁴⁰` from the next integer (for odd `w` the half-integer
+   numerator cannot reach a multiple of `w` either). The finish (multiply,
+   add, divide, truncate, pack four RGBA pixels) has an AVX2 kernel behind
+   `image_kernel()` and a scalar reference; the accumulate loop is the same
+   safe code compiled for AVX2. Sparse masked rows keep the per-pixel
+   `rgb8_box_average` (the original tap loop, factored out).
+
+Masked rows are now two passes — alphas for the body, then colour and
+composite for the visible pixels — and both painters work in 32-row bands
+under row fan-out (one filter cache per band). The body is the single run
+of interior columns (`u` is monotonic in `x`), kept as compact arrays
+rather than the 80-byte column tuples.
+
+## Tried and dropped
+
+- **Reciprocal division in the per-pixel filter.** One f64 reciprocal per
+  pixel with a ±1 correction instead of three u64 divisions: slower
+  (Structures background 24 → 32 ms) — first because `u64 ↔ f64` has no
+  single x86-64 instruction (fixed with `i64` casts, still slower), then
+  three true `divsd` measured the same as three `div`. The division was
+  not the bottleneck of the per-pixel loop; the tap loop and its overhead
+  were.
+- **Regrouping the per-pixel tap loop** as `w_lo·first + w_hi·last +
+  S·Σ interior` per row: exact, but ~10 % slower than the original zip
+  loop, so the original was kept for the per-pixel path; the regrouping
+  survives only as the fixed-tap horizontal pass of the row filter.
+- **Lower dense threshold** (⅛ of the body instead of ½) and a
+  prepared-offset per-pixel path for sparse rows: no measurable change
+  under the load at the time; dropped to keep one per-pixel path.
+
+## Verification
+
+- Hashes (`verify` mode, 6 workers, `RAYON_NUM_THREADS=6`), this branch vs
+  the previous binary, xenosystems (305 p), Structures (632 p) and sahib
+  (356 p) at scale 1 and 2, with `PDF_RENDERER_IMAGE_ROW_PAR=0` and `=1`
+  (both binaries run in each mode): **5172 / 5172 pages identical**.
+- New unit tests, all passing: `exec::rgb8_area_min_tests::
+  masked_uniform_boxes_match_generic_shade` (blocky and blank-line masks at
+  1 and 8 bits, both `/Decode` polarities, masks up to 8× wider than the
+  base, boxes wider than one window, against the generic per-pixel body),
+  `windowed_mask_and_box_sum_match_per_tap_reference` (4000 random boxes,
+  every bit phase, truncated mask buffers), `row_box_filter_matches_per_pixel_box_average`
+  (both kernels, boxes of 1 to ~25 texels, rows revisited out of order,
+  boxes taller than the filter serves, near-white sums), and
+  `prepared::image_cache_tests::indexed_promotion_is_cached_by_content_and_renders_identically`
+  (cold/warm/uncached lowering, hit sharing, palette and `/Decode` in the
+  key, equality with the draw-time expansion). The existing masked,
+  masked8, opaque, CMYK, Indexed and generic-promotion fast-path tests
+  pass unchanged.
+
+## Not done / follow-ups
+
+- The JPEG Huffman residual (brief item 3) was not started.
+- Structures p0 @2 median (20.9 ms under load) sits on the 20 ms line; what
+  remains is pass 1 of the masked draw (~5–6 ms of per-pixel alpha
+  classification on rows with ink) and the row filter's horizontal pass
+  (~4 ms for the 1.1 Mpx background). An AVX2 horizontal pass (three
+  gathers per eight columns) and a run-skipping pass 1 are the next levers.
+- The warm Indexed path hashes its source samples every draw (~1 ms for
+  7 MB); a cheaper identity would need the IR to carry one.
+- AKR was not used (worktree; the ledger does not validate here).

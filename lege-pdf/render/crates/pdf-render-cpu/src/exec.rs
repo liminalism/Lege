@@ -723,13 +723,24 @@ fn paint_image(
     // palette resolution per tap, and the taps are never fewer than the texels
     // a draw touches, so it pays for itself on every geometry. A colour-key
     // mask keys on the raw palette indices and keeps the original.
+    //
+    // Lowering already performs this expansion behind the content-keyed image
+    // cache (`prepared.rs::promote_through_cache`), so a lowered image arrives
+    // here as RGB8 and only images built elsewhere expand per draw.
     let promoted_indexed;
     let img = if matches!(
         img.color_space,
         pdf_page_ir::ImageColorSpace::Indexed { .. }
     ) && !matches!(img.mask, Some(pdf_page_ir::ImageMask::ColorKey(_)))
     {
-        match img.indexed_promoted_to_rgb8() {
+        #[cfg(feature = "profiling")]
+        let promote_start = Instant::now();
+        let promoted = img.indexed_promoted_to_rgb8();
+        #[cfg(feature = "profiling")]
+        stats
+            .profile
+            .add_duration("render.image.indexed_promotion", promote_start.elapsed());
+        match promoted {
             Some(rgb) => {
                 promoted_indexed = rgb;
                 &promoted_indexed
@@ -986,9 +997,18 @@ fn paint_image(
         }
         if fast_rgb8_area {
             profile.increment("image.fast_rgb8_area_min_pixels", covered);
-        }
-        if area_min_mask.is_some() {
+            profile.add_duration("render.image.area_min", image_start.elapsed());
+        } else if let Some(mask) = area_min_mask {
             profile.increment("image.fast_rgb8_area_min_masked_pixels", covered);
+            profile.add_duration("render.image.area_min_masked", image_start.elapsed());
+            profile.increment(
+                match mask {
+                    AreaMinMask::Soft(_) => "image.area_min_masked.soft1_draws",
+                    AreaMinMask::Soft8(_) => "image.area_min_masked.soft8_draws",
+                    AreaMinMask::Stencil(_) => "image.area_min_masked.stencil_draws",
+                },
+                1,
+            );
         }
         if fast_cmyk_area_used {
             profile.increment("image.fast_cmyk_area_min_pixels", covered);
@@ -2480,67 +2500,179 @@ fn paint_axis_aligned_rgb8_area_min_masked(
     let dest_w = x1 - x0;
     let dest_h = y1 - y0;
     let columns = columns.as_slice();
+    // The alpha a soft mask yields over a box whose texels are all clear or
+    // all set. Both coverages are exact in either filter (see
+    // `MaskRowSummary`), so these are the bytes the per-tap filter produces.
+    let (alpha_clear, alpha_set) = match mask {
+        AreaMinMask::Soft(sm) | AreaMinMask::Soft8(sm) => (
+            (255.0 * crate::image::apply_smask_decode(sm, 0.0)) as u8,
+            (255.0 * crate::image::apply_smask_decode(sm, 1.0)) as u8,
+        ),
+        AreaMinMask::Stencil(_) => (0, 0),
+    };
+    // The prepared body: the columns that are interior and map into the
+    // image. `u` is monotonic in `x`, so they are one run; its base and mask
+    // taps are kept compact, apart from the column table. Every other column
+    // is the border band, painted generically.
+    let body = body_run(
+        columns
+            .iter()
+            .map(|&(interior, axes)| interior && axes.is_some()),
+    );
+    let (body_start, body_end) = body.unwrap_or((0, 0));
+    let (body_taps, body_masks): (Vec<crate::image::AxisTaps>, Vec<MaskAxis>) = columns
+        [body_start..body_end]
+        .iter()
+        .filter_map(|&(_, axes)| axes)
+        .unzip();
+    let border_cols: Vec<usize> = (0..columns.len())
+        .filter(|x| !(body_start..body_end).contains(x))
+        .collect();
+    let border_cols = border_cols.as_slice();
+    // The body's soft-mask texel span, to test a whole row's boxes for clear
+    // at once, and its summed tap widths for the tap telemetry.
+    let body_mask_span = body_masks.iter().fold(None, |span, mx| match (span, mx) {
+        (None, MaskAxis::Taps(m)) => Some((m.lo, m.hi)),
+        (Some((lo, hi)), MaskAxis::Taps(m)) => Some((m.lo.min(lo), m.hi.max(hi))),
+        (span, MaskAxis::Texel(_)) => span,
+    });
+    let body_col_taps: u64 = body_taps.iter().map(|t| (t.hi - t.lo + 1) as u64).sum();
 
-    // One destination row: reads only its own base/mask source rows and writes
-    // only its own output row, so rows are independent and the per-pixel
-    // arithmetic is untouched by how they are scheduled.
-    let paint_row =
-        |y: usize,
-         &(row_interior, row_axes): &(bool, Option<(crate::image::AxisTaps, MaskAxis)>),
-         row: &mut [u8]|
-         -> (u64, u64) {
-            let mut painted = 0u64;
-            let mut taps = 0u64;
-            for (local_x, &(col_interior, col_axes)) in columns.iter().enumerate() {
-                let x = x0 + local_x;
-                let px = &mut row[(x - output_origin) * 4..][..4];
+    // A border-band pixel, or one whose center maps outside the image: the
+    // generic per-pixel treatment, minus the clip and soft-clip terms this
+    // path's eligibility already excluded. Returns whether it painted.
+    let paint_generic = |x: usize, y: usize, px: &mut [u8]| -> bool {
+        let (dx, dy) = (x as f64 + 0.5, y as f64 + 0.5);
+        let edge = img.edge_coverage(dx, dy);
+        if edge == Some(0) {
+            return false;
+        }
+        let color = match edge {
+            None => img.shade(dx, dy),
+            Some(_) => img.shade_clamped(dx, dy),
+        };
+        let Some(color) = color else { return false };
+        let cov = match edge {
+            Some(ec) => mul_div_255(255, ec),
+            None => 255,
+        };
+        let a = mul_div_255(color[3] as u16, cov);
+        if a == 0 {
+            return false;
+        }
+        composite_px_blended(
+            px,
+            [color[0], color[1], color[2]],
+            a as u8,
+            BlendChoice::Normal,
+        );
+        true
+    };
 
-                let (Some((tx, mx)), Some((ty, my)), true) =
-                    (col_axes, row_axes, col_interior && row_interior)
-                else {
-                    // Border band, or a column/row whose center maps outside the
-                    // image: the generic per-pixel treatment, minus the clip and
-                    // soft-clip terms this path's eligibility already excluded.
-                    let (dx, dy) = (x as f64 + 0.5, y as f64 + 0.5);
-                    let edge = img.edge_coverage(dx, dy);
-                    if edge == Some(0) {
-                        continue;
-                    }
-                    let color = match edge {
-                        None => img.shade(dx, dy),
-                        Some(_) => img.shade_clamped(dx, dy),
-                    };
-                    let Some(color) = color else { continue };
-                    let cov = match edge {
-                        Some(ec) => mul_div_255(255, ec),
-                        None => 255,
-                    };
-                    let a = mul_div_255(color[3] as u16, cov);
-                    if a == 0 {
-                        continue;
-                    }
-                    composite_px_blended(
-                        px,
-                        [color[0], color[1], color[2]],
-                        a as u8,
-                        BlendChoice::Normal,
-                    );
-                    painted += 1;
-                    continue;
-                };
+    // The row filter: a body row with many visible pixels (a cover under a
+    // mostly opaque layer) is box-averaged a whole row at a time, a sparse
+    // one (a scanned page's foreground layer) per visible pixel. Both are
+    // exact, so the choice is only about speed.
+    let max_row_total = rows
+        .iter()
+        .filter_map(|&(_, axes)| axes.map(|(ty, _)| ty.total))
+        .max();
+    let template = max_row_total
+        .filter(|_| !body_taps.is_empty())
+        .and_then(|rt| RowBoxFilter::new(rgb, stride, &body_taps, rt));
 
-                let weight = tx.total * ty.total;
-                if weight == 0 {
-                    continue;
+    let (output, first_output_y, output_stride) = surface.rows_mut_abs(y0, y1);
+    // Align the row table with the clipped output window.
+    let row_offset = first_output_y.saturating_sub(y0);
+    let row_slice = rows.get(row_offset..).unwrap_or(&[]);
+
+    // One band of destination rows: reads only its own base/mask source rows
+    // and writes only its own output rows, so bands are independent and the
+    // per-pixel arithmetic is untouched by how they are scheduled.
+    let paint_band = |first_y: usize,
+                      band: &mut [u8],
+                      band_rows: &[(bool, Option<(crate::image::AxisTaps, MaskAxis)>)]|
+     -> (u64, u64) {
+        let mut painted = 0u64;
+        let mut taps = 0u64;
+        let mut filter = template.as_ref().map(RowBoxFilter::fresh);
+        let mut alphas = vec![0u8; body_taps.len()];
+        let mut colors = vec![0u8; body_taps.len() * 4];
+        for (i, (row, &(row_interior, row_axes))) in band
+            .chunks_exact_mut(output_stride)
+            .zip(band_rows)
+            .enumerate()
+        {
+            let y = first_y + i;
+            // The union and intersection of the soft-mask rows this row's
+            // boxes span, so a box that is uniformly clear or set — most of a
+            // scanned page's foreground mask, most of a cover's opacity layer
+            // — is classified without its per-tap filter.
+            let summary = match (mask, row_axes) {
+                (AreaMinMask::Soft(sm), Some((_, MaskAxis::Taps(mty)))) => {
+                    Some(MaskRowSummary::bits(sm, &mty))
                 }
-                taps += (tx.hi - tx.lo + 1) as u64 * (ty.hi - ty.lo + 1) as u64;
+                (AreaMinMask::Soft8(sm), Some((_, MaskAxis::Taps(mty)))) => {
+                    Some(MaskRowSummary::bytes(sm, &mty))
+                }
+                _ => None,
+            };
+            // Every body box of this row clear, and clear means transparent
+            // (no inverting `/Decode`): the body paints nothing, so only the
+            // border band remains — the blank lines and margins of a scanned
+            // page's foreground layer cost one scan of the mask union.
+            if alpha_clear == 0
+                && row_interior
+                && let (Some(summary), Some((ty, _)), Some((lo, hi))) =
+                    (&summary, row_axes, body_mask_span)
+                && summary.clear_over(lo, hi)
+            {
+                taps += body_col_taps * (ty.hi - ty.lo + 1) as u64;
+                for &local_x in border_cols {
+                    let x = x0 + local_x;
+                    if paint_generic(x, y, &mut row[(x - output_origin) * 4..][..4]) {
+                        painted += 1;
+                    }
+                }
+                continue;
+            }
 
-                // The mask first: a fully transparent destination pixel skips the
-                // box average entirely, and on a scanned page the foreground layer
-                // is transparent over most of the sheet.
+            // The border band, generically.
+            for &local_x in border_cols {
+                let x = x0 + local_x;
+                if paint_generic(x, y, &mut row[(x - output_origin) * 4..][..4]) {
+                    painted += 1;
+                }
+            }
+            let (Some((ty, my)), true) = (row_axes, row_interior && !body_taps.is_empty()) else {
+                // Not a body row: the body columns are generic too.
+                for x in x0 + body_start..x0 + body_end {
+                    if paint_generic(x, y, &mut row[(x - output_origin) * 4..][..4]) {
+                        painted += 1;
+                    }
+                }
+                continue;
+            };
+            taps += body_col_taps * (ty.hi - ty.lo + 1) as u64;
+
+            // Pass 1: each body pixel's mask alpha, first — a transparent
+            // pixel skips the box average.
+            let mut visible = 0usize;
+            for (a, &mx) in alphas.iter_mut().zip(&body_masks) {
+                let uniform = summary.as_ref().and_then(|s| match mx {
+                    MaskAxis::Taps(mtx) => s.uniform(&mtx),
+                    MaskAxis::Texel(_) => None,
+                });
                 let alpha = match (mask, mx, my) {
+                    _ if uniform.is_some() => {
+                        if uniform == Some(true) {
+                            alpha_set
+                        } else {
+                            alpha_clear
+                        }
+                    }
                     (AreaMinMask::Soft(sm), MaskAxis::Taps(mtx), MaskAxis::Taps(mty)) => {
-                        let coverage = crate::image::bilevel_smask_coverage(sm, &mtx, &mty);
+                        let coverage = bilevel_smask_coverage_windowed(sm, &mtx, &mty);
                         (255.0 * crate::image::apply_smask_decode(sm, coverage)) as u8
                     }
                     (AreaMinMask::Soft8(sm), MaskAxis::Taps(mtx), MaskAxis::Taps(mty)) => {
@@ -2558,55 +2690,53 @@ fn paint_axis_aligned_rgb8_area_min_masked(
                     // combinations cannot occur.
                     _ => 0,
                 };
+                *a = alpha;
+                visible += (alpha != 0) as usize;
+            }
+            if visible == 0 {
+                continue;
+            }
+
+            // Pass 2: colour and composite the visible body pixels — a dense
+            // row through the row filter, a sparse one pixel by pixel.
+            let dense = visible * 2 >= body_taps.len()
+                && filter
+                    .as_mut()
+                    .is_some_and(|f| f.average_row(&ty, &mut colors));
+            let body_row = &mut row[(x0 + body_start - output_origin) * 4..];
+            for (k, ((&alpha, tx), px)) in alphas
+                .iter()
+                .zip(&body_taps)
+                .zip(body_row.chunks_exact_mut(4))
+                .enumerate()
+            {
                 if alpha == 0 {
                     continue;
                 }
-
-                let (mut a0, mut a1, mut a2) = (0u64, 0u64, 0u64);
-                for sr in ty.lo..=ty.hi {
-                    let wy = ty.weight_at(sr);
-                    let base = sr as usize * stride + tx.lo as usize * 3;
-                    let end = sr as usize * stride + (tx.hi as usize + 1) * 3;
-                    for (col, texel) in (tx.lo..).zip(rgb[base..end].chunks_exact(3)) {
-                        let w = wy * tx.weight_at(col);
-                        a0 += w * texel[0] as u64;
-                        a1 += w * texel[1] as u64;
-                        a2 += w * texel[2] as u64;
-                    }
-                }
-                let color = [
-                    ((a0 + weight / 2) / weight).min(255) as u8,
-                    ((a1 + weight / 2) / weight).min(255) as u8,
-                    ((a2 + weight / 2) / weight).min(255) as u8,
-                ];
-
+                let color = if dense {
+                    [colors[k * 4], colors[k * 4 + 1], colors[k * 4 + 2]]
+                } else {
+                    rgb8_box_average(rgb, stride, tx, &ty, tx.total * ty.total)
+                };
                 composite_px_blended(px, color, alpha, BlendChoice::Normal);
                 painted += 1;
             }
-            (painted, taps)
-        };
-
-    let (output, first_output_y, output_stride) = surface.rows_mut_abs(y0, y1);
-    // Align the row table with the clipped output window.
-    let row_offset = first_output_y.saturating_sub(y0);
-    let row_slice = rows.get(row_offset..).unwrap_or(&[]);
+        }
+        (painted, taps)
+    };
 
     let parallel = image_row_parallel_enabled()
         && dest_w.saturating_mul(dest_h) >= IMAGE_ROW_PAR_PIXEL_THRESHOLD;
     if parallel {
+        const BAND: usize = 32;
         output
-            .par_chunks_mut(output_stride)
-            .zip(row_slice.par_iter())
+            .par_chunks_mut(output_stride * BAND)
+            .zip(row_slice.par_chunks(BAND))
             .enumerate()
-            .map(|(i, (row, axes))| paint_row(first_output_y + i, axes, row))
+            .map(|(i, (band, rows))| paint_band(first_output_y + i * BAND, band, rows))
             .reduce(|| (0, 0), |a, b| (a.0 + b.0, a.1 + b.1))
     } else {
-        output
-            .chunks_exact_mut(output_stride)
-            .zip(row_slice.iter())
-            .enumerate()
-            .map(|(i, (row, axes))| paint_row(first_output_y + i, axes, row))
-            .fold((0, 0), |a, b| (a.0 + b.0, a.1 + b.1))
+        paint_band(first_output_y, output, row_slice)
     }
 }
 
@@ -2653,6 +2783,56 @@ fn area_min_box_average_opaque(
     let dest_h = y1 - y0;
     let columns = source_columns.as_slice();
 
+    // The columns that map into the image form one run (u is monotonic in x);
+    // the row filter serves it whole.
+    let body = body_run(columns.iter().map(Option::is_some));
+    let body_taps: Option<Vec<crate::image::AxisTaps>> =
+        body.map(|(bx0, bx1)| columns[bx0..bx1].iter().flatten().copied().collect());
+    let max_row_total = source_rows.iter().flatten().map(|t| t.total).max();
+    let filter_template = body_taps
+        .as_deref()
+        .zip(max_row_total)
+        .and_then(|(cols, rt)| RowBoxFilter::new(rgb, stride, cols, rt));
+    if let (Some(template), Some((bx0, _))) = (&filter_template, body) {
+        let cols = template.cols;
+        let col_span: u64 = cols.iter().map(|t| (t.hi - t.lo + 1) as u64).sum();
+        let (output, first_output_y, output_stride) = surface.rows_mut_abs(y0, y1);
+        let row_offset = first_output_y.saturating_sub(y0);
+        let row_slice = source_rows.get(row_offset..).unwrap_or(&[]);
+        let first_target = (x0 + bx0 - output_origin) * 4;
+        // One band of destination rows with its own row cache; bands are
+        // independent, and each row's bytes do not depend on the cache.
+        let paint_band = |band: &mut [u8], band_rows: &[Option<crate::image::AxisTaps>]| {
+            let mut filter = template.fresh();
+            let (mut painted, mut taps) = (0u64, 0u64);
+            for (row, ty) in band.chunks_exact_mut(output_stride).zip(band_rows) {
+                let Some(ty) = ty else { continue };
+                if !filter.average_row(ty, &mut row[first_target..]) {
+                    for (x, tx) in cols.iter().enumerate() {
+                        let c = rgb8_box_average(rgb, stride, tx, ty, tx.total * ty.total);
+                        let t = first_target + x * 4;
+                        row[t..t + 4].copy_from_slice(&[c[0], c[1], c[2], 255]);
+                    }
+                }
+                painted += cols.len() as u64;
+                taps += col_span * (ty.hi - ty.lo + 1) as u64;
+            }
+            (painted, taps)
+        };
+        let parallel = image_row_parallel_enabled()
+            && dest_w.saturating_mul(dest_h) >= IMAGE_ROW_PAR_PIXEL_THRESHOLD;
+        return if parallel {
+            const BAND: usize = 32;
+            output
+                .par_chunks_mut(output_stride * BAND)
+                .zip(row_slice.par_chunks(BAND))
+                .map(|(band, rows)| paint_band(band, rows))
+                .reduce(|| (0, 0), |a, b| (a.0 + b.0, a.1 + b.1))
+        } else {
+            paint_band(output, row_slice)
+        };
+    }
+
     // One destination row: reads only its own source rows and writes only its
     // own output row, so rows are independent and the per-pixel arithmetic is
     // untouched by how they are scheduled.
@@ -2668,23 +2848,9 @@ fn area_min_box_average_opaque(
             if weight == 0 {
                 continue;
             }
-            let (mut a0, mut a1, mut a2) = (0u64, 0u64, 0u64);
-            for sr in ty.lo..=ty.hi {
-                let wy = ty.weight_at(sr);
-                let base = sr as usize * stride + tx.lo as usize * 3;
-                let end = sr as usize * stride + (tx.hi as usize + 1) * 3;
-                for (col, texel) in (tx.lo..).zip(rgb[base..end].chunks_exact(3)) {
-                    let w = wy * tx.weight_at(col);
-                    a0 += w * texel[0] as u64;
-                    a1 += w * texel[1] as u64;
-                    a2 += w * texel[2] as u64;
-                }
-            }
+            let color = rgb8_box_average(rgb, stride, &tx, &ty, weight);
             let target = (x0 + local_x - output_origin) * 4;
-            row[target] = ((a0 + weight / 2) / weight).min(255) as u8;
-            row[target + 1] = ((a1 + weight / 2) / weight).min(255) as u8;
-            row[target + 2] = ((a2 + weight / 2) / weight).min(255) as u8;
-            row[target + 3] = 255;
+            row[target..target + 4].copy_from_slice(&[color[0], color[1], color[2], 255]);
             painted += 1;
             taps += (tx.hi - tx.lo + 1) as u64 * (ty.hi - ty.lo + 1) as u64;
         }
@@ -2714,6 +2880,519 @@ fn area_min_box_average_opaque(
             .fold((0, 0), |a, b| (a.0 + b.0, a.1 + b.1))
     };
     (painted, taps)
+}
+
+/// Weighted box average of a packed RGB8 source over one destination pixel's
+/// prepared tap boxes: per channel `(Σ wy·wx·texel + weight/2) / weight`,
+/// clamped to 255 — the integer arithmetic of `PreparedImage::area_average`'s
+/// RGB8 branch, tap for tap. `weight` is `tx.total * ty.total` (non-zero, the
+/// caller's check).
+#[inline(always)]
+fn rgb8_box_average(
+    rgb: &[u8],
+    stride: usize,
+    tx: &crate::image::AxisTaps,
+    ty: &crate::image::AxisTaps,
+    weight: u64,
+) -> [u8; 3] {
+    let (mut a0, mut a1, mut a2) = (0u64, 0u64, 0u64);
+    for sr in ty.lo..=ty.hi {
+        let wy = ty.weight_at(sr);
+        let base = sr as usize * stride + tx.lo as usize * 3;
+        let end = sr as usize * stride + (tx.hi as usize + 1) * 3;
+        for (col, texel) in (tx.lo..).zip(rgb[base..end].chunks_exact(3)) {
+            let w = wy * tx.weight_at(col);
+            a0 += w * texel[0] as u64;
+            a1 += w * texel[1] as u64;
+            a2 += w * texel[2] as u64;
+        }
+    }
+    [
+        ((a0 + weight / 2) / weight).min(255) as u8,
+        ((a1 + weight / 2) / weight).min(255) as u8,
+        ((a2 + weight / 2) / weight).min(255) as u8,
+    ]
+}
+
+/// The single run of `true` in `flags` as `(start, end)`, or `None` when
+/// there is none or more than one.
+fn body_run(flags: impl Iterator<Item = bool>) -> Option<(usize, usize)> {
+    let mut run: Option<(usize, usize)> = None;
+    for (i, flag) in flags.enumerate() {
+        if !flag {
+            continue;
+        }
+        run = match run {
+            None => Some((i, i + 1)),
+            Some((start, end)) if end == i => Some((start, i + 1)),
+            Some(_) => return None,
+        };
+    }
+    run
+}
+
+/// An exact box filter that averages a whole destination row at once over a
+/// contiguous run of destination columns (`cols`, their prepared X taps).
+///
+/// The per-pixel filter sums `Σ_rows wy · Σ_cols wx · texel` for every
+/// destination pixel and divides three times; the rows of one destination row
+/// share their row weights, and neighbouring destination rows share most of
+/// their source rows. Here each source row's horizontal sums `Σ wx · texel`
+/// are computed once per band of destination rows and cached; a destination
+/// row is then a weighted sum of a few cached rows and one division per
+/// channel, both over contiguous planar arrays the compiler vectorises.
+///
+/// The arithmetic is carried in `f64` but every value in it is an integer:
+/// the horizontal sums, the products with a row weight and their sums stay
+/// below 2⁴⁹ (the constructor requires `tx.total · ty.total < 2⁴⁰`, and a
+/// texel is at most 255), so all of them are exact, and the sums are the
+/// per-pixel filter's `u64` sums regrouped — integer addition is
+/// associative. The rounding division `(acc + ⌊w/2⌋) / w`, truncated, is the
+/// integer floor: an IEEE quotient is correctly rounded, the quotient is
+/// below 256 where the rounding error is under 2⁻⁴⁶, and a quotient that is
+/// not an integer is at least `1/w > 2⁻⁴⁰` from the next one, so truncation
+/// never crosses an integer. The bytes are the per-pixel filter's.
+struct RowBoxFilter<'a> {
+    rgb: &'a [u8],
+    stride: usize,
+    cols: &'a [crate::image::AxisTaps],
+    /// `tx.total` per column.
+    col_total: Vec<f64>,
+    /// When every box is at most four texels wide: per column, the byte
+    /// offsets of four texels within a source row and their weights, the
+    /// absent ones weighted zero (and pointed at a texel that exists), and
+    /// how many of the four the widest box uses. Otherwise empty, and the
+    /// horizontal pass sums each box's taps in a loop.
+    taps4: Vec<([usize; 4], [u32; 4])>,
+    taps_used: usize,
+    /// Cached horizontal passes: `(source row, last use, R | G | B planes)`.
+    slots: Vec<(u32, u64, Vec<f64>)>,
+    clock: u64,
+    /// The weighted sums of the current destination row, planar.
+    acc: Vec<f64>,
+    kernel: ImageKernel,
+}
+
+impl<'a> RowBoxFilter<'a> {
+    /// Tallest box the filter serves; a taller one (a minification of more
+    /// than ~15× on Y) is left to the per-pixel filter.
+    const MAX_ROWS: usize = 16;
+
+    /// `None` when a box's total weight could leave the exact range, or the
+    /// run is empty. `max_row_total` bounds `ty.total` over the rows served.
+    fn new(
+        rgb: &'a [u8],
+        stride: usize,
+        cols: &'a [crate::image::AxisTaps],
+        max_row_total: u64,
+    ) -> Option<Self> {
+        let max_col_total = cols.iter().map(|t| t.total).max()?;
+        if max_col_total.checked_mul(max_row_total)? >= 1 << 40 {
+            return None;
+        }
+        let n = cols.len();
+        let taps_used = cols.iter().map(|t| (t.hi - t.lo) as usize + 1).max()?;
+        let taps4 = if taps_used <= 4 {
+            cols.iter()
+                .map(|t| {
+                    let (lo, span) = (t.lo as usize, (t.hi - t.lo) as usize);
+                    let mut offsets = [lo * 3; 4];
+                    let mut weights = [0u32; 4];
+                    for (k, (o, w)) in offsets.iter_mut().zip(&mut weights).enumerate() {
+                        if k <= span {
+                            *o = (lo + k) * 3;
+                            *w = t.weight_at((lo + k) as u32) as u32;
+                        }
+                    }
+                    (offsets, weights)
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+        Some(Self {
+            rgb,
+            stride,
+            cols,
+            col_total: cols.iter().map(|t| t.total as f64).collect(),
+            taps4,
+            taps_used,
+            slots: Vec::new(),
+            clock: 0,
+            acc: vec![0.0; 3 * n],
+            kernel: image_kernel(),
+        })
+    }
+
+    /// The same filter with an empty row cache, for another band of rows.
+    fn fresh(&self) -> Self {
+        Self {
+            rgb: self.rgb,
+            stride: self.stride,
+            cols: self.cols,
+            col_total: self.col_total.clone(),
+            taps4: self.taps4.clone(),
+            taps_used: self.taps_used,
+            slots: Vec::new(),
+            clock: 0,
+            acc: vec![0.0; self.acc.len()],
+            kernel: self.kernel,
+        }
+    }
+
+    /// `Σ wx · texel` of source row `row` for every column, planar.
+    fn horizontal(&self, row: u32, planes: &mut [f64]) {
+        let n = self.cols.len();
+        let (r, rest) = planes.split_at_mut(n);
+        let (g, b) = rest.split_at_mut(n);
+        let row_base = row as usize * self.stride;
+        let src = &self.rgb[row_base..row_base + self.stride];
+        // Weights are at most `S` and texels 255, so four products fit `u32`;
+        // the absent taps add `0 · texel`. The tap count is fixed per draw so
+        // the loop body is straight-line code.
+        let fixed = |taps: usize, r: &mut [f64], g: &mut [f64], b: &mut [f64]| {
+            for (x, (o, w)) in self.taps4.iter().enumerate() {
+                let mut sum = [0u32; 3];
+                for k in 0..taps {
+                    let t = &src[o[k]..o[k] + 3];
+                    sum[0] += w[k] * t[0] as u32;
+                    sum[1] += w[k] * t[1] as u32;
+                    sum[2] += w[k] * t[2] as u32;
+                }
+                r[x] = sum[0] as f64;
+                g[x] = sum[1] as f64;
+                b[x] = sum[2] as f64;
+            }
+        };
+        match (self.taps4.is_empty(), self.taps_used) {
+            (false, 1..=2) => return fixed(2, r, g, b),
+            (false, 3) => return fixed(3, r, g, b),
+            (false, _) => return fixed(4, r, g, b),
+            (true, _) => {}
+        }
+        for (x, tx) in self.cols.iter().enumerate() {
+            let base = row_base + tx.lo as usize * 3;
+            let end = row_base + (tx.hi as usize + 1) * 3;
+            let (mut a0, mut a1, mut a2) = (0u64, 0u64, 0u64);
+            for (col, texel) in (tx.lo..).zip(self.rgb[base..end].chunks_exact(3)) {
+                let w = tx.weight_at(col);
+                a0 += w * texel[0] as u64;
+                a1 += w * texel[1] as u64;
+                a2 += w * texel[2] as u64;
+            }
+            r[x] = a0 as f64;
+            g[x] = a1 as f64;
+            b[x] = a2 as f64;
+        }
+    }
+
+    /// The cache slot holding source row `row`, filling one if needed. Rows
+    /// in `keep` (the box being assembled) are never evicted.
+    fn slot(&mut self, row: u32, keep: (u32, u32)) -> usize {
+        self.clock += 1;
+        if let Some(i) = self.slots.iter().position(|s| s.0 == row) {
+            self.slots[i].1 = self.clock;
+            return i;
+        }
+        let i = if self.slots.len() <= Self::MAX_ROWS {
+            self.slots.push((row, 0, vec![0.0; 3 * self.cols.len()]));
+            self.slots.len() - 1
+        } else {
+            // More slots than the tallest box, so one lies outside it.
+            self.slots
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| s.0 < keep.0 || s.0 > keep.1)
+                .min_by_key(|(_, s)| s.1)
+                .map_or(0, |(i, _)| i)
+        };
+        let mut planes = std::mem::take(&mut self.slots[i].2);
+        self.horizontal(row, &mut planes);
+        self.slots[i] = (row, self.clock, planes);
+        i
+    }
+
+    /// Average every column over the rows `ty` and write the pixels opaque
+    /// into `dst` (RGBA, one pixel per column). `false` when the box is taller
+    /// than [`Self::MAX_ROWS`] (nothing is written).
+    fn average_row(&mut self, ty: &crate::image::AxisTaps, dst: &mut [u8]) -> bool {
+        if (ty.hi - ty.lo) as usize >= Self::MAX_ROWS {
+            return false;
+        }
+        self.acc.fill(0.0);
+        for r in ty.lo..=ty.hi {
+            let i = self.slot(r, (ty.lo, ty.hi));
+            box_accumulate(
+                self.kernel,
+                &mut self.acc,
+                &self.slots[i].2,
+                ty.weight_at(r) as f64,
+            );
+        }
+        box_finish(
+            self.kernel,
+            &self.acc,
+            &self.col_total,
+            ty.total as f64,
+            dst,
+        );
+        true
+    }
+}
+
+/// `acc[i] += wy · h[i]`: one cached source row's horizontal sums, weighted,
+/// into a destination row's planar sums. Exact (see [`RowBoxFilter`]).
+#[inline]
+#[allow(
+    unsafe_code,
+    reason = "dispatches the AVX2 build of the loop behind a runtime probe; see SAFETY comment"
+)]
+fn box_accumulate(kernel: ImageKernel, acc: &mut [f64], h: &[f64], wy: f64) {
+    match kernel {
+        #[cfg(target_arch = "x86_64")]
+        // SAFETY: AVX2 is present (`image_kernel` probed it); the body is
+        // safe code.
+        ImageKernel::Avx2 => unsafe { box_accumulate_avx2(acc, h, wy) },
+        ImageKernel::Scalar => box_accumulate_body(acc, h, wy),
+    }
+}
+
+#[inline(always)]
+fn box_accumulate_body(acc: &mut [f64], h: &[f64], wy: f64) {
+    for (a, &v) in acc.iter_mut().zip(h) {
+        *a += wy * v;
+    }
+}
+
+/// [`box_accumulate_body`] compiled for AVX2, which the compiler vectorises
+/// four lanes wide (separate multiply and add, never fused: Rust does not
+/// contract floating-point expressions).
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+fn box_accumulate_avx2(acc: &mut [f64], h: &[f64], wy: f64) {
+    box_accumulate_body(acc, h, wy);
+}
+
+/// Divide a destination row's planar sums (`acc`: `R | G | B`, one entry per
+/// column) by each box's weight `row_total · col_total[x]`, rounding to
+/// nearest as `(acc + ⌊w/2⌋) / w` does in integers — computed as
+/// `trunc((acc + w/2) / w)`, which is the same floor (see [`RowBoxFilter`];
+/// the half-integer numerator cannot reach the next multiple of `w` either)
+/// — and write the pixels opaque RGBA into `dst`.
+#[inline]
+#[allow(
+    unsafe_code,
+    reason = "dispatches the AVX2 kernel behind a runtime probe; see SAFETY comment"
+)]
+fn box_finish(kernel: ImageKernel, acc: &[f64], col_total: &[f64], row_total: f64, dst: &mut [u8]) {
+    let n = col_total.len();
+    // Bounds-check once, here, so both kernels share one invariant.
+    let dst = &mut dst[..n * 4];
+    let acc = &acc[..n * 3];
+    match kernel {
+        #[cfg(target_arch = "x86_64")]
+        // SAFETY: AVX2 is present (`image_kernel` probed it); `acc` holds
+        // `3n` sums, `col_total` `n` totals and `dst` `4n` bytes, which is all
+        // the kernel reads and writes.
+        ImageKernel::Avx2 => unsafe { box_finish_avx2(acc, col_total, row_total, dst) },
+        ImageKernel::Scalar => box_finish_scalar(acc, col_total, row_total, dst, 0),
+    }
+}
+
+/// Scalar reference for [`box_finish`], from column `start` on.
+#[inline]
+fn box_finish_scalar(acc: &[f64], col_total: &[f64], row_total: f64, dst: &mut [u8], start: usize) {
+    let n = col_total.len();
+    for x in start..n {
+        let w = row_total * col_total[x];
+        let q = |a: f64| ((a + 0.5 * w) / w) as i32 as u8;
+        dst[x * 4..x * 4 + 4].copy_from_slice(&[q(acc[x]), q(acc[n + x]), q(acc[2 * n + x]), 255]);
+    }
+}
+
+/// AVX2 [`box_finish`]: four columns per iteration — the same multiply, add,
+/// divide and truncation as the scalar reference, lane for lane — packed to
+/// four RGBA pixels with one store.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+#[allow(
+    unsafe_code,
+    reason = "AVX2 intrinsics over bounds-checked slices; see SAFETY comments"
+)]
+fn box_finish_avx2(acc: &[f64], col_total: &[f64], row_total: f64, dst: &mut [u8]) {
+    use std::arch::x86_64::*;
+    let n = col_total.len();
+    let (ar, rest) = acc.split_at(n);
+    let (ag, ab) = rest.split_at(n);
+    let rt = _mm256_set1_pd(row_total);
+    let half = _mm256_set1_pd(0.5);
+    let alpha = _mm_set1_epi32(0xFF00_0000u32 as i32);
+    let mut x = 0;
+    while x + 4 <= n {
+        // SAFETY: `x + 4 <= n` and every plane and `col_total` hold `n`
+        // entries; `dst` holds `4n` bytes, so the 16-byte store at `4x` is in
+        // bounds.
+        unsafe {
+            let w = _mm256_mul_pd(rt, _mm256_loadu_pd(col_total.as_ptr().add(x)));
+            let hw = _mm256_mul_pd(half, w);
+            let q = |plane: &[f64]| {
+                let a = _mm256_loadu_pd(plane.as_ptr().add(x));
+                _mm256_cvttpd_epi32(_mm256_div_pd(_mm256_add_pd(a, hw), w))
+            };
+            let (r, g, b) = (q(ar), q(ag), q(ab));
+            let px = _mm_or_si128(
+                _mm_or_si128(r, _mm_slli_epi32::<8>(g)),
+                _mm_or_si128(_mm_slli_epi32::<16>(b), alpha),
+            );
+            _mm_storeu_si128(dst.as_mut_ptr().add(x * 4).cast::<__m128i>(), px);
+        }
+        x += 4;
+    }
+    box_finish_scalar(acc, col_total, row_total, dst, x);
+}
+
+/// The union and intersection of the soft-mask rows one destination row's
+/// boxes span (`bits`: packed one-bit rows; `bytes`: eight-bit rows), padded
+/// so a 64-bit window read never leaves the buffer. A box whose texels are
+/// all clear or all set has an exact coverage in both mask filters — `0.0`,
+/// or the full weight over itself, `1.0`: a one-bit box's weighted ones equal
+/// `tx.total · ty.total` exactly when every bit is set (every tap weighs at
+/// least 1), and an eight-bit box of `255` texels sums the integral products
+/// `wy · wx · 1.0` without rounding (they stay far below 2⁵³) — so its alpha
+/// is known without running the filter.
+struct MaskRowSummary {
+    any: Vec<u8>,
+    all: Vec<u8>,
+    one_bit: bool,
+}
+
+impl MaskRowSummary {
+    fn new(sm: &pdf_page_ir::ImageSMask, rows: &crate::image::AxisTaps, one_bit: bool) -> Self {
+        let row_bytes = crate::image::smask_row_bits(sm) / 8;
+        let mut any = vec![0u8; row_bytes + 8];
+        let mut all = vec![0u8; row_bytes + 8];
+        all[..row_bytes].fill(0xff);
+        for r in rows.lo..=rows.hi {
+            // Bytes past the end of the samples read as zero, as the filters'
+            // own reads do.
+            let src = sm
+                .samples
+                .get(r as usize * row_bytes..)
+                .map_or(&[][..], |s| &s[..s.len().min(row_bytes)]);
+            for ((a, b), &v) in any.iter_mut().zip(all.iter_mut()).zip(src) {
+                *a |= v;
+                *b &= v;
+            }
+            all[src.len()..row_bytes].fill(0);
+        }
+        Self { any, all, one_bit }
+    }
+
+    fn bits(sm: &pdf_page_ir::ImageSMask, rows: &crate::image::AxisTaps) -> Self {
+        Self::new(sm, rows, true)
+    }
+
+    fn bytes(sm: &pdf_page_ir::ImageSMask, rows: &crate::image::AxisTaps) -> Self {
+        Self::new(sm, rows, false)
+    }
+
+    /// Whether every texel in columns `lo..=hi` of the spanned rows is clear.
+    fn clear_over(&self, lo: u32, hi: u32) -> bool {
+        let (lo, hi) = (lo as usize, hi as usize);
+        if !self.one_bit {
+            return self.any[lo..=hi].iter().all(|&v| v == 0);
+        }
+        let (first, last) = (lo / 8, hi / 8);
+        let head = 0xffu8 >> (lo % 8);
+        let tail = 0xffu8 << (7 - hi % 8);
+        if first == last {
+            return self.any[first] & head & tail == 0;
+        }
+        self.any[first] & head == 0
+            && self.any[last] & tail == 0
+            && self.any[first + 1..last].iter().all(|&v| v == 0)
+    }
+
+    /// `Some(false)` when every texel of the box is clear, `Some(true)` when
+    /// every one is set, `None` when it is mixed (or too wide to test in one
+    /// window, which only costs the shortcut).
+    #[inline]
+    fn uniform(&self, cols: &crate::image::AxisTaps) -> Option<bool> {
+        if self.one_bit {
+            let width = (cols.hi - cols.lo + 1) as usize;
+            if width > 57 {
+                return None;
+            }
+            let full = (1u64 << width) - 1;
+            if bit_window(&self.any, cols.lo as usize, width) == 0 {
+                Some(false)
+            } else if bit_window(&self.all, cols.lo as usize, width) == full {
+                Some(true)
+            } else {
+                None
+            }
+        } else {
+            let range = cols.lo as usize..=cols.hi as usize;
+            if self.any[range.clone()].iter().all(|&v| v == 0) {
+                Some(false)
+            } else if self.all[range].iter().all(|&v| v == 0xff) {
+                Some(true)
+            } else {
+                None
+            }
+        }
+    }
+}
+
+/// `width` (≤ 57) bits of an MSB-first packed buffer starting at bit `bit`,
+/// right-aligned: the first bit lands at `width - 1`, the last at 0. Bytes
+/// past the end of `data` read as zero.
+#[inline(always)]
+fn bit_window(data: &[u8], bit: usize, width: usize) -> u64 {
+    let byte = bit >> 3;
+    let word = match data.get(byte..byte + 8) {
+        Some(b) => u64::from_be_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]]),
+        None => {
+            let mut buf = [0u8; 8];
+            if let Some(tail) = data.get(byte..) {
+                buf[..tail.len()].copy_from_slice(tail);
+            }
+            u64::from_be_bytes(buf)
+        }
+    };
+    (word << (bit & 7)) >> (64 - width)
+}
+
+/// [`crate::image::bilevel_smask_coverage`] with each mask row's taps read as
+/// one 64-bit window instead of bit by bit: the same `w_lo·first + w_hi·last
+/// + S·popcount(interior)` per row, the same saturating row-weighted sum, the
+/// same `f32` division — so the identical coverage. Boxes wider than one
+/// window take the original.
+#[inline]
+fn bilevel_smask_coverage_windowed(
+    sm: &pdf_page_ir::ImageSMask,
+    tx: &crate::image::AxisTaps,
+    ty: &crate::image::AxisTaps,
+) -> f32 {
+    const S: u64 = crate::image::AXIS_TAP_SCALE;
+    let width = (tx.hi - tx.lo + 1) as usize;
+    if width > 57 {
+        return crate::image::bilevel_smask_coverage(sm, tx, ty);
+    }
+    let row_bits = crate::image::smask_row_bits(sm);
+    let weight = tx.total.saturating_mul(ty.total).max(1);
+    let mut ones_w = 0u64;
+    for row in ty.lo..=ty.hi {
+        let win = bit_window(&sm.samples, row as usize * row_bits + tx.lo as usize, width);
+        let row_ones = if width == 1 {
+            tx.w_lo * win
+        } else {
+            let interior = (win >> 1) & ((1u64 << (width - 2)) - 1);
+            tx.w_lo * (win >> (width - 1)) + tx.w_hi * (win & 1) + S * interior.count_ones() as u64
+        };
+        ones_w = ones_w.saturating_add(ty.weight_at(row).saturating_mul(row_ones));
+    }
+    ones_w as f32 / weight as f32
 }
 
 /// Table size above which the bilevel summed-area table is filled across the
@@ -4380,6 +5059,242 @@ mod rgb8_area_min_tests {
                     );
                     assert_eq!(painted, ref_painted, "{what}: painted count");
                     assert_surfaces_equal(&mut fast, &mut reference, &what);
+                }
+            }
+        }
+    }
+
+    /// A blocky mask like a scanned page's foreground layer or a cover's
+    /// opacity layer: large clear and set regions, a band of noise, so the
+    /// uniform-box shortcuts and the per-tap filters both run, at one and
+    /// eight bits, both `/Decode` polarities, mask geometries narrower and
+    /// much wider than the base (boxes wider than one 57-bit window), and
+    /// placements offset into the surface.
+    #[test]
+    fn masked_uniform_boxes_match_generic_shade() {
+        let mut rng = Rng(0x5eed_b10c_4a11_0001);
+        let cases = [
+            (7u32, 5u32, 3u32, 3u32),
+            (33, 9, 8, 4),
+            (64, 48, 20, 15),
+            (90, 70, 31, 23),
+            (40, 40, 3, 2),
+        ];
+        for &(sw, sh, dev_w, dev_h) in &cases {
+            for &(mw, mh) in &[
+                (sw, sh),
+                (sw * 3, sh * 3),
+                (sw * 8 + 5, sh * 2 + 1),
+                (sw.div_ceil(2), sh.div_ceil(2)),
+            ] {
+                for trial in 0..8 {
+                    let samples: Vec<u8> = (0..(sw * sh * 3)).map(|_| rng.byte()).collect();
+                    let mut img = make_image(sw, sh, dev_w, dev_h, samples);
+                    let one_bit = trial % 2 == 0;
+                    // Blocks of 16x8 mask texels: clear, set, or noisy, with
+                    // every fourth band of rows clear across the whole width
+                    // (a blank line).
+                    let block = |x: u32, y: u32, rng: &mut Rng| -> u8 {
+                        if (y / 8) % 4 == 3 {
+                            return 0;
+                        }
+                        let kind = ((x / 16) * 7 + (y / 8) * 3 + trial) % 5;
+                        match kind {
+                            0 | 1 => 0,
+                            2 | 3 => 255,
+                            _ => rng.byte(),
+                        }
+                    };
+                    let samples: Vec<u8> = if one_bit {
+                        let row_bytes = (mw as usize).div_ceil(8);
+                        let mut packed = vec![0u8; row_bytes * mh as usize];
+                        for y in 0..mh {
+                            for x in 0..mw {
+                                if block(x, y, &mut rng) >= 128 {
+                                    packed[y as usize * row_bytes + x as usize / 8] |=
+                                        0x80 >> (x % 8);
+                                }
+                            }
+                        }
+                        packed
+                    } else {
+                        (0..mh)
+                            .flat_map(|y| (0..mw).map(move |x| (x, y)))
+                            .map(|(x, y)| block(x, y, &mut rng))
+                            .collect()
+                    };
+                    img.smask = Some(Arc::new(pdf_page_ir::ImageSMask {
+                        width: mw,
+                        height: mh,
+                        bits_per_component: if one_bit { 1 } else { 8 },
+                        decode: (trial % 4 >= 2).then(|| Arc::from(vec![[1.0f32, 0.0f32]])),
+                        samples: Arc::from(samples),
+                        codec: None,
+                        codec_data: None,
+                        codec_parms: None,
+                    }));
+                    let Some(kind) = area_min_mask(&img) else {
+                        continue;
+                    };
+                    let what = format!(
+                        "bits={} sw={sw} sh={sh} mask={mw}x{mh} dev={dev_w}x{dev_h} trial={trial}",
+                        if one_bit { 1 } else { 8 }
+                    );
+                    let mut fast =
+                        Surface::new(dev_w as usize, dev_h as usize, Background::Transparent);
+                    let (painted, _taps) = paint_axis_aligned_rgb8_area_min_masked(
+                        &img,
+                        kind,
+                        &mut fast,
+                        0,
+                        0,
+                        dev_w as usize,
+                        dev_h as usize,
+                    );
+                    let (mut reference, ref_painted) = generic_masked_reference(&img, dev_w, dev_h);
+                    assert_eq!(painted, ref_painted, "{what}: painted count");
+                    assert_surfaces_equal(&mut fast, &mut reference, &what);
+                }
+            }
+        }
+    }
+
+    /// The windowed one-bit coverage and the regrouped RGB8 box sum must equal
+    /// the per-tap originals for arbitrary tap boxes: every phase of `lo`
+    /// within a byte, widths from one texel to past the 57-bit window, rows
+    /// at the very end of a truncated buffer.
+    #[test]
+    fn windowed_mask_and_box_sum_match_per_tap_reference() {
+        let mut rng = Rng(0x0dd5_eed5_7a95_0002);
+        for _ in 0..4000 {
+            let mw = 1 + (rng.next() % 150) as u32;
+            let mh = 1 + (rng.next() % 12) as u32;
+            let row_bytes = (mw as usize).div_ceil(8);
+            let density = rng.byte();
+            let mut samples: Vec<u8> = (0..row_bytes * mh as usize)
+                .map(|_| {
+                    let mut b = 0u8;
+                    for bit in 0..8 {
+                        if rng.byte() < density {
+                            b |= 1 << bit;
+                        }
+                    }
+                    b
+                })
+                .collect();
+            if rng.byte() < 32 {
+                // A truncated payload: the filters read missing bytes as zero.
+                let keep = (rng.next() as usize) % (samples.len() + 1);
+                samples.truncate(keep);
+            }
+            let sm = pdf_page_ir::ImageSMask {
+                width: mw,
+                height: mh,
+                bits_per_component: 1,
+                decode: None,
+                samples: Arc::from(samples),
+                codec: None,
+                codec_data: None,
+                codec_parms: None,
+            };
+            let f =
+                |len: u32, rng: &mut Rng| (rng.next() % (len as u64 * 100)) as f64 / 100.0 - 0.5;
+            let half = |rng: &mut Rng| 0.5 + (rng.next() % 4000) as f64 / 100.0;
+            let Some(tx) = crate::image::axis_box_taps(f(mw, &mut rng), half(&mut rng), mw) else {
+                continue;
+            };
+            let Some(ty) = crate::image::axis_box_taps(f(mh, &mut rng), half(&mut rng), mh) else {
+                continue;
+            };
+            let fast = bilevel_smask_coverage_windowed(&sm, &tx, &ty);
+            let reference = crate::image::bilevel_smask_coverage(&sm, &tx, &ty);
+            assert_eq!(
+                fast.to_bits(),
+                reference.to_bits(),
+                "coverage {tx:?} {ty:?}"
+            );
+
+            // The same boxes over an RGB8 image of the mask's size.
+            let rgb: Vec<u8> = (0..mw * mh * 3).map(|_| rng.byte()).collect();
+            let stride = mw as usize * 3;
+            let weight = tx.total * ty.total;
+            let mut acc = [0u64; 3];
+            for sr in ty.lo..=ty.hi {
+                for col in tx.lo..=tx.hi {
+                    let w = ty.weight_at(sr) * tx.weight_at(col);
+                    let o = sr as usize * stride + col as usize * 3;
+                    for c in 0..3 {
+                        acc[c] += w * rgb[o + c] as u64;
+                    }
+                }
+            }
+            let expect = acc.map(|a| ((a + weight / 2) / weight).min(255) as u8);
+            assert_eq!(
+                rgb8_box_average(&rgb, stride, &tx, &ty, weight),
+                expect,
+                "box {tx:?} {ty:?}"
+            );
+        }
+    }
+
+    /// The row filter must reproduce the per-pixel box average byte for byte
+    /// with every kernel: boxes of one to dozens of texels on either axis
+    /// (the three-tap and the looped horizontal sums), rows revisited in
+    /// both directions and out of order (the cache), boxes taller than the
+    /// filter serves (it declines), and the near-white sums where the
+    /// rounding division lands on exact multiples.
+    #[test]
+    fn row_box_filter_matches_per_pixel_box_average() {
+        let mut rng = Rng(0x0b0c_5f11_7e40_0004);
+        for kernel in available_kernels() {
+            for trial in 0..60 {
+                let sw = 1 + (rng.next() % 90) as u32;
+                let sh = 1 + (rng.next() % 90) as u32;
+                let rgb: Vec<u8> = (0..sw * sh * 3)
+                    .map(|_| match trial % 3 {
+                        0 => rng.byte(),
+                        1 => 255 - (rng.byte() & 3),
+                        _ => [0, 255][(rng.byte() & 1) as usize],
+                    })
+                    .collect();
+                let stride = sw as usize * 3;
+                let half = |rng: &mut Rng| 0.5 + (rng.next() % 1200) as f64 / 100.0;
+                let (hx, hy) = (half(&mut rng), half(&mut rng));
+                let pos =
+                    |len: u32, rng: &mut Rng| (rng.next() % (len as u64 * 64)) as f64 / 64.0 - 0.5;
+                let n = 1 + (rng.next() % 40) as usize;
+                let mut cols: Vec<crate::image::AxisTaps> = (0..n)
+                    .filter_map(|_| crate::image::axis_box_taps(pos(sw, &mut rng), hx, sw))
+                    .collect();
+                if cols.is_empty() {
+                    continue;
+                }
+                cols.sort_by_key(|t| t.lo);
+                let rows: Vec<crate::image::AxisTaps> = (0..30)
+                    .filter_map(|_| crate::image::axis_box_taps(pos(sh, &mut rng), hy, sh))
+                    .collect();
+                let max_row_total = rows.iter().map(|t| t.total).max().unwrap_or(1);
+                let mut filter = RowBoxFilter::new(&rgb, stride, &cols, max_row_total).unwrap();
+                filter.kernel = kernel;
+                let mut dst = vec![0u8; cols.len() * 4];
+                for ty in &rows {
+                    let served = filter.average_row(ty, &mut dst);
+                    assert_eq!(
+                        served,
+                        ((ty.hi - ty.lo) as usize) < RowBoxFilter::MAX_ROWS,
+                        "{kernel:?} {ty:?}"
+                    );
+                    if !served {
+                        continue;
+                    }
+                    for (x, tx) in cols.iter().enumerate() {
+                        let expect = rgb8_box_average(&rgb, stride, tx, ty, tx.total * ty.total);
+                        assert_eq!(
+                            dst[x * 4..x * 4 + 4],
+                            [expect[0], expect[1], expect[2], 255],
+                            "{kernel:?} trial={trial} col={tx:?} row={ty:?}"
+                        );
+                    }
                 }
             }
         }

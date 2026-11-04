@@ -828,10 +828,37 @@ impl PreparedImage {
         })
     }
 
-    /// The packed RGB8 expansion behind [`Self::indexed_promoted_to_rgb8`].
-    fn indexed_source_as_rgb8(&self) -> Option<Arc<[u8]>> {
+    /// Whether [`Self::indexed_source_as_rgb8`] expands this image, and the
+    /// draw may therefore be served the expansion in its place: an Indexed
+    /// image of 2, 4 or 8 bpc, not a stencil, with complete sample data, at
+    /// most 64 Mpx, and without a colour-key mask (that tests the *raw*
+    /// palette indices, which the expansion discards).
+    pub(crate) fn indexed_promotion_eligible(&self) -> bool {
         // 64 Mpx -> 192 MiB of RGB8, the same ceiling as the CMYK conversion.
         const MAX_EXPAND_PIXELS: usize = 64 * 1024 * 1024;
+        if !matches!(self.color_space, ImageColorSpace::Indexed { .. })
+            || self.is_stencil
+            || !matches!(self.bpc, 2 | 4 | 8)
+            || matches!(self.mask, Some(ImageMask::ColorKey(_)))
+        {
+            return false;
+        }
+        let (w, h) = (self.width as usize, self.height as usize);
+        let Some(n) = w.checked_mul(h) else {
+            return false;
+        };
+        let Some(source_bits) = self.row_bits().checked_mul(h) else {
+            return false;
+        };
+        n > 0 && n <= MAX_EXPAND_PIXELS && self.samples.len() >= source_bits / 8
+    }
+
+    /// The packed RGB8 expansion behind [`Self::indexed_promoted_to_rgb8`];
+    /// `None` unless [`Self::indexed_promotion_eligible`].
+    pub(crate) fn indexed_source_as_rgb8(&self) -> Option<Arc<[u8]>> {
+        if !self.indexed_promotion_eligible() {
+            return None;
+        }
         let ImageColorSpace::Indexed {
             base,
             hival,
@@ -840,16 +867,9 @@ impl PreparedImage {
         else {
             return None;
         };
-        if self.is_stencil || !matches!(self.bpc, 2 | 4 | 8) {
-            return None;
-        }
         let (w, h) = (self.width as usize, self.height as usize);
-        let n = w.checked_mul(h)?;
+        let n = w * h;
         let row_bits = self.row_bits();
-        let source_bytes = row_bits.checked_mul(h)? / 8;
-        if n == 0 || n > MAX_EXPAND_PIXELS || self.samples.len() < source_bytes {
-            return None;
-        }
         let entries = 1usize << self.bpc;
         let palette: Vec<[u8; 3]> = (0..entries as u32)
             .map(|raw| {
