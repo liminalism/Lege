@@ -1,7 +1,7 @@
 [package]
 name = "pdf-chaos-tests"
 description = "Stable chaos/mutation regression gate for the never-panic invariant (dev/test-only)."
-version.workspace = true
+version = "0.4.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true

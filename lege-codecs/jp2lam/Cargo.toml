@@ -2,7 +2,7 @@
 
 [package]
 name = "jp2lam"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2024"
 description = "Pure Rust JPEG 2000 (JP2 and J2K) encoder and focused Part 1 decoder for document and photographic images, with lossless, measured-quality, and exact-rate compression"
 license = "MIT OR Apache-2.0"

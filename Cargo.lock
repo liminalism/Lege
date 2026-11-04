@@ -2408,7 +2408,7 @@ dependencies = [
 
 [[package]]
 name = "jp2lam"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "jpxl-perceptual",
  "memmap2",
@@ -3781,7 +3781,7 @@ dependencies = [
 
 [[package]]
 name = "pdf-chaos-tests"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "pdf-content",
  "pdf-document",
@@ -3795,7 +3795,7 @@ dependencies = [
 
 [[package]]
 name = "pdf-cli"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3822,7 +3822,7 @@ dependencies = [
 
 [[package]]
 name = "pdf-color"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "pdf-object",
  "thiserror 2.0.19",
@@ -3830,7 +3830,7 @@ dependencies = [
 
 [[package]]
 name = "pdf-content"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "pdf-color",
  "pdf-document",
@@ -3848,7 +3848,7 @@ dependencies = [
 
 [[package]]
 name = "pdf-document"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "flate2",
  "pdf-object",
@@ -3863,7 +3863,7 @@ dependencies = [
 
 [[package]]
 name = "pdf-font"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "pdf-object",
  "pdf-test-support",
@@ -3873,15 +3873,15 @@ dependencies = [
 
 [[package]]
 name = "pdf-function"
-version = "0.1.0"
+version = "0.4.0"
 
 [[package]]
 name = "pdf-geom"
-version = "0.1.0"
+version = "0.4.0"
 
 [[package]]
 name = "pdf-image"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "hayro-ccitt",
  "jbig2enc-rust",
@@ -3896,7 +3896,7 @@ dependencies = [
 
 [[package]]
 name = "pdf-object"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "pdf-syntax",
  "thiserror 2.0.19",
@@ -3904,7 +3904,7 @@ dependencies = [
 
 [[package]]
 name = "pdf-page-ir"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "bitflags 2.13.1",
  "pdf-geom",
@@ -3912,7 +3912,7 @@ dependencies = [
 
 [[package]]
 name = "pdf-postprocess"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "bytemuck",
  "lege-gpu",
@@ -3922,11 +3922,11 @@ dependencies = [
 
 [[package]]
 name = "pdf-profiling"
-version = "0.1.0"
+version = "0.4.0"
 
 [[package]]
 name = "pdf-read"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "pdf-content",
  "pdf-document",
@@ -3940,7 +3940,7 @@ dependencies = [
 
 [[package]]
 name = "pdf-render-api"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "pdf-page-ir",
  "thiserror 2.0.19",
@@ -3948,7 +3948,7 @@ dependencies = [
 
 [[package]]
 name = "pdf-render-cpu"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "pdf-color",
  "pdf-font",
@@ -3963,7 +3963,7 @@ dependencies = [
 
 [[package]]
 name = "pdf-render-scheduler"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "crossbeam-channel",
  "pdf-content",
@@ -3979,7 +3979,7 @@ dependencies = [
 
 [[package]]
 name = "pdf-render-wgpu"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "bytemuck",
  "lege-gpu",
@@ -3994,7 +3994,7 @@ dependencies = [
 
 [[package]]
 name = "pdf-security"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "pdf-object",
  "thiserror 2.0.19",
@@ -4002,7 +4002,7 @@ dependencies = [
 
 [[package]]
 name = "pdf-source"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "memmap2",
  "thiserror 2.0.19",
@@ -4010,7 +4010,7 @@ dependencies = [
 
 [[package]]
 name = "pdf-structure"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "flate2",
  "pdf-object",
@@ -4021,7 +4021,7 @@ dependencies = [
 
 [[package]]
 name = "pdf-syntax"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "pdf-source",
  "thiserror 2.0.19",
@@ -4029,7 +4029,7 @@ dependencies = [
 
 [[package]]
 name = "pdf-test-support"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "pdf-render-api",
  "pdf-security",
@@ -4038,7 +4038,7 @@ dependencies = [
 
 [[package]]
 name = "pdf-text"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "pdf-content",
  "pdf-document",

@@ -1,7 +1,7 @@
 [package]
 name = "pdf-read"
 description = "qpdf-style read-only document doctor: examine a PDF and report structure, encryption, page, annotation, and feature health."
-version.workspace = true
+version = "0.4.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true

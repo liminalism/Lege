@@ -18,7 +18,7 @@ collected in §13.
 
 | crate | contents | status after this plan |
 |---|---|---|
-| `lege-pdf` | read, text, render (CPU), print (feature) | the product; 0.1.0 is the goal |
+| `lege-pdf` | read, text, render (CPU), print (feature) | the product; 0.4.0 is the goal (the renderer workspace was numbered 0.4.0 on 2026-11-04; `lege-pdf/render/CHANGELOG.md`) |
 | `lege-pdf-write` | the typed, append-only, image-oriented emitter | 0.1.0 after its honesty fixes; optional re-export from `lege-pdf` under a `write` feature later |
 
 Not published: `agent` (stays an in-repo binary over `lege-pdf`), `pdf-integrity`
@@ -619,7 +619,7 @@ One table per corpus class, five columns, plus a link to the full report:
 
 ```text
 Scanned books (JPEG), 144 DPI, single thread       p50 ms/page   pages/s (8 threads)   pages ok
-lege-pdf 0.1.0                                          …               …                 …/…
+lege-pdf 0.4.0                                          …               …                 …/…
 hayro 0.9.0                                             …               …                 …/…
 PDFium (pdfium-binaries …)                              …               …                 …/…
 MuPDF 1.2x                                              …               …                 …/…
@@ -676,7 +676,7 @@ real differentiator.
    the sibling-checkout dependencies the ecosystem workspace tolerates.
 4. MSRV job at 1.97; clippy with the workspace denies; `cargo deny` for
    licences and duplicate versions.
-5. Version 0.1.0, then `lege-pdf-write` 0.1.0 after §7.
+5. Version 0.4.0 (already set in the workspace), then `lege-pdf-write` 0.1.0 after §7.
 6. The in-repo consumers (`lege-process`, `lege-document-ocr`,
    `lege-render-ffi`, `agent`, `pdf-integrity`, the Liminaldoc viewer) switch
    to `lege-pdf = { path = "../lege-pdf", features = [...] }` in the same
@@ -695,7 +695,7 @@ real differentiator.
 | 3 | facade API (§6.2), examples, rustdoc | 1 week | the three examples compile from a fresh `cargo new`; docs build with no warnings |
 | 4 | print fixes (§8.2), `print` feature wired, Windows queue run or "experimental" label | 3–5 days | print tests green; one real print on Linux |
 | 5 | README with benchmark table, THIRD-PARTY-NOTICES, LICENSE, CHANGELOG, docs.rs metadata, CI jobs (§11) | 3–5 days | dry-run clean on three OSes |
-| 6 | `cargo publish lege-pdf 0.1.0` | — | |
+| 6 | `cargo publish lege-pdf 0.4.0` | — | |
 | 7 | `lege-pdf-write` fixes (§7, items 1–8, 11–12), publish 0.1.0 | 3 days | qpdf/pypdf round-trip test green |
 | 8 | 0.2: impose-to-PDF (§8.3), balanced page tree and dedup in write, codec slimming (§6.4), text benchmark (§9.4) | 4–6 weeks | |
 

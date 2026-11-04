@@ -1,9 +1,9 @@
 # Changelog
 
-## 0.6.0 — Unreleased
+## 0.6.0 — 2026-11-02
 
-Changes since the last published version, 0.5.4. This is a release draft;
-no 0.6.0 publication is implied.
+Changes since the last published version, 0.5.4. Published to crates.io on
+2026-11-02.
 
 ### Encoding and compression
 
