@@ -153,7 +153,9 @@ pub fn blend_mask_rect_avx2(
         .checked_mul(cov_stride)
         .and_then(|v| v.checked_add(width));
     let (Some(dst_end), Some(cov_end)) = (dst_end, cov_end) else {
-        panic!("blend_mask_rect_avx2: rectangle extent overflows usize");
+        // An extent that overflows usize cannot lie inside either buffer;
+        // the scalar kernel's slicing reports it the same way for both paths.
+        return blend_mask_rect(dst, dst_stride, cov, cov_stride, width, height, rgb, alpha);
     };
     let dst = &mut dst[..dst_end];
     // `cov` keeps its full length: bytes past `cov_end` may be *read* (never

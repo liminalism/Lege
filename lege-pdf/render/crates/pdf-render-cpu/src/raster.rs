@@ -851,7 +851,7 @@ const SPARSE_MIN_SPAN: usize = 64;
 fn convert_row_sparse(
     acc: &mut [f32],
     cov: &mut [u8],
-    touched: &mut Vec<(u32, u32)>,
+    touched: &mut [(u32, u32)],
     col_min: usize,
     col_max: usize,
     rule: FillRule,
@@ -946,7 +946,7 @@ fn convert_row_sparse(
     if x < convert_end {
         let byte = coverage_byte(running, rule);
         if byte != 0 {
-            match runs.as_deref_mut() {
+            match runs {
                 Some(runs) => runs.push(CovRun {
                     x0: x as u32,
                     x1: convert_end as u32,
