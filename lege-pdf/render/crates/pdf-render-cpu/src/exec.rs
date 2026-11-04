@@ -713,6 +713,32 @@ fn paint_image(
     } else {
         img
     };
+    // Indexed (palette) sources are one byte (or less) per texel resolved
+    // through a palette, which no fast path reads. Expand them to RGB8 once
+    // through the palette; sampling the promoted image is byte-identical (see
+    // `PreparedImage::indexed_promoted_to_rgb8`), and every path from here on —
+    // the axis-aligned fast paths, the masked MRC path, and the generic
+    // sampler's RGB8 byte-sum branch — is then open to it. The expansion is
+    // one pass over the source; any sampling of the original costs at least a
+    // palette resolution per tap, and the taps are never fewer than the texels
+    // a draw touches, so it pays for itself on every geometry. A colour-key
+    // mask keys on the raw palette indices and keeps the original.
+    let promoted_indexed;
+    let img = if matches!(
+        img.color_space,
+        pdf_page_ir::ImageColorSpace::Indexed { .. }
+    ) && !matches!(img.mask, Some(pdf_page_ir::ImageMask::ColorKey(_)))
+    {
+        match img.indexed_promoted_to_rgb8() {
+            Some(rgb) => {
+                promoted_indexed = rgb;
+                &promoted_indexed
+            }
+            None => img,
+        }
+    } else {
+        img
+    };
     let fast_rgb8_base = blend_is_normal
         && cmask.is_none()
         && soft.is_none()
@@ -762,7 +788,7 @@ fn paint_image(
     // and a mask lookup for every destination pixel — all of which depend only
     // on the destination column or row once the placement is axis-aligned.
     let area_min_mask = if rgb8_area_shape {
-        area_min_bilevel_mask(img)
+        area_min_mask(img)
     } else {
         None
     };
@@ -1499,6 +1525,10 @@ fn paint_binary_box_sat(
 /// RGB8 image sampled nearest-neighbor. Source X indices depend only on device
 /// X, so compute them once per draw; then copy bytes directly into the
 /// premultiplied RGBA surface (opaque straight RGB equals premultiplied RGB).
+///
+/// Runs of destination columns that read consecutive source texels — the
+/// whole row at 1:1 — are widened 3→4 bytes by [`widen_rgb8_to_rgba8_opaque`]
+/// instead of copied texel by texel.
 fn paint_axis_aligned_rgb8_nearest_opaque(
     img: &crate::image::PreparedImage,
     surface: &mut Surface,
@@ -1507,22 +1537,32 @@ fn paint_axis_aligned_rgb8_nearest_opaque(
     x1: usize,
     y1: usize,
 ) -> (u64, u64) {
-    const OUTSIDE: usize = usize::MAX;
-
-    let mut source_columns = Vec::with_capacity(x1 - x0);
+    // Present (in-image) destination columns form one interval: `u` is
+    // monotone in `x`, so the set where it lies in `[0, 1)` is contiguous.
+    let mut first_x = None;
+    let mut columns: Vec<u32> = Vec::with_capacity(x1 - x0);
     for x in x0..x1 {
         let u = img.inv.a * (x as f64 + 0.5) + img.inv.e;
         if !(0.0..1.0).contains(&u) {
-            source_columns.push(OUTSIDE);
+            if first_x.is_some() {
+                break;
+            }
             continue;
         }
+        first_x.get_or_insert(x);
         let fx = u * img.width as f64 - 0.5;
-        source_columns
-            .push((fx.round() as i64).clamp(0, img.width.saturating_sub(1) as i64) as usize);
+        columns.push((fx.round() as i64).clamp(0, img.width.saturating_sub(1) as i64) as u32);
     }
+    let Some(first_x) = first_x else {
+        return (0, 0);
+    };
+    let runs = consecutive_runs(&columns);
+    let n = columns.len();
 
     let source_stride = img.width as usize * 3;
+    let samples: &[u8] = &img.samples;
     let output_origin = surface.origin_x;
+    let kernel = image_kernel();
     let mut painted = 0u64;
     for y in y0..y1 {
         let v = img.inv.d * (y as f64 + 0.5) + img.inv.f;
@@ -1533,50 +1573,265 @@ fn paint_axis_aligned_rgb8_nearest_opaque(
         let source_row = (fy.round() as i64).clamp(0, img.height.saturating_sub(1) as i64) as usize;
         let source_base = source_row * source_stride;
         let row = surface.row_mut(y);
-        for (local_x, &source_column) in source_columns.iter().enumerate() {
-            if source_column == OUTSIDE {
-                continue;
-            }
-            let source = source_base + source_column * 3;
-            let target = (x0 + local_x - output_origin) * 4;
-            row[target] = img.samples[source];
-            row[target + 1] = img.samples[source + 1];
-            row[target + 2] = img.samples[source + 2];
-            row[target + 3] = 255;
-            painted += 1;
+        let dst = &mut row[(first_x - output_origin) * 4..][..n * 4];
+        for &(start, len) in &runs {
+            let src_off = source_base + columns[start] as usize * 3;
+            widen_rgb8_to_rgba8_opaque(kernel, samples, src_off, &mut dst[start * 4..][..len * 4]);
         }
+        painted += n as u64;
     }
     (painted, painted)
 }
 
-/// Precomputed bilinear sample coordinates for one destination column/row.
-#[derive(Clone, Copy)]
-struct BilinearAxis {
-    /// Source texel floor index (clamped).
-    i0: u32,
-    /// Source texel ceil index (clamped).
-    i1: u32,
-    /// Fractional weight toward `i1` (matches `PreparedImage::bilinear`).
-    t: f32,
-    one_minus_t: f32,
+/// Split `columns` into maximal runs `(start, len)` of consecutive source
+/// texel indices (`columns[k + 1] == columns[k] + 1`).
+fn consecutive_runs(columns: &[u32]) -> Vec<(usize, usize)> {
+    let mut runs = Vec::new();
+    let mut start = 0usize;
+    for k in 1..=columns.len() {
+        if k == columns.len() || columns[k] != columns[k - 1].wrapping_add(1) {
+            runs.push((start, k - start));
+            start = k;
+        }
+    }
+    runs
+}
+
+/// Which vector kernel the opaque RGB8 image painters run. Probed once per
+/// draw, never per pixel; the scalar twins are the reference the vector
+/// kernels are tested against bit for bit.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum ImageKernel {
+    Scalar,
+    #[cfg(target_arch = "x86_64")]
+    Avx2,
+}
+
+#[inline]
+fn image_kernel() -> ImageKernel {
+    #[cfg(target_arch = "x86_64")]
+    {
+        if is_x86_feature_detected!("avx2") {
+            return ImageKernel::Avx2;
+        }
+    }
+    ImageKernel::Scalar
+}
+
+/// Write `dst.len() / 4` opaque RGBA pixels from the packed RGB8 texels at
+/// `src[src_off..]`: `[r, g, b]` → `[r, g, b, 255]`. The source is the whole
+/// sample buffer (not just the run) so the vector kernel can read a few bytes
+/// past the run's end wherever the buffer continues; it never reads past the
+/// buffer itself.
+#[inline]
+#[allow(
+    unsafe_code,
+    reason = "dispatches the AVX2 widen kernel behind a runtime probe; see SAFETY comment"
+)]
+fn widen_rgb8_to_rgba8_opaque(kernel: ImageKernel, src: &[u8], src_off: usize, dst: &mut [u8]) {
+    let n = dst.len() / 4;
+    // Bounds-check the run once, here, so both kernels share one invariant.
+    let run = &src[src_off..src_off + n * 3];
+    match kernel {
+        #[cfg(target_arch = "x86_64")]
+        ImageKernel::Avx2 => {
+            // SAFETY: AVX2 is present (`image_kernel` probed it); `run` is a
+            // valid `3n` byte slice at `src_off` within `src`, and `dst` holds
+            // at least `4n` bytes.
+            unsafe { widen_rgb8_to_rgba8_avx2(src, src_off, n, dst) }
+        }
+        ImageKernel::Scalar => widen_rgb8_to_rgba8_scalar(run, dst),
+    }
+}
+
+/// Scalar reference for [`widen_rgb8_to_rgba8_opaque`].
+#[inline]
+fn widen_rgb8_to_rgba8_scalar(run: &[u8], dst: &mut [u8]) {
+    for (rgb, out) in run.chunks_exact(3).zip(dst.chunks_exact_mut(4)) {
+        out[0] = rgb[0];
+        out[1] = rgb[1];
+        out[2] = rgb[2];
+        out[3] = 255;
+    }
+}
+
+/// AVX2 widen: eight texels per iteration (two 16-byte loads, one in-lane
+/// byte shuffle, one alpha OR, one 32-byte store), scalar for the remainder
+/// and wherever a 16-byte load would run past the end of `src`.
+///
+/// # Safety
+/// The CPU must support AVX2. `src[src_off..src_off + 3n]` and `dst[..4n]`
+/// must be in bounds (the caller slices both).
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+#[allow(unsafe_code)]
+unsafe fn widen_rgb8_to_rgba8_avx2(src: &[u8], src_off: usize, n: usize, dst: &mut [u8]) {
+    use core::arch::x86_64::*;
+    debug_assert!(dst.len() >= n * 4 && src.len() >= src_off + n * 3);
+    // Per 128-bit lane: texel k's bytes 3k..3k+2 land at 4k..4k+2; byte 4k+3
+    // is zeroed (shuffle index -1) and then OR'd to 255.
+    let shuffle = _mm256_setr_epi8(
+        0, 1, 2, -1, 3, 4, 5, -1, 6, 7, 8, -1, 9, 10, 11, -1, //
+        0, 1, 2, -1, 3, 4, 5, -1, 6, 7, 8, -1, 9, 10, 11, -1,
+    );
+    let alpha = _mm256_set1_epi32(0xFF00_0000u32 as i32);
+    let mut i = 0usize;
+    // The second lane's load starts 12 bytes in and reads 16, so the group
+    // needs 28 readable source bytes.
+    while i + 8 <= n && src_off + i * 3 + 28 <= src.len() {
+        // SAFETY: both 16-byte loads lie within `src` by the loop condition;
+        // the 32-byte store lies within `dst[..4n]` since `i + 8 <= n`.
+        unsafe {
+            let p = src.as_ptr().add(src_off + i * 3);
+            let lo = _mm_loadu_si128(p.cast());
+            let hi = _mm_loadu_si128(p.add(12).cast());
+            let v = _mm256_set_m128i(hi, lo);
+            let out = _mm256_or_si256(_mm256_shuffle_epi8(v, shuffle), alpha);
+            _mm256_storeu_si256(dst.as_mut_ptr().add(i * 4).cast(), out);
+        }
+        i += 8;
+    }
+    if i < n {
+        widen_rgb8_to_rgba8_scalar(
+            &src[src_off + i * 3..src_off + n * 3],
+            &mut dst[i * 4..n * 4],
+        );
+    }
+}
+
+/// The present destination columns of an axis-aligned bilinear draw, as
+/// structure-of-arrays tables the row kernels stream through. Present columns
+/// (those whose centre maps inside the image) form one interval starting at
+/// device column `first_x`; absent columns paint nothing.
+struct BilinearColumns {
+    first_x: usize,
+    /// Byte offset of the floor tap within a source row (`i0 * 3`).
+    off0: Vec<i32>,
+    /// Byte offset of the ceil tap within a source row (`i1 * 3`, clamped).
+    off1: Vec<i32>,
+    /// Fractional weight toward the ceil tap (matches `PreparedImage::bilinear`).
+    t: Vec<f32>,
+    one_minus_t: Vec<f32>,
+}
+
+impl BilinearColumns {
+    fn len(&self) -> usize {
+        self.off0.len()
+    }
+}
+
+/// The present destination rows of an axis-aligned bilinear draw: the source
+/// row pair and vertical weights of each, starting at device row `first_y`.
+struct BilinearRows {
+    first_y: usize,
+    i0: Vec<u32>,
+    i1: Vec<u32>,
+    t: Vec<f32>,
+    one_minus_t: Vec<f32>,
+}
+
+impl BilinearRows {
+    fn len(&self) -> usize {
+        self.i0.len()
+    }
+}
+
+/// Prepare the column table over device columns `x0..x1`, or `None` when no
+/// column centre maps inside the image.
+fn bilinear_columns(
+    img: &crate::image::PreparedImage,
+    x0: usize,
+    x1: usize,
+) -> Option<BilinearColumns> {
+    let w = img.width;
+    let last = (w as i64 - 1).max(0);
+    let mut cols = BilinearColumns {
+        first_x: 0,
+        off0: Vec::with_capacity(x1 - x0),
+        off1: Vec::with_capacity(x1 - x0),
+        t: Vec::with_capacity(x1 - x0),
+        one_minus_t: Vec::with_capacity(x1 - x0),
+    };
+    let mut first = None;
+    for x in x0..x1 {
+        let u = img.inv.a * (x as f64 + 0.5) + img.inv.e;
+        if !(0.0..1.0).contains(&u) {
+            if first.is_some() {
+                break;
+            }
+            continue;
+        }
+        first.get_or_insert(x);
+        let fx = u * w as f64 - 0.5;
+        let x_floor = fx.floor();
+        let tx = (fx - x_floor) as f32;
+        let ix0 = (x_floor as i64).clamp(0, last);
+        let ix1 = (x_floor as i64 + 1).clamp(0, last);
+        cols.off0.push((ix0 * 3) as i32);
+        cols.off1.push((ix1 * 3) as i32);
+        cols.t.push(tx);
+        cols.one_minus_t.push(1.0 - tx);
+    }
+    cols.first_x = first?;
+    Some(cols)
+}
+
+/// Prepare the row table over device rows `y0..y1` (see [`bilinear_columns`]).
+fn bilinear_rows(img: &crate::image::PreparedImage, y0: usize, y1: usize) -> Option<BilinearRows> {
+    let h = img.height;
+    let last = (h as i64 - 1).max(0);
+    let mut rows = BilinearRows {
+        first_y: 0,
+        i0: Vec::with_capacity(y1 - y0),
+        i1: Vec::with_capacity(y1 - y0),
+        t: Vec::with_capacity(y1 - y0),
+        one_minus_t: Vec::with_capacity(y1 - y0),
+    };
+    let mut first = None;
+    for y in y0..y1 {
+        let v = img.inv.d * (y as f64 + 0.5) + img.inv.f;
+        if !(0.0..1.0).contains(&v) {
+            if first.is_some() {
+                break;
+            }
+            continue;
+        }
+        first.get_or_insert(y);
+        let fy = (1.0 - v) * h as f64 - 0.5;
+        let y_floor = fy.floor();
+        let ty = (fy - y_floor) as f32;
+        rows.i0.push((y_floor as i64).clamp(0, last) as u32);
+        rows.i1.push((y_floor as i64 + 1).clamp(0, last) as u32);
+        rows.t.push(ty);
+        rows.one_minus_t.push(1.0 - ty);
+    }
+    rows.first_y = first?;
+    Some(rows)
 }
 
 /// Fast path for opaque, unmasked, axis-aligned RGB8 magnification / 1:1 with
 /// bilinear sampling — the continuous-tone JPEG/JPX case.
 ///
 /// Mirrors [`paint_axis_aligned_rgb8_nearest_opaque`]: source U depends only on
-/// device X and V only on Y, so axis tables are prepared once. Each destination
-/// pixel then does the same four-tap f32 lerp + truncate as
-/// `PreparedImage::bilinear`, writing opaque premultiplied RGBA.
+/// device X and V only on Y, so axis tables are prepared once. The filter is
+/// separable and is run that way: each *source* row touched is lerped
+/// horizontally once into a planar f32 row (`hlerp`), and each destination row
+/// lerps its two cached source rows vertically (`vlerp`) and writes opaque
+/// premultiplied RGBA. Under magnification a source row serves several
+/// destination rows, and even at 1:1 it serves two, so the horizontal work is
+/// shared instead of repeated per destination pixel. Every op is the same f32
+/// op in the same order as `PreparedImage::bilinear` (horizontal, then
+/// vertical, then truncate), so the result is byte-identical to the generic
+/// per-pixel sampler.
 ///
-/// Rows are independent and painted with Rayon when the destination is large
-/// enough that the parallel overhead is recovered. On x86_64, each row's
-/// interior uses SSE (`f32x4`) to bilinear-filter four consecutive pixels at
-/// a time with the same f32 op order + truncate-to-u8 as the scalar path.
-#[allow(
-    unsafe_code,
-    reason = "dispatches the SSE2 row kernel behind a target check; see SAFETY comment"
-)]
+/// When every fractional weight is exactly zero — the image placed at unit
+/// scale on an integer translation — the lerps reduce to the floor texel and
+/// the draw is a straight 3→4 byte widen of each source row.
+///
+/// Rows are independent and painted in bands across the rayon pool when the
+/// destination is large enough that the parallel overhead is recovered. On
+/// x86_64 with AVX2 the row kernels gather and lerp eight columns at a time;
+/// the scalar twins are the tested reference.
 fn paint_axis_aligned_rgb8_bilinear_opaque(
     img: &crate::image::PreparedImage,
     surface: &mut Surface,
@@ -1585,292 +1840,445 @@ fn paint_axis_aligned_rgb8_bilinear_opaque(
     x1: usize,
     y1: usize,
 ) -> (u64, u64) {
-    let w = img.width;
-    let h = img.height;
-    let mut columns: Vec<Option<BilinearAxis>> = Vec::with_capacity(x1 - x0);
-    for x in x0..x1 {
-        let u = img.inv.a * (x as f64 + 0.5) + img.inv.e;
-        if !(0.0..1.0).contains(&u) {
-            columns.push(None);
-            continue;
-        }
-        let fx = u * w as f64 - 0.5;
-        let x_floor = fx.floor();
-        let tx = (fx - x_floor) as f32;
-        let ix0 = (x_floor as i64).clamp(0, (w as i64 - 1).max(0)) as u32;
-        let ix1 = (x_floor as i64 + 1).clamp(0, (w as i64 - 1).max(0)) as u32;
-        columns.push(Some(BilinearAxis {
-            i0: ix0,
-            i1: ix1,
-            t: tx,
-            one_minus_t: 1.0 - tx,
-        }));
-    }
-
-    let mut rows: Vec<Option<BilinearAxis>> = Vec::with_capacity(y1 - y0);
-    for y in y0..y1 {
-        let v = img.inv.d * (y as f64 + 0.5) + img.inv.f;
-        if !(0.0..1.0).contains(&v) {
-            rows.push(None);
-            continue;
-        }
-        let fy = (1.0 - v) * h as f64 - 0.5;
-        let y_floor = fy.floor();
-        let ty = (fy - y_floor) as f32;
-        let iy0 = (y_floor as i64).clamp(0, (h as i64 - 1).max(0)) as u32;
-        let iy1 = (y_floor as i64 + 1).clamp(0, (h as i64 - 1).max(0)) as u32;
-        rows.push(Some(BilinearAxis {
-            i0: iy0,
-            i1: iy1,
-            t: ty,
-            one_minus_t: 1.0 - ty,
-        }));
-    }
-
-    let source_stride = w as usize * 3;
-    let samples = img.samples.as_ref();
-    let output_origin = surface.origin_x;
-    let dest_w = x1 - x0;
-    let dest_h = y1 - y0;
-    // Parallelize when the destination is large enough that row scheduling
-    // pays off (JPEG scans at scale ≥1 are tens of megapixels).
-    const PAR_PIXEL_THRESHOLD: usize = 256 * 256;
-
-    let use_sse = bilinear_row_use_sse();
-    let paint_row = |row_axis: &Option<BilinearAxis>, row: &mut [u8]| -> u64 {
-        let Some(ry) = *row_axis else {
-            return 0;
-        };
-        #[cfg(target_arch = "x86_64")]
-        if use_sse {
-            // SAFETY: SSE2 is required by x86_64 System V / Windows x64 ABIs;
-            // `bilinear_row_use_sse` only returns true on those targets.
-            return unsafe {
-                paint_bilinear_row_sse2(
-                    samples,
-                    source_stride,
-                    &columns,
-                    ry,
-                    row,
-                    x0,
-                    output_origin,
-                )
-            };
-        }
-        let _ = use_sse;
-        paint_bilinear_row_scalar(samples, source_stride, &columns, ry, row, x0, output_origin)
+    let (Some(columns), Some(rows)) = (bilinear_columns(img, x0, x1), bilinear_rows(img, y0, y1))
+    else {
+        return (0, 0);
     };
-
-    let (buf, first_abs_y, stride) = surface.rows_mut_abs(y0, y1);
-    // Align row table with the clipped buffer window.
-    let row_offset = first_abs_y.saturating_sub(y0);
-    let row_slice = if row_offset < rows.len() {
-        &rows[row_offset..]
-    } else {
-        &[]
-    };
-
-    let painted =
-        if image_row_parallel_enabled() && dest_w.saturating_mul(dest_h) >= PAR_PIXEL_THRESHOLD {
-            buf.par_chunks_mut(stride)
-                .zip(row_slice.par_iter())
-                .map(|(row, axis)| paint_row(axis, row))
-                .sum()
-        } else {
-            buf.chunks_exact_mut(stride)
-                .zip(row_slice.iter())
-                .map(|(row, axis)| paint_row(axis, row))
-                .sum()
-        };
-
+    let painted = paint_bilinear_rows(image_kernel(), img, surface, &columns, &rows);
     // Four source taps per painted destination pixel (edge clamps may alias).
     (painted, painted.saturating_mul(4))
 }
 
-#[inline]
-fn bilinear_row_use_sse() -> bool {
-    // x86_64 always has SSE2; the kernel uses only SSE2 ops (`f32x4` mul/add
-    // + truncate convert), so no runtime feature probe is required.
-    cfg!(target_arch = "x86_64")
-}
-
-/// Scalar bilinear row: four-tap f32 lerp + truncate, one dest pixel at a time.
-#[inline]
-fn paint_bilinear_row_scalar(
-    samples: &[u8],
-    source_stride: usize,
-    columns: &[Option<BilinearAxis>],
-    ry: BilinearAxis,
-    row: &mut [u8],
-    x0: usize,
-    output_origin: usize,
+/// Paint the prepared bilinear tables with `kernel`. Split from
+/// [`paint_axis_aligned_rgb8_bilinear_opaque`] so the tests can run every
+/// kernel over the same tables and compare the surfaces.
+fn paint_bilinear_rows(
+    kernel: ImageKernel,
+    img: &crate::image::PreparedImage,
+    surface: &mut Surface,
+    columns: &BilinearColumns,
+    rows: &BilinearRows,
 ) -> u64 {
-    let base0 = ry.i0 as usize * source_stride;
-    let base1 = ry.i1 as usize * source_stride;
-    let mut painted = 0u64;
-    for (local_x, col) in columns.iter().enumerate() {
-        let Some(rx) = *col else {
-            continue;
+    let source_stride = img.width as usize * 3;
+    let samples: &[u8] = &img.samples;
+    let n = columns.len();
+    let dst_x = (columns.first_x - surface.origin_x) * 4;
+
+    // The integer-aligned unit-scale draw: `t == 0` everywhere makes every
+    // lerp return its floor tap exactly, so the row is a widened copy.
+    let unit_blit = columns.t.iter().all(|&t| t == 0.0) && rows.t.iter().all(|&t| t == 0.0);
+
+    let (buf, first_abs_y, stride) = surface.rows_mut_abs(rows.first_y, rows.first_y + rows.len());
+    // Align the row table with the clipped buffer window.
+    let row_offset = first_abs_y.saturating_sub(rows.first_y);
+    let dest_rows = rows
+        .len()
+        .saturating_sub(row_offset)
+        .min(buf.len() / stride.max(1));
+    if dest_rows == 0 || n == 0 {
+        return 0;
+    }
+    let buf = &mut buf[..dest_rows * stride];
+    let parallel = image_row_parallel_enabled()
+        && n.saturating_mul(dest_rows) >= IMAGE_ROW_PAR_PIXEL_THRESHOLD;
+
+    if unit_blit {
+        let texels: Vec<u32> = columns.off0.iter().map(|&o| (o / 3) as u32).collect();
+        let runs = consecutive_runs(&texels);
+        let paint_row = |i: usize, row: &mut [u8]| {
+            let base = rows.i0[row_offset + i] as usize * source_stride;
+            let dst = &mut row[dst_x..dst_x + n * 4];
+            for &(start, len) in &runs {
+                let src_off = base + columns.off0[start] as usize;
+                widen_rgb8_to_rgba8_opaque(
+                    kernel,
+                    samples,
+                    src_off,
+                    &mut dst[start * 4..][..len * 4],
+                );
+            }
         };
-        let rgb = bilinear_rgb8_pixel(samples, base0, base1, rx, ry);
-        let target = (x0 + local_x - output_origin) * 4;
-        row[target] = rgb[0];
-        row[target + 1] = rgb[1];
-        row[target + 2] = rgb[2];
-        row[target + 3] = 255;
-        painted += 1;
+        if parallel {
+            buf.par_chunks_mut(stride)
+                .enumerate()
+                .for_each(|(i, row)| paint_row(i, row));
+        } else {
+            buf.chunks_exact_mut(stride)
+                .enumerate()
+                .for_each(|(i, row)| paint_row(i, row));
+        }
+        return (n * dest_rows) as u64;
     }
-    painted
+
+    // Each band of destination rows streams its own two-slot cache of
+    // horizontally lerped source rows. Bands are the unit of fan-out; serially
+    // the whole draw is one band so no source row is lerped twice.
+    const BAND_ROWS: usize = 32;
+    let band_rows = if parallel { BAND_ROWS } else { dest_rows };
+    let paint_band = |band: usize, band_buf: &mut [u8]| {
+        let mut cache = HLerpCache::new(n);
+        for (i, row) in band_buf.chunks_exact_mut(stride).enumerate() {
+            let r = row_offset + band * band_rows + i;
+            let (iy0, iy1) = (rows.i0[r], rows.i1[r]);
+            let s0 = cache.ensure(iy0, None, |plane| {
+                hlerp_row(
+                    kernel,
+                    samples,
+                    iy0 as usize * source_stride,
+                    columns,
+                    plane,
+                )
+            });
+            let s1 = cache.ensure(iy1, Some(s0), |plane| {
+                hlerp_row(
+                    kernel,
+                    samples,
+                    iy1 as usize * source_stride,
+                    columns,
+                    plane,
+                )
+            });
+            let (p0, p1) = (cache.plane(s0), cache.plane(s1));
+            vlerp_row(
+                kernel,
+                p0,
+                p1,
+                n,
+                rows.t[r],
+                rows.one_minus_t[r],
+                &mut row[dst_x..dst_x + n * 4],
+            );
+        }
+    };
+    if parallel {
+        buf.par_chunks_mut(stride * band_rows)
+            .enumerate()
+            .for_each(|(band, band_buf)| paint_band(band, band_buf));
+    } else {
+        buf.chunks_mut(stride * band_rows)
+            .enumerate()
+            .for_each(|(band, band_buf)| paint_band(band, band_buf));
+    }
+    (n * dest_rows) as u64
 }
 
-/// One opaque RGB bilinear sample. Op order matches `PreparedImage::bilinear`
-/// (horizontal then vertical, f32, truncate toward zero).
-#[inline(always)]
-fn bilinear_rgb8_pixel(
-    samples: &[u8],
-    base0: usize,
-    base1: usize,
-    rx: BilinearAxis,
-    ry: BilinearAxis,
-) -> [u8; 3] {
-    let s00 = base0 + rx.i0 as usize * 3;
-    let s10 = base0 + rx.i1 as usize * 3;
-    let s01 = base1 + rx.i0 as usize * 3;
-    let s11 = base1 + rx.i1 as usize * 3;
-    let mut rgb = [0u8; 3];
-    for ch in 0..3 {
-        let top = samples[s00 + ch] as f32 * rx.one_minus_t + samples[s10 + ch] as f32 * rx.t;
-        let bot = samples[s01 + ch] as f32 * rx.one_minus_t + samples[s11 + ch] as f32 * rx.t;
-        rgb[ch] = (top * ry.one_minus_t + bot * ry.t).clamp(0.0, 255.0) as u8;
-    }
-    rgb
+/// Two horizontally lerped source rows, planar f32 (`[r; n][g; n][b; n]`),
+/// keyed by source row. Destination rows walk the source monotonically with
+/// step ≤ 1 under magnification, so two slots make every source row's
+/// horizontal pass happen once per band.
+struct HLerpCache {
+    n: usize,
+    keys: [Option<u32>; 2],
+    planes: [Vec<f32>; 2],
+    next_evict: usize,
 }
 
-/// SSE2 row painter: groups of four consecutive *present* columns share one
-/// vertical weight pair and run channel lerps as `f32x4`. Gaps / leftovers use
-/// the scalar path. Byte-identical to [`paint_bilinear_row_scalar`].
-///
-/// # Safety
-/// Caller must ensure this is an x86_64 target (SSE2 is part of the baseline
-/// ABI). Sample indices derived from `columns`/`ry` must lie in `samples`.
-#[cfg(target_arch = "x86_64")]
-#[target_feature(enable = "sse2")]
+impl HLerpCache {
+    fn new(n: usize) -> Self {
+        Self {
+            n,
+            keys: [None, None],
+            planes: [vec![0.0; n * 3], vec![0.0; n * 3]],
+            next_evict: 0,
+        }
+    }
+
+    /// The slot holding source row `row`, filling one with `fill` if absent.
+    /// `keep` is a slot the caller still needs and must not be evicted.
+    fn ensure(&mut self, row: u32, keep: Option<usize>, fill: impl FnOnce(&mut [f32])) -> usize {
+        if let Some(slot) = (0..2).find(|&s| self.keys[s] == Some(row)) {
+            return slot;
+        }
+        let mut slot = self.next_evict;
+        if keep == Some(slot) {
+            slot = 1 - slot;
+        }
+        fill(&mut self.planes[slot][..self.n * 3]);
+        self.keys[slot] = Some(row);
+        self.next_evict = 1 - slot;
+        slot
+    }
+
+    fn plane(&self, slot: usize) -> &[f32] {
+        &self.planes[slot][..self.n * 3]
+    }
+}
+
+/// Horizontal pass of one source row (at byte offset `base`) over the column
+/// table, into `plane` (`[r; n][g; n][b; n]`): each lane is
+/// `s0 * (1 - t) + s1 * t` in f32, the order `PreparedImage::bilinear` uses.
+#[inline]
 #[allow(
     unsafe_code,
-    reason = "SSE2 intrinsics and one unaligned store; see the Safety section"
+    reason = "dispatches the AVX2 gather kernel behind a runtime probe; see SAFETY comment"
 )]
-unsafe fn paint_bilinear_row_sse2(
+fn hlerp_row(
+    kernel: ImageKernel,
     samples: &[u8],
-    source_stride: usize,
-    columns: &[Option<BilinearAxis>],
-    ry: BilinearAxis,
-    row: &mut [u8],
-    x0: usize,
-    output_origin: usize,
-) -> u64 {
-    use std::arch::x86_64::{
-        _mm_add_ps, _mm_cvttps_epi32, _mm_mul_ps, _mm_set_ps, _mm_set1_ps, _mm_storeu_si128,
-    };
+    base: usize,
+    columns: &BilinearColumns,
+    plane: &mut [f32],
+) {
+    match kernel {
+        #[cfg(target_arch = "x86_64")]
+        ImageKernel::Avx2 => {
+            // SAFETY: AVX2 is present (`image_kernel` probed it). The kernel
+            // bounds every gather against `samples.len()` itself and takes the
+            // scalar path for columns a 4-byte gather would overrun.
+            unsafe { hlerp_row_avx2(samples, base, columns, plane) }
+        }
+        ImageKernel::Scalar => hlerp_row_scalar(samples, base, columns, plane, 0),
+    }
+}
 
-    let base0 = ry.i0 as usize * source_stride;
-    let base1 = ry.i1 as usize * source_stride;
-    let omty = _mm_set1_ps(ry.one_minus_t);
-    let tyv = _mm_set1_ps(ry.t);
-    let mut painted = 0u64;
+/// Scalar reference for [`hlerp_row`], from column `start` on.
+#[inline]
+fn hlerp_row_scalar(
+    samples: &[u8],
+    base: usize,
+    columns: &BilinearColumns,
+    plane: &mut [f32],
+    start: usize,
+) {
     let n = columns.len();
-    let mut local_x = 0usize;
+    let (r, rest) = plane.split_at_mut(n);
+    let (g, b) = rest.split_at_mut(n);
+    for k in start..n {
+        let s0 = base + columns.off0[k] as usize;
+        let s1 = base + columns.off1[k] as usize;
+        let omt = columns.one_minus_t[k];
+        let t = columns.t[k];
+        r[k] = samples[s0] as f32 * omt + samples[s1] as f32 * t;
+        g[k] = samples[s0 + 1] as f32 * omt + samples[s1 + 1] as f32 * t;
+        b[k] = samples[s0 + 2] as f32 * omt + samples[s1 + 2] as f32 * t;
+    }
+}
 
-    while local_x + 4 <= n {
-        let c0 = columns[local_x];
-        let c1 = columns[local_x + 1];
-        let c2 = columns[local_x + 2];
-        let c3 = columns[local_x + 3];
-        if let (Some(rx0), Some(rx1), Some(rx2), Some(rx3)) = (c0, c1, c2, c3) {
-            let omtx = _mm_set_ps(
-                rx3.one_minus_t,
-                rx2.one_minus_t,
-                rx1.one_minus_t,
-                rx0.one_minus_t,
-            );
-            let tx = _mm_set_ps(rx3.t, rx2.t, rx1.t, rx0.t);
-            let mut out_r = [0u8; 4];
-            let mut out_g = [0u8; 4];
-            let mut out_b = [0u8; 4];
-            for ch in 0..3 {
-                let mut p00 = [0f32; 4];
-                let mut p10 = [0f32; 4];
-                let mut p01 = [0f32; 4];
-                let mut p11 = [0f32; 4];
-                for (lane, rx) in [rx0, rx1, rx2, rx3].into_iter().enumerate() {
-                    let s00 = base0 + rx.i0 as usize * 3 + ch;
-                    let s10 = base0 + rx.i1 as usize * 3 + ch;
-                    let s01 = base1 + rx.i0 as usize * 3 + ch;
-                    let s11 = base1 + rx.i1 as usize * 3 + ch;
-                    p00[lane] = samples[s00] as f32;
-                    p10[lane] = samples[s10] as f32;
-                    p01[lane] = samples[s01] as f32;
-                    p11[lane] = samples[s11] as f32;
-                }
-                // `_mm_set_ps` is high→low: lane3..lane0.
-                let v00 = _mm_set_ps(p00[3], p00[2], p00[1], p00[0]);
-                let v10 = _mm_set_ps(p10[3], p10[2], p10[1], p10[0]);
-                let v01 = _mm_set_ps(p01[3], p01[2], p01[1], p01[0]);
-                let v11 = _mm_set_ps(p11[3], p11[2], p11[1], p11[0]);
-                // Same op order as scalar: top/bot horizontal, then vertical.
-                let top = _mm_add_ps(_mm_mul_ps(v00, omtx), _mm_mul_ps(v10, tx));
-                let bot = _mm_add_ps(_mm_mul_ps(v01, omtx), _mm_mul_ps(v11, tx));
-                let out = _mm_add_ps(_mm_mul_ps(top, omty), _mm_mul_ps(bot, tyv));
-                // Truncate toward zero (matches `as u8` for values in [0, 255]).
-                let ti = _mm_cvttps_epi32(out);
-                let mut tmp = [0i32; 4];
-                // SAFETY: `tmp` has room for 4×i32; storeu needs no alignment.
-                unsafe {
-                    _mm_storeu_si128(tmp.as_mut_ptr().cast(), ti);
-                }
-                let dest = match ch {
-                    0 => &mut out_r,
-                    1 => &mut out_g,
-                    _ => &mut out_b,
+/// AVX2 horizontal pass: eight columns per iteration, each tap fetched as one
+/// 32-bit gather (`[r, g, b, next]`) and split into three f32 lanes. Same
+/// mul/mul/add order as the scalar twin, no FMA, so the planes are identical.
+///
+/// # Safety
+/// The CPU must support AVX2. `plane.len() >= 3 * columns.len()`.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+#[allow(unsafe_code)]
+unsafe fn hlerp_row_avx2(
+    samples: &[u8],
+    base: usize,
+    columns: &BilinearColumns,
+    plane: &mut [f32],
+) {
+    use core::arch::x86_64::*;
+    let n = columns.len();
+    debug_assert!(plane.len() >= n * 3);
+    // A gather reads 4 bytes at `base + off`; the row's ceil-tap offsets are
+    // non-decreasing, so the columns it may serve are a prefix.
+    let avail = samples.len().saturating_sub(base);
+    let gather_cols = if avail >= 4 {
+        columns.off1.partition_point(|&o| (o as usize) + 4 <= avail)
+    } else {
+        0
+    };
+    let byte_mask = _mm256_set1_epi32(0xFF);
+    let mut k = 0usize;
+    // SAFETY: every index gathered in this loop satisfies
+    // `base + off + 4 <= samples.len()` by `gather_cols`; the plane stores are
+    // within `plane[..3n]` since `k + 8 <= n`.
+    unsafe {
+        let row_ptr = samples.as_ptr().add(base).cast::<i32>();
+        let (r_out, rest) = plane.split_at_mut(n);
+        let (g_out, b_out) = rest.split_at_mut(n);
+        // Eight consecutive texels (24 bytes) split into per-channel i32 lanes:
+        // two 16-byte loads (the second 12 bytes in, so each 128-bit lane
+        // holds four texels) and one in-lane byte shuffle per channel.
+        let plane_mask = |c: i8| {
+            _mm256_setr_epi8(
+                c,
+                -1,
+                -1,
+                -1,
+                c + 3,
+                -1,
+                -1,
+                -1,
+                c + 6,
+                -1,
+                -1,
+                -1,
+                c + 9,
+                -1,
+                -1,
+                -1, //
+                c,
+                -1,
+                -1,
+                -1,
+                c + 3,
+                -1,
+                -1,
+                -1,
+                c + 6,
+                -1,
+                -1,
+                -1,
+                c + 9,
+                -1,
+                -1,
+                -1,
+            )
+        };
+        let (mask_r, mask_g, mask_b) = (plane_mask(0), plane_mask(1), plane_mask(2));
+        let texel_ramp = _mm256_setr_epi32(0, 3, 6, 9, 12, 15, 18, 21);
+        let load_run = |off: i32| {
+            let p = samples.as_ptr().add(base + off as usize);
+            let v = _mm256_set_m128i(_mm_loadu_si128(p.add(12).cast()), _mm_loadu_si128(p.cast()));
+            (
+                _mm256_shuffle_epi8(v, mask_r),
+                _mm256_shuffle_epi8(v, mask_g),
+                _mm256_shuffle_epi8(v, mask_b),
+            )
+        };
+        while k + 8 <= gather_cols {
+            let omt = _mm256_loadu_ps(columns.one_minus_t.as_ptr().add(k));
+            let t = _mm256_loadu_ps(columns.t.as_ptr().add(k));
+            let lerp = |a: __m256i, b: __m256i| {
+                let fa = _mm256_cvtepi32_ps(a);
+                let fb = _mm256_cvtepi32_ps(b);
+                _mm256_add_ps(_mm256_mul_ps(fa, omt), _mm256_mul_ps(fb, t))
+            };
+            let (o0, o1) = (columns.off0[k], columns.off1[k]);
+            let idx0 = _mm256_loadu_si256(columns.off0.as_ptr().add(k).cast());
+            let idx1 = _mm256_loadu_si256(columns.off1.as_ptr().add(k).cast());
+            // When the eight columns read eight consecutive texels — the 1:1
+            // case — both taps are plain loads instead of gathers. The test is
+            // per lane: at 1:1 the floor index can also step by zero or two
+            // texels where floating-point noise straddles an integer, so a
+            // matching span alone would not do. The second lane's load reads
+            // 28 bytes from the run's start.
+            let consecutive = |idx: __m256i, o: i32| {
+                let expected = _mm256_add_epi32(_mm256_set1_epi32(o), texel_ramp);
+                _mm256_movemask_epi8(_mm256_cmpeq_epi32(idx, expected)) == -1
+            };
+            let run = consecutive(idx0, o0)
+                && consecutive(idx1, o1)
+                && base + o1 as usize + 28 <= samples.len();
+            let ((r0, g0, b0), (r1, g1, b1)) = if run {
+                (load_run(o0), load_run(o1))
+            } else {
+                let v0 = _mm256_i32gather_epi32::<1>(row_ptr, idx0);
+                let v1 = _mm256_i32gather_epi32::<1>(row_ptr, idx1);
+                let split = |v: __m256i| {
+                    (
+                        _mm256_and_si256(v, byte_mask),
+                        _mm256_and_si256(_mm256_srli_epi32::<8>(v), byte_mask),
+                        _mm256_and_si256(_mm256_srli_epi32::<16>(v), byte_mask),
+                    )
                 };
-                for lane in 0..4 {
-                    dest[lane] = tmp[lane].clamp(0, 255) as u8;
-                }
-            }
-            for lane in 0..4 {
-                let target = (x0 + local_x + lane - output_origin) * 4;
-                row[target] = out_r[lane];
-                row[target + 1] = out_g[lane];
-                row[target + 2] = out_b[lane];
-                row[target + 3] = 255;
-            }
-            painted += 4;
-            local_x += 4;
-            continue;
+                (split(v0), split(v1))
+            };
+            _mm256_storeu_ps(r_out.as_mut_ptr().add(k), lerp(r0, r1));
+            _mm256_storeu_ps(g_out.as_mut_ptr().add(k), lerp(g0, g1));
+            _mm256_storeu_ps(b_out.as_mut_ptr().add(k), lerp(b0, b1));
+            k += 8;
         }
-        if let Some(rx) = c0 {
-            let rgb = bilinear_rgb8_pixel(samples, base0, base1, rx, ry);
-            let target = (x0 + local_x - output_origin) * 4;
-            row[target] = rgb[0];
-            row[target + 1] = rgb[1];
-            row[target + 2] = rgb[2];
-            row[target + 3] = 255;
-            painted += 1;
-        }
-        local_x += 1;
     }
-    while local_x < n {
-        if let Some(rx) = columns[local_x] {
-            let rgb = bilinear_rgb8_pixel(samples, base0, base1, rx, ry);
-            let target = (x0 + local_x - output_origin) * 4;
-            row[target] = rgb[0];
-            row[target + 1] = rgb[1];
-            row[target + 2] = rgb[2];
-            row[target + 3] = 255;
-            painted += 1;
-        }
-        local_x += 1;
+    if k < n {
+        hlerp_row_scalar(samples, base, columns, plane, k);
     }
-    painted
+}
+
+/// Vertical pass of one destination row: `p0 * (1 - t) + p1 * t` per channel
+/// in f32, truncated toward zero, written as opaque RGBA into `dst` (`4n`
+/// bytes). The order `PreparedImage::bilinear` uses after its horizontal lerps.
+#[inline]
+#[allow(
+    unsafe_code,
+    reason = "dispatches the AVX2 pack kernel behind a runtime probe; see SAFETY comment"
+)]
+fn vlerp_row(
+    kernel: ImageKernel,
+    p0: &[f32],
+    p1: &[f32],
+    n: usize,
+    t: f32,
+    one_minus_t: f32,
+    dst: &mut [u8],
+) {
+    assert!(p0.len() >= n * 3 && p1.len() >= n * 3 && dst.len() >= n * 4);
+    match kernel {
+        #[cfg(target_arch = "x86_64")]
+        ImageKernel::Avx2 => {
+            // SAFETY: AVX2 is present (`image_kernel` probed it); the slice
+            // lengths asserted above are the kernel's only precondition.
+            unsafe { vlerp_row_avx2(p0, p1, n, t, one_minus_t, dst) }
+        }
+        ImageKernel::Scalar => vlerp_row_scalar(p0, p1, n, t, one_minus_t, dst, 0),
+    }
+}
+
+/// Scalar reference for [`vlerp_row`], from column `start` on.
+#[inline]
+fn vlerp_row_scalar(
+    p0: &[f32],
+    p1: &[f32],
+    n: usize,
+    t: f32,
+    omt: f32,
+    dst: &mut [u8],
+    start: usize,
+) {
+    for k in start..n {
+        let out = &mut dst[k * 4..k * 4 + 4];
+        out[0] = (p0[k] * omt + p1[k] * t).clamp(0.0, 255.0) as u8;
+        out[1] = (p0[n + k] * omt + p1[n + k] * t).clamp(0.0, 255.0) as u8;
+        out[2] = (p0[2 * n + k] * omt + p1[2 * n + k] * t).clamp(0.0, 255.0) as u8;
+        out[3] = 255;
+    }
+}
+
+/// AVX2 vertical pass: eight columns per iteration — three planar lerps, a
+/// truncating `cvtt` (matching `as u8` on `[0, 255]`), a clamp, and one packed
+/// 32-byte RGBA store.
+///
+/// # Safety
+/// The CPU must support AVX2. `p0.len() >= 3n`, `p1.len() >= 3n`,
+/// `dst.len() >= 4n`.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+#[allow(unsafe_code)]
+unsafe fn vlerp_row_avx2(p0: &[f32], p1: &[f32], n: usize, t: f32, omt: f32, dst: &mut [u8]) {
+    use core::arch::x86_64::*;
+    debug_assert!(p0.len() >= n * 3 && p1.len() >= n * 3 && dst.len() >= n * 4);
+    let tv = _mm256_set1_ps(t);
+    let omtv = _mm256_set1_ps(omt);
+    let zero = _mm256_setzero_si256();
+    let max = _mm256_set1_epi32(255);
+    let alpha = _mm256_set1_epi32(0xFF00_0000u32 as i32);
+    let mut k = 0usize;
+    // SAFETY: every load reads `[k, k + 8)` of a plane channel with
+    // `k + 8 <= n`, within the asserted lengths; the store writes
+    // `dst[4k..4k + 32]`, within `4n`.
+    unsafe {
+        while k + 8 <= n {
+            let channel = |c: usize| {
+                let a = _mm256_loadu_ps(p0.as_ptr().add(c * n + k));
+                let b = _mm256_loadu_ps(p1.as_ptr().add(c * n + k));
+                let v = _mm256_add_ps(_mm256_mul_ps(a, omtv), _mm256_mul_ps(b, tv));
+                let i = _mm256_cvttps_epi32(v);
+                _mm256_min_epi32(_mm256_max_epi32(i, zero), max)
+            };
+            let r = channel(0);
+            let g = _mm256_slli_epi32::<8>(channel(1));
+            let b = _mm256_slli_epi32::<16>(channel(2));
+            let px = _mm256_or_si256(_mm256_or_si256(r, g), _mm256_or_si256(b, alpha));
+            _mm256_storeu_si256(dst.as_mut_ptr().add(k * 4).cast(), px);
+            k += 8;
+        }
+    }
+    if k < n {
+        vlerp_row_scalar(p0, p1, n, t, omt, dst, k);
+    }
 }
 
 /// Fast path for an opaque, unmasked, axis-aligned RGB8 image being
@@ -1927,23 +2335,34 @@ fn paint_axis_aligned_cmyk_area_min_opaque(
 /// point-sampled all-or-nothing. Both are JBIG2 in practice.
 #[derive(Clone, Copy)]
 enum AreaMinMask<'a> {
+    /// A one-bit `/SMask`, box-filtered by packed popcount.
     Soft(&'a pdf_page_ir::ImageSMask),
+    /// An eight-bit `/SMask` (a cover's transparency layer), box-filtered in
+    /// f64 exactly as the generic sampler does.
+    Soft8(&'a pdf_page_ir::ImageSMask),
     Stencil(&'a pdf_page_ir::ImageSMask),
 }
 
 /// Classify `img`'s mask for the axis-aligned area-minification fast path, or
 /// `None` to keep the generic per-pixel path.
-fn area_min_bilevel_mask(img: &crate::image::PreparedImage) -> Option<AreaMinMask<'_>> {
+fn area_min_mask(img: &crate::image::PreparedImage) -> Option<AreaMinMask<'_>> {
     if let Some(sm) = img.smask.as_deref() {
-        // `sample_smask` only takes its packed-bit box-filter branch at 1 bpc
-        // and only box-filters at all when the mask minifies on an axis;
-        // point-sampled masks are not what this path reproduces.
+        // `sample_smask` only box-filters at all when the mask minifies on an
+        // axis; point-sampled masks are not what this path reproduces. Its
+        // packed-bit branch is reproduced at 1 bpc, its multi-bit branch at
+        // 8 bpc over a complete byte-per-texel buffer.
         let footprint = img.smask_footprint(sm);
-        let usable = sm.bits_per_component == 1
-            && sm.width > 0
-            && sm.height > 0
-            && (footprint[0] > 1.0 || footprint[1] > 1.0);
-        return usable.then_some(AreaMinMask::Soft(sm));
+        let minified = sm.width > 0 && sm.height > 0 && (footprint[0] > 1.0 || footprint[1] > 1.0);
+        if !minified {
+            return None;
+        }
+        return match sm.bits_per_component {
+            1 => Some(AreaMinMask::Soft(sm)),
+            8 if sm.samples.len() >= sm.width as usize * sm.height as usize => {
+                Some(AreaMinMask::Soft8(sm))
+            }
+            _ => None,
+        };
     }
     match img.mask.as_ref()? {
         // A colour-key mask tests the base image's own samples, not an
@@ -1964,9 +2383,10 @@ enum MaskAxis {
     Texel(u32),
 }
 
-/// Area-minify an axis-aligned opaque RGB8 image cut out by a bilevel mask —
-/// the MRC scanned-page shape: a JPX foreground over a JPX background, cut out
-/// by a JBIG2 layer sharing the foreground's placement.
+/// Area-minify an axis-aligned opaque RGB8 image cut out by a mask — the MRC
+/// scanned-page shape (a JPX foreground over a JPX background, cut out by a
+/// JBIG2 layer sharing the foreground's placement) and the cover-image shape
+/// (a Flate RGB/palette image under an eight-bit transparency layer).
 ///
 /// The generic per-pixel loop recomputes, for every destination pixel, the
 /// inverse map, the base image's two box-filter tap ranges, and the mask's own
@@ -2001,7 +2421,7 @@ fn paint_axis_aligned_rgb8_area_min_masked(
     let half_u = 0.5 * img.inv.a.abs();
     let half_v = 0.5 * img.inv.d.abs();
     let mask_footprint = match mask {
-        AreaMinMask::Soft(sm) => img.smask_footprint(sm),
+        AreaMinMask::Soft(sm) | AreaMinMask::Soft8(sm) => img.smask_footprint(sm),
         AreaMinMask::Stencil(_) => [0.0, 0.0],
     };
 
@@ -2018,12 +2438,14 @@ fn paint_axis_aligned_rgb8_area_min_masked(
         }
         let base = img.box_taps_x(u * img.width as f64 - 0.5);
         let axis = match mask {
-            AreaMinMask::Soft(sm) => crate::image::PreparedImage::smask_box_taps(
-                u * sm.width as f64 - 0.5,
-                mask_footprint[0],
-                sm.width,
-            )
-            .map(MaskAxis::Taps),
+            AreaMinMask::Soft(sm) | AreaMinMask::Soft8(sm) => {
+                crate::image::PreparedImage::smask_box_taps(
+                    u * sm.width as f64 - 0.5,
+                    mask_footprint[0],
+                    sm.width,
+                )
+                .map(MaskAxis::Taps)
+            }
             AreaMinMask::Stencil(sm) => Some(MaskAxis::Texel(crate::image::stencil_col(sm, u))),
         };
         columns.push((interior, base.zip(axis)));
@@ -2041,12 +2463,14 @@ fn paint_axis_aligned_rgb8_area_min_masked(
         }
         let base = img.box_taps_y((1.0 - v) * img.height as f64 - 0.5);
         let axis = match mask {
-            AreaMinMask::Soft(sm) => crate::image::PreparedImage::smask_box_taps(
-                (1.0 - v) * sm.height as f64 - 0.5,
-                mask_footprint[1],
-                sm.height,
-            )
-            .map(MaskAxis::Taps),
+            AreaMinMask::Soft(sm) | AreaMinMask::Soft8(sm) => {
+                crate::image::PreparedImage::smask_box_taps(
+                    (1.0 - v) * sm.height as f64 - 0.5,
+                    mask_footprint[1],
+                    sm.height,
+                )
+                .map(MaskAxis::Taps)
+            }
             AreaMinMask::Stencil(sm) => Some(MaskAxis::Texel(crate::image::stencil_row(sm, v))),
         };
         rows.push((interior, base.zip(axis)));
@@ -2117,6 +2541,10 @@ fn paint_axis_aligned_rgb8_area_min_masked(
                 let alpha = match (mask, mx, my) {
                     (AreaMinMask::Soft(sm), MaskAxis::Taps(mtx), MaskAxis::Taps(mty)) => {
                         let coverage = crate::image::bilevel_smask_coverage(sm, &mtx, &mty);
+                        (255.0 * crate::image::apply_smask_decode(sm, coverage)) as u8
+                    }
+                    (AreaMinMask::Soft8(sm), MaskAxis::Taps(mtx), MaskAxis::Taps(mty)) => {
+                        let coverage = crate::image::gray8_smask_coverage(sm, &mtx, &mty);
                         (255.0 * crate::image::apply_smask_decode(sm, coverage)) as u8
                     }
                     (AreaMinMask::Stencil(sm), MaskAxis::Texel(col), MaskAxis::Texel(srow)) => {
@@ -3727,7 +4155,7 @@ mod rgb8_area_min_tests {
                         img.mask = Some(pdf_page_ir::ImageMask::Stencil(mask));
                     }
 
-                    let Some(kind) = area_min_bilevel_mask(&img) else {
+                    let Some(kind) = area_min_mask(&img) else {
                         // Only a non-minifying soft mask is turned away, and
                         // then the generic path is already what runs.
                         assert!(soft, "a stencil mask is always eligible");
@@ -3758,6 +4186,71 @@ mod rgb8_area_min_tests {
                             "{what} row {y} differs sw={sw} sh={sh} mask={mw}x{mh} dev={dev_w}x{dev_h}"
                         );
                     }
+                }
+            }
+        }
+    }
+
+    /// The eight-bit soft-mask variant of the MRC path must reproduce the
+    /// generic per-pixel body byte for byte — the f64 box filter, the
+    /// `/Decode` remap, the alpha narrowing and the source-over composite —
+    /// including the anti-aliased border band, over mask geometries that
+    /// differ from the base image's.
+    #[test]
+    fn masked8_fast_path_matches_generic_shade() {
+        let mut rng = Rng(0x8b17_5caf_e000_0001);
+        let cases = [
+            (7u32, 5u32, 3u32, 3u32),
+            (16, 16, 5, 7),
+            (33, 9, 8, 4),
+            (9, 33, 4, 8),
+            (64, 48, 20, 15),
+            (5, 5, 4, 2),
+        ];
+        for &(sw, sh, dev_w, dev_h) in &cases {
+            for &(mw, mh) in &[(sw, sh), (sw * 2, sh * 2), (sw.div_ceil(2), sh.div_ceil(2))] {
+                for trial in 0..4 {
+                    let samples: Vec<u8> = (0..(sw * sh * 3)).map(|_| rng.byte()).collect();
+                    let mut img = make_image(sw, sh, dev_w, dev_h, samples);
+                    // Mostly opaque with transparent holes, like a cover's
+                    // transparency layer, so both the skip and the composite
+                    // run; odd trials invert through `/Decode [1 0]`.
+                    let mask: Vec<u8> = (0..mw * mh)
+                        .map(|_| if rng.byte() < 40 { rng.byte() } else { 255 })
+                        .collect();
+                    img.smask = Some(Arc::new(pdf_page_ir::ImageSMask {
+                        width: mw,
+                        height: mh,
+                        bits_per_component: 8,
+                        decode: (trial % 2 == 1).then(|| Arc::from(vec![[1.0f32, 0.0f32]])),
+                        samples: Arc::from(mask),
+                        codec: None,
+                        codec_data: None,
+                        codec_parms: None,
+                    }));
+                    let Some(kind) = area_min_mask(&img) else {
+                        // A non-minifying mask is turned away; the generic
+                        // path is then already what runs.
+                        continue;
+                    };
+                    assert!(matches!(kind, AreaMinMask::Soft8(_)));
+                    let mut fast =
+                        Surface::new(dev_w as usize, dev_h as usize, Background::Transparent);
+                    let (painted, _taps) = paint_axis_aligned_rgb8_area_min_masked(
+                        &img,
+                        kind,
+                        &mut fast,
+                        0,
+                        0,
+                        dev_w as usize,
+                        dev_h as usize,
+                    );
+                    let (mut reference, ref_painted) = generic_masked_reference(&img, dev_w, dev_h);
+                    let what = format!(
+                        "smask8 sw={sw} sh={sh} mask={mw}x{mh} dev={dev_w}x{dev_h} trial={trial}"
+                    );
+                    assert_eq!(painted, ref_painted, "{what}: painted count");
+                    assert_surfaces_equal(&mut fast, &mut reference, &what);
                 }
             }
         }
@@ -3938,6 +4431,409 @@ mod rgb8_area_min_tests {
                         reference.row_mut(y).to_vec(),
                         "bilinear row {y} differs sw={sw} sh={sh} dev={dev_w}x{dev_h}"
                     );
+                }
+            }
+        }
+    }
+
+    /// Generic reference: `shade()` + opaque source-over onto a transparent
+    /// surface (a direct write for an opaque sample). Returns the painted count.
+    fn generic_reference(img: &PreparedImage, dev_w: u32, dev_h: u32) -> (Surface, u64) {
+        let mut reference = Surface::new(dev_w as usize, dev_h as usize, Background::Transparent);
+        let mut painted = 0u64;
+        for y in 0..dev_h as usize {
+            let row = reference.row_mut(y);
+            for x in 0..dev_w as usize {
+                if let Some(c) = img.shade(x as f64 + 0.5, y as f64 + 0.5) {
+                    let a = mul_div_255(mul_div_255(c[3] as u16, 255), 255);
+                    if a == 0 {
+                        continue;
+                    }
+                    let ia = 255 - a;
+                    let px = &mut row[x * 4..x * 4 + 4];
+                    px[0] = (mul_div_255(c[0] as u16, a) + mul_div_255(px[0] as u16, ia)) as u8;
+                    px[1] = (mul_div_255(c[1] as u16, a) + mul_div_255(px[1] as u16, ia)) as u8;
+                    px[2] = (mul_div_255(c[2] as u16, a) + mul_div_255(px[2] as u16, ia)) as u8;
+                    px[3] = (a + mul_div_255(px[3] as u16, ia)) as u8;
+                    painted += 1;
+                }
+            }
+        }
+        (reference, painted)
+    }
+
+    fn assert_surfaces_equal(a: &mut Surface, b: &mut Surface, what: &str) {
+        for y in 0..a.height {
+            assert_eq!(
+                a.row_mut(y).to_vec(),
+                b.row_mut(y).to_vec(),
+                "{what}: row {y} differs"
+            );
+        }
+    }
+
+    /// The kernels the image painters can run on this host.
+    fn available_kernels() -> Vec<ImageKernel> {
+        let mut kernels = vec![ImageKernel::Scalar];
+        #[cfg(target_arch = "x86_64")]
+        if is_x86_feature_detected!("avx2") {
+            kernels.push(ImageKernel::Avx2);
+        }
+        kernels
+    }
+
+    /// A packed Indexed source: `bpc`-bit MSB-first samples, byte-aligned rows.
+    fn packed_indexed_samples(sw: u32, sh: u32, bpc: u8, rng: &mut Rng) -> Vec<u8> {
+        let row_bytes = (sw as usize * bpc as usize).div_ceil(8);
+        (0..row_bytes * sh as usize).map(|_| rng.byte()).collect()
+    }
+
+    /// The Indexed fast path (resolve the palette once, expand to RGB8, then
+    /// box-average) must reproduce the generic per-tap lookup + average, byte
+    /// for byte: at 8 bpc the generic path resolves each tap through
+    /// `pixel()`, at 2/4 bpc through the prepared `sample_lut`; with and
+    /// without a `/Decode` remap; over Gray, RGB and CMYK palettes.
+    #[test]
+    fn indexed_fast_path_matches_generic_shade() {
+        let mut rng = Rng(0x1d1d_1d1d_5eed_0001);
+        let cases = [
+            (7u32, 5u32, 3u32, 3u32),
+            (16, 16, 5, 7),
+            (33, 9, 8, 4),
+            (64, 48, 20, 15),
+            (5, 5, 4, 2),
+        ];
+        let bases: [ImageColorSpace; 3] = [
+            ImageColorSpace::Gray,
+            ImageColorSpace::Rgb,
+            ImageColorSpace::Cmyk,
+        ];
+        for &bpc in &[2u8, 4, 8] {
+            for base in &bases {
+                for &(sw, sh, dev_w, dev_h) in &cases {
+                    for &with_decode in &[false, true] {
+                        // A palette shorter than `2^bpc` exercises the `hival` clamp.
+                        let hival = ((1u32 << bpc) - 1).min(200 + (rng.byte() as u32 % 56));
+                        let lookup: Vec<u8> = (0..(hival as usize + 1) * base.components())
+                            .map(|_| rng.byte())
+                            .collect();
+                        let color_space = ImageColorSpace::Indexed {
+                            base: Box::new(base.clone()),
+                            hival,
+                            lookup: Arc::from(lookup),
+                        };
+                        let samples = packed_indexed_samples(sw, sh, bpc, &mut rng);
+                        let mut img =
+                            make_image_cs(sw, sh, dev_w, dev_h, color_space.clone(), samples);
+                        img.bpc = bpc;
+                        img.decode = with_decode.then(|| {
+                            // `/Decode [hi lo]`: inverts the index range, in index units.
+                            Arc::from(vec![[hival as f32, 0.0f32]])
+                        });
+                        // What prepared.rs attaches: a LUT for 1/2/4 bpc, none at 8.
+                        img.sample_lut = crate::image::build_sample_lut(
+                            bpc,
+                            &color_space,
+                            img.decode.as_deref(),
+                            false,
+                        );
+                        assert_eq!(img.sample_lut.is_some(), bpc <= 4);
+                        let promoted = img
+                            .indexed_promoted_to_rgb8()
+                            .expect("indexed promotion applies to this small image");
+                        let what = format!(
+                            "indexed bpc={bpc} base={base:?} decode={with_decode} sw={sw} sh={sh} dev={dev_w}x{dev_h}"
+                        );
+                        // Unmasked: the promoted image takes the RGB8 area path.
+                        let mut fast =
+                            Surface::new(dev_w as usize, dev_h as usize, Background::Transparent);
+                        let (painted, _taps) = paint_axis_aligned_rgb8_area_min_opaque(
+                            &promoted,
+                            &mut fast,
+                            0,
+                            0,
+                            dev_w as usize,
+                            dev_h as usize,
+                        );
+                        let (mut reference, ref_painted) = generic_reference(&img, dev_w, dev_h);
+                        assert_eq!(painted, ref_painted, "{what}: painted count");
+                        assert_surfaces_equal(&mut fast, &mut reference, &what);
+                        // Cut out by a bilevel soft mask: the promoted image
+                        // takes the masked MRC path.
+                        let mut masked = img.clone();
+                        masked.smask = Some(bilevel(sw, sh, &mut rng));
+                        let promoted_masked = masked.indexed_promoted_to_rgb8().unwrap();
+                        let kind = area_min_mask(&promoted_masked).expect("bilevel mask");
+                        let mut fast =
+                            Surface::new(dev_w as usize, dev_h as usize, Background::Transparent);
+                        let (painted, _taps) = paint_axis_aligned_rgb8_area_min_masked(
+                            &promoted_masked,
+                            kind,
+                            &mut fast,
+                            0,
+                            0,
+                            dev_w as usize,
+                            dev_h as usize,
+                        );
+                        let (mut reference, ref_painted) =
+                            generic_masked_reference(&masked, dev_w, dev_h);
+                        assert_eq!(painted, ref_painted, "{what} smask: painted count");
+                        assert_surfaces_equal(&mut fast, &mut reference, &format!("{what} smask"));
+                        // Under an 8-bit soft mask no fast path applies; the
+                        // generic sampler itself must see the same image.
+                        let mut soft8 = img.clone();
+                        soft8.smask = Some(Arc::new(pdf_page_ir::ImageSMask {
+                            width: sw,
+                            height: sh,
+                            bits_per_component: 8,
+                            decode: None,
+                            samples: Arc::from(
+                                (0..sw * sh).map(|_| rng.byte()).collect::<Vec<u8>>(),
+                            ),
+                            codec: None,
+                            codec_data: None,
+                            codec_parms: None,
+                        }));
+                        let promoted_soft8 = soft8.indexed_promoted_to_rgb8().unwrap();
+                        let (mut a, pa) = generic_masked_reference(&promoted_soft8, dev_w, dev_h);
+                        let (mut b, pb) = generic_masked_reference(&soft8, dev_w, dev_h);
+                        assert_eq!(pa, pb, "{what} smask8: painted count");
+                        assert_surfaces_equal(&mut a, &mut b, &format!("{what} smask8"));
+                    }
+                }
+            }
+        }
+    }
+
+    /// A per-pixel-transform image (non-sRGB ICC RGB, Lab, one- and
+    /// two-colorant tint tables), with and without `/Decode`, resolved to
+    /// RGB8 once must draw byte-identically to the generic per-tap
+    /// transform: the promoted image through the generic sampler and through
+    /// the RGB8 area-min fast path, each against the original image through
+    /// the generic sampler.
+    #[test]
+    fn generic_promotion_matches_generic_shade() {
+        let mut rng = Rng(0x1cc0_1cc0_5eed_0003);
+        let cases = [
+            (7u32, 5u32, 3u32, 3u32),
+            (16, 16, 5, 7),
+            (33, 9, 8, 4),
+            (40, 30, 13, 11),
+        ];
+        for variant in 0..4 {
+            for &(sw, sh, dev_w, dev_h) in &cases {
+                for &with_decode in &[false, true] {
+                    let (color_space, ncomp) = match variant {
+                        0 => {
+                            let trc: Vec<f32> =
+                                (0..768).map(|_| rng.byte() as f32 / 255.0).collect();
+                            let mut matrix = [0f32; 9];
+                            for m in matrix.iter_mut() {
+                                *m = rng.byte() as f32 / 255.0;
+                            }
+                            (
+                                ImageColorSpace::IccRgb {
+                                    trc: Arc::from(trc),
+                                    matrix,
+                                },
+                                3,
+                            )
+                        }
+                        1 => (
+                            ImageColorSpace::Lab {
+                                white_point: [0.9505, 1.0, 1.089],
+                                range: [-100.0, 100.0, -100.0, 100.0],
+                            },
+                            3,
+                        ),
+                        2 => {
+                            let rgb: Vec<u8> = (0..768).map(|_| rng.byte()).collect();
+                            (
+                                ImageColorSpace::TintLut {
+                                    rgb: Arc::from(rgb),
+                                },
+                                1,
+                            )
+                        }
+                        _ => {
+                            let rgb: Vec<u8> = (0..256 * 256 * 3).map(|_| rng.byte()).collect();
+                            (
+                                ImageColorSpace::TintLut2 {
+                                    rgb: Arc::from(rgb),
+                                },
+                                2,
+                            )
+                        }
+                    };
+                    let samples: Vec<u8> = (0..(sw * sh) as usize * ncomp)
+                        .map(|_| rng.byte())
+                        .collect();
+                    let mut img = make_image_cs(sw, sh, dev_w, dev_h, color_space, samples);
+                    img.decode = with_decode.then(|| {
+                        Arc::from((0..ncomp).map(|_| [1.0f32, 0.0f32]).collect::<Vec<_>>())
+                    });
+                    assert!(img.generic_promotion_eligible());
+                    let promoted = img.generic_promoted_to_rgb8().expect("eligible");
+                    let what = format!(
+                        "variant {variant} decode={with_decode} sw={sw} sh={sh} dev={dev_w}x{dev_h}"
+                    );
+                    let (mut reference, ref_painted) = generic_reference(&img, dev_w, dev_h);
+                    let (mut via_promoted, promoted_painted) =
+                        generic_reference(&promoted, dev_w, dev_h);
+                    assert_eq!(promoted_painted, ref_painted, "{what}: painted (generic)");
+                    assert_surfaces_equal(
+                        &mut via_promoted,
+                        &mut reference,
+                        &format!("{what} (generic over promoted)"),
+                    );
+                    let mut fast =
+                        Surface::new(dev_w as usize, dev_h as usize, Background::Transparent);
+                    let (painted, _taps) = paint_axis_aligned_rgb8_area_min_opaque(
+                        &promoted,
+                        &mut fast,
+                        0,
+                        0,
+                        dev_w as usize,
+                        dev_h as usize,
+                    );
+                    assert_eq!(painted, ref_painted, "{what}: painted (fast)");
+                    assert_surfaces_equal(
+                        &mut fast,
+                        &mut reference,
+                        &format!("{what} (fast over promoted)"),
+                    );
+                }
+            }
+        }
+    }
+
+    /// An image placed at `(tx, ty)` device pixels, magnifying/1:1 by
+    /// `dev_w / sw` on X and `dev_h / sh` on Y, inside a `surf_w x surf_h`
+    /// surface. Off-diagonals exactly zero, as lowering computes them.
+    fn make_image_placed(
+        sw: u32,
+        sh: u32,
+        dev_w: u32,
+        dev_h: u32,
+        tx: f64,
+        ty: f64,
+        samples: Vec<u8>,
+    ) -> PreparedImage {
+        let mut img = make_image(sw, sh, dev_w, dev_h, samples);
+        img.inv = Matrix {
+            a: 1.0 / dev_w as f64,
+            b: 0.0,
+            c: 0.0,
+            d: 1.0 / dev_h as f64,
+            e: -tx / dev_w as f64,
+            f: -ty / dev_h as f64,
+        };
+        img
+    }
+
+    /// Magnified / 1:1 bilinear draws — wide enough for the eight-lane
+    /// kernels plus a ragged tail, placed on integer translations (the widened
+    /// 1:1 blit), on fractional translations (two-tap lerps with tiny weights)
+    /// and partly off the surface — must match generic `shade()` byte for
+    /// byte on every kernel this host has, and every kernel must agree.
+    #[test]
+    fn bilinear_kernels_match_generic_shade_and_each_other() {
+        let mut rng = Rng(0xb111_4ea8_0000_0042);
+        // (sw, sh, dev_w, dev_h, tx, ty, surf_w, surf_h)
+        let cases: [(u32, u32, u32, u32, f64, f64, u32, u32); 9] = [
+            (64, 8, 64, 8, 0.0, 0.0, 64, 8),     // 1:1, exact blit
+            (64, 8, 64, 8, 16.0, 4.0, 96, 16),   // 1:1, integer offset (exact)
+            (37, 5, 37, 5, 3.0, 2.0, 48, 9),     // 1:1, non-power-of-two width
+            (64, 8, 64, 8, 0.5, 0.25, 80, 12),   // 1:1, fractional offset
+            (40, 7, 97, 13, 2.0, 1.0, 101, 15),  // non-integer magnification
+            (33, 9, 66, 18, 0.0, 0.0, 66, 18),   // 2x
+            (33, 9, 66, 18, -7.0, -3.0, 50, 12), // 2x, partly off the surface
+            (9, 3, 9, 3, 0.0, 0.0, 9, 3),        // 1:1, narrower than one group
+            (1, 1, 8, 8, 0.0, 0.0, 8, 8),        // degenerate source
+        ];
+        for &(sw, sh, dev_w, dev_h, tx, ty, surf_w, surf_h) in &cases {
+            for _trial in 0..4 {
+                let samples: Vec<u8> = (0..(sw * sh * 3)).map(|_| rng.byte()).collect();
+                let mut img = make_image_placed(sw, sh, dev_w, dev_h, tx, ty, samples);
+                img.interpolation = InterpolationMode::Bilinear;
+                let what = format!("bilinear sw={sw} sh={sh} dev={dev_w}x{dev_h} at ({tx},{ty})");
+                let (mut reference, ref_painted) = generic_reference(&img, surf_w, surf_h);
+                for kernel in available_kernels() {
+                    let Some(columns) = bilinear_columns(&img, 0, surf_w as usize) else {
+                        panic!("{what}: no columns");
+                    };
+                    let Some(rows) = bilinear_rows(&img, 0, surf_h as usize) else {
+                        panic!("{what}: no rows");
+                    };
+                    let mut fast =
+                        Surface::new(surf_w as usize, surf_h as usize, Background::Transparent);
+                    let painted = paint_bilinear_rows(kernel, &img, &mut fast, &columns, &rows);
+                    assert_eq!(painted, ref_painted, "{what} {kernel:?}: painted count");
+                    assert_surfaces_equal(&mut fast, &mut reference, &format!("{what} {kernel:?}"));
+                }
+            }
+        }
+    }
+
+    /// The nearest fast path — widened runs at 1:1, texel-by-texel copies when
+    /// magnified — must match generic `shade()` byte for byte.
+    #[test]
+    fn nearest_fast_path_matches_generic_shade() {
+        let mut rng = Rng(0x4ea7_e570_0000_0007);
+        let cases: [(u32, u32, u32, u32, f64, f64, u32, u32); 5] = [
+            (64, 8, 64, 8, 0.0, 0.0, 64, 8),
+            (37, 5, 37, 5, 3.0, 2.0, 48, 9),
+            (64, 8, 64, 8, 0.5, 0.25, 80, 12),
+            (33, 9, 66, 18, -7.0, -3.0, 50, 12),
+            (40, 7, 97, 13, 2.0, 1.0, 101, 15),
+        ];
+        for &(sw, sh, dev_w, dev_h, tx, ty, surf_w, surf_h) in &cases {
+            for _trial in 0..4 {
+                let samples: Vec<u8> = (0..(sw * sh * 3)).map(|_| rng.byte()).collect();
+                let img = make_image_placed(sw, sh, dev_w, dev_h, tx, ty, samples);
+                let what = format!("nearest sw={sw} sh={sh} dev={dev_w}x{dev_h} at ({tx},{ty})");
+                let (mut reference, ref_painted) = generic_reference(&img, surf_w, surf_h);
+                let mut fast =
+                    Surface::new(surf_w as usize, surf_h as usize, Background::Transparent);
+                let (painted, _) = paint_axis_aligned_rgb8_nearest_opaque(
+                    &img,
+                    &mut fast,
+                    0,
+                    0,
+                    surf_w as usize,
+                    surf_h as usize,
+                );
+                assert_eq!(painted, ref_painted, "{what}: painted count");
+                assert_surfaces_equal(&mut fast, &mut reference, &what);
+            }
+        }
+    }
+
+    /// The vector widen must equal the scalar one over every run length and
+    /// offset, including runs ending at the very end of the buffer where the
+    /// vector loads cannot run and the scalar tail takes over.
+    #[test]
+    fn widen_kernels_match_scalar_bit_exact() {
+        let mut rng = Rng(0x71de_0000_0000_0001);
+        let src: Vec<u8> = (0..4096).map(|_| rng.byte()).collect();
+        for kernel in available_kernels() {
+            for &n in &[0usize, 1, 3, 7, 8, 9, 15, 16, 17, 31, 64, 100] {
+                for &off in &[
+                    0usize,
+                    1,
+                    5,
+                    4096 - n * 3 - 40,
+                    4096 - n * 3 - 1,
+                    4096 - n * 3,
+                ] {
+                    if off + n * 3 > src.len() {
+                        continue;
+                    }
+                    let mut expected = vec![0xAAu8; n * 4];
+                    widen_rgb8_to_rgba8_scalar(&src[off..off + n * 3], &mut expected);
+                    let mut got = vec![0xAAu8; n * 4];
+                    widen_rgb8_to_rgba8_opaque(kernel, &src, off, &mut got);
+                    assert_eq!(got, expected, "{kernel:?} n={n} off={off}");
                 }
             }
         }

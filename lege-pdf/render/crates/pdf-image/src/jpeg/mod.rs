@@ -107,13 +107,35 @@ fn err(msg: &str) -> ImageError {
 
 // --- Huffman tables ----------------------------------------------------------
 
+/// Bits of lookahead in the one-shot decode tables. Ten covers every code of
+/// the standard tables but the rarest AC symbols, and leaves room in the same
+/// peek for a short code *plus* its magnitude bits (see [`FastAc`]).
+const HUFF_LOOKAHEAD: u32 = 10;
+const HUFF_FAST_SIZE: usize = 1 << HUFF_LOOKAHEAD;
+
+/// One fully decoded AC `(run, coefficient)` pair for a lookahead prefix whose
+/// Huffman code *and* magnitude bits both fit in [`HUFF_LOOKAHEAD`] bits (the
+/// bulk of a photographic scan: short codes with one-to-four-bit magnitudes).
+/// `len` is the total bits consumed, code plus magnitude; `0` means the prefix
+/// is not resolvable this way and the symbol path applies.
+#[derive(Clone, Copy, Default)]
+struct FastAc {
+    coeff: i16,
+    run: u8,
+    len: u8,
+}
+
 /// Canonical Huffman decode table built from a DHT segment's 16 length
 /// counts + value list — the same code assignment the encoder's
 /// `generate_huffman_table` produces.
 struct HuffTable {
-    /// One-shot lookup on the next 8 bits: `(value, code_length)`;
-    /// `code_length == 0` means "longer than 8 bits, take the slow path".
-    fast: Box<[(u8, u8); 256]>,
+    /// One-shot lookup on the next [`HUFF_LOOKAHEAD`] bits: `(value,
+    /// code_length)`; `code_length == 0` means "longer than the lookahead,
+    /// take the slow path".
+    fast: Box<[(u8, u8); HUFF_FAST_SIZE]>,
+    /// Combined symbol + magnitude lookup for AC decoding; see [`FastAc`].
+    /// Built for every table (the DC tables never consult it).
+    fast_ac: Box<[FastAc; HUFF_FAST_SIZE]>,
     /// Slow path per code length `l` (1-indexed): the largest code of
     /// length `l` (or -1 when none), the smallest, and where its values
     /// start in `values`.
@@ -129,7 +151,7 @@ impl HuffTable {
         if total != values.len() || total > 256 {
             return Err(err("DHT count/value mismatch"));
         }
-        let mut fast = Box::new([(0u8, 0u8); 256]);
+        let mut fast = Box::new([(0u8, 0u8); HUFF_FAST_SIZE]);
         let mut max_code = [-1i32; 17];
         let mut min_code = [0i32; 17];
         let mut val_ptr = [0usize; 17];
@@ -143,11 +165,11 @@ impl HuffTable {
                 if code + n as i32 > (1 << l) {
                     return Err(err("DHT overlong code assignment"));
                 }
-                if l <= 8 {
-                    // Populate every 8-bit prefix of each code.
+                if l as u32 <= HUFF_LOOKAHEAD {
+                    // Populate every lookahead prefix of each code.
                     for i in 0..n {
                         let c = (code + i as i32) as usize;
-                        let shift = 8 - l;
+                        let shift = HUFF_LOOKAHEAD as usize - l;
                         for tail in 0..(1usize << shift) {
                             fast[(c << shift) | tail] = (values[k + i], l as u8);
                         }
@@ -159,8 +181,28 @@ impl HuffTable {
             }
             code <<= 1;
         }
+        // The combined AC lookup: where the code's magnitude bits also fit in
+        // the prefix, resolve the coefficient outright. `extend` here is the
+        // same function the symbol path applies to the bits it reads, so the
+        // two paths agree bit for bit.
+        let mut fast_ac = Box::new([FastAc::default(); HUFF_FAST_SIZE]);
+        for (prefix, slot) in fast_ac.iter_mut().enumerate() {
+            let (symbol, code_len) = fast[prefix];
+            let s = (symbol & 15) as u32;
+            let code_len = code_len as u32;
+            if code_len == 0 || s == 0 || code_len + s > HUFF_LOOKAHEAD {
+                continue;
+            }
+            let magnitude = ((prefix as u32) >> (HUFF_LOOKAHEAD - code_len - s)) & ((1 << s) - 1);
+            *slot = FastAc {
+                coeff: extend(magnitude, s as u8) as i16,
+                run: symbol >> 4,
+                len: (code_len + s) as u8,
+            };
+        }
         Ok(HuffTable {
             fast,
+            fast_ac,
             max_code,
             min_code,
             val_ptr,
@@ -257,6 +299,38 @@ impl<'a> BitReader<'a> {
         }
     }
 
+    /// Branch-light top-up for the symbol loop. When the next eight input
+    /// bytes exist and contain no `0xFF`, insert as many whole bytes as fit
+    /// *unconditionally* — zero when the buffer is already full — so the
+    /// per-symbol path carries no data-dependent "is a refill due" branch
+    /// (which the entropy stream makes unpredictable). The bytes inserted are
+    /// exactly the ones [`Self::fill`]'s word path would insert; everything
+    /// else (stuffing, markers, the input tail) defers to `fill`, the exact
+    /// arbiter. Leaves at least 57 valid bits like `fill`.
+    #[inline]
+    fn top_up(&mut self) {
+        if !self.hit_marker
+            && let Some(chunk) = self.data.get(self.pos..self.pos + 8)
+            && let Ok(arr) = <[u8; 8]>::try_from(chunk)
+        {
+            let word = u64::from_be_bytes(arr);
+            let inv = !word;
+            if inv.wrapping_sub(0x0101_0101_0101_0101) & !inv & 0x8080_8080_8080_8080 == 0 {
+                let take = ((64 - self.count) / 8) as u32; // 0..=8
+                // The top `8·take` bits of `word`, through a 128-bit shift so
+                // neither `take == 0` nor `take == 8` reaches a 64-bit shift
+                // count; with `take == 0`, `keep` is zero and `count` may be
+                // 64, hence the masked shift.
+                let keep = word & ((((1u128 << (8 * take)) - 1) << (64 - 8 * take)) as u64);
+                self.buf |= keep >> (self.count & 63);
+                self.count += (8 * take) as u8;
+                self.pos += take as usize;
+                return;
+            }
+        }
+        self.fill();
+    }
+
     #[inline]
     fn consume(&mut self, n: u8) {
         self.buf <<= n as u32;
@@ -303,16 +377,16 @@ impl<'a> BitReader<'a> {
     /// code below without touching the input.
     #[inline]
     fn decode_prefilled(&mut self, table: &HuffTable) -> u8 {
-        let peek = (self.buf >> 56) as u8;
-        let (value, len) = table.fast[peek as usize];
+        let peek = (self.buf >> (64 - HUFF_LOOKAHEAD)) as usize;
+        let (value, len) = table.fast[peek];
         if len > 0 {
             self.consume(len);
             return value;
         }
-        // Slow path: extend bit by bit from 9 to 16.
+        // Slow path: extend bit by bit from the lookahead to 16.
         let mut code = peek as i32;
-        self.consume(8);
-        for l in 9..=16usize {
+        self.consume(HUFF_LOOKAHEAD as u8);
+        for l in (HUFF_LOOKAHEAD as usize + 1)..=16usize {
             code = (code << 1) | (self.buf >> 63) as i32;
             self.consume(1);
             if table.max_code[l] >= 0 && code <= table.max_code[l] {
@@ -348,15 +422,16 @@ impl<'a> BitReader<'a> {
 }
 
 /// Sign-extend an `n`-bit magnitude per ITU T.81 F.2.2.1 (`EXTEND`).
+/// Branch-free on `n > 0`: a magnitude below `2^(n-1)` is negative and is
+/// offset by `-(2^n - 1)`, the same arithmetic as the spec's `v - 2^n + 1`.
 #[inline]
 fn extend(v: u32, n: u8) -> i32 {
     if n == 0 {
-        0
-    } else if (v as i32) < (1 << (n - 1)) {
-        v as i32 - (1 << n) + 1
-    } else {
-        v as i32
+        return 0;
     }
+    let v = v as i32;
+    let negative = (v < (1 << (n - 1))) as i32;
+    v - negative * ((1 << n) - 1)
 }
 
 /// Decode one baseline / extended-sequential block (full DC + AC) from the
@@ -377,35 +452,81 @@ fn decode_block_sequential(
     dc: &HuffTable,
     ac: &HuffTable,
     pred: &mut i32,
-    block: &mut [i16],
+    block: &mut [i16; 64],
 ) -> bool {
-    // Pass 4 batching: one `fill` covers a worst-case 16-bit code plus its
-    // 16-bit magnitude, so each (symbol, magnitude) pair costs exactly one
-    // refill check instead of two-plus.
-    reader.fill();
+    // One top-up covers a worst-case 16-bit code plus its 16-bit magnitude
+    // (≥ 57 bits buffered), so each (symbol, magnitude) pair costs one
+    // refill step instead of two-plus.
+    reader.top_up();
     let t = reader.decode_prefilled(dc).min(16);
     let diff = extend(reader.take_bits(t), t);
     *pred += diff;
     block[0] = *pred as i16;
     let mut any_ac = false;
     let mut k = 1usize;
-    while k <= 63 {
-        reader.fill();
-        let rs = reader.decode_prefilled(ac);
-        let r = (rs >> 4) as usize;
-        let s = rs & 15;
-        if s == 0 {
-            if r == 15 {
-                k += 16; // ZRL
-                continue;
+    // The symbol path for one AC coefficient: a Huffman symbol, then its
+    // magnitude bits. `continue` / `break` act on the loop below.
+    macro_rules! symbol_path {
+        () => {{
+            let rs = reader.decode_prefilled(ac);
+            let r = (rs >> 4) as usize;
+            let s = rs & 15;
+            if s == 0 {
+                if r == 15 {
+                    k += 16; // ZRL
+                    continue;
+                }
+                break; // EOB
             }
-            break; // EOB
+            k += r;
+            if k > 63 {
+                break; // corrupt run — tolerate
+            }
+            block[ZIGZAG_INV[k] as usize] = extend(reader.take_bits(s), s) as i16;
+            any_ac = true;
+            k += 1;
+        }};
+    }
+    while k <= 63 {
+        reader.top_up();
+        // Combined lookup first: code and magnitude resolved from one peek,
+        // which is the common case. Its bookkeeping mirrors the symbol path
+        // exactly — on an overlong run only the code is consumed before the
+        // break, as the symbol path would have done.
+        let peek = (reader.buf >> (64 - HUFF_LOOKAHEAD)) as usize;
+        let fast = ac.fast_ac[peek];
+        if fast.len == 0 {
+            symbol_path!();
+            continue;
         }
-        k += r;
+        k += fast.run as usize;
         if k > 63 {
-            break; // corrupt run — tolerate
+            reader.consume(ac.fast[peek].1);
+            break;
         }
-        block[ZIGZAG_INV[k] as usize] = extend(reader.take_bits(s), s) as i16;
+        reader.consume(fast.len);
+        block[ZIGZAG_INV[k] as usize] = fast.coeff;
+        any_ac = true;
+        k += 1;
+        if k > 63 {
+            break;
+        }
+        // A short pair consumed at most `HUFF_LOOKAHEAD` bits, leaving ≥ 47:
+        // enough for one more coefficient on either path (≤ 16 + 15 bits)
+        // without another top-up.
+        let peek = (reader.buf >> (64 - HUFF_LOOKAHEAD)) as usize;
+        let fast = ac.fast_ac[peek];
+        if fast.len == 0 {
+            symbol_path!();
+            continue;
+        }
+        k += fast.run as usize;
+        if k > 63 {
+            reader.consume(ac.fast[peek].1);
+            break;
+        }
+        reader.consume(fast.len);
+        block[ZIGZAG_INV[k] as usize] = fast.coeff;
         any_ac = true;
         k += 1;
     }
@@ -1114,7 +1235,11 @@ impl<'a> Decoder<'a> {
             if off + 64 > coeffs.len() {
                 return Ok(());
             }
-            decode_block_sequential(reader, dc, ac, &mut preds[si], &mut coeffs[off..off + 64]);
+            // The length check above makes this infallible.
+            let Ok(block) = <&mut [i16; 64]>::try_from(&mut coeffs[off..off + 64]) else {
+                return Ok(());
+            };
+            decode_block_sequential(reader, dc, ac, &mut preds[si], block);
             Ok(())
         })
     }
@@ -1954,7 +2079,8 @@ unsafe fn rgb_ycc_row_avx2(
                 ChromaX::Identity => last + 8 <= cb_row.len() && last + 8 <= cr_row.len(),
                 ChromaX::Half => last / 2 + 4 <= cb_row.len() && last / 2 + 4 <= cr_row.len(),
             };
-            if y_ok && c_ok {
+            let o_ok = lim * 3 <= out_row.len();
+            if y_ok && c_ok && o_ok {
                 break;
             }
             lim -= 8;
@@ -2043,17 +2169,30 @@ unsafe fn rgb_ycc_row_avx2(
 
             // Clamp each channel to [0, 255] and gather the low byte of each lane.
             let clamp = |v| _mm256_min_epi32(_mm256_max_epi32(v, zero), c255);
-            let ra = pack_low_bytes_avx2(clamp(r)).to_le_bytes();
-            let ga = pack_low_bytes_avx2(clamp(g)).to_le_bytes();
-            let ba = pack_low_bytes_avx2(clamp(b)).to_le_bytes();
+            let ra = pack_low_bytes_avx2(clamp(r));
+            let ga = pack_low_bytes_avx2(clamp(g));
+            let ba = pack_low_bytes_avx2(clamp(b));
 
-            let mut dst = x * 3;
-            for i in 0..8 {
-                out_row[dst] = ra[i];
-                out_row[dst + 1] = ga[i];
-                out_row[dst + 2] = ba[i];
-                dst += 3;
-            }
+            // Interleave the three eight-byte channel runs into the 24 output
+            // bytes with two shuffles per store (a 16-byte store for pixels
+            // 0..5 plus r5, an 8-byte store for the rest) instead of 24
+            // bounds-checked scalar byte writes; `lim * 3 <= out_row.len()`
+            // keeps both stores inside the row.
+            let rg = _mm_set_epi64x(ga as i64, ra as i64);
+            let bb = _mm_cvtsi64_si128(ba as i64);
+            #[rustfmt::skip]
+            let lo = _mm_or_si128(
+                _mm_shuffle_epi8(rg, _mm_setr_epi8(0, 8, -1, 1, 9, -1, 2, 10, -1, 3, 11, -1, 4, 12, -1, 5)),
+                _mm_shuffle_epi8(bb, _mm_setr_epi8(-1, -1, 0, -1, -1, 1, -1, -1, 2, -1, -1, 3, -1, -1, 4, -1)),
+            );
+            #[rustfmt::skip]
+            let hi = _mm_or_si128(
+                _mm_shuffle_epi8(rg, _mm_setr_epi8(13, -1, 6, 14, -1, 7, 15, -1, -1, -1, -1, -1, -1, -1, -1, -1)),
+                _mm_shuffle_epi8(bb, _mm_setr_epi8(-1, 5, -1, -1, 6, -1, -1, 7, -1, -1, -1, -1, -1, -1, -1, -1)),
+            );
+            let dst = out_row.as_mut_ptr().add(x * 3);
+            _mm_storeu_si128(dst.cast(), lo);
+            _mm_storel_epi64(dst.add(16).cast(), hi);
             x += 8;
         }
         lim
@@ -2240,49 +2379,286 @@ fn upsample_component_row(
                 }
             }
         }
-        Upsample::FancyH2V1 => {
-            for (x, d) in dst.iter_mut().enumerate() {
-                let sx = (x / 2).min(source_w - 1);
-                let v = near[sx] as u16;
-                *d = if x & 1 == 0 {
-                    if sx == 0 {
-                        v as u8
-                    } else {
-                        ((v * 3 + near[sx - 1] as u16 + 1) >> 2) as u8
-                    }
-                } else if sx + 1 == source_w {
-                    v as u8
-                } else {
-                    ((v * 3 + near[sx + 1] as u16 + 2) >> 2) as u8
-                };
-            }
-        }
-        Upsample::FancyH1V2 => {
-            let bias = 1 + (output_y & 1) as u16;
-            for (x, d) in dst.iter_mut().enumerate() {
-                *d = ((near[x] as u16 * 3 + far[x] as u16 + bias) >> 2) as u8;
-            }
-        }
-        Upsample::FancyH2V2 => {
-            for (x, d) in dst.iter_mut().enumerate() {
-                let sx = (x / 2).min(source_w - 1);
-                let this = near[sx] as u16 * 3 + far[sx] as u16;
-                *d = if x & 1 == 0 {
-                    if sx == 0 {
-                        ((this * 4 + 8) >> 4) as u8
-                    } else {
-                        let prev = near[sx - 1] as u16 * 3 + far[sx - 1] as u16;
-                        ((this * 3 + prev + 8) >> 4) as u8
-                    }
-                } else if sx + 1 == source_w {
-                    ((this * 4 + 7) >> 4) as u8
-                } else {
-                    let next = near[sx + 1] as u16 * 3 + far[sx + 1] as u16;
-                    ((this * 3 + next + 7) >> 4) as u8
-                };
-            }
+        Upsample::FancyH2V1 => upsample_h2v1_row(dst, near, source_w),
+        Upsample::FancyH1V2 => upsample_h1v2_row(dst, near, far, 1 + (output_y & 1) as u16),
+        Upsample::FancyH2V2 => upsample_h2v2_row(dst, near, far, source_w),
+    }
+}
+
+/// The 4:2:2 horizontal triangle filter for one output row
+/// (`h2v1_fancy_upsample`). Runtime-dispatched to AVX2; the scalar reference
+/// and the vector kernel are bit-for-bit identical, verified by
+/// `upsample_tests::h2v1_avx2_matches_scalar_bit_exact`.
+#[inline]
+#[allow(
+    unsafe_code,
+    reason = "dispatches the AVX2 upsampling kernel behind a runtime probe; see SAFETY comment"
+)]
+fn upsample_h2v1_row(dst: &mut [u8], near: &[u8], source_w: usize) {
+    let near = &near[..source_w];
+    #[cfg(target_arch = "x86_64")]
+    {
+        if is_x86_feature_detected!("avx2") {
+            // SAFETY: AVX2 is present (runtime probe above); `near` is exactly
+            // `source_w` bytes and the kernel bounds every load and store
+            // against that length and `dst.len()`.
+            let done = unsafe { upsample_h2v1_row_avx2(dst, near) };
+            upsample_h2v1_row_scalar(dst, near, 0, 2.min(dst.len()));
+            upsample_h2v1_row_scalar(dst, near, done, dst.len());
+            return;
         }
     }
+    upsample_h2v1_row_scalar(dst, near, 0, dst.len());
+}
+
+/// Scalar reference for [`upsample_h2v1_row`] over output columns `x0..x1`:
+/// libjpeg-turbo's `h2v1_fancy_upsample`, edge texels replicated.
+#[inline]
+fn upsample_h2v1_row_scalar(dst: &mut [u8], near: &[u8], x0: usize, x1: usize) {
+    let source_w = near.len();
+    for (x, d) in dst[..x1].iter_mut().enumerate().skip(x0) {
+        let sx = (x / 2).min(source_w - 1);
+        let v = near[sx] as u16;
+        *d = if x & 1 == 0 {
+            if sx == 0 {
+                v as u8
+            } else {
+                ((v * 3 + near[sx - 1] as u16 + 1) >> 2) as u8
+            }
+        } else if sx + 1 == source_w {
+            v as u8
+        } else {
+            ((v * 3 + near[sx + 1] as u16 + 2) >> 2) as u8
+        };
+    }
+}
+
+/// AVX2 kernel for [`upsample_h2v1_row`]: sixteen interior source texels per
+/// iteration in `u16` lanes — even output `(this·3 + prev + 1) >> 2`, odd
+/// output `(this·3 + next + 2) >> 2`, stored interleaved. Returns the first
+/// output column not written; columns `0..2` are never written here.
+///
+/// # Safety
+/// The CPU must support AVX2. Every load reads sixteen bytes at `s - 1`, `s`,
+/// `s + 1` with `s + 17 <= near.len()`, and every store writes thirty-two
+/// bytes at `2s` with `2s + 32 <= dst.len()`.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+#[allow(unsafe_code)]
+unsafe fn upsample_h2v1_row_avx2(dst: &mut [u8], near: &[u8]) -> usize {
+    use core::arch::x86_64::*;
+    let source_w = near.len();
+    let three = _mm256_set1_epi16(3);
+    let bias_even = _mm256_set1_epi16(1);
+    let bias_odd = _mm256_set1_epi16(2);
+    let mut s = 1usize;
+    // SAFETY: the loop condition keeps every 16-byte load inside `near`
+    // (`s - 1 >= 0`, `s + 1 + 16 <= source_w`) and every 32-byte store inside
+    // `dst` (`2s + 32 <= dst.len()`).
+    unsafe {
+        let load = |i: usize| _mm256_cvtepu8_epi16(_mm_loadu_si128(near.as_ptr().add(i).cast()));
+        while s + 17 <= source_w && 2 * s + 32 <= dst.len() {
+            let prev = load(s - 1);
+            let this3 = _mm256_mullo_epi16(load(s), three);
+            let next = load(s + 1);
+            let even =
+                _mm256_srli_epi16::<2>(_mm256_add_epi16(_mm256_add_epi16(this3, prev), bias_even));
+            let odd =
+                _mm256_srli_epi16::<2>(_mm256_add_epi16(_mm256_add_epi16(this3, next), bias_odd));
+            let out = _mm256_or_si256(even, _mm256_slli_epi16::<8>(odd));
+            _mm256_storeu_si256(dst.as_mut_ptr().add(2 * s).cast(), out);
+            s += 16;
+        }
+    }
+    2 * s
+}
+
+/// The 4:4:0 vertical blend for one output row (`h1v2_fancy_upsample`):
+/// `(near·3 + far + bias) >> 2`, `bias` 1 on even output rows and 2 on odd
+/// ones. Runtime-dispatched to AVX2; verified bit-exact by
+/// `upsample_tests::h1v2_avx2_matches_scalar_bit_exact`.
+#[inline]
+#[allow(
+    unsafe_code,
+    reason = "dispatches the AVX2 upsampling kernel behind a runtime probe; see SAFETY comment"
+)]
+fn upsample_h1v2_row(dst: &mut [u8], near: &[u8], far: &[u8], bias: u16) {
+    #[cfg(target_arch = "x86_64")]
+    {
+        if is_x86_feature_detected!("avx2") {
+            // SAFETY: AVX2 is present (runtime probe above); the kernel bounds
+            // every load and store against the three slice lengths.
+            let done = unsafe { upsample_h1v2_row_avx2(dst, near, far, bias) };
+            upsample_h1v2_row_scalar(dst, near, far, bias, done, dst.len());
+            return;
+        }
+    }
+    upsample_h1v2_row_scalar(dst, near, far, bias, 0, dst.len());
+}
+
+/// Scalar reference for [`upsample_h1v2_row`] over output columns `x0..x1`.
+#[inline]
+fn upsample_h1v2_row_scalar(
+    dst: &mut [u8],
+    near: &[u8],
+    far: &[u8],
+    bias: u16,
+    x0: usize,
+    x1: usize,
+) {
+    for (x, d) in dst[..x1].iter_mut().enumerate().skip(x0) {
+        *d = ((near[x] as u16 * 3 + far[x] as u16 + bias) >> 2) as u8;
+    }
+}
+
+/// AVX2 kernel for [`upsample_h1v2_row`]: thirty-two texels per iteration in
+/// two `u16` halves, packed back to bytes (every value is at most 255, so the
+/// saturating pack is exact). Returns the first output column not written.
+///
+/// # Safety
+/// The CPU must support AVX2. Every load reads thirty-two bytes at `x` from
+/// `near` and `far` and every store writes thirty-two bytes at `x` into
+/// `dst`, with `x + 32` within all three lengths.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+#[allow(unsafe_code)]
+unsafe fn upsample_h1v2_row_avx2(dst: &mut [u8], near: &[u8], far: &[u8], bias: u16) -> usize {
+    use core::arch::x86_64::*;
+    let limit = dst.len().min(near.len()).min(far.len());
+    let three = _mm256_set1_epi16(3);
+    let bias = _mm256_set1_epi16(bias as i16);
+    let mut x = 0usize;
+    // SAFETY: the loop condition keeps every 16-byte load at `x` and `x + 16`
+    // inside `near` and `far`, and the 32-byte store inside `dst`.
+    unsafe {
+        let blend = |n: *const u8, f: *const u8| {
+            let n = _mm256_cvtepu8_epi16(_mm_loadu_si128(n.cast()));
+            let f = _mm256_cvtepu8_epi16(_mm_loadu_si128(f.cast()));
+            _mm256_srli_epi16::<2>(_mm256_add_epi16(
+                _mm256_add_epi16(_mm256_mullo_epi16(n, three), f),
+                bias,
+            ))
+        };
+        while x + 32 <= limit {
+            let lo = blend(near.as_ptr().add(x), far.as_ptr().add(x));
+            let hi = blend(near.as_ptr().add(x + 16), far.as_ptr().add(x + 16));
+            // `packus` interleaves 128-bit lanes: [lo0 hi0 | lo1 hi1] → reorder.
+            let packed = _mm256_permute4x64_epi64::<0b11_01_10_00>(_mm256_packus_epi16(lo, hi));
+            _mm256_storeu_si256(dst.as_mut_ptr().add(x).cast(), packed);
+            x += 32;
+        }
+    }
+    x
+}
+
+/// The 4:2:0 triangle filter for one output row (`h2v2_fancy_upsample`): the
+/// decoder's dominant per-pixel loop on a 4:2:0 scan, two chroma rows per
+/// output row each the full output width. Runtime-dispatched to AVX2; the
+/// scalar reference and the vector kernel are bit-for-bit identical, verified
+/// by `upsample_tests::h2v2_avx2_matches_scalar_bit_exact`.
+#[inline]
+#[allow(
+    unsafe_code,
+    reason = "dispatches the AVX2 upsampling kernel behind a runtime probe; see SAFETY comment"
+)]
+fn upsample_h2v2_row(dst: &mut [u8], near: &[u8], far: &[u8], source_w: usize) {
+    // Slice the sources once, here, so the vector kernel's bounds are slice
+    // invariants rather than caller promises (the scalar loop indexes the
+    // same range and would panic on the same inputs).
+    let near = &near[..source_w];
+    let far = &far[..source_w];
+    #[cfg(target_arch = "x86_64")]
+    {
+        if is_x86_feature_detected!("avx2") {
+            // SAFETY: AVX2 is present (runtime probe above); `near` and `far`
+            // are exactly `source_w` bytes and the kernel bounds every load
+            // and store against those lengths and `dst.len()`.
+            let done = unsafe { upsample_h2v2_row_avx2(dst, near, far) };
+            // The first source texel (no left neighbour) and whatever the
+            // vector loop could not cover take the scalar reference.
+            upsample_h2v2_row_scalar(dst, near, far, 0, 2.min(dst.len()));
+            upsample_h2v2_row_scalar(dst, near, far, done, dst.len());
+            return;
+        }
+    }
+    upsample_h2v2_row_scalar(dst, near, far, 0, dst.len());
+}
+
+/// Scalar reference for [`upsample_h2v2_row`] over output columns
+/// `x0..x1`. The formulae and the asymmetric `+8/+7` biases are
+/// libjpeg-turbo's `h2v2_fancy_upsample`.
+#[inline]
+fn upsample_h2v2_row_scalar(dst: &mut [u8], near: &[u8], far: &[u8], x0: usize, x1: usize) {
+    let source_w = near.len();
+    for (x, d) in dst[..x1].iter_mut().enumerate().skip(x0) {
+        let sx = (x / 2).min(source_w - 1);
+        let this = near[sx] as u16 * 3 + far[sx] as u16;
+        *d = if x & 1 == 0 {
+            if sx == 0 {
+                ((this * 4 + 8) >> 4) as u8
+            } else {
+                let prev = near[sx - 1] as u16 * 3 + far[sx - 1] as u16;
+                ((this * 3 + prev + 8) >> 4) as u8
+            }
+        } else if sx + 1 == source_w {
+            ((this * 4 + 7) >> 4) as u8
+        } else {
+            let next = near[sx + 1] as u16 * 3 + far[sx + 1] as u16;
+            ((this * 3 + next + 7) >> 4) as u8
+        };
+    }
+}
+
+/// AVX2 kernel for [`upsample_h2v2_row`]: sixteen interior source texels per
+/// iteration. Each lane forms the vertical blend `near * 3 + far` for the
+/// texel and its two neighbours in u16, then the even output
+/// `(this * 3 + prev + 8) >> 4` and the odd output `(this * 3 + next + 7) >> 4`,
+/// and stores the thirty-two output bytes interleaved as `even | odd << 8`.
+/// Every intermediate fits u16 (at most `1020 * 3 + 1020 + 8`), so the lanes
+/// compute exactly what the scalar `u16` expressions do.
+///
+/// Returns the first output column it did not write; columns `0..2` (the
+/// left edge, which has no `prev`) are never written here.
+///
+/// # Safety
+/// The CPU must support AVX2. `near.len() == far.len()`; every load reads
+/// sixteen bytes at `s - 1`, `s`, `s + 1` with `s + 17 <= near.len()`, and
+/// every store writes thirty-two bytes at `2s` with `2s + 32 <= dst.len()`.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+#[allow(unsafe_code)]
+unsafe fn upsample_h2v2_row_avx2(dst: &mut [u8], near: &[u8], far: &[u8]) -> usize {
+    use core::arch::x86_64::*;
+    debug_assert_eq!(near.len(), far.len());
+    let source_w = near.len();
+    let three = _mm256_set1_epi16(3);
+    let bias_even = _mm256_set1_epi16(8);
+    let bias_odd = _mm256_set1_epi16(7);
+    let mut s = 1usize;
+    // SAFETY: the loop condition keeps every 16-byte load inside `near`/`far`
+    // (`s - 1 >= 0`, `s + 1 + 16 <= source_w`) and every 32-byte store inside
+    // `dst` (`2s + 32 <= dst.len()`).
+    unsafe {
+        let blend = |i: usize| {
+            let n = _mm256_cvtepu8_epi16(_mm_loadu_si128(near.as_ptr().add(i).cast()));
+            let f = _mm256_cvtepu8_epi16(_mm_loadu_si128(far.as_ptr().add(i).cast()));
+            _mm256_add_epi16(_mm256_mullo_epi16(n, three), f)
+        };
+        while s + 17 <= source_w && 2 * s + 32 <= dst.len() {
+            let prev = blend(s - 1);
+            let this = blend(s);
+            let next = blend(s + 1);
+            let this3 = _mm256_mullo_epi16(this, three);
+            let even =
+                _mm256_srli_epi16::<4>(_mm256_add_epi16(_mm256_add_epi16(this3, prev), bias_even));
+            let odd =
+                _mm256_srli_epi16::<4>(_mm256_add_epi16(_mm256_add_epi16(this3, next), bias_odd));
+            let out = _mm256_or_si256(even, _mm256_slli_epi16::<8>(odd));
+            _mm256_storeu_si256(dst.as_mut_ptr().add(2 * s).cast(), out);
+            s += 16;
+        }
+    }
+    2 * s
 }
 
 /// How one output row is produced from the per-component sample rows. Shared
@@ -2753,8 +3129,194 @@ mod idct_tests {
 }
 
 #[cfg(test)]
+mod entropy_tests {
+    #![allow(clippy::expect_used)]
+    use super::{BitReader, HuffTable, ZIGZAG_INV, decode_block_sequential, extend};
+
+    struct Rng(u64);
+    impl Rng {
+        fn next(&mut self) -> u64 {
+            self.0 ^= self.0 << 13;
+            self.0 ^= self.0 >> 7;
+            self.0 ^= self.0 << 17;
+            self.0
+        }
+        fn below(&mut self, n: u64) -> u64 {
+            self.next() % n
+        }
+    }
+
+    /// A random *valid* canonical table: code lengths drawn until the Kraft
+    /// sum is spent, values random (duplicates are legal in a DHT).
+    fn random_table(rng: &mut Rng) -> HuffTable {
+        let n = 1 + rng.below(200) as usize;
+        let mut counts = [0u8; 16];
+        let mut kraft = 0u64; // in units of 2^-16
+        let mut lengths = Vec::new();
+        for _ in 0..n {
+            let mut l = 2 + rng.below(8) as u32;
+            while l <= 16 && kraft + (1u64 << (16 - l)) > (1u64 << 16) {
+                l += 1;
+            }
+            if l > 16 {
+                break;
+            }
+            kraft += 1u64 << (16 - l);
+            lengths.push(l);
+        }
+        for &l in &lengths {
+            counts[l as usize - 1] += 1;
+        }
+        let values: Vec<u8> = (0..lengths.len()).map(|_| rng.next() as u8).collect();
+        HuffTable::build(&counts, values).expect("Kraft-valid lengths build")
+    }
+
+    /// Reference symbol decode: ITU T.81 F.2.2.3 `DECODE`, one bit at a
+    /// time against the canonical `max_code` / `min_code` / `val_ptr` tables,
+    /// with no lookahead at all.
+    fn decode_reference(reader: &mut BitReader, t: &HuffTable) -> u8 {
+        let mut code: i32 = 0;
+        for l in 1..=16usize {
+            code = (code << 1) | reader.read_bit() as i32;
+            if t.max_code[l] >= 0 && code <= t.max_code[l] {
+                let idx = t.val_ptr[l] + (code - t.min_code[l]) as usize;
+                return t.values.get(idx).copied().unwrap_or(0);
+            }
+        }
+        0
+    }
+
+    /// Reference block decode: the T.81 F.2.2 sequential procedure written
+    /// without any of the production decoder's lookahead or batching.
+    fn decode_block_reference(
+        reader: &mut BitReader,
+        dc: &HuffTable,
+        ac: &HuffTable,
+        pred: &mut i32,
+        block: &mut [i16; 64],
+    ) -> bool {
+        let t = decode_reference(reader, dc).min(16);
+        *pred += extend(reader.read_bits(t), t);
+        block[0] = *pred as i16;
+        let mut any_ac = false;
+        let mut k = 1usize;
+        while k <= 63 {
+            let rs = decode_reference(reader, ac);
+            let r = (rs >> 4) as usize;
+            let s = rs & 15;
+            if s == 0 {
+                if r == 15 {
+                    k += 16;
+                    continue;
+                }
+                break;
+            }
+            k += r;
+            if k > 63 {
+                break;
+            }
+            block[ZIGZAG_INV[k] as usize] = extend(reader.read_bits(s), s) as i16;
+            any_ac = true;
+            k += 1;
+        }
+        any_ac
+    }
+
+    /// Bits consumed so far, meaningful until the reader pads past a marker.
+    /// A stuffed `0xFF 0x00` pair delivers eight bits for two bytes, and no
+    /// fill ever splits a pair, so pairs before `pos` are counted once.
+    fn consumed(r: &BitReader) -> usize {
+        let stuffed = r.data[..r.pos]
+            .windows(2)
+            .filter(|w| w == &[0xFF, 0x00])
+            .count();
+        (r.pos - stuffed) * 8 - r.count as usize
+    }
+
+    /// The lookahead decoder (10-bit symbol table plus the combined
+    /// run/coefficient table) must produce the same coefficients, the same
+    /// DC prediction, the same `any_ac` flag and consume the same bits as the
+    /// bit-serial reference — over random tables and random data, including
+    /// stuffed `0xFF 0x00` bytes, embedded markers and truncation.
+    #[test]
+    fn lookahead_decoder_matches_bit_serial_reference() {
+        let mut rng = Rng(0x7a11_9e5c_0000_0001);
+        for trial in 0..400 {
+            let dc = random_table(&mut rng);
+            let ac = random_table(&mut rng);
+            let len = 64 + rng.below(4096) as usize;
+            let mut data: Vec<u8> = (0..len).map(|_| rng.next() as u8).collect();
+            // Stuffed bytes, and sometimes a marker part-way or at the end.
+            for i in 0..data.len() - 1 {
+                if data[i] == 0xFF && rng.below(4) != 0 {
+                    data[i + 1] = 0x00;
+                }
+            }
+            if trial % 3 == 0 {
+                let at = data.len() / 2 + rng.below(data.len() as u64 / 2) as usize;
+                if at + 1 < data.len() {
+                    data[at] = 0xFF;
+                    data[at + 1] = 0xD9;
+                }
+            }
+            let mut fast = BitReader::new(&data, 0);
+            let mut slow = BitReader::new(&data, 0);
+            let (mut pred_fast, mut pred_slow) = (0i32, 0i32);
+            let mut blocks = 0;
+            let mut past_marker = 0;
+            while blocks < 4000 {
+                let mut a = [0i16; 64];
+                let mut b = [0i16; 64];
+                let any_a = decode_block_sequential(&mut fast, &dc, &ac, &mut pred_fast, &mut a);
+                let any_b = decode_block_reference(&mut slow, &dc, &ac, &mut pred_slow, &mut b);
+                assert_eq!(a, b, "trial {trial} block {blocks}: coefficients");
+                assert_eq!(any_a, any_b, "trial {trial} block {blocks}: any_ac");
+                assert_eq!(pred_fast, pred_slow, "trial {trial} block {blocks}: pred");
+                // The two readers refill at different moments (per symbol vs
+                // per bit), so one may touch a marker a few bytes before the
+                // other; bit positions are compared only while neither has.
+                if !fast.hit_marker && !slow.hit_marker {
+                    assert_eq!(
+                        consumed(&fast),
+                        consumed(&slow),
+                        "trial {trial} block {blocks}: bits"
+                    );
+                } else {
+                    // Run a few more blocks into the zero padding, then stop.
+                    past_marker += 1;
+                    if past_marker > 8 {
+                        break;
+                    }
+                }
+                blocks += 1;
+            }
+        }
+    }
+
+    /// The combined AC table resolves exactly the prefixes whose code plus
+    /// magnitude fit the lookahead, and nothing else.
+    #[test]
+    fn fast_ac_covers_exactly_the_short_pairs() {
+        let mut rng = Rng(0xfa57_ac00_0000_0002);
+        for _ in 0..50 {
+            let t = random_table(&mut rng);
+            for prefix in 0..super::HUFF_FAST_SIZE {
+                let (symbol, code_len) = t.fast[prefix];
+                let s = (symbol & 15) as u32;
+                let expect =
+                    code_len != 0 && s != 0 && code_len as u32 + s <= super::HUFF_LOOKAHEAD;
+                assert_eq!(t.fast_ac[prefix].len != 0, expect, "prefix {prefix:#x}");
+            }
+        }
+    }
+}
+
+#[cfg(test)]
 mod upsample_tests {
-    use super::{Upsample, upsample_component_row};
+    use super::{
+        Upsample, upsample_component_row, upsample_h1v2_row_scalar, upsample_h2v1_row_scalar,
+        upsample_h2v2_row_scalar,
+    };
 
     #[test]
     fn h2v1_matches_libjpeg_triangle_and_edge_replication() {
@@ -2819,6 +3381,111 @@ mod upsample_tests {
             2,
         );
         assert_eq!(out, [15, 25, 45, 65, 85, 95]);
+    }
+
+    /// The AVX2 4:2:0 row kernel must equal the scalar reference bit for bit
+    /// over fuzzed chroma rows of every width class: narrower than one vector,
+    /// exact multiples, ragged tails, and odd output widths.
+    #[test]
+    fn h2v2_avx2_matches_scalar_bit_exact() {
+        let mut seed = 0x5eed_c0de_u64;
+        let mut next = || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            (seed >> 24) as u8
+        };
+        for source_w in (1..40).chain([63, 64, 65, 100, 127, 128, 129, 837]) {
+            for &out_w in &[2 * source_w, 2 * source_w - 1] {
+                for _ in 0..4 {
+                    let near: Vec<u8> = (0..source_w).map(|_| next()).collect();
+                    let far: Vec<u8> = (0..source_w).map(|_| next()).collect();
+                    let mut expected = vec![0u8; out_w];
+                    upsample_h2v2_row_scalar(&mut expected, &near, &far, 0, out_w);
+                    let mut got = vec![0xAAu8; out_w];
+                    upsample_component_row(
+                        Upsample::FancyH2V2,
+                        &mut got,
+                        0,
+                        &near,
+                        &far,
+                        source_w,
+                        1,
+                        2,
+                    );
+                    assert_eq!(got, expected, "source_w={source_w} out_w={out_w}");
+                }
+            }
+        }
+    }
+
+    /// Same contract for the 4:2:2 horizontal kernel.
+    #[test]
+    fn h2v1_avx2_matches_scalar_bit_exact() {
+        let mut seed = 0x4222_c0de_u64;
+        let mut next = || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            (seed >> 24) as u8
+        };
+        for source_w in (1..40).chain([63, 64, 65, 100, 127, 128, 129, 837]) {
+            for &out_w in &[2 * source_w, 2 * source_w - 1] {
+                for _ in 0..4 {
+                    let near: Vec<u8> = (0..source_w).map(|_| next()).collect();
+                    let mut expected = vec![0u8; out_w];
+                    upsample_h2v1_row_scalar(&mut expected, &near, 0, out_w);
+                    let mut got = vec![0xAAu8; out_w];
+                    upsample_component_row(
+                        Upsample::FancyH2V1,
+                        &mut got,
+                        0,
+                        &near,
+                        &near,
+                        source_w,
+                        1,
+                        2,
+                    );
+                    assert_eq!(got, expected, "source_w={source_w} out_w={out_w}");
+                }
+            }
+        }
+    }
+
+    /// Same contract for the 4:4:0 vertical kernel, on both row parities
+    /// (which select the `+1` / `+2` bias) and ragged widths.
+    #[test]
+    fn h1v2_avx2_matches_scalar_bit_exact() {
+        let mut seed = 0x4440_c0de_u64;
+        let mut next = || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            (seed >> 24) as u8
+        };
+        for w in (1..70).chain([95, 96, 97, 128, 129, 255, 256, 257, 1001]) {
+            for output_y in [0usize, 1] {
+                for _ in 0..3 {
+                    let near: Vec<u8> = (0..w).map(|_| next()).collect();
+                    let far: Vec<u8> = (0..w).map(|_| next()).collect();
+                    let bias = 1 + (output_y & 1) as u16;
+                    let mut expected = vec![0u8; w];
+                    upsample_h1v2_row_scalar(&mut expected, &near, &far, bias, 0, w);
+                    let mut got = vec![0xAAu8; w];
+                    upsample_component_row(
+                        Upsample::FancyH1V2,
+                        &mut got,
+                        output_y,
+                        &near,
+                        &far,
+                        w,
+                        1,
+                        1,
+                    );
+                    assert_eq!(got, expected, "w={w} y={output_y}");
+                }
+            }
+        }
     }
 
     #[test]
