@@ -37,7 +37,7 @@ use crate::mask::{ClipGeom, ClipMask, build_clip_mask_cancellable};
 use pdf_page_ir::DeviceRect;
 
 use crate::prepared::{CpuPreparedPage, DrawClass, PreparedCommand, PreparedGlyphRun, PreparedOp};
-use crate::raster::RasterKernel;
+use crate::raster::{CovRun, RasterKernel};
 use crate::stats::RenderStats;
 use crate::surface::{Surface, unique_arc_mut, zeroed_arc};
 use rayon::prelude::*;
@@ -3502,28 +3502,51 @@ fn paint_command(
             // (possibly offset) surface; pass full device dims.
             let width = surface.origin_x + surface.width;
             let height = surface.origin_y + surface.height;
+            // A solid Normal fill with no per-pixel modulation paints the
+            // raster's constant runs directly; anything else wants the plain
+            // coverage buffer.
+            let runs_direct = mask.is_none()
+                && soft.is_none()
+                && stencil.is_none()
+                && shading.is_none()
+                && matches!(blend, BlendChoice::Normal);
 
-            if !raster.fill_cancellable(
+            if !raster.fill_runs_cancellable(
                 &page.points,
                 subs,
                 width,
                 height,
                 cmd.rule,
                 page.decode_limits.should_cancel.as_deref(),
-                |y, x0, x1, cov| {
+                |y, x0, x1, cov, runs| {
                     if y < by0 || y >= by1 {
-                        return;
+                        return false;
                     }
                     #[cfg(feature = "profiling")]
                     let dispatch_start = Instant::now();
-                    dispatch_row(
-                        surface, kernels, y, x0, x1, cov, bx0, bx1, mask, soft, rgb, alpha, opaque,
-                        premul, blend, shading, stencil,
-                    );
+                    let dirty = if runs_direct {
+                        dispatch_runs(
+                            surface, kernels, y, x0, x1, cov, runs, bx0, bx1, rgb, alpha, opaque,
+                            premul,
+                        );
+                        false
+                    } else {
+                        for r in runs {
+                            if let Some(c) = r.fill {
+                                cov[r.x0 as usize..r.x1 as usize].fill(c);
+                            }
+                        }
+                        dispatch_row(
+                            surface, kernels, y, x0, x1, cov, bx0, bx1, mask, soft, rgb, alpha,
+                            opaque, premul, blend, shading, stencil,
+                        );
+                        true
+                    };
                     #[cfg(feature = "profiling")]
                     {
                         dispatch_elapsed += dispatch_start.elapsed();
                     }
+                    dirty
                 },
             ) {
                 stats.cancelled = true;
@@ -3895,6 +3918,89 @@ fn dispatch_row(
         BlendChoice::Normal => {}
     }
 
+    classify_spans(row, ox, cov, cxa, cxb, kernels, rgb, alpha, opaque, premul);
+}
+
+/// [`dispatch_row`] for the common solid case (Normal blend, no clip mask,
+/// soft mask, stencil or shading) with the row handed over as
+/// [`CovRun`]s: constant runs are painted directly — a full-coverage run is
+/// one `fill_opaque`/`blend_const`, a partial constant one `blend_const` at
+/// the scaled alpha — and only the cell runs go through span
+/// classification. Byte-identical to materializing the runs and calling
+/// `dispatch_row`: every pixel gets the kernel the classifier would choose
+/// for its coverage byte (`blend_const` at `a = c·alpha` is `blend_mask`'s
+/// arithmetic at constant coverage `c`; checked by
+/// `kernels::tests::blend_const_matches_blend_mask_at_constant_coverage`).
+#[allow(clippy::too_many_arguments)]
+#[inline]
+fn dispatch_runs(
+    surface: &mut Surface,
+    kernels: &KernelSet,
+    y: usize,
+    x0: usize,
+    x1: usize,
+    cov: &[u8],
+    runs: &[CovRun],
+    bx0: usize,
+    bx1: usize,
+    rgb: [u8; 3],
+    alpha: u8,
+    opaque: bool,
+    premul: [u8; 4],
+) {
+    let cxa = x0.max(bx0);
+    let cxb = x1.min(bx1.saturating_sub(1));
+    if cxa > cxb {
+        return;
+    }
+    let ox = surface.origin_x;
+    let row = surface.row_mut(y);
+    for r in runs {
+        let s = (r.x0 as usize).max(cxa);
+        let e = (r.x1 as usize).min(cxb + 1);
+        if s >= e {
+            continue;
+        }
+        match r.fill {
+            None => classify_spans(row, ox, cov, s, e - 1, kernels, rgb, alpha, opaque, premul),
+            Some(0) => {}
+            Some(255) => {
+                let dst = &mut row[(s - ox) * 4..(e - ox) * 4];
+                if opaque {
+                    (kernels.fill_opaque)(dst, premul);
+                } else {
+                    (kernels.blend_const)(dst, rgb, alpha);
+                }
+            }
+            Some(c) => {
+                let a = if alpha == 255 {
+                    c
+                } else {
+                    mul_div_255(c as u16, alpha as u16) as u8
+                };
+                (kernels.blend_const)(&mut row[(s - ox) * 4..(e - ox) * 4], rgb, a);
+            }
+        }
+    }
+}
+
+/// Classify `cov[cxa..=cxb]` into empty, full and partial spans and dispatch
+/// one kernel per span onto `row` (a surface row whose column 0 is device
+/// column `ox`).
+#[allow(clippy::too_many_arguments)]
+#[inline]
+fn classify_spans(
+    row: &mut [u8],
+    ox: usize,
+    cov: &[u8],
+    cxa: usize,
+    cxb: usize,
+    kernels: &KernelSet,
+    rgb: [u8; 3],
+    alpha: u8,
+    opaque: bool,
+    premul: [u8; 4],
+) {
     // Span classification. Runs of empty or full coverage are the common case
     // (the interior of any shape wider than a few pixels), so both are walked
     // eight bytes at a time before the per-byte tail.

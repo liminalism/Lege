@@ -961,6 +961,42 @@ mod tests {
         }
     }
 
+    /// The vector fill paints a constant-coverage run `c` with
+    /// `blend_const(rgb, c·alpha)` instead of `blend_mask` over a buffer of
+    /// `c`s; the two must agree byte for byte for every coverage, alpha,
+    /// colour channel value and premultiplied backdrop.
+    #[test]
+    fn blend_const_matches_blend_mask_at_constant_coverage() {
+        let mut rng = Rng(0x2545_F491_4F6C_DD1D);
+        for c in 1..=255u8 {
+            for alpha in 0..=255u8 {
+                let a = if alpha == 255 {
+                    c
+                } else {
+                    mul_div_255(c as u16, alpha as u16) as u8
+                };
+                let rgb = [rng.byte(), rng.byte(), rng.byte()];
+                let mut dst: Vec<u8> = (0..32).map(|_| rng.byte()).collect();
+                // Include the extremes of every channel.
+                dst[..4].copy_from_slice(&[0, 0, 0, 0]);
+                dst[4..8].copy_from_slice(&[255, 255, 255, 255]);
+                let mut via_mask = dst.clone();
+                blend_mask(&mut via_mask, &[c; 8], rgb, alpha);
+                blend_const(&mut dst, rgb, a);
+                assert_eq!(dst, via_mask, "c {c} alpha {alpha} rgb {rgb:?}");
+            }
+        }
+        for v in [0u8, 255] {
+            for c in 1..=255u8 {
+                let mut dst = vec![rng.byte(); 4];
+                let mut via_mask = dst.clone();
+                blend_mask(&mut via_mask, &[c], [v, v, v], 255);
+                blend_const(&mut dst, [v, v, v], c);
+                assert_eq!(dst, via_mask, "c {c} v {v}");
+            }
+        }
+    }
+
     #[test]
     fn fill_opaque_overwrites() {
         let mut dst = [0u8; 12];
