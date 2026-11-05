@@ -1,5 +1,4 @@
 use crate::appearance::{Palette, Rgb};
-use liminalkit_shell::Scale;
 use liminalkit_text::{Face, FaceId, FontSet, TextStyle};
 use liminalkit_ui::Theme;
 use std::sync::OnceLock;
@@ -42,10 +41,12 @@ pub fn rgb(c: Rgb) -> u32 {
     (u32::from(c.0) << 16) | (u32::from(c.1) << 8) | u32::from(c.2)
 }
 
-/// Keep the palette unscaled. These widgets consume surface dimensions raw;
-/// convert those to physical pixels here. Fonts and focus_width are the two
-/// tokens Ui scales internally, so they remain logical until consumption.
-pub fn theme(p: Palette, scale: Scale) -> Theme {
+/// Every size here is logical. The controls scale `padding`, `row_height`,
+/// `corner_radius`, `border_width` and `focus_width` themselves, and
+/// `Ui::new` converts the two font styles to physical pixels once, after
+/// which [`snap_fonts`] snaps them; code that reads a size token directly
+/// goes through `Ui::px`.
+pub fn theme(p: Palette) -> Theme {
     Theme {
         background: rgb(p.control_bg),
         panel: rgb(p.card_bg),
@@ -61,10 +62,10 @@ pub fn theme(p: Palette, scale: Scale) -> Theme {
         // other scales.
         body: TextStyle::new(FACE, 12.83),
         heading: TextStyle::new(FACE, 14.67),
-        row_height: scale.px(27),
-        padding: scale.px(8),
-        corner_radius: scale.px(5),
-        border_width: scale.hairline(),
+        row_height: 27,
+        padding: 8,
+        corner_radius: 5,
+        border_width: 1,
         focus_width: 1,
         ..Theme::default()
     }

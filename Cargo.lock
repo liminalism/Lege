@@ -2844,16 +2844,16 @@ dependencies = [
 
 [[package]]
 name = "liminalkit-raster"
-version = "0.1.0"
-source = "git+https://github.com/liminalism/liminalkit?branch=main#19c5cd393ad6ee802170a789fd3fd1e4ff84bcdf"
+version = "0.5.0"
+source = "git+https://github.com/liminalism/liminalkit?branch=main#3812aa068316fedbf9fa8cf9c7e61364dd548f8c"
 dependencies = [
  "wide",
 ]
 
 [[package]]
 name = "liminalkit-shell"
-version = "0.1.0"
-source = "git+https://github.com/liminalism/liminalkit?branch=main#19c5cd393ad6ee802170a789fd3fd1e4ff84bcdf"
+version = "0.5.0"
+source = "git+https://github.com/liminalism/liminalkit?branch=main#3812aa068316fedbf9fa8cf9c7e61364dd548f8c"
 dependencies = [
  "arboard",
  "liminalkit-raster",
@@ -2864,16 +2864,16 @@ dependencies = [
 
 [[package]]
 name = "liminalkit-text"
-version = "0.1.0"
-source = "git+https://github.com/liminalism/liminalkit?branch=main#19c5cd393ad6ee802170a789fd3fd1e4ff84bcdf"
+version = "0.5.0"
+source = "git+https://github.com/liminalism/liminalkit?branch=main#3812aa068316fedbf9fa8cf9c7e61364dd548f8c"
 dependencies = [
  "liminalkit-raster",
 ]
 
 [[package]]
 name = "liminalkit-ui"
-version = "0.1.0"
-source = "git+https://github.com/liminalism/liminalkit?branch=main#19c5cd393ad6ee802170a789fd3fd1e4ff84bcdf"
+version = "0.5.0"
+source = "git+https://github.com/liminalism/liminalkit?branch=main#3812aa068316fedbf9fa8cf9c7e61364dd548f8c"
 dependencies = [
  "liminalkit-raster",
  "liminalkit-shell",
@@ -2884,8 +2884,8 @@ dependencies = [
 
 [[package]]
 name = "liminalkit-windowing"
-version = "0.1.0"
-source = "git+https://github.com/liminalism/liminalkit?branch=main#19c5cd393ad6ee802170a789fd3fd1e4ff84bcdf"
+version = "0.5.0"
+source = "git+https://github.com/liminalism/liminalkit?branch=main#3812aa068316fedbf9fa8cf9c7e61364dd548f8c"
 dependencies = [
  "liminalkit-raster",
  "liminalkit-shell",
@@ -3689,7 +3689,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d8fae84b431384b68627d0f9b3b1245fcf9f46f6c0e3dc902e9dce64edd1967"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.45.0",
 ]
 
 [[package]]
