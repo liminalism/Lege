@@ -25,7 +25,7 @@ path = "GUI/liminalUI/src/main.rs"
 required-features = ["gui"]
 
 [build-dependencies]
-winres = "0.1.12"  # Updated
+embed-resource = "3.0"
 
 [dependencies]
 # NOTE: `app_dirs2` and `directories` were removed here as unreferenced; the

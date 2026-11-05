@@ -289,6 +289,14 @@ impl PixelApp for LegeApp {
                 })
                 .collect();
             if let Ok(icon) = winit::window::Icon::from_rgba(rgba, bitmap.width, bitmap.height) {
+                // Windows takes the title-bar icon from this and the taskbar
+                // and Alt-Tab icon separately; without the second it falls
+                // back to the executable's resource, if it has one.
+                #[cfg(target_os = "windows")]
+                {
+                    use winit::platform::windows::WindowExtWindows;
+                    window.set_taskbar_icon(Some(icon.clone()));
+                }
                 window.set_window_icon(Some(icon));
             }
         }
@@ -1130,6 +1138,36 @@ fn choice_label(ui: &mut Ui<'_>, area: Rect, text: &str) {
         ui.label_styled(area, text, style, ui.theme.text, Align::Centre);
     }
 }
+/// A checkbox whose edge never disappears. liminalkit fills a checked box and
+/// draws a checked or focused box's edge in `accent`: the fill should stay
+/// the selected colour, so the edge is drawn again in the border colour.
+fn checkbox(ui: &mut Ui<'_>, area: Rect, checked: &mut bool, label: &str) -> bool {
+    let accent = ui.theme.accent;
+    ui.theme.accent = ui.theme.selection;
+    let clicked = ui.checkbox(area, checked, label);
+    ui.theme.accent = accent;
+    // The box liminalkit draws: `CHECKBOX_SIZE`, vertically centred, 4px corners.
+    let size = ui.px(liminalkit_ui::CHECKBOX_SIZE).min(area.h);
+    let (x, y) = (area.x as f32, (area.y + (area.h - size) / 2) as f32);
+    let (size, line, radius) = (
+        size as f32,
+        ui.px(ui.theme.border_width) as f32,
+        ui.px(4) as f32,
+    );
+    let mut ring = Path::new();
+    ring.rounded_rect(x, y, size, size, radius);
+    ring.rounded_rect(
+        x + line,
+        y + line,
+        size - 2.0 * line,
+        size - 2.0 * line,
+        (radius - line).max(0.0),
+    );
+    let edge = ui.theme.panel_edge;
+    ui.painter
+        .fill_path_rule(ui.kernel, &mut ring, FillRule::EvenOdd, edge, 255);
+    clicked
+}
 /// A dashboard card, returning the area inside its padding. Its edge is a
 /// little heavier than the controls' hairlines, and anti-aliased.
 fn card(ui: &mut Ui<'_>, area: Rect) -> Rect {
@@ -1585,7 +1623,7 @@ impl Dashboard {
                 );
                 let rect = row[(index % columns) as usize];
                 let mut value = $value;
-                if ui.checkbox(rect, &mut value, $label) {
+                if checkbox(ui, rect, &mut value, $label) {
                     $changed(value);
                 }
                 hover(ui, rect, $tip, true, note);
@@ -1711,7 +1749,7 @@ impl Dashboard {
         ] {
             let rect = buttons[index];
             let mut checked = selected;
-            if ui.checkbox(rect, &mut checked, text) {
+            if checkbox(ui, rect, &mut checked, text) {
                 self.select_geometry(index);
             }
             hover(ui, rect, tooltip, true, note);

@@ -56,7 +56,10 @@ pub fn theme(p: Palette) -> Theme {
         panel_edge: rgb(p.border),
         text: rgb(p.text),
         text_dim: rgb(p.muted),
-        accent: rgb(p.selected_bg),
+        // Controls draw a focused edge in `accent`. The selected fill would
+        // erase the edge of a selected button; checkboxes, which also fill
+        // with `accent`, swap the selected fill back in (`app::checkbox`).
+        accent: rgb(p.border_focus),
         accent_soft: rgb(p.selected_bg),
         hover: rgb(p.hover_bg),
         selection: rgb(p.selected_bg),
