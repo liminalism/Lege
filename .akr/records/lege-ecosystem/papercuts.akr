@@ -394,6 +394,18 @@ record lege-ecosystem.papercut.akr-check-0-6-2-raises-akr-g024-a-recorded/1 : pa
     created_at 2026-11-05
 }
 
+record lege-ecosystem.papercut.akr-check-0-6-2-raises-akr-g025-exit-status/1 : papercut {
+    title "`akr check` 0.6.2 raises AKR-G025 (\"exit status cannot be trusted\",…"
+    state verified
+    statement """
+        `akr check` 0.6.2 raises AKR-G025 ("exit status cannot be trusted", pipeline) on 10 evidence records where it either is not a pipeline or the last stage is the assertion: a `|` inside a regex alternation (`grep -rn lege-process|lege_process`, `rg -n 'A|B|C'`) or inside a prose bracket (`[40-80 | 40-240 | all]`) is read as a pipe, and `... | rg -q PATTERN`, `... | jq -e EXPR`, `... | sha256sum` are flagged although the final command's status or output is exactly what was observed. G024 and G025 are also absent from the report while the working tree has uncommitted watched paths (only AKR-G004 shows), so a ledger that looked like 19 diagnostics before a commit turns into 26 promoted errors after it. Guess at a fix: tokenise with shell quoting before looking for `|`, accept pipelines whose last stage is a known asserting filter, and report these rules regardless of G004.
+        """
+    observed_at git:c95663377d4af73afb6e9972c773fe1befa12cf9
+    about "akr"
+    author "claude"
+    created_at 2026-11-05
+}
+
 record lege-ecosystem.papercut.akr-import-ingest-of-a-long-planning-document/1 : papercut {
     title "akr import/ingest of a long planning document promotes essentially…"
     state superseded
