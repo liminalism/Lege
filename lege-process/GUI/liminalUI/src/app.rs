@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 
 use liminalkit_raster::{FillRule, Painter, Path, RasterKernel, Rect, WindowBuffer};
 use liminalkit_shell::{Input, KeyInput, Modifiers, MouseButton, Scale};
-use liminalkit_text::{Align, TextCache};
+use liminalkit_text::{Align, Hinting, TextCache, TextRendering};
 use liminalkit_ui::{Focus, ScrollState, TextFieldState, Ui};
 use liminalkit_windowing::{ImeCursorArea, ImeEvent, PixelApp, Waker};
 
@@ -197,7 +197,10 @@ impl LegeApp {
             dashboard: Dashboard::new(),
             // Status text and queue paths change continuously. Keep their
             // raster cache bounded instead of retaining every past label.
-            text: TextCache::with_limits(crate::theme::fonts(), 512, 2 * 1024 * 1024),
+            // Vertical hinting puts cap height and ascenders on whole pixels;
+            // `theme::crisp` sizes already have whole-pixel x-heights.
+            text: TextCache::with_limits(crate::theme::fonts(), 512, 2 * 1024 * 1024)
+                .with_rendering(TextRendering::DEFAULT.with_hinting(Hinting::Vertical)),
             kernel: RasterKernel::new(),
             input: Input::new(),
             focus: Focus::new(),
@@ -211,7 +214,7 @@ impl PixelApp for LegeApp {
     fn render(&mut self, buffer: &mut WindowBuffer, scale: Scale) {
         self.dashboard.poll();
         let palette = appearance::active_palette();
-        let theme = crate::theme::theme(palette, scale);
+        let theme = crate::theme::theme(palette);
         let bands = Bands::new(buffer.width as i32, buffer.height as i32, scale);
         if self.dashboard.modal.is_none() {
             let card = LeftCard::new(bands.right.inset(scale.px(8)), scale);
@@ -1131,10 +1134,11 @@ fn choice_label(ui: &mut Ui<'_>, area: Rect, text: &str) {
 /// little heavier than the controls' hairlines, and anti-aliased.
 fn card(ui: &mut Ui<'_>, area: Rect) -> Rect {
     let theme = ui.theme;
-    let radius = theme.corner_radius as f32;
+    let corner = ui.px(theme.corner_radius);
+    let radius = corner as f32;
     let edge = ui.scale.f(1.5);
     ui.painter
-        .fill_rounded_rect(area.inset(1), theme.corner_radius - 1, theme.panel);
+        .fill_rounded_rect(area.inset(1), corner - 1, theme.panel);
     let (x, y, w, h) = (area.x as f32, area.y as f32, area.w as f32, area.h as f32);
     let mut ring = Path::new();
     ring.rounded_rect(x, y, w, h, radius);
@@ -1152,7 +1156,7 @@ fn card(ui: &mut Ui<'_>, area: Rect) -> Rect {
         theme.panel_edge,
         255,
     );
-    area.inset(theme.padding)
+    area.inset(ui.px(theme.padding))
 }
 fn arrow_button(ui: &mut Ui<'_>, area: Rect, direction: i32) -> bool {
     let clicked = ui.button(area, "");
@@ -1173,7 +1177,7 @@ fn arrow_button(ui: &mut Ui<'_>, area: Rect, direction: i32) -> bool {
 /// `width` at body size; otherwise the largest crisp size at which they do.
 fn checkbox_font(ui: &mut Ui<'_>, width: i32, columns: i32, labels: &[&str]) -> Option<f32> {
     let column = (width - ui.px(2) * (columns - 1)) / columns;
-    let available = column - ui.px(liminalkit_ui::CHECKBOX_SIZE) - ui.theme.padding / 2;
+    let available = column - ui.px(liminalkit_ui::CHECKBOX_SIZE) - ui.px(ui.theme.padding / 2);
     let style = ui.theme.body;
     let widest = labels
         .iter()
@@ -1192,7 +1196,7 @@ fn geometry_cells(ui: &mut Ui<'_>, area: Rect, labels: [&str; 3]) -> Vec<Rect> {
     if checkbox_font(ui, area.w, 3, &labels).is_none() {
         return cells(area, 3, gap);
     }
-    let chrome = ui.px(liminalkit_ui::CHECKBOX_SIZE) + ui.theme.padding / 2 + ui.px(6);
+    let chrome = ui.px(liminalkit_ui::CHECKBOX_SIZE) + ui.px(ui.theme.padding / 2) + ui.px(6);
     let style = ui.theme.body;
     let text: Vec<i32> = labels.iter().map(|l| ui.text.measure(l, style)).collect();
     let fixed = 3 * chrome + 2 * gap;
@@ -2662,7 +2666,7 @@ mod tests {
     #[test]
     fn compact_resolution_field_fits_height_and_width() {
         let mut text = TextCache::new(crate::theme::fonts());
-        let style = crate::theme::theme(appearance::active_palette(), Scale::ONE).body;
+        let style = crate::theme::theme(appearance::active_palette()).body;
         let field = LeftCard::new(Rect::new(0, 0, 340, 236), Scale::ONE).resolution;
         assert!(text.measure("1200x800", style) <= field.w - 8);
     }

@@ -2843,16 +2843,16 @@ dependencies = [
 
 [[package]]
 name = "liminalkit-raster"
-version = "0.1.0"
-source = "git+https://github.com/liminalism/liminalkit?branch=main#19c5cd393ad6ee802170a789fd3fd1e4ff84bcdf"
+version = "0.5.0"
+source = "git+https://github.com/liminalism/liminalkit?branch=main#b74d61ca727ab1560c946fbdcd3b99d7a2a97946"
 dependencies = [
  "wide",
 ]
 
 [[package]]
 name = "liminalkit-shell"
-version = "0.1.0"
-source = "git+https://github.com/liminalism/liminalkit?branch=main#19c5cd393ad6ee802170a789fd3fd1e4ff84bcdf"
+version = "0.5.0"
+source = "git+https://github.com/liminalism/liminalkit?branch=main#b74d61ca727ab1560c946fbdcd3b99d7a2a97946"
 dependencies = [
  "arboard",
  "liminalkit-raster",
@@ -2863,16 +2863,16 @@ dependencies = [
 
 [[package]]
 name = "liminalkit-text"
-version = "0.1.0"
-source = "git+https://github.com/liminalism/liminalkit?branch=main#19c5cd393ad6ee802170a789fd3fd1e4ff84bcdf"
+version = "0.5.0"
+source = "git+https://github.com/liminalism/liminalkit?branch=main#b74d61ca727ab1560c946fbdcd3b99d7a2a97946"
 dependencies = [
  "liminalkit-raster",
 ]
 
 [[package]]
 name = "liminalkit-ui"
-version = "0.1.0"
-source = "git+https://github.com/liminalism/liminalkit?branch=main#19c5cd393ad6ee802170a789fd3fd1e4ff84bcdf"
+version = "0.5.0"
+source = "git+https://github.com/liminalism/liminalkit?branch=main#b74d61ca727ab1560c946fbdcd3b99d7a2a97946"
 dependencies = [
  "liminalkit-raster",
  "liminalkit-shell",
@@ -2883,8 +2883,8 @@ dependencies = [
 
 [[package]]
 name = "liminalkit-windowing"
-version = "0.1.0"
-source = "git+https://github.com/liminalism/liminalkit?branch=main#19c5cd393ad6ee802170a789fd3fd1e4ff84bcdf"
+version = "0.5.0"
+source = "git+https://github.com/liminalism/liminalkit?branch=main#b74d61ca727ab1560c946fbdcd3b99d7a2a97946"
 dependencies = [
  "liminalkit-raster",
  "liminalkit-shell",
