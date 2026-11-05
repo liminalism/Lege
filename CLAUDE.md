@@ -26,20 +26,22 @@ Lege is a fully-automatic PDF processor for E-Ink ebook readers. It renders PDF 
 | Liminaldoc reader and writer | `../liminaldoc/` | Separate native document product; old source copies remain here during migration |
 | Shared assets/tools | `lege-misc/` | Icons, packaging, scripts, docs, dev utilities, and `xtask` |
 
-The workspace default members are `lege-process` and
-`lege-process/GUI/liminalUI`, so plain `cargo build` builds the CLI and the GUI.
+The only workspace default member is `lege-process`. Its default `gui`
+feature depends on `lege-gui-liminalui` and adds a `lege-gui` binary target, so
+plain `cargo build` (or `cargo gui`, i.e. `cargo build -p lege`) builds both
+the CLI and the GUI; `cargo cli` builds `--bin lege` alone.
 Standalone codec projects retain their own build graphs; root patches make the
 processor use the in-tree linked codecs.
 
-Every binary in this workspace has a unique name, so any combination of
-packages can be selected in one Cargo invocation. In particular the `lege`
-package builds the CLI *only* — it has no GUI feature and no GUI
-dependencies. Liminaldoc has its own Cargo workspace:
+Never select `-p lege` and `-p lege-gui-liminalui` in one invocation: both
+packages have a `lege-gui` binary, and their outputs collide in `target/`.
+Build the GUI through `lege` (as above), or `-p lege-gui-liminalui` on its own.
+Liminaldoc has its own Cargo workspace:
 
 | Binary | Package | Path |
 |---|---|---|
 | `lege` | `lege` | `lege-process/` |
-| `lege-gui` | `lege-gui-liminalui` | `lege-process/GUI/liminalUI/` |
+| `lege-gui` | `lege` (default `gui` feature), or `lege-gui-liminalui` alone | `lege-process/GUI/liminalUI/` |
 | `liminaldoc-reader` | `liminaldoc-reader` | `../liminaldoc/crates/liminal-reader/` |
 | `liminaldoc-writer` | `docwrite-app` | `../liminaldoc/crates/docwrite-app/` |
 
