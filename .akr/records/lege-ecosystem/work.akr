@@ -1791,7 +1791,7 @@ record lege-ecosystem.work.glyph-font-text-output/1 : work {
         path "lege-document-ocr/crates/export/src/lib.rs",
         path "lege-pdf/read/src/session.rs",
         path "lege-pdf/write/**",
-        path "lege-process/GUI/Freya/**",
+        path "lege-process/GUI/liminalUI/**",
         path "lege-process/core/accumulator.rs",
         path "lege-process/core/clean_gray.rs",
         path "lege-process/core/main.rs",
@@ -1803,8 +1803,12 @@ record lege-ecosystem.work.glyph-font-text-output/1 : work {
         path "lege-process/pipeline/helper_functions.rs",
         path "lege-process/pipeline/pdf_tokio_pipeline.rs"
     ]
-    intent "Improve the shipped per-document glyph-font text output. Investigate and correct remaining small-bold substitutions and excessive font and glyph growth on long books, with representative quality and performance measurements."
-    note "TrueTyping output, outline fitting, OCR ToUnicode, orientation and font banking are implemented. Earlier feature stages are historical context; residual quality and long-book growth remain open."
+    intent """
+        Improve the shipped per-document glyph-font text output. Investigate and correct remaining small-bold substitutions and excessive font and glyph growth on long books, with representative quality and performance measurements.
+        """
+    note """
+        TrueTyping output, outline fitting, OCR ToUnicode, orientation and font banking are implemented. Earlier feature stages are historical context; residual quality and long-book growth remain open.
+        """
     claim the-user-found-it-on-two-books {
         text """
             The default's first day in a user's hands found both failures at once: the ITU T.88 specification came back with whole letters replaced in body text, and an 836-page book died after seven minutes on the 16-bit glyph id space while taking twenty minutes to get halfway.

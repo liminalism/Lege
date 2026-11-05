@@ -382,6 +382,18 @@ record lege-ecosystem.papercut.agents-md-documents-knowledge-context-get/2 : pap
     created_at 2026-10-05
 }
 
+record lege-ecosystem.papercut.akr-check-0-6-2-raises-akr-g024-a-recorded/1 : papercut {
+    title "`akr check` 0.6.2 raises AKR-G024 (\"a recorded command names no test…"
+    state verified
+    statement """
+        `akr check` 0.6.2 raises AKR-G024 ("a recorded command names no test that exists") on 16 evidence records whose `command` is not a test filter at all: it takes fragments of file names and arguments as test names (`aubman_and_` from `Taubman_and_Marcellin.pdf`, `tructures_processed_2026` from an output path, `raw_3rd_batch`, `audit_provenance` from a script path) and it reports `print_cli` from `cargo test -p lege-pdf-agent --test print_cli` although lege-pdf/agent/tests/print_cli.rs is tracked (a `--test` target is a file name, not a function name). Under --strict these warnings fail the check, and the only way to clear them is to rewrite the recorded command of sealed evidence. Guess at a fix: only parse a filter out of commands whose program is `cargo test`/`cargo nextest`, resolve `--test <name>` against tests/<name>.rs, and exempt evidence records (which report what was run) as opposed to acceptance checks (which gate).
+        """
+    observed_at git:bd2bc8caad33b73e631abf4c0ac4040e208a62fd
+    about "akr"
+    author "claude"
+    created_at 2026-11-05
+}
+
 record lege-ecosystem.papercut.akr-import-ingest-of-a-long-planning-document/1 : papercut {
     title "akr import/ingest of a long planning document promotes essentially…"
     state superseded

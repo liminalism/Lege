@@ -35,7 +35,7 @@ record lege-ecosystem.decision.a-fold-may-not-change-a-letters-counters/1 : deci
 record lege-ecosystem.decision.jbig2-is-the-default-pdf-text-format-again/1 : decision {
     title "JBIG2 is the Freya GUI's default PDF text encoder again; truetyping is the opt-in checkbox"
     state proposed
-    scope [ path "lege-process/GUI/Freya/**", path "lege-process/language_service/**" ]
+    scope [ path "lege-process/GUI/liminalUI/**", path "lege-process/language_service/**" ]
     decision """
         The Freya GUI's default PDF text encoder is JBIG2 symbol mode again. Truetyping stays a first-class format, keeps its name everywhere, and is offered as a checkbox (TrueTyping text) that excludes compatibility mode; clearing either checkbox returns to JBIG2. CompressionType::default() is Jbig2 and ProcessingOptions::new() starts there. The CLI is unchanged: its non-interactive default was and is ccitt4, truetyping is --truetyping or format 4.
         """
@@ -50,7 +50,6 @@ record lege-ecosystem.decision.jbig2-is-the-default-pdf-text-format-again/1 : de
         @lege-ecosystem.evidence.truetyping-parallel-probe-benchmark-2026-09-05,
         @lege-ecosystem.observation.truetyping-dictionary-lock-serialized-every-page
     ]
-    author "GitHub Uploader"
 }
 
 record lege-ecosystem.decision.jbig2-symbol-substitution-is-opt-in/1 : decision {
@@ -255,7 +254,7 @@ record lege-ecosystem.decision.simple-cli-default-binarization-is-adaptive/1 : d
 
 record lege-ecosystem.decision.top-level-application-license-agpl/1 : decision {
     title "License the top-level Lege applications under AGPL-3.0-only"
-    state active
+    state superseded
     scope [
         path "Cargo.toml",
         path "LICENSE",
@@ -281,6 +280,37 @@ record lege-ecosystem.decision.top-level-application-license-agpl/1 : decision {
         @lege-ecosystem.evidence.djvu-license-linkage-boundary-audit-20260822/1,
         @lege-ecosystem.evidence.djvu-subprocess-license-surface-audit-20260822/1
     ]
+}
+
+record lege-ecosystem.decision.top-level-application-license-agpl/2 : decision {
+    title "License the top-level Lege applications under AGPL-3.0-only"
+    state active
+    scope [
+        path "Cargo.toml",
+        path "LICENSE",
+        path "NOTICE",
+        path "README.md",
+        path "lege-android/**",
+        path "lege-misc/docs/licenses.html",
+        path "lege-process/**"
+    ]
+    topic top-level-application-license
+    decision """
+        The Lege top-level workspace and combined application products are licensed AGPL-3.0-only, authorizing direct linking to the AGPL-3.0-only DJVULibRust crate. The root and application package metadata and included license texts must say AGPL-3.0-only. Independently usable codec and third-party subtrees retain their explicit licenses: DJVULibRust remains AGPL-3.0-only, while jbig2enc-rust and jp2lam remain MIT OR Apache-2.0.
+        """
+    context """
+        The user selected the plan's recommended D1 outcome: everything is AGPL again at the top level. The former MIT application declaration existed to support the now-retired arms-length subprocess boundary.
+        """
+    consequences """
+        Lege may restore the in-process DJVULibRust API. Application crates that directly link lege-process, including lege-android, must not continue to claim MIT. Mixed-license subtrees and third-party notices remain explicitly mapped rather than being relabeled.
+        """
+    derived_from [ @lege-ecosystem.work.open-source-monorepo-relaunch/1 ]
+    supersedes [ @lege-ecosystem.decision.top-level-application-license-agpl/1 ]
+    supported_by [
+        @lege-ecosystem.evidence.djvu-license-linkage-boundary-audit-20260822/1,
+        @lege-ecosystem.evidence.djvu-subprocess-license-surface-audit-20260822/1
+    ]
+    author "dk"
 }
 
 record lege-ecosystem.decision.truetyping-banks-fonts-and-respects-a-bilevel-source/1 : decision {
