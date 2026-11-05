@@ -14,7 +14,9 @@ repository = "https://github.com/liminalism/lege"
 keywords = ["jpeg2000", "jp2", "j2k", "encoder", "decoder"]
 categories = ["multimedia::encoding", "multimedia::images", "compression"]
 # Backup copies (`*.rs.bk`) and in-tree notes stay in the checkout. The
-# published package is the library, both binaries' sources, tests, and examples.
+# published package is the library, the jp2lam binary, tests, and examples.
+# compare_encodings stays a local `cli` binary. Its source is outside these
+# globs, so `cargo package` omits that target.
 include = [
     "Cargo.toml",
     "Cargo.lock",
@@ -36,7 +38,7 @@ required-features = ["cli"]
 
 [[bin]]
 name = "compare_encodings"
-path = "src/bin/compare_encodings.rs"
+path = "tools/compare_encodings.rs"
 required-features = ["cli"]
 
 [features]
