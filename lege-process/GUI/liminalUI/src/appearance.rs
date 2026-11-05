@@ -214,27 +214,26 @@ fn persist_theme_choice(
 }
 
 pub fn active_palette() -> Palette {
-    match active_theme_choice() {
+    palette_for(active_theme_choice())
+}
+
+/// The palette a theme choice draws with.
+pub(crate) fn palette_for(choice: ThemeChoice) -> Palette {
+    match choice {
         ThemeChoice::Default => BASE_DAY,
         ThemeChoice::Sanzo { index, dark } => match crate::sanzowada::theme_at(index) {
             Some(t) => {
-                let mut palette = if dark {
-                    t.dark
-                } else {
-                    colorize_light_surfaces(t.light)
-                };
+                let mut palette = if dark { t.dark } else { t.light };
 
                 // Notifications use the combo's lightest source color instead of
-                // the built-in yellow. The raw light palette maps that color to
-                // app_bg before light-surface tinting.
+                // the built-in yellow; the light palette's background is that color.
                 palette.info_bg = t.light.app_bg;
 
-                // A few generated dark variants used a dark source color for text.
-                // Normalize both primary and secondary copy for dependable contrast.
-                if dark {
-                    palette.text = (255, 255, 255);
-                    palette.muted = (220, 220, 220);
-                }
+                // Text keeps the combo's own color (its darkest in a light theme,
+                // its lightest in a dark one), moved only as far toward black or
+                // white as legibility needs, so every theme shows all its colors.
+                palette.text = legible(palette.text, palette.app_bg, TEXT_CONTRAST);
+                palette.muted = legible(palette.muted, palette.app_bg, MUTED_CONTRAST);
                 palette
             }
             None => BASE_DAY,
@@ -242,26 +241,63 @@ pub fn active_palette() -> Palette {
     }
 }
 
-/// Many Sanzo combos have a near-white lightest color (Cream/Sulphur/Pale Lemon
-/// Yellow, etc.), so mapping "lightest -> background" makes those light themes look
-/// like the default cream UI instead of their own combo. This pulls near-white
-/// surfaces toward the theme's own accent (a Sanzo color) so each light theme reads
-/// as itself. The tint is proportional to how close the background is to white, so
-/// themes whose lightest color is already colored (mint, orange, etc.) are untouched.
-pub(crate) fn colorize_light_surfaces(mut p: Palette) -> Palette {
-    let luma = |c: Rgb| 0.299 * c.0 as f32 + 0.587 * c.1 as f32 + 0.114 * c.2 as f32;
-    // 0 below luma 200, ramping to the cap by luma 255.
-    let t = (((luma(p.app_bg) - 200.0) / 55.0).clamp(0.0, 1.0)) * 0.34;
-    if t <= 0.0 {
-        return p;
+/// WCAG contrast for body text, and for the secondary (muted) text.
+const TEXT_CONTRAST: f32 = 4.5;
+const MUTED_CONTRAST: f32 = 3.0;
+
+/// `color`, or the nearest mix of it away from the background (toward white
+/// if it is the lighter of the two, else toward black) with at least
+/// `minimum` WCAG contrast. On a mid-tone background that is out of reach,
+/// the text goes all the way to white or black, keeping a dark theme's light
+/// text light rather than flipping it.
+pub(crate) fn legible(color: Rgb, background: Rgb, minimum: f32) -> Rgb {
+    let target = if luminance(color) >= luminance(background) {
+        (255, 255, 255)
+    } else {
+        (0, 0, 0)
+    };
+    (0..=20)
+        .map(|step| blend(color, target, step as f32 / 20.0))
+        .find(|candidate| contrast(*candidate, background) >= minimum)
+        .unwrap_or(target)
+}
+
+/// Label color for text drawn on `fill` (a selected button, say): the
+/// theme's text color made legible against that fill. A label may flip to
+/// the other extreme when only that one is legible on the fill.
+pub fn text_on(fill: Rgb) -> Rgb {
+    let text = legible(active_palette().text, fill, TEXT_CONTRAST);
+    if contrast(text, fill) >= TEXT_CONTRAST {
+        return text;
     }
-    let accent = p.selected_bg;
-    p.app_bg = blend(p.app_bg, accent, t);
-    p.panel_bg = blend(p.panel_bg, accent, t);
-    p.card_bg = blend(p.card_bg, accent, t);
-    p.control_bg = blend(p.control_bg, accent, t);
-    p.info_bg = blend(p.info_bg, accent, t);
-    p
+    let (black, white) = ((0, 0, 0), (255, 255, 255));
+    if contrast(black, fill) > contrast(white, fill) {
+        black
+    } else {
+        white
+    }
+}
+
+/// WCAG 2 contrast ratio between two sRGB colors.
+pub(crate) fn contrast(a: Rgb, b: Rgb) -> f32 {
+    let (lighter, darker) = {
+        let (la, lb) = (luminance(a), luminance(b));
+        if la > lb { (la, lb) } else { (lb, la) }
+    };
+    (lighter + 0.05) / (darker + 0.05)
+}
+
+/// WCAG 2 relative luminance.
+fn luminance(c: Rgb) -> f32 {
+    let channel = |v: u8| {
+        let v = v as f32 / 255.0;
+        if v <= 0.04045 {
+            v / 12.92
+        } else {
+            ((v + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    0.2126 * channel(c.0) + 0.7152 * channel(c.1) + 0.0722 * channel(c.2)
 }
 
 fn blend(a: Rgb, b: Rgb, t: f32) -> Rgb {
@@ -355,18 +391,19 @@ mod tests {
             index: 0,
             dark: false,
         }));
-        let mut light = colorize_light_surfaces(t.light);
-        light.info_bg = t.light.app_bg;
-        assert_eq!(active_palette(), light);
+        let light = active_palette();
+        assert_eq!(light.app_bg, t.light.app_bg, "the combo's own background");
+        assert_eq!(light.info_bg, t.light.app_bg);
 
         set_theme_preview(Some(ThemeChoice::Sanzo {
             index: 0,
             dark: true,
         }));
         let dark = active_palette();
+        assert_eq!(dark.app_bg, t.dark.app_bg);
         assert_eq!(dark.info_bg, t.light.app_bg);
-        assert_eq!(dark.text, (255, 255, 255));
-        assert_eq!(dark.muted, (220, 220, 220));
+        // Golden Yellow on Slate Color is legible as it is.
+        assert_eq!(dark.text, t.dark.text);
 
         // Out-of-range index falls back to the default palette rather than panicking.
         set_theme_preview(Some(ThemeChoice::Sanzo {
@@ -379,23 +416,43 @@ mod tests {
     }
 
     #[test]
-    fn colorize_tints_near_white_light_surfaces_only() {
-        // A near-white cream background is pulled toward the accent so it no longer
-        // reads as the default cream UI.
-        let mut cream = BASE_DAY;
-        cream.app_bg = (251, 245, 205);
-        cream.panel_bg = (251, 245, 205);
-        cream.selected_bg = (224, 28, 21); // red accent
-        let out = colorize_light_surfaces(cream);
-        assert_ne!(out.app_bg, cream.app_bg, "near-white bg should be tinted");
-        assert!(out.panel_bg != cream.panel_bg);
+    fn every_theme_keeps_its_colors_and_legible_text() {
+        for index in 0..crate::sanzowada::THEME_COUNT {
+            let t = crate::sanzowada::theme_at(index).unwrap();
+            for dark in [false, true] {
+                let p = palette_for(ThemeChoice::Sanzo { index, dark });
+                let source = if dark { t.dark } else { t.light };
+                assert_eq!(p.app_bg, source.app_bg, "theme {index} dark={dark}");
+                for (color, minimum) in [(p.text, TEXT_CONTRAST), (p.muted, MUTED_CONTRAST)] {
+                    // Pure white or black is as far as a mid-tone allows.
+                    assert!(
+                        contrast(color, p.app_bg) >= minimum
+                            || [(0, 0, 0), (255, 255, 255)].contains(&color),
+                        "{index} {dark}: {color:?} on {:?}",
+                        p.app_bg
+                    );
+                }
+                // A dark theme's text stays light, a light theme's dark.
+                assert_eq!(
+                    luminance(p.text) > luminance(p.app_bg),
+                    dark,
+                    "{index} {dark}"
+                );
+                // Text that is already legible keeps the combo's exact color.
+                if contrast(source.text, source.app_bg) >= TEXT_CONTRAST {
+                    assert_eq!(p.text, source.text, "{index} {dark}");
+                }
+            }
+        }
+    }
 
-        // An already-colored (non-white) background is left untouched.
-        let mut colored = BASE_DAY;
-        colored.app_bg = (155, 212, 189); // mint, luma < 200
-        colored.selected_bg = (227, 91, 30);
-        let out2 = colorize_light_surfaces(colored);
-        assert_eq!(out2.app_bg, colored.app_bg, "colored bg must not be tinted");
+    #[test]
+    fn legible_keeps_a_legible_color_and_mixes_a_faint_one() {
+        let bg = (58, 57, 61);
+        assert_eq!(legible((255, 168, 63), bg, 4.5), (255, 168, 63));
+        let fixed = legible((90, 80, 70), bg, 4.5);
+        assert!(contrast(fixed, bg) >= 4.5);
+        assert_ne!(fixed, (255, 255, 255));
     }
 
     #[test]

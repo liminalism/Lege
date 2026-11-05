@@ -162,7 +162,8 @@
       "layout_short": "Layout",
       "images_short": "Bilder",
       "queue_short": "Liste",
-      "log_empty": "Noch keine verarbeiteten Dokumente."
+      "log_empty": "Noch keine verarbeiteten Dokumente.",
+      "theme_keys_hint": "← → Design · ↑ ↓ hell oder dunkel · Enter übernehmen · Esc abbrechen"
     }
   }
 }

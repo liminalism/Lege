@@ -224,6 +224,7 @@ mod tests {
                 "theme_preview",
                 "resolution_width_ignored",
                 "log_empty",
+                "theme_keys_hint",
             ] {
                 assert!(
                     text.interactive

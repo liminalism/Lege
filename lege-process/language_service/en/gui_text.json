@@ -162,7 +162,8 @@
       "layout_short": "Layout",
       "images_short": "Images",
       "queue_short": "Queue",
-      "log_empty": "No processed documents yet."
+      "log_empty": "No processed documents yet.",
+      "theme_keys_hint": "← → theme · ↑ ↓ light or dark · Enter accept · Esc cancel"
     }
   }
 }

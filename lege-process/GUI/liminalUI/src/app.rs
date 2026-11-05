@@ -334,7 +334,8 @@ impl PixelApp for LegeApp {
             match key {
                 KeyInput::Left => self.dashboard.step_theme(-1),
                 KeyInput::Right => self.dashboard.step_theme(1),
-                KeyInput::Up | KeyInput::Down => self.dashboard.flip_theme(),
+                KeyInput::Up => self.dashboard.set_theme_row(false),
+                KeyInput::Down => self.dashboard.set_theme_row(true),
                 KeyInput::Enter => self.dashboard.accept_theme(),
                 _ => self.input.key(key.clone()),
             }
@@ -949,44 +950,79 @@ impl Dashboard {
         self.modal_error = None;
     }
     fn choose_theme(&mut self) {
-        self.theme_index = match appearance::active_theme_choice() {
-            ThemeChoice::Default => 0,
-            ThemeChoice::Sanzo { index, dark } => 1 + index * 2 + usize::from(dark),
-        };
+        self.theme_index = theme_ring_index(appearance::active_theme_choice());
         self.modal = Some(Modal::Theme);
     }
     fn preview_theme(&mut self) {
-        appearance::set_theme_preview(Some(if self.theme_index == 0 {
-            ThemeChoice::Default
-        } else {
-            ThemeChoice::Sanzo {
-                index: (self.theme_index - 1) / 2,
-                dark: (self.theme_index - 1) % 2 == 1,
-            }
-        }));
+        appearance::set_theme_preview(Some(theme_at_ring(self.theme_index)));
     }
     fn step_theme(&mut self, delta: i32) {
-        self.theme_index = (self.theme_index as i32 + delta)
-            .rem_euclid((1 + crate::sanzowada::THEME_COUNT * 2) as i32)
-            as usize;
+        self.theme_index = theme_ring_step(self.theme_index, delta);
         self.preview_theme();
     }
-    fn flip_theme(&mut self) {
-        if self.theme_index > 0 {
-            self.theme_index = if self.theme_index % 2 == 1 {
-                self.theme_index + 1
-            } else {
-                self.theme_index - 1
-            };
+    /// Move to the light (`dark == false`) or dark row, keeping the combo.
+    /// From Default, the dark row starts at its first combo.
+    fn set_theme_row(&mut self, dark: bool) {
+        let next = theme_ring_row(self.theme_index, dark);
+        if next != self.theme_index {
+            self.theme_index = next;
             self.preview_theme();
         }
     }
+    /// Save the previewed theme and close the dialog, About included.
     fn accept_theme(&mut self) {
         let choice = appearance::active_theme_choice();
         if let Err(error) = appearance::commit_theme_choice(choice) {
             self.notice(error.to_string(), 8);
         } else {
-            self.modal = Some(Modal::About);
+            self.close_modal();
+        }
+    }
+}
+
+// The theme picker's order, as in the Freya GUI: Default, then the light
+// row (Sanzo Light 1..N), then the dark row (Sanzo Dark 1..N). Left/Right walk
+// this ring, so the end of one row continues at the start of the other, and
+// the end of the dark row wraps to Default. Up/Down move a combo between rows.
+fn theme_ring_len() -> usize {
+    1 + 2 * crate::sanzowada::THEME_COUNT
+}
+fn theme_at_ring(position: usize) -> ThemeChoice {
+    let n = crate::sanzowada::THEME_COUNT;
+    match position {
+        0 => ThemeChoice::Default,
+        p if p <= n => ThemeChoice::Sanzo {
+            index: p - 1,
+            dark: false,
+        },
+        p => ThemeChoice::Sanzo {
+            index: p - n - 1,
+            dark: true,
+        },
+    }
+}
+fn theme_ring_step(position: usize, delta: i32) -> usize {
+    (position as i32 + delta).rem_euclid(theme_ring_len() as i32) as usize
+}
+/// The same combo in the light (`dark == false`) or dark row. From Default,
+/// the dark row starts at its first combo.
+fn theme_ring_row(position: usize, dark: bool) -> usize {
+    match theme_at_ring(position) {
+        ThemeChoice::Default if dark => theme_ring_index(ThemeChoice::Sanzo { index: 0, dark }),
+        ThemeChoice::Default => position,
+        ThemeChoice::Sanzo { index, .. } => theme_ring_index(ThemeChoice::Sanzo { index, dark }),
+    }
+}
+fn theme_ring_index(choice: ThemeChoice) -> usize {
+    match choice {
+        ThemeChoice::Default => 0,
+        ThemeChoice::Sanzo { index, dark } => {
+            1 + index
+                + if dark {
+                    crate::sanzowada::THEME_COUNT
+                } else {
+                    0
+                }
         }
     }
 }
@@ -1094,14 +1130,20 @@ fn small(ui: &mut Ui<'_>, area: Rect, text: &str) {
     ui.label_styled(area, text, style, ui.theme.text_dim, Align::Left);
 }
 fn choice(ui: &mut Ui<'_>, area: Rect, text: &str, selected: bool) -> bool {
-    let old = ui.theme.panel;
+    let old = ui.theme;
     if selected {
         ui.theme.panel = ui.theme.selection;
+        ui.theme.text = on_selection();
     }
     let clicked = ui.button(area, "");
     choice_label(ui, area, text);
-    ui.theme.panel = old;
+    ui.theme = old;
     clicked
+}
+/// The text color for labels on the selected fill.
+fn on_selection() -> u32 {
+    let fill = appearance::active_palette().selected_bg;
+    crate::theme::rgb(appearance::text_on(fill))
 }
 fn choice_label(ui: &mut Ui<'_>, area: Rect, text: &str) {
     let available = (area.w - ui.px(8)).max(1);
@@ -1335,6 +1377,7 @@ impl Dashboard {
         let original_theme = ui.theme;
         ui.theme.body.size = font(ui, 16.0);
         ui.theme.panel = ui.theme.selection;
+        ui.theme.text = on_selection();
         ui.theme.panel_edge = crate::theme::rgb(appearance::active_palette().border_focus);
         let start = ui.button(
             actions.primary,
@@ -2091,45 +2134,41 @@ impl Dashboard {
                 }
             }
             Modal::Theme => {
-                let text = if self.theme_index == 0 {
-                    tr("default_theme").to_owned()
-                } else {
-                    format!(
+                let selected = theme_at_ring(self.theme_index);
+                let text = match selected {
+                    ThemeChoice::Default => tr("default_theme").to_owned(),
+                    ThemeChoice::Sanzo { index, dark } => format!(
                         "Sanzo {} {}",
-                        if (self.theme_index - 1) % 2 == 1 {
-                            tr("dark")
-                        } else {
-                            tr("light")
-                        },
-                        (self.theme_index - 1) / 2 + 1
-                    )
+                        if dark { tr("dark") } else { tr("light") },
+                        index + 1
+                    ),
                 };
                 label(ui, row(body, 0, row_h), &text);
-                if self.theme_index > 0 {
-                    if let Some(theme) = crate::sanzowada::theme_at((self.theme_index - 1) / 2) {
-                        small(ui, row(body, 1, row_h), &theme.colors.join(", "));
-                    }
+                if let ThemeChoice::Sanzo { index, .. } = selected
+                    && let Some(theme) = crate::sanzowada::theme_at(index)
+                {
+                    small(ui, row(body, 1, row_h), &theme.colors.join(", "));
                 }
-                // The bundled face has no arrow glyphs; draw the steppers as
-                // chevrons. Light/Dark show which variant is being previewed.
-                let buttons = cells(row(body, 2, row_h), 4, ui.px(4));
-                if arrow_button(ui, buttons[0], -1) {
+                // The steppers walk the ring; the switch moves the combo
+                // between the light and dark rows.
+                let controls = cells(row(body, 2, row_h), 4, ui.px(4));
+                if arrow_button(ui, controls[0], -1) {
                     self.step_theme(-1);
                 }
-                if arrow_button(ui, buttons[1], 1) {
+                if arrow_button(ui, controls[1], 1) {
                     self.step_theme(1);
                 }
-                let dark = (self.theme_index > 0).then(|| (self.theme_index - 1) % 2 == 1);
-                for (index, text) in [(2, tr("light")), (3, tr("dark"))] {
-                    if choice(ui, buttons[index], text, dark == Some(index == 3)) {
-                        if self.theme_index == 0 {
-                            self.theme_index = 1;
-                        }
-                        let combo = (self.theme_index - 1) / 2;
-                        self.theme_index = 1 + combo * 2 + usize::from(index == 3);
-                        self.preview_theme();
-                    }
+                let mut dark = matches!(selected, ThemeChoice::Sanzo { dark: true, .. });
+                let switch = Rect::new(
+                    controls[2].x + ui.px(8),
+                    controls[2].y,
+                    controls[3].right() - controls[2].x - ui.px(8),
+                    controls[2].h,
+                );
+                if ui.toggle(switch, &mut dark, tr("dark")) {
+                    self.set_theme_row(dark);
                 }
+                small(ui, row(body, 3, row_h), tr("theme_keys_hint"));
                 if ui.button(row(body, 4, row_h), tr("accept")) {
                     self.accept_theme();
                 }
@@ -2720,6 +2759,42 @@ mod tests {
             app.dashboard.resolution_edit,
             ResolutionEdit::Displaying
         ));
+    }
+    #[test]
+    fn theme_ring_walks_rows_and_switches_between_them() {
+        let n = crate::sanzowada::THEME_COUNT;
+        let at = |index, dark| theme_ring_index(ThemeChoice::Sanzo { index, dark });
+        for position in 0..theme_ring_len() {
+            assert_eq!(theme_ring_index(theme_at_ring(position)), position);
+        }
+        // The end of the light row continues at the start of the dark row.
+        assert_eq!(theme_ring_step(at(n - 1, false), 1), at(0, true));
+        assert_eq!(theme_ring_step(at(0, true), -1), at(n - 1, false));
+        // The end of the dark row wraps through Default to the light row.
+        assert_eq!(theme_ring_step(at(n - 1, true), 1), 0);
+        assert_eq!(theme_ring_step(0, 1), at(0, false));
+        assert_eq!(theme_ring_step(0, -1), at(n - 1, true));
+        // Down and Up keep the combo and change the row.
+        assert_eq!(theme_ring_row(at(4, false), true), at(4, true));
+        assert_eq!(theme_ring_row(at(4, true), false), at(4, false));
+        assert_eq!(theme_ring_row(at(4, true), true), at(4, true));
+        assert_eq!(theme_ring_row(0, true), at(0, true));
+        assert_eq!(theme_ring_row(0, false), 0);
+    }
+    #[test]
+    fn the_bundled_font_covers_every_ui_string() {
+        // A missing glyph draws as a box; the theme picker's arrows once did.
+        let face = crate::theme::fonts().face(crate::theme::FACE);
+        for json in [
+            include_str!("../../../language_service/en/gui_text.json"),
+            include_str!("../../../language_service/de/gui_text.json"),
+        ] {
+            let missing: Vec<char> = json
+                .chars()
+                .filter(|c| !c.is_control() && !face.covers(*c))
+                .collect();
+            assert!(missing.is_empty(), "no glyph for {missing:?}");
+        }
     }
     #[test]
     fn every_tooltip_fits_without_clipping() {
