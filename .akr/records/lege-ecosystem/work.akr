@@ -1128,6 +1128,47 @@ record lege-ecosystem.work.component-level-parallelism/1 : work {
     }
 }
 
+record lege-ecosystem.work.context-menu-watch/1 : work {
+    title "Standalone Windows C++ context-menu inventory and watcher"
+    state completed
+    scope [ path "tools/context-menu-watch/**" ]
+    intent """
+        Provide a native C++ console utility to inventory registry-based Explorer context menus, identify new or modified registrations, and offer explicit selected backup and deletion with machine-scope UAC support.
+        """
+    acceptance {
+        check native-build {
+            statement """
+                The standalone x64 C++17 executable builds with MSVC /W4 /WX and the integration suite passes.
+                """
+            method command
+            command "& .\\tools\\context-menu-watch\\build.ps1 -Test"
+            verified_by [
+                @lege-ecosystem.evidence.context-menu-watch-msvc-integration-20261104/1
+            ]
+        }
+        check registry-lifecycle {
+            statement """
+                Disposable HKCU fixtures demonstrate new/modified entry detection, live notifications, explicit deletion with exact .reg restoration, and refusal on cancelled, invalid, stale, or failed-backup operations.
+                """
+            method command
+            command "& .\\tools\\context-menu-watch\\test.ps1"
+            verified_by [
+                @lege-ecosystem.evidence.context-menu-watch-msvc-integration-20261104/1
+            ]
+        }
+        check usage-and-scope {
+            statement """
+                Documentation describes commands, baselines, backups, elevation, and the limits of registry-only inventory.
+                """
+            method manual
+            verified_by [
+                @lege-ecosystem.evidence.context-menu-watch-msvc-integration-20261104/1
+            ]
+        }
+    }
+    author "dk"
+}
+
 record lege-ecosystem.work.core-recommendation/1 : work {
     title "39. Core recommendation"
     state abandoned
@@ -4069,6 +4110,108 @@ record lege-ecosystem.work.pagepress-pdf-import-followup/1 : work {
     note "PagePress already imports and merges existing PDF pages through its temporary lopdf backend; lege-pdf-read integration is the remaining backend follow-up."
     after [ @lege-ecosystem.milestone.pagepress-mvp ]
     author "dk"
+}
+
+record lege-ecosystem.work.pdf-publication-first-step/1 : work {
+    title "First publication step: shared PDF page artifacts and printer correctness"
+    state completed
+    scope [ path "lege-pdf/**" ]
+    intent """
+        Follow CRATES-IO-PLAN incrementally: share semantic and raster artifacts in a bounded cancellation-aware session cache; reject incompatible booklet duplex; abort failed Windows spool jobs; make print fixture local and label experimental Windows support. MIT is the owner's intended publication license; license file audit and package consolidation are later steps.
+        """
+    acceptance {
+        check printer-correctness {
+            statement """
+                Print tests pass, booklet duplex validation rejects unsafe combinations, and Windows abort-on-error compiles.
+                """
+            method command
+            verified_by [ @lege-ecosystem.evidence.pdf-publication-first-step-tests-20261104/1 ]
+        }
+        check shared-artifacts {
+            statement """
+                Text and raster reuse one page compilation across calls and threads, with bounded LRU retention and cancellation tests.
+                """
+            method command
+            verified_by [ @lege-ecosystem.evidence.pdf-publication-first-step-tests-20261104/1 ]
+        }
+    }
+    author "dk"
+}
+
+record lege-ecosystem.work.pdf-publication-print-geometry-preview/1 : work {
+    title "Second PDF publication step: Windows job geometry and lazy previews"
+    state completed
+    scope [
+        path "lege-pdf/CRATES-IO-PLAN.md",
+        path "lege-pdf/agent/src/commands/print.rs",
+        path "lege-pdf/agent/tests/print_cli.rs",
+        path "lege-pdf/print/**"
+    ]
+    intent """
+        Resolve one orientation for each Windows print job, query hardware margins using the requested paper and orientation, preserve physical hardware margins on duplex backs, reject inconsistent direct sheet submissions, and add a lazy printer-independent PNG preview iterator.
+        """
+    acceptance {
+        check lazy-preview {
+            statement """
+                Preview iterator yields ordered PNGs lazily without printer access and reports per-sheet errors; print and read tests pass.
+                """
+            method command
+            verified_by [ @lege-ecosystem.evidence.pdf-print-geometry-preview-tests-20261104/1 ]
+        }
+        check windows-geometry {
+            statement """
+                Tests cover uniform job orientation, oriented hardware margins, duplex hardware edge handling and Windows DEVMODE validation; Windows backend compiles.
+                """
+            method command
+            verified_by [ @lege-ecosystem.evidence.pdf-print-geometry-preview-tests-20261104/1 ]
+        }
+    }
+}
+
+record lege-ecosystem.work.pdf-render-headsup-20261104/1 : work {
+    title "Measure six PDF renderers on the user's eight-document corpus before publication"
+    state proposed
+    scope [
+        path ".agent/scratch/pdf-render-headsup-20261104/**",
+        path "lege-pdf/CRATES-IO-PLAN.md"
+    ]
+    intent """
+        Reconstruct the July differential/performance methodology and create an isolated temporary reproducible benchmark on D:/pdf-test. Acquire current PDFium from bblanchon/pdfium-binaries (prebuilt), Hayro, MuPDF, pdf-toolkit and PDFluent pdf-render; measure single-thread page latency and concurrent document throughput separately. Compare every page at 72 and 144 DPI using an independent-family majority agreement gate, retain unresolved outcomes and failures, and provide results without changing production renderer/printing APIs.
+        """
+    note """
+        2026-11-04 user-directed stopping point: accuracy/acquisition complete; timing stopped at 53/384 jobs after the 632-page pdf-toolkit Structures document. A subsequently started MuPDF run was interrupted and excluded. No benchmark workers or queued stages remain. Interim report and all raw data/harness retained in .agent/scratch/pdf-render-headsup-20261104 (kept, about 52 GB). The broad speed claim remains unestablished; dedicated same-page gates, concurrent repetitions, default/20-worker scaling and warm samples remain unexecuted. Do not automatically resume the large matrix. A future bounded production-configuration comparison requires a new scoped task. See evidence.pdf-render-headsup-partial-timing-20261104/1 for observed partial timings.
+        """
+    acceptance {
+        check accuracy {
+            statement """
+                All 1,849 pages are attempted at 72 and 144 DPI in all six engines, with family-aware majority agreement, explicit failures/unresolved pages and representative visual review.
+                """
+            method command
+            verified_by [ @lege-ecosystem.evidence.pdf-render-headsup-accuracy-20261104/1 ]
+        }
+        check acquisition {
+            statement """
+                All six named renderer controls are acquired/pinned, PDFium binary hash is verified, and machine/corpus/source provenance is retained.
+                """
+            method manual
+            verified_by [ @lege-ecosystem.evidence.pdf-render-headsup-acquisition-20261104/1 ]
+        }
+        check report {
+            statement """
+                A self-contained report, raw measurements and rerunnable harness are retained; July corpus/harness history and publication limitations are documented.
+                """
+            method manual
+            verified_by [
+                @lege-ecosystem.evidence.pdf-render-headsup-interim-report-20261104/1
+            ]
+        }
+        check timing {
+            statement """
+                Uncontended isolated-process timing excludes PNG/I/O, separates single-thread and concurrent modes, repeats the concurrent series, and applies a same-page correctness gate before any speed claim.
+                """
+            method command
+        }
+    }
 }
 
 record lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec/1 : work {

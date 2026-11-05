@@ -284,3 +284,24 @@ record lege-ecosystem.encode-quality.root-cause/1 : assessment {
     }
     supported_by [ @lege-ecosystem.encode-quality.headsup-measurement-2026-08-11/1 ]
 }
+
+record lege-ecosystem.jp2lam.lege-approxquality-is-a-fallback-and-a-background-path/1 : assessment {
+    title "Lege photographs use the verified floor; ApproxQuality remains on backgrounds and on encode failure"
+    state verified
+    scope [
+        path "lege-process/encoding/jp2.rs",
+        path "lege-process/pipeline/pdf_tokio_pipeline.rs",
+        path "lege-process/pipeline/quality_policy.rs"
+    ]
+    statement """
+        Lege is not encoding reader-visible photographs with ApproxQuality. Figure regions, covers, full-page color, and gray figure overlays call EncodeOptions::display_photo, and the legacy quality number is only fallback_quality. That fallback is a defect: encode_display maps every error, including a missed SSIMULACRA2 floor, to a successful ApproxQuality encode at source size, so a file can miss the floor the caller asked for. The MRC gray background staying on Document profile plus the quality field matches the jp2lam decision that document layers stay off the SSIMULACRA2 scale; that layer is a near-white antialias residual, and a score floor would be the wrong objective. The preservation color background (encode_rgb at mrc_bg_quality) and the preserved-mask original background (display_box None) still encode continuous-tone page images with ApproxQuality. quality_policy.rs says every JP2 site takes the verified path; those two backgrounds do not. That is a real quality defect on those paths, and it is a deliberate call site, not jp2lam selecting the wrong ladder by itself.
+        """
+    confidence high
+    as_of git:24c10cbd0e3a6197d6dfcb0e80b1422aa62957d9
+    derived_from [ @lege-ecosystem.decision.jp2lam-verified-quality-scale/1 ]
+    supported_by [
+        @lege-ecosystem.jp2lam.encoder-quality-controls/1,
+        @lege-ecosystem.jp2lam.lege-jp2-call-sites/1
+    ]
+    author "dk"
+}

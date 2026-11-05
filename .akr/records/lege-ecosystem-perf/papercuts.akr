@@ -3,11 +3,26 @@ project lege-ecosystem
 
 record lege-ecosystem-perf.papercut.a-release-profiler-rebuild-from-the-repository/1 : papercut {
     title "A release-profiler rebuild from the repository root rejected…"
+    state superseded
+    statement """
+        A release-profiler rebuild from the repository root rejected `--features bench-profiling` because the `pdfium-diff` tool is deliberately outside the workspace; the feature belongs to its own manifest. The command must run from `lege-pdf/render/tools/pdfium-diff` or pass that manifest explicitly.
+        """
+    observed_at git:ef8b70669f02df887a959aafe62ac996691c9ef3
+    author "codex"
+    created_at 2026-08-09
+}
+
+record lege-ecosystem-perf.papercut.a-release-profiler-rebuild-from-the-repository/2 : papercut {
+    title "A release-profiler rebuild from the repository root rejected…"
     state verified
     statement """
         A release-profiler rebuild from the repository root rejected `--features bench-profiling` because the `pdfium-diff` tool is deliberately outside the workspace; the feature belongs to its own manifest. The command must run from `lege-pdf/render/tools/pdfium-diff` or pass that manifest explicitly.
         """
     observed_at git:ef8b70669f02df887a959aafe62ac996691c9ef3
+    closed_at 2026-11-04
+    supersedes [
+        @lege-ecosystem-perf.papercut.a-release-profiler-rebuild-from-the-repository/1
+    ]
     author "codex"
     created_at 2026-08-09
 }
@@ -26,7 +41,7 @@ record lege-ecosystem-perf.papercut.after-committing-validated-akr-record-change
 
 record lege-ecosystem-perf.papercut.after-committing-validated-akr-record-changes/2 : papercut {
     title "After committing validated AKR record changes with ordinary Git, `akr…"
-    state verified
+    state superseded
     statement """
         After committing validated AKR record changes with ordinary Git, `akr lock --check` rejected the embedded build commit because the lock was generated against the parent source commit. The workflow needs an atomic documented commit path or an explicit follow-up lock-only commit; otherwise a seemingly clean knowledge commit fails the required post-commit audit.
         """
@@ -37,9 +52,23 @@ record lege-ecosystem-perf.papercut.after-committing-validated-akr-record-change
     created_at 2026-08-09
 }
 
+record lege-ecosystem-perf.papercut.after-committing-validated-akr-record-changes/3 : papercut {
+    title "After committing validated AKR record changes with ordinary Git, `akr…"
+    state verified
+    statement """
+        After committing validated AKR record changes with ordinary Git, `akr lock --check` rejected the embedded build commit because the lock was generated against the parent source commit. The workflow needs an atomic documented commit path or an explicit follow-up lock-only commit; otherwise a seemingly clean knowledge commit fails the required post-commit audit.
+        """
+    observed_at git:c0baea0d7c8b7d17690c6da78db22e407e82cf5d
+    about "akr"
+    closed_at 2026-11-04
+    supersedes [ @lege-ecosystem-perf.papercut.after-committing-validated-akr-record-changes/2 ]
+    author "codex"
+    created_at 2026-08-09
+}
+
 record lege-ecosystem-perf.papercut.after-several-successful-akr-writes-the-mcp/1 : papercut {
     title "After several successful AKR writes, the MCP transport closed…"
-    state verified
+    state superseded
     statement """
         After several successful AKR writes, the MCP transport closed persistently: knowledge.explain and knowledge.revise both failed immediately, and error[AKR-C004]: "D-011" is neither a registered diagnostic code, a known rule, nor a record kind also rejected a decision identifier even though tool guidance names it. The local  fallback completed the handoff update.
         """
@@ -49,9 +78,23 @@ record lege-ecosystem-perf.papercut.after-several-successful-akr-writes-the-mcp/
     created_at 2026-08-09
 }
 
+record lege-ecosystem-perf.papercut.after-several-successful-akr-writes-the-mcp/2 : papercut {
+    title "After several successful AKR writes, the MCP transport closed…"
+    state verified
+    statement """
+        After several successful AKR writes, the MCP transport closed persistently: knowledge.explain and knowledge.revise both failed immediately, and error[AKR-C004]: "D-011" is neither a registered diagnostic code, a known rule, nor a record kind also rejected a decision identifier even though tool guidance names it. The local  fallback completed the handoff update.
+        """
+    observed_at git:174105ceac73d00a20e25fc7bf80d23444dd7d93
+    about "akr"
+    closed_at 2026-11-04
+    supersedes [ @lege-ecosystem-perf.papercut.after-several-successful-akr-writes-the-mcp/1 ]
+    author "codex"
+    created_at 2026-08-09
+}
+
 record lege-ecosystem-perf.papercut.at-handoff-knowledge-validate-withheld-its/1 : papercut {
     title "At handoff, knowledge.validate withheld its entire 8.5k-token result…"
-    state verified
+    state superseded
     statement """
         At handoff, knowledge.validate withheld its entire 8.5k-token result and suggested narrower arguments even though the tool exposes no scope/filter argument; diagnosing required the separate `akr check` CLI (the protocol's `knowledge.validate` name is not a CLI subcommand). A summarized diagnostics mode would make the required handoff check actionable.
         """
@@ -61,9 +104,23 @@ record lege-ecosystem-perf.papercut.at-handoff-knowledge-validate-withheld-its/1
     created_at 2026-08-09
 }
 
+record lege-ecosystem-perf.papercut.at-handoff-knowledge-validate-withheld-its/2 : papercut {
+    title "At handoff, knowledge.validate withheld its entire 8.5k-token result…"
+    state verified
+    statement """
+        At handoff, knowledge.validate withheld its entire 8.5k-token result and suggested narrower arguments even though the tool exposes no scope/filter argument; diagnosing required the separate `akr check` CLI (the protocol's `knowledge.validate` name is not a CLI subcommand). A summarized diagnostics mode would make the required handoff check actionable.
+        """
+    observed_at git:ef8b70669f02df887a959aafe62ac996691c9ef3
+    about "akr"
+    closed_at 2026-11-04
+    supersedes [ @lege-ecosystem-perf.papercut.at-handoff-knowledge-validate-withheld-its/1 ]
+    author "codex"
+    created_at 2026-08-09
+}
+
 record lege-ecosystem-perf.papercut.correcting-an-inaccurate-papercut-via-knowledge/1 : papercut {
     title "Correcting an inaccurate papercut via knowledge.supersede failed…"
-    state verified
+    state superseded
     statement """
         Correcting an inaccurate papercut via knowledge.supersede failed because the connected workspace vocabulary 0.1 does not support the tool schema's `new_key` option. The correction had to reuse the original key instead of creating a clearer replacement key.
         """
@@ -73,7 +130,35 @@ record lege-ecosystem-perf.papercut.correcting-an-inaccurate-papercut-via-knowle
     created_at 2026-08-09
 }
 
+record lege-ecosystem-perf.papercut.correcting-an-inaccurate-papercut-via-knowledge/2 : papercut {
+    title "Correcting an inaccurate papercut via knowledge.supersede failed…"
+    state verified
+    statement """
+        Correcting an inaccurate papercut via knowledge.supersede failed because the connected workspace vocabulary 0.1 does not support the tool schema's `new_key` option. The correction had to reuse the original key instead of creating a clearer replacement key.
+        """
+    observed_at git:ef8b70669f02df887a959aafe62ac996691c9ef3
+    about "akr"
+    closed_at 2026-11-04
+    supersedes [
+        @lege-ecosystem-perf.papercut.correcting-an-inaccurate-papercut-via-knowledge/1
+    ]
+    author "codex"
+    created_at 2026-08-09
+}
+
 record lege-ecosystem-perf.papercut.creating-the-finalization-work-record-failed/1 : papercut {
+    title "Creating the finalization work record failed because `depends_on`…"
+    state superseded
+    statement """
+        Creating the finalization work record failed because `depends_on` cannot reference a completed work record, but the propose schema does not identify which relation should capture historical provenance. The write was retried with only the live decision dependency.
+        """
+    observed_at git:ef8b70669f02df887a959aafe62ac996691c9ef3
+    about "akr"
+    author "codex"
+    created_at 2026-08-09
+}
+
+record lege-ecosystem-perf.papercut.creating-the-finalization-work-record-failed/2 : papercut {
     title "Creating the finalization work record failed because `depends_on`…"
     state verified
     statement """
@@ -81,6 +166,8 @@ record lege-ecosystem-perf.papercut.creating-the-finalization-work-record-failed
         """
     observed_at git:ef8b70669f02df887a959aafe62ac996691c9ef3
     about "akr"
+    closed_at 2026-11-04
+    supersedes [ @lege-ecosystem-perf.papercut.creating-the-finalization-work-record-failed/1 ]
     author "codex"
     created_at 2026-08-09
 }
@@ -98,7 +185,7 @@ record lege-ecosystem-perf.papercut.imported-lege-ecosystem-perf-audit-work-reco
 
 record lege-ecosystem-perf.papercut.knowledge-context-withheld-a-4-1k-token-bundle/1 : papercut {
     title "knowledge.context withheld a 4.1k-token bundle even though I requested…"
-    state verified
+    state superseded
     statement """
         knowledge.context withheld a 4.1k-token bundle even though I requested a 16k budget, then advised requesting fewer tokens. The MCP response ceiling is lower than the tool's advertised budget parameter, so context had to be retried with narrower paths.
         """
@@ -108,9 +195,25 @@ record lege-ecosystem-perf.papercut.knowledge-context-withheld-a-4-1k-token-bund
     created_at 2026-08-09
 }
 
+record lege-ecosystem-perf.papercut.knowledge-context-withheld-a-4-1k-token-bundle/2 : papercut {
+    title "knowledge.context withheld a 4.1k-token bundle even though I requested…"
+    state verified
+    statement """
+        knowledge.context withheld a 4.1k-token bundle even though I requested a 16k budget, then advised requesting fewer tokens. The MCP response ceiling is lower than the tool's advertised budget parameter, so context had to be retried with narrower paths.
+        """
+    observed_at git:ef8b70669f02df887a959aafe62ac996691c9ef3
+    about "akr"
+    closed_at 2026-11-04
+    supersedes [
+        @lege-ecosystem-perf.papercut.knowledge-context-withheld-a-4-1k-token-bundle/1
+    ]
+    author "codex"
+    created_at 2026-08-09
+}
+
 record lege-ecosystem-perf.papercut.knowledge-papercut-rejected-its-first-call/1 : papercut {
     title "`knowledge.papercut` rejected its first call because this…"
-    state verified
+    state superseded
     statement """
         `knowledge.papercut` rejected its first call because this multi-namespace project requires an explicit namespace, although the task protocol's example does not mention that requirement. Retrying with `namespace: lege-ecosystem-perf` succeeded.
         """
@@ -120,9 +223,23 @@ record lege-ecosystem-perf.papercut.knowledge-papercut-rejected-its-first-call/1
     created_at 2026-08-09
 }
 
+record lege-ecosystem-perf.papercut.knowledge-papercut-rejected-its-first-call/2 : papercut {
+    title "`knowledge.papercut` rejected its first call because this…"
+    state verified
+    statement """
+        `knowledge.papercut` rejected its first call because this multi-namespace project requires an explicit namespace, although the task protocol's example does not mention that requirement. Retrying with `namespace: lege-ecosystem-perf` succeeded.
+        """
+    observed_at git:174105ceac73d00a20e25fc7bf80d23444dd7d93
+    about "akr"
+    closed_at 2026-11-04
+    supersedes [ @lege-ecosystem-perf.papercut.knowledge-papercut-rejected-its-first-call/1 ]
+    author "codex"
+    created_at 2026-08-09
+}
+
 record lege-ecosystem-perf.papercut.refreshing-the-handoff-s-structures-pdf-profile/1 : papercut {
     title "Refreshing the handoff's Structures.pdf profile, `cargo build --release…"
-    state verified
+    state superseded
     statement """
         Refreshing the handoff's Structures.pdf profile, `cargo build --release -p pdfium-diff` failed because the profiling tool also is not a root-workspace member. It must be built through `lege-pdf/render/tools/pdfium-diff/Cargo.toml`, mirroring the jp2lam package-selection gotcha.
         """
@@ -132,9 +249,25 @@ record lege-ecosystem-perf.papercut.refreshing-the-handoff-s-structures-pdf-prof
     created_at 2026-08-09
 }
 
+record lege-ecosystem-perf.papercut.refreshing-the-handoff-s-structures-pdf-profile/2 : papercut {
+    title "Refreshing the handoff's Structures.pdf profile, `cargo build --release…"
+    state verified
+    statement """
+        Refreshing the handoff's Structures.pdf profile, `cargo build --release -p pdfium-diff` failed because the profiling tool also is not a root-workspace member. It must be built through `lege-pdf/render/tools/pdfium-diff/Cargo.toml`, mirroring the jp2lam package-selection gotcha.
+        """
+    observed_at git:174105ceac73d00a20e25fc7bf80d23444dd7d93
+    about "cargo"
+    closed_at 2026-11-04
+    supersedes [
+        @lege-ecosystem-perf.papercut.refreshing-the-handoff-s-structures-pdf-profile/1
+    ]
+    author "codex"
+    created_at 2026-08-09
+}
+
 record lege-ecosystem-perf.papercut.running-cargo-fmt-check-from-lege-pdf-render/1 : papercut {
     title "Running `cargo fmt --check` from `lege-pdf/render` failed with…"
-    state verified
+    state superseded
     statement """
         Running `cargo fmt --check` from `lege-pdf/render` failed with “Failed to find targets” because that directory is not a usable Cargo formatting root even though renderer crates are nested beneath it. The verification workflow needs to point rustfmt/cargo at the concrete crate or the external tool manifest.
         """
@@ -143,13 +276,39 @@ record lege-ecosystem-perf.papercut.running-cargo-fmt-check-from-lege-pdf-render
     created_at 2026-08-09
 }
 
+record lege-ecosystem-perf.papercut.running-cargo-fmt-check-from-lege-pdf-render/2 : papercut {
+    title "Running `cargo fmt --check` from `lege-pdf/render` failed with…"
+    state verified
+    statement """
+        Running `cargo fmt --check` from `lege-pdf/render` failed with “Failed to find targets” because that directory is not a usable Cargo formatting root even though renderer crates are nested beneath it. The verification workflow needs to point rustfmt/cargo at the concrete crate or the external tool manifest.
+        """
+    observed_at git:ef8b70669f02df887a959aafe62ac996691c9ef3
+    closed_at 2026-11-04
+    supersedes [ @lege-ecosystem-perf.papercut.running-cargo-fmt-check-from-lege-pdf-render/1 ]
+    author "codex"
+    created_at 2026-08-09
+}
+
 record lege-ecosystem-perf.papercut.the-exact-structures-pdf-profiling-command/1 : papercut {
+    title "The exact Structures.pdf profiling command stored in AKR failed after a…"
+    state superseded
+    statement """
+        The exact Structures.pdf profiling command stored in AKR failed after a normal release rebuild because `pdfium-diff profile` requires the non-default `bench-profiling` feature. The evidence command does not capture its required build configuration; rebuild via the tool manifest with `--features bench-profiling` first.
+        """
+    observed_at git:174105ceac73d00a20e25fc7bf80d23444dd7d93
+    author "codex"
+    created_at 2026-08-09
+}
+
+record lege-ecosystem-perf.papercut.the-exact-structures-pdf-profiling-command/2 : papercut {
     title "The exact Structures.pdf profiling command stored in AKR failed after a…"
     state verified
     statement """
         The exact Structures.pdf profiling command stored in AKR failed after a normal release rebuild because `pdfium-diff profile` requires the non-default `bench-profiling` feature. The evidence command does not capture its required build configuration; rebuild via the tool manifest with `--features bench-profiling` first.
         """
     observed_at git:174105ceac73d00a20e25fc7bf80d23444dd7d93
+    closed_at 2026-11-04
+    supersedes [ @lege-ecosystem-perf.papercut.the-exact-structures-pdf-profiling-command/1 ]
     author "codex"
     created_at 2026-08-09
 }
@@ -191,7 +350,7 @@ record lege-ecosystem-perf.papercut.the-targeted-renderer-image-clippy-check-is/
 
 record lege-ecosystem-perf.papercut.while-correcting-a-sealed-evidence-record/1 : papercut {
     title "While correcting a sealed evidence record, copying the JSON-rendered…"
-    state verified
+    state superseded
     statement """
         While correcting a sealed evidence record, copying the JSON-rendered observed_at value into an AKR source body failed because the source grammar expects a typed commit rather than the displayed string; additionally, papercut logging requires an explicit namespace in this multi-namespace repository.
         """
@@ -200,7 +359,32 @@ record lege-ecosystem-perf.papercut.while-correcting-a-sealed-evidence-record/1 
     created_at 2026-08-09
 }
 
+record lege-ecosystem-perf.papercut.while-correcting-a-sealed-evidence-record/2 : papercut {
+    title "While correcting a sealed evidence record, copying the JSON-rendered…"
+    state verified
+    statement """
+        While correcting a sealed evidence record, copying the JSON-rendered observed_at value into an AKR source body failed because the source grammar expects a typed commit rather than the displayed string; additionally, papercut logging requires an explicit namespace in this multi-namespace repository.
+        """
+    observed_at git:174105ceac73d00a20e25fc7bf80d23444dd7d93
+    closed_at 2026-11-04
+    supersedes [ @lege-ecosystem-perf.papercut.while-correcting-a-sealed-evidence-record/1 ]
+    author "codex"
+    created_at 2026-08-09
+}
+
 record lege-ecosystem-perf.papercut.while-recording-the-renderer-decision-knowledge/1 : papercut {
+    title "While recording the renderer decision, knowledge.propose rejected a…"
+    state superseded
+    statement """
+        While recording the renderer decision, knowledge.propose rejected a dotted decision topic even though the key is dot-delimited; the topic segment syntax was not apparent from the tool schema, so the write had to be retried with a single hyphenated segment. The response also warned that the connected MCP vocabulary 0.2 is newer than the workspace build vocabulary 0.1.
+        """
+    observed_at git:ef8b70669f02df887a959aafe62ac996691c9ef3
+    about "akr"
+    author "codex"
+    created_at 2026-08-09
+}
+
+record lege-ecosystem-perf.papercut.while-recording-the-renderer-decision-knowledge/2 : papercut {
     title "While recording the renderer decision, knowledge.propose rejected a…"
     state verified
     statement """
@@ -208,6 +392,10 @@ record lege-ecosystem-perf.papercut.while-recording-the-renderer-decision-knowle
         """
     observed_at git:ef8b70669f02df887a959aafe62ac996691c9ef3
     about "akr"
+    closed_at 2026-11-04
+    supersedes [
+        @lege-ecosystem-perf.papercut.while-recording-the-renderer-decision-knowledge/1
+    ]
     author "codex"
     created_at 2026-08-09
 }

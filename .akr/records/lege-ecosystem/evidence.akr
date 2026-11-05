@@ -382,6 +382,20 @@ record lege-ecosystem.evidence.calrgb-adaptation-matrix-cache-landed/1 : evidenc
     author "dk"
 }
 
+record lege-ecosystem.evidence.context-menu-watch-msvc-integration-20261104/1 : evidence {
+    title "MSVC context-menu utility build and registry fixture integration results"
+    state verified
+    result pass
+    method command
+    observed_at git:279debcc0b71e61bf495e71f12c89991883c3323
+    command "& .\\tools\\context-menu-watch\\build.ps1 -Test"
+    artifact "tools/context-menu-watch/validation/msvc-integration-20261104.txt"
+    summary """
+        MSVC x64 C++17 /W4 /WX build produced a standalone executable; 23 integration checks passed, including registry notification detection, new/changed comparison, cancelled/invalid/stale selection refusal, backup failure refusal, confirmed HKCU deletion, exact reg.exe restoration of nested Unicode/type-rich data, reinstallation detection, wider scans, and corrupt baseline rejection. Documentation was reviewed for commands, elevation, baseline/backup locations, and registry-only coverage limits.
+        """
+    author "dk"
+}
+
 record lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1 : evidence {
     title "jp2lam decode-fix-plan import fully dispositioned"
     state verified
@@ -2356,6 +2370,112 @@ record lege-ecosystem.evidence.pdf-intake-writer-tests-20260908/1 : evidence {
         classification the record asks for, is in lege-document-ocr/crates/docir/src/lib.rs.
         Run on Linux at repo HEAD 823d46dd during the 2026-09-08 ledger-cleanup pass.
         """
+}
+
+record lege-ecosystem.evidence.pdf-print-geometry-preview-checks-20261104/1 : evidence {
+    title "PDF printer and CLI lint, documentation and formatting checks"
+    state verified
+    result pass
+    method command
+    observed_at git:279debcc0b71e61bf495e71f12c89991883c3323
+    command "cargo clippy -p lege-pdf-print -p lege-pdf-agent --all-targets --no-deps; RUSTDOCFLAGS='-D warnings' cargo doc -p lege-pdf-print --no-deps; cargo fmt -p lege-pdf-print -p lege-pdf-agent -- --check; git diff --check -- lege-pdf/print lege-pdf/agent lege-pdf/CRATES-IO-PLAN.md"
+    summary """
+        Focused Windows Clippy completed with existing warnings only. The print documentation build passed with warnings denied; focused rustfmt and whitespace checks passed. Windows backend and the CLI consumer compiled.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.pdf-print-geometry-preview-tests-20261104/1 : evidence {
+    title "Windows print geometry, lazy previews and CLI regression checks"
+    state verified
+    result pass
+    method command
+    observed_at git:279debcc0b71e61bf495e71f12c89991883c3323
+    command "$env:CARGO_INCREMENTAL='0'; cargo test -p lege-pdf-print -p lege-pdf-read; cargo test -p lege-pdf-agent --test print_cli"
+    summary """
+        Working tree atop 279debcc: 136 read/print tests and all 10 print CLI integration tests passed. New tests exercise job-wide orientation across mixed page sizes and selections, asymmetric hardware edges on duplex backs, oriented DC metrics and anisotropic DPI, custom-media flags/axes, direct mixed-geometry rejection, lazy per-sheet PNG errors, backend planning before submission, and offline/queried CLI previews. No physical printer queue was used.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.pdf-publication-first-step-checks-20261104/1 : evidence {
+    title "PDF lint, formatting and FFI compilation checks"
+    state verified
+    result pass
+    method command
+    observed_at git:279debcc0b71e61bf495e71f12c89991883c3323
+    command "cargo clippy -p lege-pdf-read -p lege-pdf-print --all-targets --no-deps; cargo check -p lege-render-ffi --all-targets; cargo fmt -p lege-pdf-read -p lege-pdf-print -- --check"
+    summary """
+        In the Windows working tree atop 279debcc, focused Clippy exited successfully with ten pre-existing style warnings; the Windows AbortDoc path compiled. The C ABI consumer all-targets check and focused formatting check passed. No physical queue was exercised; Windows printing remains experimental.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.pdf-publication-first-step-tests-20261104/1 : evidence {
+    title "Read and print tests pass after shared page compilation and printer fixes"
+    state verified
+    result pass
+    method command
+    observed_at git:279debcc0b71e61bf495e71f12c89991883c3323
+    command "$env:CARGO_INCREMENTAL='0'; cargo test -p lege-pdf-read -p lege-pdf-print"
+    summary """
+        In the working tree atop 279debcc, all 127 Windows read/print tests passed. Coverage includes text/raster reuse, concurrent same-page requests, LRU ownership release, cache clearing during compilation, failure/unwind retry, cancellation, compatible and incompatible booklet binding, and existing raster/PNG/spool tests.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.pdf-render-headsup-accuracy-20261104/1 : evidence {
+    title "All six acquired engines completed all 1849 pages at 72 and 144 DPI (96 document/scale attempts, 22188 successful native renders). Family-aware majority scoring covers 3698 page/scale rows. Lege agrees on 1849/1849 at 144 DPI; at 72 DPI it has 1466 agree, 210 suspect and 173 ambiguous. Forty-eight engine/document concurrency checks (144 sampled page comparisons) pass; representative contact sheets for all eight documents were visually inspected. Input, engine source and frozen adapter hashes remain unchanged; no renderer workers remain active."
+    state verified
+    result pass
+    method command
+    observed_at git:279debcc0b71e61bf495e71f12c89991883c3323
+    command ".agent/scratch/pdf-render-headsup-20261104/venv/Scripts/python.exe .agent/scratch/pdf-render-headsup-20261104/audit_interim.py"
+    summary """
+        All six acquired engines completed all 1849 pages at 72 and 144 DPI (96 document/scale attempts, 22188 successful native renders). Family-aware majority scoring covers 3698 page/scale rows. Lege agrees on 1849/1849 at 144 DPI; at 72 DPI it has 1466 agree, 210 suspect and 173 ambiguous. Forty-eight engine/document concurrency checks (144 sampled page comparisons) pass; representative contact sheets for all eight documents were visually inspected. Input, engine source and frozen adapter hashes remain unchanged; no renderer workers remain active.
+        Capture ".agent/scratch/pdf-render-headsup-20261104/interim-audit.json": 474 bytes; sha256:e5a773c3ba0e93bdb94258a896eb0fa799a72d5f885e1d2e6166338fc3ec03df (identity only; raw capture is not a retained artifact).
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.pdf-render-headsup-acquisition-20261104/1 : evidence {
+    title "Prepared manifest for eight D:/pdf-test PDFs (1849 pages) and release-built isolated adapters for all six controls. PDFium 158.0.8125.0 is Blanchon's chromium/8125 Windows x64 archive with SHA-256 matching its GitHub asset digest. Hayro 0.9.0, pdf-toolkit 0.3.13, PDFluent pdf-render 1.3.0 and MuPDF 1.28.6 via PyMuPDF 2.1 were obtained directly; the MuPDF wheel SHA-256 matches PyPI. No source assistance required."
+    state verified
+    result pass
+    method command
+    observed_at git:279debcc0b71e61bf495e71f12c89991883c3323
+    command ".agent/scratch/pdf-render-headsup-20261104/venv/Scripts/python.exe .agent/scratch/pdf-render-headsup-20261104/run.py prepare"
+    summary """
+        Prepared manifest for eight D:/pdf-test PDFs (1849 pages) and release-built isolated adapters for all six controls. PDFium 158.0.8125.0 is Blanchon's chromium/8125 Windows x64 archive with SHA-256 matching its GitHub asset digest. Hayro 0.9.0, pdf-toolkit 0.3.13, PDFluent pdf-render 1.3.0 and MuPDF 1.28.6 via PyMuPDF 2.1 were obtained directly; the MuPDF wheel SHA-256 matches PyPI. No source assistance required.
+        Capture ".agent/scratch/pdf-render-headsup-20261104/machine.json": 56725 bytes; sha256:563dcfae2f59a8a8d2dd3c46f590ce5fbdb635f0cc1cf5579468d14a39b2149d (identity only; raw capture is not a retained artifact).
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.pdf-render-headsup-interim-report-20261104/1 : evidence {
+    title "Saved a self-contained interim report, complete accuracy/pair metrics, 53 completed timing records, release/input/source fingerprints and rerunnable harness in the kept pdf-render-headsup-20261104 scratch folder. All six controls obtained directly; Blanchon PDFium archive and MuPDF wheel hashes match release metadata. Recovered July performance progression and sweep-15 counts (200218 comparisons, 100109 sampled document/pages, 230 legacy-schema error rows); preserved corrected exact-scale PDFium geometry audit and visual low-DPI scan findings. Production rendering/printing/name/publishing files were unchanged."
+    state verified
+    result pass
+    method manual
+    observed_at git:279debcc0b71e61bf495e71f12c89991883c3323
+    summary """
+        Saved a self-contained interim report, complete accuracy/pair metrics, 53 completed timing records, release/input/source fingerprints and rerunnable harness in the kept pdf-render-headsup-20261104 scratch folder. All six controls obtained directly; Blanchon PDFium archive and MuPDF wheel hashes match release metadata. Recovered July performance progression and sweep-15 counts (200218 comparisons, 100109 sampled document/pages, 230 legacy-schema error rows); preserved corrected exact-scale PDFium geometry audit and visual low-DPI scan findings. Production rendering/printing/name/publishing files were unchanged.
+        Capture ".agent/scratch/pdf-render-headsup-20261104/interim-summary.md": 10041 bytes; sha256:c63ba8734cccea6de253365801929868891e488a34da2906fd867bb81b7471cf (identity only; raw capture is not a retained artifact).
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.pdf-render-headsup-partial-timing-20261104/1 : evidence {
+    title "User requested a natural stopping point rather than completing 384 timing jobs. Stopped after 53 completed single-pass timing records, preserving the finished 632-page pdf-toolkit Structures run; the following MuPDF run was interrupted and excluded. No repeated full matrix, dedicated speed-gated series, worker scaling or warm-sample series was completed. Individual controlled observations include 144-DPI Chinese medicine at eight workers: Lege 9.43 pages/s and PDFium 28.74 pages/s, both majority-agreeing on all 392 pages. No broad speed lead or overall ranking established; default automatic nested/20-worker Lege configuration remains unmeasured."
+    state verified
+    result inconclusive
+    method observation
+    observed_at git:279debcc0b71e61bf495e71f12c89991883c3323
+    summary """
+        User requested a natural stopping point rather than completing 384 timing jobs. Stopped after 53 completed single-pass timing records, preserving the finished 632-page pdf-toolkit Structures run; the following MuPDF run was interrupted and excluded. No repeated full matrix, dedicated speed-gated series, worker scaling or warm-sample series was completed. Individual controlled observations include 144-DPI Chinese medicine at eight workers: Lege 9.43 pages/s and PDFium 28.74 pages/s, both majority-agreeing on all 392 pages. No broad speed lead or overall ranking established; default automatic nested/20-worker Lege configuration remains unmeasured.
+        Capture ".agent/scratch/pdf-render-headsup-20261104/completed-timings.csv": 6112 bytes; sha256:bc9ea330239093ddc212fc35c5c7e790b95bdcb00b31406d0cfd2b812f0ac593 (identity only; raw capture is not a retained artifact).
+        """
+    author "dk"
 }
 
 record lege-ecosystem.evidence.pipeline-writer-and-spooled-epub-tests/1 : evidence {

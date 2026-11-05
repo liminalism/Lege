@@ -28,3 +28,214 @@ record lege-ecosystem-perf.observation.decode-flamegraph-lear-2026-08-06/1 : obs
     observed_at git:c66f1cad9f227fca6ddcf0e3f52c1a0b7394c93d
     method command
 }
+
+record lege-ecosystem-perf.renderer-headsup.font-index-lazy-sparse-20261104/1 : observation {
+    title "System font index made lazy and sparse: cold start 133 -> 8 ms"
+    state verified
+    statement """
+        FolderFontProvider (pdf-font system.rs) read every installed font file in full at construction, 389 MB over 535
+        entries on this machine, costing ~130 ms before the first page of every cold process; the November harness timed
+        that inside every whole-document figure (viaduct 15.7 vs PDFium 60 pages/s was almost entirely this). The index is
+        now built lazily on first lookup and reads only the table directory, name and OS/2 tables per file (sparse reader,
+        whole-file fallback, parity test over all installed fonts). Viaduct page-0 first visit 133 -> 7.8 ms, viaduct
+        whole document 191 -> 50 ms (parity with PDFium), xenosystems 8 workers 739 -> 589 ms. cargo test -p pdf-font passes.
+        Uncommitted. Evidence: .agent/scratch/pdf-render-headsup-20261104/variance-investigation.md section 6.
+        """
+    observed_at git:d39b8f1a81890f6a9f2697c0250e0c604c7d4e68
+    method command
+    watches [ "lege-pdf/render/crates/pdf-font/src/system.rs" ]
+    author "dk"
+}
+
+record lege-ecosystem-perf.renderer-headsup.jpx-headroom-fix-20261104/1 : observation {
+    title "JPX decode headroom 2 -> 1: MRC scan pages 2.6x faster at 144 DPI, agreement unchanged"
+    state verified
+    statement """
+        Removing the 2x SUPERSAMPLE_HEADROOM from codec_target_size (pdf-render-cpu prepared.rs; now 1.0, override
+        PDF_RENDERER_JPX_HEADROOM) lets the JPX codec take the one-level reduction at viewer resolution. Chinese-medicine
+        100 pages at 144 DPI: serial 494 -> 191 ms/page (PDFium 185); 8 workers harness env 9.2 -> 23.9 pages/s
+        (PDFium 8 procs 30.4); 20 workers automatic 11.0 -> 32.9 pages/s. 72 DPI serial 181-190 -> 79 ms/page (PDFium 64).
+        Harness-metric agreement with the retained old-Lege and PDFium rasters is unchanged on 20 sampled pages of
+        chinese-medicine, Structures and centralpark at both scales (mean abs diff vs old Lege 0.13-0.45/255);
+        cargo test -p pdf-render-cpu passes. Uncommitted in the working tree. Evidence:
+        .agent/scratch/pdf-render-headsup-20261104/variance-investigation.md section 5 and variance-investigation/headroom-fix/.
+        """
+    observed_at git:279debcc0b71e61bf495e71f12c89991883c3323
+    method command
+    watches [
+        "lege-pdf/render/crates/pdf-render-cpu/src/prepared.rs",
+        "lege-pdf/render/crates/pdf-image/src/jpx.rs"
+    ]
+    author "dk"
+}
+
+record lege-ecosystem-perf.renderer-headsup.lege-vs-rust-renderers-20261104/1 : observation {
+    title "Lege vs Hayro/pdf-render after fixes: Hayro ahead 1.2-3.6x on 7 of 8 documents; gaps are per-core kernels and codecs"
+    state verified
+    statement """
+        With both fixes in, Hayro 0.9.0 renders faster than Lege on 7 of 8 private test documents at 72 and 144 DPI,
+        1.2-3.5x serially (P-core pinned) and 1.3-3.6x at eight workers; Lege leads only centralpark at 72 DPI. pdf-render
+        1.3 and pdf-toolkit are behind Lege. Hayro is single-threaded per page (vello_cpu num_threads 0) so the gap is
+        per-core kernel and codec throughput: sahib 1:1 JPEG draw 44 ms for 4.6 Mpx (bilinear forced at 1:1, scalar loops),
+        2x upscale 158 ms; xenosystems page 0 Indexed-image area minification 363 ms in the generic per-tap loop; text
+        pages ~1.5x Hayro; jp2lam serial 1.5-2x behind hayro-jpeg2000. Hayro's July standing was never timed (0.7.0 was
+        an accuracy control only); 0.8.0 (Oct 4) and 0.9.0 (Nov 2) added glyph caching, hinting, always-on SIMD and
+        performance work across syntax, interpret, jpeg2000 and jbig2. Evidence:
+        .agent/scratch/pdf-render-headsup-20261104/variance-investigation.md section 8, variance-investigation/rust-renderers/.
+        """
+    observed_at git:5951f37ae9248a80878bee52481191af832ddf21
+    method command
+    watches [
+        "lege-pdf/render/crates/pdf-render-cpu/src/exec.rs",
+        "lege-pdf/render/crates/pdf-render-cpu/src/prepared.rs",
+        "lege-pdf/CRATES-IO-PLAN.md"
+    ]
+    author "dk"
+}
+
+record lege-ecosystem-perf.renderer-headsup.memory-lege-vs-pdfium-processes-20261104/1 : observation {
+    title "Memory: 8 PDFium processes ~1.8x one 8-worker Lege process, not 8x"
+    state verified
+    statement """
+        Peak process-tree RSS, chinese-medicine at 144 DPI, after the JPX headroom fix: Lege 1 worker 225-230 MB, 8 workers
+        374-408 MB (was 1,000 MB before the fix), 20 workers 470-565 MB. PDFium: 1 process 177 MB and 8 processes 708 MB
+        when the document is opened from the file; the harness's worker keeps two in-memory copies of the 85 MB file per
+        process and recorded 339 / 2,172 MB. Eight PDFium processes therefore cost ~1.8x Lege's eight workers, not 8x.
+        Evidence: .agent/scratch/pdf-render-headsup-20261104/variance-investigation.md section 7 and variance-investigation/memory/.
+        """
+    observed_at git:d39b8f1a81890f6a9f2697c0250e0c604c7d4e68
+    method command
+    watches [
+        "lege-pdf/render/crates/pdf-render-scheduler/src/lib.rs",
+        "lege-pdf/render/crates/pdf-render-cpu/src/prepared.rs"
+    ]
+    author "dk"
+}
+
+record lege-ecosystem-perf.renderer-headsup.merged-three-areas-20261104/1 : observation {
+    title "Merged per-area work: Lege leads Hayro on 4/8 documents serially, bit-identical, faster everywhere"
+    state verified
+    statement """
+        After merging the three per-area branches (jp2lam serial decode 945a9cc9, text/vector fill f6c2566c, image draw
+        kernels 035660da) the renderer is bit-identical to 5951f37a on 3698/3698 corpus page renders and faster on every
+        private test document: 1.0x (viaduct, pure vector, untouched) to 4.2x (xenosystems at 8 workers). Against Hayro
+        0.9.0, serial P-core pinned at 144 DPI, Lege now leads 4 of 8 (xenosystems 1.29x, chinese-medicine 1.28x, sahib
+        1.22x, beans 1.38x), ties centralpark (0.97) and trails Structures 0.74 (JBIG2 generic decode ~6 ns/px and masked
+        draw missing the area-min fast path), viaduct 0.67 (vector fill untouched), vogtle 0.85 (1.02 at 72 DPI). At 8
+        workers vogtle drops to 0.59: Lege scales 2.0x vs Hayro 2.9x on a 22-page book, a pipeline ramp cost. pdf-render is
+        behind both everywhere. Tests: 626 renderer-crate + 464 jp2lam, 0 failed. Evidence:
+        .agent/scratch/pdf-render-headsup-20261104/variance-investigation.md section 10, variance-investigation/merged/,
+        and the three notes in dev-notes/lege-pdf/render-refinement/performance-history/*-20261104.md.
+        """
+    observed_at git:9c93b580bf068a22f1dc8057134708867d6be1df
+    method command
+    watches [
+        "lege-pdf/render/crates/pdf-render-cpu/src/exec.rs",
+        "lege-pdf/render/crates/pdf-render-cpu/src/kernels.rs",
+        "lege-pdf/render/crates/pdf-image/src/jpeg/mod.rs",
+        "lege-codecs/jp2lam/src/decode/t1.rs",
+        "lege-pdf/CRATES-IO-PLAN.md"
+    ]
+    author "dk"
+}
+
+record lege-ecosystem-perf.renderer-headsup.round3-merged-20261104/1 : observation {
+    title "Round 3 merged: Lege ahead of Hayro on 7/8 documents serially, bit-identical; render crates 0.4.0, jp2lam 0.3.1, jbig2enc-rust 0.6.1"
+    state verified
+    statement """
+        Round 3 (three bounded Opus workers, merged as d9c6d147 / a15c7c45 / 2503eece) keeps the renderer bit-identical
+        on 3698/3698 corpus page renders and, serially at 144 DPI P-core pinned, puts Lege ahead of Hayro 0.9.0 on 7 of 8
+        documents: Structures 1.66x, xenosystems 1.65x, chinese-medicine 1.46x, beans 1.36x, centralpark 1.30x, sahib
+        1.29x, vogtle 1.09x, viaduct 0.99x (tie). Remaining losses: beans at 72 DPI 0.77x (fixed per-page cost, glyph-cache
+        misses) and vogtle at 8 workers 0.62x (22 pages; Lege scales 2.2x vs Hayro 3.1x, a pipeline ramp question).
+        Levers landed: whole-glyph blend_mask_rect with in-kernel coverage count, solid fills from scanline runs, cached
+        Indexed expansion, exact row box filter and uniform-mask shortcuts for masked area-min, windowed JBIG2 generic
+        decoder (Structures p0 mask 28.8 -> 7.8 ms). Corrections to earlier records: viaduct is three JPEG images, not
+        vector; the Structures JBIG2 layer is a 1-bit /SMask already on the masked fast path. Versions: render crates
+        0.4.0 (explicit, CHANGELOG added), jp2lam 0.3.1, jbig2enc-rust 0.6.1. Suites: 291 + 270 + the real-stream
+        equivalence pass; the six tests in jbig2enc-rust/tests/roundtrip_after_fix.rs need an external jbig2dec binary
+        absent on this host. Evidence: .agent/scratch/pdf-render-headsup-20261104/variance-investigation.md section 11,
+        variance-investigation/round3/, and the dated notes in dev-notes/lege-pdf/render-refinement/performance-history/.
+        """
+    observed_at git:58e7d7de4f41392c786976fd76fdf89edbc64c75
+    method command
+    watches [
+        "lege-pdf/render/crates/pdf-render-cpu/src/exec.rs",
+        "lege-pdf/render/crates/pdf-render-cpu/src/kernels.rs",
+        "lege-pdf/render/crates/pdf-render-cpu/src/raster.rs",
+        "lege-codecs/jbig2enc-rust/src/decode/generic.rs",
+        "lege-pdf/render/CHANGELOG.md",
+        "lege-pdf/CRATES-IO-PLAN.md"
+    ]
+    author "dk"
+}
+
+record lege-ecosystem-perf.renderer-headsup.round4-followups-20261104/1 : observation {
+    title "Round 4 follow-ups: scheduler window, font dedup, adaptive flattening, masked alpha pass, low-bit-depth image path; halftone/HENSKIP tested"
+    state verified
+    statement """
+        Round 4 (2026-11-04, main checkout, no worktrees or implementation subagents, no version change; commit e7d1b298eba07cac3f8da5ea8a0ba0514f7cdf54) took the
+        round-3 "next levers" one at a time. (1) Short-document ramp: the scheduler's fixed reorder window of 12 starved the render
+        workers on short documents; the default is now reorder_window_for(compile, render) = 4 slots per worker, floor 12, with the
+        page feed sized to it, and the document font cache resolves each font once across compile workers (per-font slot with an
+        in-flight lock). vogtle at 8 workers: 0.62x -> level with hayro (best of three 45 -> 38 ms vs 39). (2) Glyph-cache misses:
+        outline curves are flattened adaptively (fewest uniform segments within 1/16 px, FreeType's threshold, cap 64) instead of a
+        fixed 8 per curve; beans serial 72 DPI 22.7 -> 14.7 ms (0.77x -> 1.31x hayro). This is the one output change: 2-7% of text
+        pixels move by 4 levels on average, max 28; PDF_RENDERER_OUTLINE_SEGMENTS=8 reproduces the old output byte for byte and the
+        corpus hash check runs under it (3698/3698 vs 035660da). (3) Masked area-min alpha pass skips clear runs: Structures' masked
+        draw 7.7 -> 7.3 ms per page, exact; the AVX2 horizontal pass from the hand-off profiled at 2% and was not built. (4) JBIG2
+        halftone, tested not changed: a halftone-region PDF made with Lege 1.5.1 (--halftone --text-format jbig2, viaduct; HENSKIP=0,
+        Lege's encoder never sets it) and synthetic HENSKIP=1 streams all decode identically to hayro; the one defect was in
+        jbig2enc-rust's test-only stream writer, which fed skipped cells' values into later contexts (T.88 6.2.5.7 has 0), fixed
+        in tests/common/writer.rs; the decoder is unchanged. (5) Found by that test: 1-, 2- and 4-bit single-component images drawn
+        axis-aligned at or above their resolution (Lege's own JBIG2/CCITT pages) had no fast path and took the generic per-pixel
+        loop at ~30 ns a pixel; the new lookup-table nearest painter is byte-identical (unit test; 3740/3740 hashes vs the
+        pre-change adapter) and brings Lege's own output from 105 to 5.5 ms per page at 144 DPI (hayro 8.3) and 27.5 to 1.9 ms at
+        72 DPI (hayro 3.9); the halftone pages 175-205 -> 9-10 ms. JPEG Huffman and page composition examined, unchanged.
+        Timing drive (round-4 vs round-3 adapter vs hayro 0.9.0, one run, P-core pinned), serial 144 DPI lege/hayro:
+        Structures 1.67x, beans 1.41x, centralpark 1.48x, chinese-medicine 1.39x, sahib 1.38x, viaduct 1.06x, vogtle 1.04x, xenosystems 1.61x; serial 72 DPI: Structures 1.53x, beans 1.09x, centralpark 1.78x, chinese-medicine 1.33x, sahib 1.88x, viaduct 1.07x, vogtle 1.00x, xenosystems 1.73x; 8 workers 144 DPI: Structures 1.80x, beans 1.27x, centralpark 1.28x, chinese-medicine 1.74x, sahib 1.15x, viaduct 1.07x, vogtle 0.91x, xenosystems 1.44x. Suites 292 + 360, clippy 0 errors. Evidence:
+        .agent/scratch/pdf-render-headsup-20261104/variance-investigation.md section 12, variance-investigation/round4/ (incl.
+        halftone/ with the Lege-made PDFs, the HENSKIP streams and the scanner), and
+        dev-notes/lege-pdf/render-refinement/performance-history/optimization-round4-followups-20261104.md.
+        """
+    observed_at git:e7d1b298eba07cac3f8da5ea8a0ba0514f7cdf54
+    method manual
+    watches [
+        "lege-pdf/render/crates/pdf-render-scheduler/src/lib.rs",
+        "lege-pdf/render/crates/pdf-content/src/interpret.rs",
+        "lege-pdf/render/crates/pdf-render-cpu/src/exec.rs",
+        "lege-pdf/render/crates/pdf-render-cpu/src/prepared.rs",
+        "lege-pdf/render/crates/pdf-render-cpu/src/image.rs",
+        "lege-codecs/jbig2enc-rust/src/decode/halftone_region.rs"
+    ]
+    author "dk"
+}
+
+record lege-ecosystem-perf.renderer-headsup.timing-variance-20261104/1 : observation {
+    title "Nov-04 renderer head-to-head timing variance explained: protocol change plus JPX full-resolution decode"
+    state verified
+    statement """
+        The 2026-11-04 renderer head-to-head timings differ from the July/August pdfium-diff bench results for three
+        methodological reasons and one real engine cost. (1) July measured Lege on 20 threads with nested JPX/image-row
+        parallelism in a pre-warmed process against single-threaded PDFium; November is 8-vs-8 with nested parallelism
+        off, cold processes, and PDFium in 8 processes (5.7x its serial rate). (2) The serial dump pass ran Lege with
+        PDF_RENDERER_JPX_CONCURRENCY=1 (unrecognised = Budgeted(8)) while timing used serial: 92 vs 195 ms/page on
+        chinese-medicine 72 DPI. (3) No CPU affinity on the i7-13700H: pinned P-cores 178-181 ms/page, E-cores 293,
+        and one unpinned full run landed at 315; single-pass serial numbers carry a 1.6x error bar. Cold start adds
+        130-480 ms (system font directory scan of 535 files plus first-page caches), which is the whole result for the
+        3-page documents. (4) The real cost: on the JPX/MRC books the renderer is 13-23 ms/page warm but jp2lam decodes
+        both full-page JPX layers at full resolution at 144 DPI (SUPERSAMPLE_HEADROOM=2 in pdf-render-cpu prepared.rs
+        rejects the one-level reduction), 300-380 ms per layer serial; Lege peaks at ~11 pages/s with the whole machine
+        vs PDFium 30 pages/s with 8 processes. Report and raw data:
+        .agent/scratch/pdf-render-headsup-20261104/variance-investigation.md and variance-investigation/.
+        """
+    observed_at git:279debcc0b71e61bf495e71f12c89991883c3323
+    method command
+    watches [
+        "lege-pdf/render/crates/pdf-render-cpu/src/prepared.rs",
+        "lege-pdf/render/crates/pdf-image/src/jpx.rs",
+        "lege-pdf/render/crates/pdf-font/src/system.rs",
+        "lege-pdf/render/README.md"
+    ]
+    author "dk"
+}

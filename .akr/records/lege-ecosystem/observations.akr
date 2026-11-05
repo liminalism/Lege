@@ -96,6 +96,177 @@ record lege-ecosystem.encode-quality.no-sibling-checkout-dependencies-20261103/1
     author "Claude"
 }
 
+record lege-ecosystem.jp2lam.crates-io-path-dependency/1 : observation {
+    title "jp2lam publish depends on a path-only sibling crate"
+    state verified
+    scope [ path "lege-codecs/jp2lam/Cargo.toml", path "lege-codecs/jp2lam/README.md" ]
+    statement """
+        jp2lam 0.3.0 depends on jpxl-perceptual 0.3.0 by path (jpegXL-rs/JPXL/crates/jpxl-perceptual) with default-features false, and the dependency is not optional, so lossless encodes link it too. cargo publish rewrites a path dependency to the registry and fails unless jpxl-perceptual 0.3.0 is already published. The crate has no image::ImageEncoder implementation; the image crate is only pulled in by the cli feature. The README features section still tells dependents to use version 0.1 while the manifest is 0.3.0. License is MIT OR Apache-2.0, and the ISO text under research/ is outside the published include set.
+        """
+    observed_at git:24c10cbd0e3a6197d6dfcb0e80b1422aa62957d9
+    method manual
+    watches [ "lege-codecs/jp2lam/Cargo.toml", "lege-codecs/jp2lam/README.md" ]
+    author "dk"
+}
+
+record lege-ecosystem.jp2lam.encoder-codestream-recipe/1 : observation {
+    title "jp2lam encode writes one fixed Part 1 coding recipe"
+    state verified
+    scope [
+        path "lege-codecs/jp2lam/src/j2k/markers.rs",
+        path "lege-codecs/jp2lam/src/plan/**",
+        path "lege-codecs/jp2lam/src/tiling.rs",
+        path "lege-process/encoding/jp2.rs"
+    ]
+    statement """
+        The production encoder does not expose Part 1 coding parameters. encode_cod writes Scod 0, LRCP only (ProgressionOrder has no other variant), one quality layer, code-block style 0, and either reversible 5/3 or irreversible 9/7. Decomposition count is chosen internally and capped at 5 for gray and 6 for sRGB. Code-block size is 32×32 below quality 30 and 64×64 otherwise. Guard bits are 2. Image and tile origins are 0. Each tile is exactly one tile-part. Precinct index is always 0 (one precinct per subband). Rsiz is 0. Tier-1 can encode arithmetic bypass, predictable termination, and segmentation symbols, but the plan never selects them and the COD marker would not signal them. There is no TLM, PLT, SOP, EPH, ROI, or progression-order change. Lege's Jp2Settings still carries num_resolutions, prog_order, irreversible, tile_size, codeblock, rates, and psnrs; encode() ignores them except to map rate, or the last rates/psnrs entry, onto a single quality number.
+        """
+    observed_at git:24c10cbd0e3a6197d6dfcb0e80b1422aa62957d9
+    method manual
+    watches [
+        "lege-codecs/jp2lam/src/j2k/markers.rs",
+        "lege-codecs/jp2lam/src/plan/**",
+        "lege-codecs/jp2lam/src/tiling.rs",
+        "lege-codecs/jp2lam/src/encode/backend/native/t1.rs",
+        "lege-process/encoding/jp2.rs"
+    ]
+    author "dk"
+}
+
+record lege-ecosystem.jp2lam.encoder-color-and-sample-limits/1 : observation {
+    title "jp2lam encode accepts only unsigned 8–16-bit gray and sRGB"
+    state verified
+    scope [
+        path "lege-codecs/jp2lam/src/jp2.rs",
+        path "lege-codecs/jp2lam/src/model.rs",
+        path "lege-codecs/jp2lam/src/plan/**"
+    ]
+    statement """
+        Encoder validation accepts only unsigned samples at precision 8..=16 with dx=dy=1, and only gray or sRGB. Signed samples, chroma subsampling, and any other precision are rejected. EncodingPlan::build_view rejects CMYK as decode-only and rejects YUV/YCbCr. Three-component input always applies the multiple-component transform; there is no way to store components unchanged. There is no alpha, palette, or extra-component colorspace. The JP2 writer emits the signature, file type, image header, optional per-component bit depth, one color-spec box, and the codestream. It does not write a channel definition, palette, component mapping, capture/display resolution, or XML/UUID box. The decoder already accepts CMYK, cdef opacity, and palettes, so those are encode gaps rather than format gaps.
+        """
+    observed_at git:24c10cbd0e3a6197d6dfcb0e80b1422aa62957d9
+    method manual
+    watches [
+        "lege-codecs/jp2lam/src/plan/validate.rs",
+        "lege-codecs/jp2lam/src/plan/mod.rs",
+        "lege-codecs/jp2lam/src/plan/derive.rs",
+        "lege-codecs/jp2lam/src/jp2.rs",
+        "lege-codecs/jp2lam/src/model.rs"
+    ]
+    author "dk"
+}
+
+record lege-ecosystem.jp2lam.encoder-content-allocation/1 : observation {
+    title "jp2lam content profiles are global; text-versus-photo block classes are unwired"
+    state verified
+    scope [
+        path "lege-codecs/jp2lam/src/encode/backend/native/**",
+        path "lege-codecs/jp2lam/src/perceptual/**",
+        path "lege-codecs/jp2lam/src/profile.rs"
+    ]
+    statement """
+        ContentProfile::Document is one global quantizer curve tuned for cleaned text pages. Photo and General share the photographic curve. The live code-block classifier is classify_from_nonzero_fraction and only produces Flat, Gradient, or TexturePhoto. EdgeText and BackgroundNoise exist only under cfg(test). Taubman subband masking is cfg(test); the live rate path passes a neutral weight. The luma contrast mask runs for enumerated gray and sRGB and is skipped for an RGB ICC profile. A mixed page is not split inside the encoder; spatial text-versus-photo allocation has to happen before encode.
+        """
+    observed_at git:24c10cbd0e3a6197d6dfcb0e80b1422aa62957d9
+    method manual
+    watches [
+        "lege-codecs/jp2lam/src/profile.rs",
+        "lege-codecs/jp2lam/src/perceptual/taubman_masking.rs",
+        "lege-codecs/jp2lam/src/encode/backend/native/t1.rs",
+        "lege-codecs/jp2lam/src/encode/backend/native/rate.rs",
+        "lege-codecs/jp2lam/src/encode/backend/native/backend.rs"
+    ]
+    author "dk"
+}
+
+record lege-ecosystem.jp2lam.encoder-quality-controls/1 : observation {
+    title "jp2lam quality field is ApproxQuality; the verified floor is a separate control"
+    state verified
+    scope [
+        path "lege-codecs/jp2lam/src/dwt/pcrd.rs",
+        path "lege-codecs/jp2lam/src/encode/**",
+        path "lege-codecs/jp2lam/src/model.rs",
+        path "lege-codecs/jp2lam/src/plan/**"
+    ]
+    statement """
+        When EncodeOptions.rate_control is absent and quality is below 100, resolve_rate_control selects RateControl::ApproxQuality. That ladder's lambda is scaled by (pixels/12e6)^0.35 and is not a SSIMULACRA2 floor. RateControl::Quality is the verified ssimulacra2-jpxl-1 floor and accepts only 8-bit unsigned gray or enumerated sRGB. A Quality or Perceptual target whose source is under 8px on either side silently becomes lossless. RateControl::Quality { level: 100 } returns InvalidInput; a Perceptual score of 100 returns PerceptualTargetMissed with achieved 0. Exact byte, bits-per-pixel, and ratio targets stay on measured MSE; select_stored_tile_passes does not apply perceptual weighting to them. EncodeOptions::photo, photo_quality, display_photo, and the photographic presets set TilePolicy::Auto, and with max_working_memory unset that tiles at 2048. encode_with_psnr scores only gray and sRGB. Perceptual weighting is also off for qualities 96–99.
+        """
+    observed_at git:24c10cbd0e3a6197d6dfcb0e80b1422aa62957d9
+    method manual
+    watches [
+        "lege-codecs/jp2lam/src/plan/mod.rs",
+        "lege-codecs/jp2lam/src/plan/derive.rs",
+        "lege-codecs/jp2lam/src/model.rs",
+        "lege-codecs/jp2lam/src/dwt/pcrd.rs",
+        "lege-codecs/jp2lam/src/encode/backend/native/backend.rs",
+        "lege-codecs/jp2lam/src/encode/backend/native/rate.rs"
+    ]
+    author "dk"
+}
+
+record lege-ecosystem.jp2lam.encoder-restricted-icc-check/1 : observation {
+    title "jp2lam restricted ICC validation checks the header only"
+    state verified
+    scope [ path "lege-codecs/jp2lam/src/model.rs" ]
+    statement """
+        ColorEncoding::restricted_icc and validate_restricted_icc accept a profile whose length matches the header, whose signature is acsp, whose PCS is XYZ, and whose data color space is GRAY or RGB. They do not check profile class or that the profile is a matrix/TRC restricted profile. A LUT-based RGB profile with that header is embedded unchanged, and the encoder does not convert the samples. Part 1 JP2 does not treat an arbitrary RGB ICC profile as a legal restricted profile.
+        """
+    observed_at git:24c10cbd0e3a6197d6dfcb0e80b1422aa62957d9
+    method manual
+    watches [ "lege-codecs/jp2lam/src/model.rs", "lege-codecs/jp2lam/src/jp2.rs" ]
+    author "dk"
+}
+
+record lege-ecosystem.jp2lam.encoder-runtime-edges/1 : observation {
+    title "jp2lam max_threads, JP2 box length, and the dead perceptual error"
+    state verified
+    scope [
+        path "lege-codecs/jp2lam/src/encode/**",
+        path "lege-codecs/jp2lam/src/error.rs",
+        path "lege-codecs/jp2lam/src/jp2.rs",
+        path "lege-codecs/jp2lam/src/model.rs"
+    ]
+    statement """
+        ResourceLimits.max_threads does not size a Rayon pool. Some(1) only disables component-level parallelism; DWT and Tier-1 still use the process pool, and any other Some(n) does nothing unless max_working_memory is also large enough for that component path. JP2 box length is a u32, so wrap_codestream fails in box_len when the container would pass 4 GiB; a raw codestream does not have that limit. Jp2LamError::PerceptualNotImplemented remains a public variant and is never returned. Lossy precision 10–16 is accepted by the planner and quantizer; tests/lossless_roundtrip.rs covers those depths on the reversible path, and the integration tests do not cover a lossy 10–16-bit encode.
+        """
+    observed_at git:24c10cbd0e3a6197d6dfcb0e80b1422aa62957d9
+    method manual
+    watches [
+        "lege-codecs/jp2lam/src/encode/backend/native/backend.rs",
+        "lege-codecs/jp2lam/src/error.rs",
+        "lege-codecs/jp2lam/src/jp2.rs",
+        "lege-codecs/jp2lam/src/model.rs",
+        "lege-codecs/jp2lam/tests/lossless_roundtrip.rs"
+    ]
+    author "dk"
+}
+
+record lege-ecosystem.jp2lam.lege-jp2-call-sites/1 : observation {
+    title "Which Lege JP2 paths use the verified floor and which use ApproxQuality"
+    state verified
+    scope [
+        path "lege-process/encoding/jp2.rs",
+        path "lege-process/encoding/streamline.rs",
+        path "lege-process/pipeline/helper_functions.rs",
+        path "lege-process/pipeline/pdf_tokio_pipeline.rs",
+        path "lege-process/pipeline/quality_policy.rs"
+    ]
+    statement """
+        Reader-visible JP2 takes EncodingSettings::Jp2Display: figure regions, covers, full-page color, and gray figure overlays call encode_display, which builds EncodeOptions::display_photo (a PerceptualTarget measured at the display box). The legacy quality number is stored as fallback_quality. encode_display turns every Err, including PerceptualTargetMissed, into encode_image. encode_image sets EncodeOptions.quality and leaves rate_control unset, so that fallback is ApproxQuality at source size, on ContentProfile::General. MRC gray backgrounds call encode_gray_document at mrc_bg_quality (default 55): Document profile plus the quality field, which is ApproxQuality. Preservation color backgrounds call encode_rgb with that same quality number: General profile plus ApproxQuality. The preserved-mask original background calls encode_region_image_sync with display_box None, and jp2_region_settings then selects EncodingSettings::Jp2Lam { quality }. pdf_to_png encodes both ladders only as a debug comparison. quality_policy.rs says the legacy preset survives only as that fallback and that every JP2 site takes the verified path.
+        """
+    observed_at git:24c10cbd0e3a6197d6dfcb0e80b1422aa62957d9
+    method manual
+    watches [
+        "lege-process/encoding/jp2.rs",
+        "lege-process/encoding/streamline.rs",
+        "lege-process/pipeline/helper_functions.rs",
+        "lege-process/pipeline/pdf_tokio_pipeline.rs",
+        "lege-process/pipeline/quality_policy.rs",
+        "lege-process/pipeline/config.rs"
+    ]
+    author "dk"
+}
+
 record lege-ecosystem.observation.a-bitonal-djvu-page-costs-more-in-iw44-than-in-jb2/1 : observation {
     title "A bitonal DjVu page spends most of its encode time on an all-white IW44 background, not on JB2"
     state verified
@@ -196,6 +367,23 @@ record lege-ecosystem.observation.doclayout-m-underdetects-text-and-images/3 : o
     review_after 2026-11-13
     supersedes [ @lege-ecosystem.observation.doclayout-m-underdetects-text-and-images/2 ]
     verified_by [ @lege-ecosystem.evidence.stale-observation-requeue-20260908/1 ]
+}
+
+record lege-ecosystem.observation.freya-main-removed/1 : observation {
+    title "freya-main removed; liminalUI embeds Noto Sans from its own fonts/ directory"
+    state verified
+    statement """
+        The vendored freya-main tree is removed from the repository; the Freya GUI is
+        deprecated and nothing in the workspace builds or links it. The Noto Sans face
+        the liminalUI GUI embeds moved to lege-process/GUI/liminalUI/fonts/ with its
+        OFL-1.1 text, and the shipped licenses notice lists liminalkit and Noto Sans
+        instead of Freya. The same change fixed the theme picker's step buttons, which
+        used arrow glyphs the bundled face lacks and rendered as missing-glyph boxes.
+        """
+    observed_at git:4bc1b3ccb0ef86e584b1a125e00ef3d078ea5457
+    method command
+    watches [ "lege-process/GUI/liminalUI/**", "Cargo.toml" ]
+    author "dk"
 }
 
 record lege-ecosystem.observation.grayscale-mode-makes-truetyping-smaller-and-cleaner/1 : observation {
