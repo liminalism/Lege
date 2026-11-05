@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 
 use liminalkit_raster::{FillRule, Painter, Path, RasterKernel, Rect, WindowBuffer};
 use liminalkit_shell::{Input, KeyInput, Modifiers, MouseButton, Scale};
-use liminalkit_text::{Align, TextCache};
+use liminalkit_text::{Align, Hinting, TextCache, TextRendering};
 use liminalkit_ui::{Focus, ScrollState, TextFieldState, Ui};
 use liminalkit_windowing::{ImeCursorArea, ImeEvent, PixelApp, Waker};
 
@@ -197,7 +197,10 @@ impl LegeApp {
             dashboard: Dashboard::new(),
             // Status text and queue paths change continuously. Keep their
             // raster cache bounded instead of retaining every past label.
-            text: TextCache::with_limits(crate::theme::fonts(), 512, 2 * 1024 * 1024),
+            // Vertical hinting puts cap height and ascenders on whole pixels;
+            // `theme::crisp` sizes already have whole-pixel x-heights.
+            text: TextCache::with_limits(crate::theme::fonts(), 512, 2 * 1024 * 1024)
+                .with_rendering(TextRendering::DEFAULT.with_hinting(Hinting::Vertical)),
             kernel: RasterKernel::new(),
             input: Input::new(),
             focus: Focus::new(),

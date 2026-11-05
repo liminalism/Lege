@@ -19,9 +19,11 @@ pub fn fonts() -> &'static FontSet {
 const X_HEIGHT: f32 = 1536.0 / 2816.0;
 
 /// The physical pixel size nearest `px` whose x-height is a whole number of
-/// pixels. The rasterizer is unhinted and every baseline is on a pixel row,
-/// so at such a size the tops of lowercase letters land on a row too instead
-/// of smearing across two. This is most of the sharpness hinting would give.
+/// pixels. Every baseline is on a pixel row, so at such a size the tops of
+/// lowercase letters land on a row too instead of smearing across two. The
+/// text cache's vertical hinting would snap the x-height anyway; at a size
+/// where it is already whole, hinting only moves caps and ascenders and
+/// lowercase keeps its designed proportions.
 pub fn crisp(px: f32) -> f32 {
     (px * X_HEIGHT).round().max(1.0) / X_HEIGHT
 }
