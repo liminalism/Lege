@@ -69,6 +69,58 @@ fn dry_run_reports_the_route_without_spooling() {
     }
 }
 
+#[cfg(windows)]
+#[test]
+fn windows_dry_run_uses_one_orientation_without_contacting_the_named_queue() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("mixed.pdf");
+    std::fs::write(&path, pdf_test_support::builder::multipage_classic(2)).unwrap();
+    let output = bin()
+        .arg("print")
+        .arg(path)
+        .args([
+            "--dry-run",
+            "--scaling",
+            "fit",
+            "--printer",
+            "nonexistent-preview-only-queue",
+            "--json",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let data = &value["data"];
+    assert_eq!(data["device"]["source"], "assumed");
+    let sheets = data["sheets"].as_array().unwrap();
+    assert_eq!(sheets.len(), 2);
+    assert!(
+        sheets
+            .iter()
+            .all(|sheet| sheet["bounds"] == sheets[0]["bounds"])
+    );
+}
+
+#[test]
+fn queried_file_preview_plans_without_submitting() {
+    let dir = tempfile::tempdir().unwrap();
+    let value = json(&[
+        "--dry-run",
+        "--query-device",
+        "--to-file",
+        dir.path().to_str().unwrap(),
+        "--n-up",
+        "2",
+    ]);
+    assert_eq!(value["data"]["device"]["source"], "queried");
+    assert_eq!(value["data"]["sheet_count"], 1);
+    assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
+}
+
 #[test]
 fn dry_run_n_up_reports_every_placement() {
     let data = json(&["--dry-run", "--n-up", "2", "--margin-mm", "10"])["data"].clone();

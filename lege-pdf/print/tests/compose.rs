@@ -16,7 +16,7 @@ use std::sync::Arc;
 use lege_pdf_print::compose::{
     Band, ComposeOptions, SheetRaster, compose_sheet, compose_sheet_banded, sheet_pixel_size,
 };
-use lege_pdf_print::preview::{PreviewOptions, render_preview_png};
+use lege_pdf_print::preview::{PreviewOptions, preview_sheets, render_preview_png};
 use lege_pdf_print::{
     Margins, Matrix, Orientation, PaperSize, Placement, PrintError, Rect, Sheet, Side,
 };
@@ -544,6 +544,39 @@ fn a_grayscale_preview_is_an_eight_bit_gray_png() {
     let info = reader.info();
     assert_eq!((info.width, info.height), (100, 100));
     assert_eq!(info.color_type, png::ColorType::Grayscale);
+}
+
+#[test]
+fn previews_are_lazy_ordered_and_report_errors_per_sheet() {
+    let session = session();
+    let bounds = Rect::new(0.0, 0.0, PAGE_POINTS, PAGE_POINTS);
+    let first = sheet(bounds, bounds, vec![placement(Matrix::IDENTITY, bounds)]);
+    let smaller = Rect::new(0.0, 0.0, 100.0, 100.0);
+    let last = sheet(smaller, smaller, vec![]);
+    let mut invalid = first.clone();
+    invalid.placements[0].source_page = 99;
+    let sheets = [first, invalid, last];
+    let settings = PreviewOptions {
+        dpi: 36.0,
+        grayscale: true,
+    };
+    // An invalid later page must not fail iterator construction or the first
+    // item. Dropping after one item never attempts the invalid page.
+    let mut previews = preview_sheets(&session, &sheets, settings);
+    assert_eq!(previews.len(), 3);
+    assert_eq!(
+        previews.next().unwrap().unwrap(),
+        render_preview_png(&session, &sheets[0], settings).unwrap()
+    );
+    assert!(matches!(previews.next().unwrap(), Err(PrintError::Read(_))));
+    let png = previews.next().unwrap().unwrap();
+    let reader = png::Decoder::new(std::io::Cursor::new(png))
+        .read_info()
+        .unwrap();
+    assert_eq!((reader.info().width, reader.info().height), (50, 50));
+    assert_eq!(previews.len(), 0);
+    assert!(previews.next().is_none());
+    assert!(preview_sheets(&session, &[], settings).next().is_none());
 }
 
 // ---------------------------------------------------------------------------

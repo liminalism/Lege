@@ -6,7 +6,7 @@
 //! a booklet reproduces the reading order. Every one of them is a failure
 //! mode that is visible on paper and nowhere else.
 
-use lege_pdf_print::layout::{booklet_slots, expand_copies, fit_page, impose};
+use lege_pdf_print::layout::{booklet_slots, expand_copies, fit_page, impose, impose_uniform};
 use lege_pdf_print::paper::{Margins, Orientation, PaperSize, Rect};
 use lege_pdf_print::{
     Duplex, NUp, NUpOrder, PageRange, PrintError, PrintJob, PrintOptions, Scaling, Side, SourcePage,
@@ -474,6 +474,98 @@ fn auto_orientation_decides_once_per_sheet_not_once_per_page() {
 }
 
 #[test]
+fn uniform_orientation_scores_the_selected_job_and_uses_oriented_margins() {
+    // The first page is tall but the rest are wide: selecting only the first
+    // page must change the whole-job choice. This catches first-sheet-only
+    // orientation decisions as well as scoring pages outside the selection.
+    let document = pages(&[(500.0, 1000.0), (1000.0, 500.0), (1000.0, 500.0)]);
+    let options = PrintOptions {
+        scaling: Scaling::FitToPage,
+        ..PrintOptions::default()
+    };
+    let portrait = Margins {
+        left: 11.0,
+        right: 13.0,
+        top: 17.0,
+        bottom: 19.0,
+    };
+    let landscape = Margins {
+        left: 23.0,
+        right: 29.0,
+        top: 31.0,
+        bottom: 37.0,
+    };
+    let sheets = impose_uniform(&job(document.clone(), options.clone()), portrait, landscape)
+        .unwrap_or_else(|e| unreachable!("impose failed: {e}"));
+    assert_eq!(sheets.len(), 3);
+    for sheet in &sheets {
+        assert!(sheet.is_landscape());
+        assert_eq!(sheet.bounds, sheets[0].bounds);
+        assert_eq!(sheet.imageable.x0, landscape.left);
+        assert_eq!(sheet.imageable.y0, landscape.bottom);
+        assert!((sheet.bounds.x1 - sheet.imageable.x1 - landscape.right).abs() < EPS);
+        assert!((sheet.bounds.y1 - sheet.imageable.y1 - landscape.top).abs() < EPS);
+    }
+    let selected = PrintOptions {
+        range: PageRange::Spans(vec![(1, 1)]),
+        ..options
+    };
+    let sheets = impose_uniform(&job(document, selected), portrait, landscape)
+        .unwrap_or_else(|e| unreachable!("impose failed: {e}"));
+    assert_eq!(sheets.len(), 1);
+    assert!(!sheets[0].is_landscape());
+    assert_eq!(sheets[0].imageable.x0, portrait.left);
+}
+
+#[test]
+fn uniform_orientation_preserves_explicit_orientation_order_and_duplex_pairs() {
+    let document = pages(&[(1000.0, 500.0); 3]);
+    let options = PrintOptions {
+        orientation: Orientation::Portrait,
+        duplex: Duplex::LongEdge,
+        reverse: true,
+        copies: 3,
+        ..PrintOptions::default()
+    };
+    let sheets = impose_uniform(&job(document, options), hardware(), hardware())
+        .unwrap_or_else(|e| unreachable!("impose failed: {e}"));
+    assert_eq!(sheets.len(), 4, "one copy, padded to a duplex pair");
+    assert!(sheets.iter().all(|sheet| !sheet.is_landscape()));
+    assert_eq!(sheets[0].placements[0].source_page, 2);
+    assert_eq!(sheets[2].placements[0].source_page, 0);
+    assert!(sheets[3].placements.is_empty());
+}
+
+#[test]
+fn duplex_mirrors_the_binding_margin_but_keeps_hardware_on_physical_edges() {
+    let hardware = Margins {
+        left: 9.0,
+        right: 45.0,
+        top: 7.0,
+        bottom: 27.0,
+    };
+    let options = PrintOptions {
+        orientation: Orientation::Portrait,
+        duplex: Duplex::LongEdge,
+        margins: Margins {
+            left: 60.0,
+            ..Margins::ZERO
+        },
+        ..PrintOptions::default()
+    };
+    let sheets = impose(&job(a4_pages(2), options), hardware)
+        .unwrap_or_else(|e| unreachable!("impose failed: {e}"));
+    assert_eq!(sheets[0].imageable.x0, 60.0);
+    assert_eq!(
+        sheets[1].imageable.x0, 9.0,
+        "hardware left stays left on the back"
+    );
+    assert!((sheets[0].bounds.x1 - sheets[0].imageable.x1 - 45.0).abs() < EPS);
+    assert!((sheets[1].bounds.x1 - sheets[1].imageable.x1 - 60.0).abs() < EPS);
+    assert_eq!(sheets[1].imageable.y0, 27.0);
+}
+
+#[test]
 fn a_duplex_pair_shares_one_orientation() {
     // The front is wide, the back tall: they are the same piece of paper, so
     // one rotation has to serve both.
@@ -823,17 +915,21 @@ fn a_booklet_is_two_cells_side_by_side_on_a_landscape_sheet() {
 }
 
 #[test]
-fn a_booklet_back_mirrors_horizontally_whatever_the_duplex_setting() {
+fn a_booklet_back_mirrors_horizontally_with_compatible_duplex() {
     let margins = Margins {
         left: 72.0,
         right: 18.0,
         top: 18.0,
         bottom: 18.0,
     };
-    for duplex in [Duplex::None, Duplex::LongEdge, Duplex::ShortEdge] {
+    for (orientation, duplex) in [
+        (Orientation::Landscape, Duplex::None),
+        (Orientation::Landscape, Duplex::ShortEdge),
+        (Orientation::Portrait, Duplex::LongEdge),
+    ] {
         let options = PrintOptions {
             paper: PaperSize::A4,
-            orientation: Orientation::Landscape,
+            orientation,
             margins,
             n_up: NUp::Booklet,
             duplex,
@@ -848,6 +944,26 @@ fn a_booklet_back_mirrors_horizontally_whatever_the_duplex_setting() {
             "{duplex:?}: {:?}",
             sheets[1].imageable
         );
+    }
+}
+
+#[test]
+fn booklet_rejects_duplex_that_flips_about_the_horizontal_fold() {
+    for (orientation, duplex) in [
+        (Orientation::Landscape, Duplex::LongEdge),
+        (Orientation::Portrait, Duplex::ShortEdge),
+        (Orientation::Auto, Duplex::LongEdge),
+    ] {
+        let options = PrintOptions {
+            orientation,
+            duplex,
+            n_up: NUp::Booklet,
+            ..PrintOptions::default()
+        };
+        assert!(matches!(
+            impose(&job(a4_pages(4), options), hardware()),
+            Err(PrintError::InvalidOptions(message)) if message.contains("booklet requires")
+        ));
     }
 }
 

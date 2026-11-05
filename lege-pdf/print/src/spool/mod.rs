@@ -161,6 +161,17 @@ pub trait Spooler: Send + Sync {
             .map(|p| p.id))
     }
     fn capabilities(&self, printer: &PrinterId) -> Result<DeviceCapabilities, PrintError>;
+    /// Plan without submitting. Backends may apply job-wide geometry constraints
+    /// and query margins for the requested paper and orientation here. The
+    /// default uses the capability snapshot; existing spoolers need no override.
+    fn plan_sheets(
+        &self,
+        _printer: &PrinterId,
+        job: &crate::PrintJob,
+        capabilities: &DeviceCapabilities,
+    ) -> Result<Vec<Sheet>, PrintError> {
+        crate::plan_sheets(job, capabilities)
+    }
     fn submit(&self, job: SpoolJob<'_>) -> Result<JobId, PrintError>;
     fn status(&self, job: &JobId) -> Result<JobStatus, PrintError>;
     fn cancel(&self, job: &JobId) -> Result<(), PrintError>;

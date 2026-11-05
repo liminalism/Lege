@@ -34,6 +34,7 @@ enum Seen {
 struct FakeSpooler {
     capabilities: DeviceCapabilities,
     seen: Mutex<Vec<Seen>>,
+    plan_margins: Option<Margins>,
 }
 
 impl FakeSpooler {
@@ -41,6 +42,7 @@ impl FakeSpooler {
         Self {
             capabilities,
             seen: Mutex::new(Vec::new()),
+            plan_margins: None,
         }
     }
 
@@ -80,6 +82,18 @@ impl Spooler for FakeSpooler {
         Ok(self.capabilities.clone())
     }
 
+    fn plan_sheets(
+        &self,
+        _printer: &PrinterId,
+        job: &lege_pdf_print::PrintJob,
+        capabilities: &DeviceCapabilities,
+    ) -> Result<Vec<lege_pdf_print::Sheet>, PrintError> {
+        lege_pdf_print::impose(
+            job,
+            self.plan_margins.unwrap_or(capabilities.hardware_margins),
+        )
+    }
+
     fn submit(&self, job: SpoolJob<'_>) -> Result<JobId, PrintError> {
         let printer = job.printer.as_str().to_owned();
         let title = job.title.clone();
@@ -116,9 +130,7 @@ fn pdf_bytes() -> Arc<[u8]> {
 /// A real one-page document, for the composed route — which, unlike
 /// pass-through, actually opens what it is handed.
 fn fixture_bytes() -> Arc<[u8]> {
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../render/crates/pdf-chaos-tests/tests/fixtures/hello_world.pdf");
-    Arc::from(std::fs::read(path).unwrap().into_boxed_slice())
+    Arc::from(include_bytes!("fixtures/hello_world.pdf").as_slice())
 }
 
 fn request<'a>(printer: &'a PrinterId, options: &'a PrintOptions) -> PrintRequest<'a> {
@@ -288,6 +300,25 @@ fn composed_jobs_reach_the_spooler_as_sheets() {
             sheets: 1,
         }]
     );
+}
+
+#[test]
+fn composed_jobs_use_the_backends_planning_hook_before_submission() {
+    let mut spooler = FakeSpooler::raster_queue();
+    // Capabilities allow printing, but the job-specific hardware query makes
+    // the imageable area empty. Ignoring the hook would submit this job.
+    spooler.plan_margins = Some(Margins::uniform(1000.0));
+    let printer = PrinterId::new("fake");
+    let options = PrintOptions::default();
+    let result = print_document_with(
+        &spooler,
+        &PrintRequest {
+            pdf_bytes: fixture_bytes(),
+            ..request(&printer, &options)
+        },
+    );
+    assert!(matches!(result, Err(PrintError::EmptyImageableArea { .. })));
+    assert!(spooler.seen().is_empty());
 }
 
 #[test]

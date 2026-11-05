@@ -198,7 +198,7 @@ impl RenderSession {
         options: &ExportOptions,
         cancellation: Option<&CancellationToken>,
     ) -> Result<Vec<u8>, ReadError> {
-        let compiled = self.compile(page)?;
+        let compiled = self.compile_cancellable(page, cancellation)?;
         self.export_compiled_page(&compiled, options, cancellation)
     }
 

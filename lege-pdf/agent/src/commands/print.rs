@@ -235,7 +235,11 @@ fn plan(
     selected: Vec<u32>,
     mut warnings: Vec<String>,
 ) -> Result<i32> {
-    let (capabilities, source) = dry_run_capabilities(args, &mut warnings)?;
+    let PlanningDevice {
+        capabilities,
+        source,
+        queue,
+    } = dry_run_capabilities(args, &mut warnings)?;
     let route = route_for(&options, &capabilities);
     let compose = compose_options(args, &options, &capabilities)?;
 
@@ -251,7 +255,15 @@ fn plan(
         }
         RouteKind::Composed => {
             let job = PrintJob::new(pages.clone(), options.clone());
-            let imposed = plan_sheets(&job, &capabilities)?;
+            let imposed = match &queue {
+                Some((spooler, printer)) => spooler.plan_sheets(printer, &job, &capabilities)?,
+                None if cfg!(windows) && args.to_file.is_none() => lege_pdf_print::impose_uniform(
+                    &job,
+                    capabilities.hardware_margins,
+                    capabilities.hardware_margins,
+                )?,
+                None => plan_sheets(&job, &capabilities)?,
+            };
             paper_sheets = Some(count_paper_sheets(&imposed));
             imposed
                 .iter()
@@ -415,27 +427,38 @@ fn resolve_printer(spooler: &dyn Spooler, requested: Option<&str>) -> Result<Pri
 /// margins at the crate's quarter-inch fallback, and PDF pass-through exactly
 /// where the platform actually has it (CUPS yes, winspool no). `--query-device`
 /// opts into asking the real queue.
+struct PlanningDevice {
+    capabilities: DeviceCapabilities,
+    source: &'static str,
+    queue: Option<(Box<dyn Spooler>, PrinterId)>,
+}
+
 fn dry_run_capabilities(
     args: &PrintArgs<'_>,
     warnings: &mut Vec<String>,
-) -> Result<(DeviceCapabilities, &'static str)> {
+) -> Result<PlanningDevice> {
     if !args.query_device {
         warnings
             .push("device capabilities assumed; pass --query-device to ask the real queue".into());
-        return Ok((
-            DeviceCapabilities {
+        return Ok(PlanningDevice {
+            capabilities: DeviceCapabilities {
                 accepts_pdf: cfg!(any(target_os = "linux", target_os = "macos")),
                 ..DeviceCapabilities::default()
             },
-            "assumed",
-        ));
+            source: "assumed",
+            queue: None,
+        });
     }
     let (spooler, _) = make_spooler(args.to_file)?;
     let printer = resolve_printer(spooler.as_ref(), args.printer)?;
     let capabilities = spooler
         .capabilities(&printer)
         .with_context(|| format!("querying {printer}"))?;
-    Ok((capabilities, "queried"))
+    Ok(PlanningDevice {
+        capabilities,
+        source: "queried",
+        queue: Some((spooler, printer)),
+    })
 }
 
 fn compose_options(

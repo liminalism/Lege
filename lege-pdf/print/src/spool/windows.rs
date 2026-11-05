@@ -7,6 +7,8 @@
 //! Windows is also the one platform that will tell us the *real* unprintable
 //! border, through `GetDeviceCaps(PHYSICALOFFSETX/Y)`. Everywhere else the
 //! crate has to assume a conservative quarter inch.
+//!
+//! Experimental: compile-tested, but not yet verified against a real queue.
 
 // Every FFI call below is a documented `unsafe` block. The workspace lint is
 // a warning rather than a hard denial precisely so a platform backend like
@@ -16,12 +18,13 @@
 use windows::Win32::Foundation::HWND;
 use windows::Win32::Graphics::Gdi::{
     BI_RGB, BITMAPINFO, BITMAPINFOHEADER, CreateDCW, DEVMODEW, DIB_RGB_COLORS, DM_COLLATE,
-    DM_COLOR, DM_COPIES, DM_DUPLEX, DM_IN_BUFFER, DM_ORIENTATION, DM_OUT_BUFFER, DM_PAPERSIZE,
-    DMCOLLATE_FALSE, DMCOLLATE_TRUE, DMCOLOR_COLOR, DMCOLOR_MONOCHROME, DMDUP_HORIZONTAL,
-    DMDUP_SIMPLEX, DMDUP_VERTICAL, DMORIENT_LANDSCAPE, DMORIENT_PORTRAIT, DMPAPER_A3, DMPAPER_A4,
-    DMPAPER_A5, DMPAPER_B5, DMPAPER_EXECUTIVE, DMPAPER_LEGAL, DMPAPER_LETTER, DMPAPER_TABLOID,
-    DMPAPER_USER, DeleteDC, GetDeviceCaps, HDC, HORZRES, LOGPIXELSX, LOGPIXELSY, PHYSICALHEIGHT,
-    PHYSICALOFFSETX, PHYSICALOFFSETY, PHYSICALWIDTH, SRCCOPY, StretchDIBits, VERTRES,
+    DM_COLOR, DM_COPIES, DM_DUPLEX, DM_IN_BUFFER, DM_ORIENTATION, DM_OUT_BUFFER, DM_PAPERLENGTH,
+    DM_PAPERSIZE, DM_PAPERWIDTH, DMCOLLATE_FALSE, DMCOLLATE_TRUE, DMCOLOR_COLOR,
+    DMCOLOR_MONOCHROME, DMDUP_HORIZONTAL, DMDUP_SIMPLEX, DMDUP_VERTICAL, DMORIENT_LANDSCAPE,
+    DMORIENT_PORTRAIT, DMPAPER_A3, DMPAPER_A4, DMPAPER_A5, DMPAPER_B5, DMPAPER_EXECUTIVE,
+    DMPAPER_LEGAL, DMPAPER_LETTER, DMPAPER_TABLOID, DMPAPER_USER, DeleteDC, GetDeviceCaps, HDC,
+    HORZRES, LOGPIXELSX, LOGPIXELSY, PHYSICALHEIGHT, PHYSICALOFFSETX, PHYSICALOFFSETY,
+    PHYSICALWIDTH, SRCCOPY, StretchDIBits, VERTRES,
 };
 use windows::Win32::Graphics::Printing::{
     ClosePrinter, DocumentPropertiesW, EnumPrintersW, GetDefaultPrinterW, JOB_INFO_1W,
@@ -29,7 +32,8 @@ use windows::Win32::Graphics::Printing::{
     SetJobW,
 };
 use windows::Win32::Storage::Xps::{
-    DC_COLORDEVICE, DC_DUPLEX, DOCINFOW, DeviceCapabilitiesW, EndDoc, EndPage, StartDocW, StartPage,
+    AbortDoc, DC_COLORDEVICE, DC_DUPLEX, DOCINFOW, DeviceCapabilitiesW, EndDoc, EndPage, StartDocW,
+    StartPage,
 };
 use windows::core::{PCWSTR, PWSTR};
 
@@ -37,7 +41,7 @@ use super::{
     DeviceCapabilities, JobId, JobStatus, PrinterId, PrinterInfo, SpoolJob, SpoolPayload, Spooler,
 };
 use crate::paper::{Margins, POINTS_PER_INCH, PaperSize};
-use crate::{Duplex, PrintError, PrintOptions};
+use crate::{Duplex, Orientation, PrintError, PrintJob, PrintOptions, Sheet};
 
 /// `SetJob`'s `JOB_CONTROL_CANCEL`.
 const JOB_CONTROL_CANCEL: u32 = 3;
@@ -115,7 +119,50 @@ impl Spooler for WindowsSpooler {
         })
     }
 
+    fn plan_sheets(
+        &self,
+        printer: &PrinterId,
+        job: &PrintJob,
+        _capabilities: &DeviceCapabilities,
+    ) -> Result<Vec<Sheet>, PrintError> {
+        job.options.validate()?;
+        // Square bounds cannot carry an auto-selected orientation to submit().
+        // Use portrait deterministically, while preserving explicit choices.
+        let mut square_job;
+        let job = if job.options.orientation == Orientation::Auto
+            && job.options.paper.width() == job.options.paper.height()
+        {
+            square_job = job.clone();
+            square_job.options.orientation = Orientation::Portrait;
+            &square_job
+        } else {
+            job
+        };
+        let name = wide(printer.as_str());
+        let margins = |landscape| -> Result<Margins, PrintError> {
+            let devmode = DevMode::for_job(&name, &job.options, landscape)?;
+            let dc = InfoDc::open_with_devmode(&name, devmode.as_ptr())?;
+            let metrics = dc.metrics();
+            metrics.validate_paper(job.options.paper, landscape)?;
+            Ok(metrics.hardware_margins())
+        };
+        // Ask the driver about the requested media in its actual orientation;
+        // queue-default portrait margins cannot describe a landscape A3 job.
+        let portrait = if job.options.orientation == Orientation::Landscape {
+            Margins::ZERO
+        } else {
+            margins(false)?
+        };
+        let landscape = if job.options.orientation == Orientation::Portrait {
+            Margins::ZERO
+        } else {
+            margins(true)?
+        };
+        crate::impose_uniform(job, portrait, landscape)
+    }
+
     fn submit(&self, job: SpoolJob<'_>) -> Result<JobId, PrintError> {
+        job.options.validate()?;
         match job.payload {
             SpoolPayload::PassThroughPdf(_) => Err(PrintError::Unsupported(
                 "Windows has no PDF spool format; compose the job to sheets instead",
@@ -125,17 +172,15 @@ impl Spooler for WindowsSpooler {
                 sheets,
                 compose,
             } => {
-                if sheets.is_empty() {
-                    return Err(PrintError::EmptyRange);
-                }
                 // The DEVMODE orientation has to match the sheets we composed;
-                // `impose` has already turned them.
-                let landscape = sheets[0].is_landscape();
+                // reject inconsistent direct submissions before opening a job.
+                let landscape = sheet_orientation(sheets, job.options)?;
                 let name = wide(job.printer.as_str());
                 let devmode = DevMode::for_job(&name, job.options, landscape)?;
                 let dc = PrintDc::open(&name, devmode.as_ptr())?;
-                let job_id = dc.start_doc(&job.title)?;
                 let geometry = dc.metrics();
+                geometry.validate_paper(job.options.paper, landscape)?;
+                let job_id = dc.start_doc(&job.title)?;
                 for sheet in sheets {
                     let raster = crate::compose::compose_sheet(session, sheet, &compose)?;
                     dc.print_page(&raster, geometry)?;
@@ -175,6 +220,32 @@ impl Spooler for WindowsSpooler {
         }
         Err(PrintError::Spool(format!("job {job} is not in any queue")))
     }
+}
+
+fn sheet_orientation(sheets: &[Sheet], options: &PrintOptions) -> Result<bool, PrintError> {
+    let first = sheets.first().ok_or(PrintError::EmptyRange)?;
+    let paper = options.paper;
+    let landscape = match options.orientation {
+        Orientation::Portrait => false,
+        Orientation::Landscape => true,
+        Orientation::Auto => {
+            first.bounds == paper.rect(Orientation::Landscape)
+                && first.bounds != paper.rect(Orientation::Portrait)
+        }
+    };
+    let orientation = if landscape {
+        Orientation::Landscape
+    } else {
+        Orientation::Portrait
+    };
+    let expected = paper.rect(orientation);
+    if sheets.iter().any(|sheet| sheet.bounds != expected) {
+        return Err(PrintError::InvalidOptions(
+            "Windows requires one paper size and orientation per job; use Spooler::plan_sheets"
+                .into(),
+        ));
+    }
+    Ok(landscape)
 }
 
 // ---------------------------------------------------------------------------
@@ -280,6 +351,34 @@ impl DcMetrics {
         (self.dpi_x > 0).then(|| f64::from(self.dpi_x))
     }
 
+    fn validate_paper(self, paper: PaperSize, landscape: bool) -> Result<(), PrintError> {
+        if self.dpi_x <= 0
+            || self.dpi_y <= 0
+            || self.physical_width <= 0
+            || self.physical_height <= 0
+        {
+            return Err(PrintError::Spool(
+                "printer returned invalid physical page metrics".into(),
+            ));
+        }
+        let (mut width, mut height) = paper.size();
+        if landscape {
+            std::mem::swap(&mut width, &mut height);
+        }
+        let actual_width = f64::from(self.physical_width) * POINTS_PER_INCH / f64::from(self.dpi_x);
+        let actual_height =
+            f64::from(self.physical_height) * POINTS_PER_INCH / f64::from(self.dpi_y);
+        // Driver dimensions are rounded to device pixels (and custom media
+        // to tenths of a millimetre). Two points allow those roundings while
+        // still rejecting a driver that kept its default paper/orientation.
+        if (actual_width - width).abs() > 2.0 || (actual_height - height).abs() > 2.0 {
+            return Err(PrintError::Spool(format!(
+                "printer configured {actual_width:.1}x{actual_height:.1}pt instead of requested {width:.1}x{height:.1}pt"
+            )));
+        }
+        Ok(())
+    }
+
     /// The unprintable border in points — the real one, straight from the
     /// driver.
     fn hardware_margins(self) -> Margins {
@@ -306,9 +405,24 @@ struct InfoDc {
 
 impl InfoDc {
     fn open(name: &[u16]) -> Result<Self, PrintError> {
+        Self::open_with_devmode(name, std::ptr::null())
+    }
+
+    fn open_with_devmode(name: &[u16], devmode: *const DEVMODEW) -> Result<Self, PrintError> {
         // SAFETY: `name` is a NUL-terminated wide string that outlives the
-        // call; a null driver and port select the queue's own driver.
-        let hdc = unsafe { CreateDCW(PCWSTR::null(), PCWSTR(name.as_ptr()), PCWSTR::null(), None) };
+        // call; `devmode` is null or points to a live driver-validated buffer.
+        let hdc = unsafe {
+            CreateDCW(
+                PCWSTR::null(),
+                PCWSTR(name.as_ptr()),
+                PCWSTR::null(),
+                if devmode.is_null() {
+                    None
+                } else {
+                    Some(devmode)
+                },
+            )
+        };
         if hdc.is_invalid() {
             return Err(PrintError::NoSuchPrinter(String::from_utf16_lossy(
                 &name[..name.len().saturating_sub(1)],
@@ -436,10 +550,10 @@ impl PrintDc {
     fn end_doc(&self) -> Result<(), PrintError> {
         // SAFETY: `hdc` is live and a document is open on it.
         let result = unsafe { EndDoc(self.hdc) };
-        self.doc_open.set(false);
         if result <= 0 {
             return Err(PrintError::Spool("EndDoc failed".to_string()));
         }
+        self.doc_open.set(false);
         Ok(())
     }
 }
@@ -447,10 +561,10 @@ impl PrintDc {
 impl Drop for PrintDc {
     fn drop(&mut self) {
         if self.doc_open.get() {
-            // An error left the document open. Close it so the DC is not
-            // deleted mid-job; the partial job is the caller's to cancel.
+            // An error left the document open. Abort rather than committing
+            // a partial job, including when EndDoc itself failed.
             // SAFETY: `hdc` is live and a document is open on it.
-            let _ = unsafe { EndDoc(self.hdc) };
+            let _ = unsafe { AbortDoc(self.hdc) };
         }
         // SAFETY: created by `CreateDCW`, deleted exactly once.
         let _ = unsafe { DeleteDC(self.hdc) };
@@ -464,20 +578,17 @@ impl Drop for PrintDc {
 /// A driver-validated `DEVMODEW` carrying the job's duplex, copies, colour,
 /// paper and orientation.
 struct DevMode {
-    buffer: Option<AlignedBuffer>,
+    buffer: AlignedBuffer,
 }
 
 impl DevMode {
     /// Ask the driver for its defaults, apply the job's options, and let the
     /// driver validate the result.
     ///
-    /// Every step degrades to "no DEVMODE" rather than failing: a job that
-    /// prints simplex because the driver would not cooperate is better than
-    /// a job that does not print.
+    /// Fail if the driver cannot validate the configuration. Falling back to
+    /// defaults would invalidate the geometry and margins used for composition.
     fn for_job(name: &[u16], options: &PrintOptions, landscape: bool) -> Result<Self, PrintError> {
-        let Ok(printer) = PrinterHandle::open(name) else {
-            return Ok(Self { buffer: None });
-        };
+        let printer = PrinterHandle::open(name)?;
         // SAFETY: `printer` is a live handle and `name` outlives the call;
         // null in/out DEVMODE pointers with fMode 0 request the size only.
         let needed = unsafe {
@@ -490,8 +601,10 @@ impl DevMode {
                 0,
             )
         };
-        if needed <= 0 {
-            return Ok(Self { buffer: None });
+        if needed < std::mem::size_of::<DEVMODEW>() as i32 {
+            return Err(PrintError::Spool(
+                "DocumentProperties returned an invalid DEVMODE size".into(),
+            ));
         }
 
         let size = needed as usize;
@@ -508,8 +621,11 @@ impl DevMode {
                 DM_OUT_BUFFER.0,
             )
         };
-        if ok < 0 {
-            return Ok(Self { buffer: None });
+        if ok != 1 {
+            // IDOK
+            return Err(PrintError::Spool(
+                "DocumentProperties could not read printer defaults".into(),
+            ));
         }
 
         // SAFETY: the driver just wrote a DEVMODEW at the front of the
@@ -531,20 +647,17 @@ impl DevMode {
                 DM_IN_BUFFER.0 | DM_OUT_BUFFER.0,
             )
         };
-        if ok < 0 {
-            return Ok(Self {
-                buffer: Some(defaults),
-            });
+        if ok != 1 {
+            // IDOK
+            return Err(PrintError::Spool(
+                "DocumentProperties could not validate print settings".into(),
+            ));
         }
-        Ok(Self {
-            buffer: Some(merged),
-        })
+        Ok(Self { buffer: merged })
     }
 
     fn as_ptr(&self) -> *const DEVMODEW {
-        self.buffer
-            .as_ref()
-            .map_or(std::ptr::null(), |b| b.as_ptr().cast::<DEVMODEW>())
+        self.buffer.as_ptr().cast::<DEVMODEW>()
     }
 }
 
@@ -595,6 +708,9 @@ fn apply_options(devmode: &mut DEVMODEW, options: &PrintOptions, landscape: bool
     if let Some((width_tenths_mm, height_tenths_mm)) = custom {
         printer_fields.dmPaperWidth = width_tenths_mm;
         printer_fields.dmPaperLength = height_tenths_mm;
+        fields |= DM_PAPERWIDTH | DM_PAPERLENGTH;
+    } else {
+        fields &= !(DM_PAPERWIDTH | DM_PAPERLENGTH);
     }
     fields = fields | DM_PAPERSIZE;
 
@@ -870,4 +986,162 @@ unsafe fn pwstr_to_string(ptr: PWSTR) -> String {
     }
     // SAFETY: the caller guarantees a live NUL-terminated string.
     unsafe { ptr.to_string() }.unwrap_or_default()
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use super::*;
+
+    fn letter_metrics() -> DcMetrics {
+        DcMetrics {
+            physical_width: 2550,
+            physical_height: 6600,
+            offset_x: 75,
+            offset_y: 50,
+            printable_width: 2350,
+            printable_height: 6450,
+            dpi_x: 300,
+            dpi_y: 600,
+        }
+    }
+
+    #[test]
+    fn hardware_margins_use_the_configured_dcs_axes_and_resolution() {
+        let portrait = letter_metrics();
+        portrait.validate_paper(PaperSize::Letter, false).unwrap();
+        assert_eq!(
+            portrait.hardware_margins(),
+            Margins {
+                left: 18.0,
+                right: 30.0,
+                top: 6.0,
+                bottom: 12.0,
+            }
+        );
+        let landscape = DcMetrics {
+            physical_width: 3300,
+            physical_height: 5100,
+            offset_x: 125,
+            offset_y: 150,
+            printable_width: 3150,
+            printable_height: 4800,
+            ..portrait
+        };
+        landscape.validate_paper(PaperSize::Letter, true).unwrap();
+        assert_eq!(
+            landscape.hardware_margins(),
+            Margins {
+                left: 30.0,
+                right: 6.0,
+                top: 18.0,
+                bottom: 18.0,
+            }
+        );
+    }
+
+    #[test]
+    fn driver_geometry_must_match_requested_paper_and_orientation() {
+        let metrics = letter_metrics();
+        assert!(metrics.validate_paper(PaperSize::A4, false).is_err());
+        assert!(metrics.validate_paper(PaperSize::Letter, true).is_err());
+        assert!(
+            DcMetrics {
+                dpi_x: 0,
+                ..metrics
+            }
+            .validate_paper(PaperSize::Letter, false)
+            .is_err()
+        );
+        // Whole-device-pixel rounding is tolerated.
+        DcMetrics {
+            physical_width: 2551,
+            ..metrics
+        }
+        .validate_paper(PaperSize::Letter, false)
+        .unwrap();
+    }
+
+    #[test]
+    fn devmode_sets_orientation_and_custom_media_dimension_flags() {
+        let mut devmode = DEVMODEW::default();
+        let options = PrintOptions {
+            paper: PaperSize::Custom {
+                width: 360.0,
+                height: 720.0,
+            },
+            ..PrintOptions::default()
+        };
+        apply_options(&mut devmode, &options, true);
+        assert!(
+            devmode
+                .dmFields
+                .contains(DM_ORIENTATION | DM_PAPERWIDTH | DM_PAPERLENGTH)
+        );
+        // SAFETY: apply_options populated the printer arm of this DEVMODE.
+        let fields = unsafe { &devmode.Anonymous1.Anonymous1 };
+        assert_eq!(i32::from(fields.dmOrientation), DMORIENT_LANDSCAPE as i32);
+        assert_eq!((fields.dmPaperWidth, fields.dmPaperLength), (1270, 2540));
+        apply_options(&mut devmode, &PrintOptions::default(), false);
+        assert_eq!(devmode.dmFields.0 & (DM_PAPERWIDTH | DM_PAPERLENGTH).0, 0);
+    }
+
+    #[test]
+    fn direct_submission_requires_one_sheet_geometry() {
+        let sheet = |orientation| {
+            let bounds = PaperSize::A4.rect(orientation);
+            Sheet {
+                index: 0,
+                bounds,
+                imageable: bounds,
+                side: crate::Side::Front,
+                placements: vec![],
+            }
+        };
+        let portrait = sheet(Orientation::Portrait);
+        let landscape = sheet(Orientation::Landscape);
+        let options = PrintOptions::default();
+        assert!(!sheet_orientation(&[portrait.clone(), portrait.clone()], &options).unwrap());
+        assert!(sheet_orientation(std::slice::from_ref(&landscape), &options).unwrap());
+        assert!(matches!(
+            sheet_orientation(&[portrait, landscape], &options),
+            Err(PrintError::InvalidOptions(_))
+        ));
+        assert!(matches!(
+            sheet_orientation(&[], &options),
+            Err(PrintError::EmptyRange)
+        ));
+        // The DEVMODE choice follows declared paper axes, including custom
+        // media that is square or whose nominal width exceeds its height.
+        for paper in [
+            PaperSize::Custom {
+                width: 720.0,
+                height: 360.0,
+            },
+            PaperSize::Custom {
+                width: 360.0,
+                height: 360.0,
+            },
+        ] {
+            for orientation in [Orientation::Portrait, Orientation::Landscape] {
+                let options = PrintOptions {
+                    paper,
+                    orientation,
+                    ..PrintOptions::default()
+                };
+                let bounds = paper.rect(orientation);
+                let sheet = Sheet {
+                    index: 0,
+                    bounds,
+                    imageable: bounds,
+                    side: crate::Side::Front,
+                    placements: vec![],
+                };
+                assert_eq!(
+                    sheet_orientation(&[sheet], &options).unwrap(),
+                    orientation == Orientation::Landscape
+                );
+            }
+        }
+    }
 }

@@ -10,6 +10,48 @@ what has to change first, how we prove the performance claim, and why one
 might not do this at all. The decisions that are yours, not mine, are
 collected in §13.
 
+### Incremental implementation — 2026-11-04
+
+The owner selected MIT as the intended publication license. The current
+workspace manifests and license files have not yet been migrated; audit and
+align the package's own files and retain third-party notices during packaging.
+Licensing does not block the incremental renderer and printer work below.
+
+First step implemented, before consolidation:
+
+- §6.2: the read session uses `compile_artifacts()` for text and raster,
+  retaining both in a configurable page-count LRU (default eight). Same-page
+  concurrent requests share compilation; cancelled/failed work is not cached.
+  Explicit eviction leaves caller handles valid and prevents in-flight work
+  from immediately refilling a cleared cache. The dead `image` dependency is
+  removed.
+- §8.2.1: booklet imposition rejects duplex edges incompatible with the
+  actual sheet orientation. Simplex is retained for manual duplex.
+- §8.2.3: Windows errors abort the open document, including failed `EndDoc`.
+- §8.2.6: composition uses the bounded session cache across sheets and copies
+  instead of a separate per-sheet compilation map.
+- §8.2.8 and 10: print tests own their PDF fixture; sheet encoding errors
+  belong to `PrintError`; Windows spooling is documented as experimental.
+
+Second step implemented:
+
+- §8.2.2 and 4: Windows plans one orientation for the selected job and queries
+  margins through driver-validated settings for each candidate orientation on
+  the requested paper. Duplex backs mirror user binding margins while keeping
+  hardware limits on their physical edges. Direct submissions with mixed sheet
+  geometries are rejected. Driver failures and physical-size mismatches fail
+  before `StartDoc` instead of silently falling back to queue defaults.
+- §8.2.9: `preview_sheets` lazily yields ordered PNG results from a supplied
+  sheet plan without contacting a printer. `Spooler::plan_sheets` provides a
+  separate device-aware planning hook, used by submission and queried CLI dry
+  runs. Windows dry runs without a device query use uniform orientation with
+  assumed margins and continue to avoid printer access.
+
+Remaining near-term printer work: CUPS subprocess timeouts (§8.2.5) and band
+delivery to spoolers (7). Real-queue tests, benchmarks, consolidation, facade
+design and packaging remain later steps.
+No publication or comparative performance claim is made by this change.
+
 ---
 
 ## 1. Summary

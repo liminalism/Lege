@@ -212,7 +212,7 @@ pub fn print_document_with(
                 request.password,
             )?;
             let job = PrintJob::from_session(&session, request.options.clone())?;
-            let sheets = crate::layout::impose(&job, capabilities.hardware_margins)?;
+            let sheets = spooler.plan_sheets(request.printer, &job, &capabilities)?;
             let compose = request
                 .compose
                 .unwrap_or_else(|| compose_options_for(request.options, &capabilities));
@@ -249,8 +249,9 @@ pub fn source_pages(
     Ok(PrintJob::from_session(&session, PrintOptions::default())?.pages)
 }
 
-/// Impose without submitting: what `print_document` would compose. This is
-/// what a GUI preview iterates over.
+/// Impose using a capability snapshot, without contacting a printer. For a
+/// preview that also needs backend constraints and job-specific hardware
+/// margins, use [`Spooler::plan_sheets`] instead.
 pub fn plan_sheets(
     job: &PrintJob,
     capabilities: &crate::spool::DeviceCapabilities,

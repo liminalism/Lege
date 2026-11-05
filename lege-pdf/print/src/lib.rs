@@ -29,9 +29,9 @@ pub use job::{
     PrintRequest, PrintRoute, RouteKind, SubmittedJob, compose_options_for, plan_sheets,
     print_document, print_document_with, route_for, source_pages,
 };
-pub use layout::{Placement, Sheet, Side, expand_copies, impose};
+pub use layout::{Placement, Sheet, Side, expand_copies, impose, impose_uniform};
 pub use paper::{Margins, Orientation, PaperSize, Rect};
-pub use preview::{PreviewOptions, render_preview_png};
+pub use preview::{PreviewOptions, preview_sheets, render_preview_png};
 pub use spool::{
     DeviceCapabilities, JobId, JobStatus, PrinterId, PrinterInfo, SpoolJob, Spooler,
     file::FileSpooler,
@@ -59,6 +59,9 @@ pub enum PrintError {
     /// Reading or rasterizing the source document failed.
     #[error("document error: {0}")]
     Read(#[from] lege_pdf_read::ReadError),
+    /// Encoding a composed sheet or preview failed.
+    #[error("failed to encode sheet image: {0}")]
+    Encode(String),
     /// A sheet raster would exceed the configured pixel budget.
     #[error("sheet raster too large: {width}x{height} exceeds {max_pixels} pixels")]
     SheetTooLarge {

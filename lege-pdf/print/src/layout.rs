@@ -155,18 +155,7 @@ pub fn impose(job: &PrintJob, hardware_margins: Margins) -> Result<Vec<Sheet>, P
     options.validate()?;
     hardware_margins.validate()?;
 
-    let page_count = u32::try_from(job.pages.len()).unwrap_or(u32::MAX);
-    let mut order = options.range.resolve(page_count);
-    if options.reverse {
-        order.reverse();
-    }
-    let pages: Vec<SourcePage> = order
-        .into_iter()
-        .filter_map(|index| job.pages.get(usize::try_from(index).ok()?).copied())
-        .collect();
-    if pages.is_empty() {
-        return Err(PrintError::EmptyRange);
-    }
+    let pages = selected_pages(job)?;
 
     let booklet = options.n_up == NUp::Booklet;
     let sides = if booklet {
@@ -180,6 +169,49 @@ pub fn impose(job: &PrintJob, hardware_margins: Margins) -> Result<Vec<Sheet>, P
         options,
         hardware_margins,
     )
+}
+
+/// Impose with one orientation for the entire job, as required by a spooler
+/// that uses a single device configuration. Hardware margins are supplied in
+/// each orientation's own frame, measured for the requested paper size.
+///
+/// In auto mode, score all selected source pages together, then fix the sheet
+/// orientation and allow individual pages to turn inside their cells. Explicit
+/// orientations are preserved. Copies are left to the spooler, as in [`impose`].
+pub fn impose_uniform(
+    job: &PrintJob,
+    portrait_hardware: Margins,
+    landscape_hardware: Margins,
+) -> Result<Vec<Sheet>, PrintError> {
+    job.options.validate()?;
+    portrait_hardware.validate()?;
+    landscape_hardware.validate()?;
+    let pages = selected_pages(job)?;
+    let hardware = |orientation| match orientation {
+        Orientation::Landscape => landscape_hardware,
+        _ => portrait_hardware,
+    };
+    let orientation = choose_orientation_with_hardware(&pages, &job.options, hardware)?;
+    let mut uniform = job.clone();
+    uniform.options.orientation = orientation;
+    impose(&uniform, hardware(orientation))
+}
+
+fn selected_pages(job: &PrintJob) -> Result<Vec<SourcePage>, PrintError> {
+    let page_count = u32::try_from(job.pages.len()).unwrap_or(u32::MAX);
+    let mut order = job.options.range.resolve(page_count);
+    if job.options.reverse {
+        order.reverse();
+    }
+    let pages: Vec<_> = order
+        .into_iter()
+        .filter_map(|index| job.pages.get(usize::try_from(index).ok()?).copied())
+        .collect();
+    if pages.is_empty() {
+        Err(PrintError::EmptyRange)
+    } else {
+        Ok(pages)
+    }
 }
 
 /// Repeat an imposed sheet sequence for `copies` copies.
@@ -335,7 +367,7 @@ fn build_sheets(
 ) -> Result<Vec<Sheet>, PrintError> {
     let booklet = options.n_up == NUp::Booklet;
     let per_physical_sheet = if two_sided { 2 } else { 1 };
-    let user = options.margins.max_with(hardware);
+    let user = options.margins;
     let page_rotation = page_rotation(options.orientation);
     let order = if booklet {
         NUpOrder::RightThenDown
@@ -352,6 +384,18 @@ fn build_sheets(
         let orientation = choose_orientation(&on_sheet, options, hardware)?;
         let bounds = options.paper.rect(orientation);
         let landscape = orientation == Orientation::Landscape;
+        if booklet && options.duplex.is_duplex() {
+            let required = if landscape {
+                Duplex::ShortEdge
+            } else {
+                Duplex::LongEdge
+            };
+            if options.duplex != required {
+                return Err(PrintError::InvalidOptions(format!(
+                    "a {orientation:?} booklet requires {required:?} duplex; use simplex for manual duplex"
+                )));
+            }
+        }
         let (columns, rows) = cell_grid(options.n_up, landscape);
 
         for (position, slots) in chunk.iter().enumerate() {
@@ -364,7 +408,8 @@ fn build_sheets(
                 back_margins(user, options.duplex, booklet, landscape)
             } else {
                 user
-            };
+            }
+            .max_with(hardware);
             let imageable = inset(bounds, margins);
             if imageable.is_empty() {
                 return Err(PrintError::EmptyImageableArea {
@@ -433,16 +478,24 @@ fn choose_orientation(
     options: &PrintOptions,
     hardware: Margins,
 ) -> Result<Orientation, PrintError> {
+    choose_orientation_with_hardware(pages, options, |_| hardware)
+}
+
+fn choose_orientation_with_hardware(
+    pages: &[SourcePage],
+    options: &PrintOptions,
+    hardware: impl Fn(Orientation) -> Margins,
+) -> Result<Orientation, PrintError> {
     let candidates: &[Orientation] = match options.orientation {
         Orientation::Portrait => &[Orientation::Portrait],
         Orientation::Landscape => &[Orientation::Landscape],
         Orientation::Auto => &[Orientation::Portrait, Orientation::Landscape],
     };
-    let margins = options.margins.max_with(hardware);
     let page_rotation = page_rotation(options.orientation);
 
     let mut best: Option<(Orientation, FitScore)> = None;
     for &candidate in candidates {
+        let margins = options.margins.max_with(hardware(candidate));
         let bounds = options.paper.rect(candidate);
         let imageable = inset(bounds, margins);
         if imageable.is_empty() {

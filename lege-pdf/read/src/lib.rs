@@ -8,6 +8,7 @@ mod font_metrics;
 mod intake;
 mod metadata;
 mod outline;
+mod page_cache;
 mod session;
 mod text;
 

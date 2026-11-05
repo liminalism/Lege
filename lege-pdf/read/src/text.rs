@@ -1,6 +1,6 @@
-use pdf_document::{PageIndex, ParseContext};
 use pdf_page_ir::{Rect, SharedBytes};
 use pdf_text::{TextPage, TextPageOptions};
+use std::sync::Arc;
 
 use crate::session::display_extent;
 use crate::{PageGeometry, ReadError, RenderSession};
@@ -215,22 +215,8 @@ fn build_text_page(session: &RenderSession, page: u32) -> Result<TextPage, ReadE
 fn build_semantic_page(
     session: &RenderSession,
     page: u32,
-) -> Result<pdf_content::SemanticPage, ReadError> {
-    if page >= session.page_count() {
-        return Err(ReadError::PageOutOfRange {
-            page,
-            page_count: session.page_count(),
-        });
-    }
-    let mut context = ParseContext::new();
-    let semantic = session
-        .compiler
-        .compile_semantic(&session.snapshot, PageIndex(page), &mut context)
-        .map_err(|error| ReadError::Compile {
-            page,
-            message: error.to_string(),
-        })?;
-    Ok(semantic)
+) -> Result<Arc<pdf_content::SemanticPage>, ReadError> {
+    Ok(Arc::clone(&session.compile(page)?.semantic))
 }
 
 fn rect_to_pixels(

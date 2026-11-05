@@ -3,7 +3,7 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use pdf_content::PageCompiler;
+use pdf_content::{PageCompiler, SemanticPage};
 use pdf_document::{DocumentLimits, DocumentSnapshot, PageIndex, ParseContext};
 use pdf_page_ir::{
     BlendMode, CompiledPage, DeviceRect, DeviceSize, DisplayOp, ImageCodecKind, ImageSMask, Matrix,
@@ -16,6 +16,7 @@ use pdf_render_api::{
 use pdf_render_cpu::{CpuBackend, CpuBackendOptions, CpuWorkerContext, DecodedBilevelSmask};
 
 use crate::intake::source;
+use crate::page_cache::PageCache;
 
 struct WorkerContexts {
     session_id: Option<u64>,
@@ -161,6 +162,7 @@ pub(crate) fn display_extent(width: f64, height: f64, rotate: u16) -> (f64, f64)
 pub struct CompiledDocumentPage {
     page_index: u32,
     raster: Arc<CompiledPage>,
+    pub(crate) semantic: Arc<SemanticPage>,
 }
 
 impl CompiledDocumentPage {
@@ -366,10 +368,23 @@ pub struct RenderSession {
     // Constructed once per document now so Phase 3 does not accidentally
     // create page-local font, glyph, and decoded-image caches.
     backend: Arc<CpuBackend>,
+    pages: PageCache<CompiledDocumentPage>,
 }
 
 impl RenderSession {
     pub fn open(bytes: Arc<[u8]>, password: Option<&str>) -> Result<Self, ReadError> {
+        Self::open_with_cache_capacity(bytes, password, 8)
+    }
+
+    /// Open with a bound on retained page compilations (eight by default).
+    /// Each entry owns semantic and raster IR together. Zero disables retention;
+    /// caller-held page handles remain valid after eviction. This is a page-count
+    /// bound, not a byte budget for individual pages or the renderer's caches.
+    pub fn open_with_cache_capacity(
+        bytes: Arc<[u8]>,
+        password: Option<&str>,
+        cached_pages: usize,
+    ) -> Result<Self, ReadError> {
         let snapshot = DocumentSnapshot::open_with_password(
             source(bytes),
             DocumentLimits::default(),
@@ -382,6 +397,7 @@ impl RenderSession {
             snapshot: Arc::new(snapshot),
             compiler: Arc::new(PageCompiler::new().with_annotations(true)),
             backend: Arc::new(CpuBackend::new(CpuBackendOptions::default())),
+            pages: PageCache::new(cached_pages),
         })
     }
 
@@ -405,25 +421,54 @@ impl RenderSession {
     }
 
     pub fn compile(&self, page: u32) -> Result<Arc<CompiledDocumentPage>, ReadError> {
+        self.compile_cancellable(page, None)
+    }
+
+    /// Compile semantic and raster artifacts in one interpretation, or reuse a
+    /// retained result. Concurrent requests for the same page share the work;
+    /// different pages compile independently. Cancelled work is not retained.
+    pub fn compile_cancellable(
+        &self,
+        page: u32,
+        cancellation: Option<&CancellationToken>,
+    ) -> Result<Arc<CompiledDocumentPage>, ReadError> {
         if page >= self.page_count() {
             return Err(self.page_out_of_range(page));
         }
+        self.pages.get_or_compile(page, cancellation, || {
+            let artifacts = WORKER_CONTEXTS
+                .with(|worker| {
+                    let mut worker = worker.borrow_mut();
+                    worker.select_document(self.id);
+                    worker.parse.begin_job();
+                    worker
+                        .parse
+                        .set_cancellation_flag(cancellation.map(|token| token.0.shared_flag()));
+                    let result = self.compiler.compile_artifacts(
+                        &self.snapshot,
+                        PageIndex(page),
+                        &mut worker.parse,
+                    );
+                    worker.parse.set_cancellation_flag(None);
+                    result
+                })
+                .map_err(|error| ReadError::Compile {
+                    page,
+                    message: error.to_string(),
+                })?;
+            Ok(Arc::new(CompiledDocumentPage {
+                page_index: page,
+                raster: artifacts.compiled,
+                semantic: artifacts.semantic,
+            }))
+        })
+    }
 
-        let compiled = WORKER_CONTEXTS
-            .with(|worker| {
-                let mut worker = worker.borrow_mut();
-                worker.select_document(self.id);
-                self.compiler
-                    .compile(&self.snapshot, PageIndex(page), &mut worker.parse)
-            })
-            .map_err(|error| ReadError::Compile {
-                page,
-                message: error.to_string(),
-            })?;
-        Ok(Arc::new(CompiledDocumentPage {
-            page_index: page,
-            raster: Arc::new(compiled),
-        }))
+    /// Evict retained semantic and raster artifacts together. Work already in
+    /// flight can finish for its caller but will not repopulate this cache.
+    /// Renderer resource caches and caller-held handles are unaffected.
+    pub fn clear_page_cache(&self) {
+        self.pages.clear();
     }
 
     pub fn render(

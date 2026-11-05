@@ -8,7 +8,6 @@ description = "Lege-owned document intake seam over the external PDF renderer"
 
 [dependencies]
 thiserror = { workspace = true }
-image = { workspace = true }
 # `src/export.rs` only. Both are already compiled for other workspace
 # members (`pdf-cli` writes PNGs, `pdf-image` re-encodes JPEG XObjects),
 # so page export adds no crate to the build graph.

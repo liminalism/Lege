@@ -19,6 +19,81 @@ fn shared(bytes: Vec<u8>) -> Arc<[u8]> {
 }
 
 #[test]
+fn text_and_raster_share_one_retained_page_in_either_order() {
+    for text_first in [false, true] {
+        let session = RenderSession::open(shared(builder::multipage_classic(2)), None).unwrap();
+        if text_first {
+            assert!(!page_text(&session, 0).unwrap().is_empty());
+        }
+        let compiled = session.compile(0).unwrap();
+        assert!(has_text_layer(&session, 0).unwrap());
+        let text = page_text(&session, 0).unwrap();
+        let evidence = page_text_evidence(&session, 0, 153, 198).unwrap();
+        assert_eq!(evidence.text, text);
+        assert!(!positioned_words(&session, 0, 153, 198).unwrap().is_empty());
+        assert!(Arc::ptr_eq(&compiled, &session.compile(0).unwrap()));
+        assert_eq!(
+            Arc::strong_count(&compiled),
+            2,
+            "caller and cache own the pair"
+        );
+        session
+            .render(&compiled, &RasterProduct::rgb8(153, 198))
+            .unwrap();
+        session.clear_page_cache();
+        assert_eq!(Arc::strong_count(&compiled), 1);
+        // A caller's page stays usable after eviction.
+        session
+            .render(&compiled, &RasterProduct::gray8(153, 198))
+            .unwrap();
+        assert!(!Arc::ptr_eq(&compiled, &session.compile(0).unwrap()));
+    }
+}
+
+#[test]
+fn concurrent_session_requests_share_the_same_page_handle() {
+    fn assert_send_sync<T: Send + Sync>() {}
+    assert_send_sync::<RenderSession>();
+    assert_send_sync::<lege_pdf_read::CompiledDocumentPage>();
+    let session = RenderSession::open(shared(builder::multipage_classic(1)), None).unwrap();
+    let barrier = std::sync::Barrier::new(8);
+    let pages = std::thread::scope(|scope| {
+        let workers: Vec<_> = (0..8)
+            .map(|_| {
+                scope.spawn(|| {
+                    barrier.wait();
+                    session.compile(0).unwrap()
+                })
+            })
+            .collect();
+        workers
+            .into_iter()
+            .map(|worker| worker.join().unwrap())
+            .collect::<Vec<_>>()
+    });
+    for page in &pages {
+        assert!(Arc::ptr_eq(&pages[0], page));
+    }
+}
+
+#[test]
+fn cancelled_compile_can_retry_and_session_caches_are_isolated() {
+    let bytes = shared(builder::multipage_classic(2));
+    let session = RenderSession::open_with_cache_capacity(Arc::clone(&bytes), None, 1).unwrap();
+    let token = CancellationToken::new();
+    token.cancel();
+    assert!(session.compile_cancellable(0, Some(&token)).is_err());
+    let first = session.compile(0).unwrap();
+    assert!(session.compile_cancellable(0, Some(&token)).is_err());
+    assert!(Arc::ptr_eq(&first, &session.compile(0).unwrap()));
+    session.compile(1).unwrap();
+    assert_eq!(Arc::strong_count(&first), 1);
+    assert!(!Arc::ptr_eq(&first, &session.compile(0).unwrap()));
+    let other = RenderSession::open(bytes, None).unwrap();
+    assert!(!Arc::ptr_eq(&first, &other.compile(0).unwrap()));
+}
+
+#[test]
 fn intake_reports_clean_recovered_and_malformed_documents() {
     let clean = shared(builder::multipage_classic(2));
     let intake = examine_document(&clean);

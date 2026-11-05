@@ -32,9 +32,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use lege_pdf_read::{
-    CompiledDocumentPage, DeviceCrop, RasterFormat, RasterPlane, RasterProduct, RenderSession,
-};
+use lege_pdf_read::{DeviceCrop, RasterFormat, RasterPlane, RasterProduct, RenderSession};
 
 use crate::paper::Rect;
 use crate::{Matrix, PrintError, Sheet};
@@ -189,7 +187,8 @@ pub fn sheet_pixel_size(sheet: &Sheet, options: &ComposeOptions) -> Result<(u32,
 /// the last, and are only ever borrowed for the duration of the call — a
 /// spooler that wants to keep one takes `band.pixels` by clone.
 ///
-/// Source pages are compiled once per sheet and rendered once per placement,
+/// Source compilations use the session's bounded cache across sheets and
+/// copies. Pages are rendered once per placement,
 /// lazily: a placement is rasterized when the first band it touches is
 /// composed and dropped after the last, so a sheet never holds more page
 /// rasters than the band currently crossing them.
@@ -213,7 +212,6 @@ pub fn compose_sheet_banded(
 
     let plans = plan_placements(session, sheet, options, width, height)?;
 
-    let mut compiled: HashMap<u32, Arc<CompiledDocumentPage>> = HashMap::new();
     let mut rendered: Vec<Option<PageRaster>> = Vec::new();
     rendered.resize_with(plans.len(), || None);
 
@@ -230,7 +228,7 @@ pub fn compose_sheet_banded(
                 continue;
             }
             if rendered[slot].is_none() {
-                rendered[slot] = Some(render_placement(session, &mut compiled, plan, options)?);
+                rendered[slot] = Some(render_placement(session, plan, options)?);
             }
             let Some(source) = rendered[slot].as_ref() else {
                 continue;
@@ -634,18 +632,10 @@ struct PageRaster {
 
 fn render_placement(
     session: &RenderSession,
-    compiled: &mut HashMap<u32, Arc<CompiledDocumentPage>>,
     plan: &PlacementPlan,
     options: &ComposeOptions,
 ) -> Result<PageRaster, PrintError> {
-    let page = match compiled.get(&plan.source_page) {
-        Some(page) => Arc::clone(page),
-        None => {
-            let page = session.compile(plan.source_page)?;
-            compiled.insert(plan.source_page, Arc::clone(&page));
-            page
-        }
-    };
+    let page = session.compile(plan.source_page)?;
 
     let crop = plan.source_crop;
     let mut product = RasterProduct {

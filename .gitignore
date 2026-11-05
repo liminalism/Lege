@@ -51,6 +51,7 @@ Thumbs.db
 # Small PDF fixtures are source inputs required by fresh-clone test builds.
 !lege-pdf/render/crates/pdf-document/tests/fixtures/*.pdf
 !lege-pdf/render/crates/pdf-chaos-tests/tests/fixtures/*.pdf
+!lege-pdf/print/tests/fixtures/*.pdf
 !lege-pdf/pdf-integrity/fixtures/*.pdf
 /cargo-checker
 /cargo-checker.exe
@@ -110,3 +111,7 @@ sources/oracle-sweep-*/
 # in lege-misc/assets/ directly.
 lege-misc/assets/logo-concepts/
 lege-misc/assets/logo-export/
+
+# Python test and bytecode caches (bindings).
+__pycache__/
+.pytest_cache/

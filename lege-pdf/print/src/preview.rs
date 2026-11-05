@@ -1,8 +1,6 @@
 //! Sheet -> PNG, for a GUI print preview. Phase 2 aimed at a file rather
 //! than a spooler.
 
-use lege_pdf_read::ReadError;
-
 use crate::compose::{SheetRaster, compose_sheet};
 use crate::{ComposeOptions, PrintError, Sheet};
 
@@ -44,6 +42,22 @@ pub fn render_preview_png(
     encode_sheet_png(&raster)
 }
 
+/// Render planned sheets to PNGs on demand, in sheet order, without printer
+/// access. Constructing or dropping the iterator does no rendering. Each
+/// requested item reports its own error; later sheets remain available.
+///
+/// Use [`crate::impose`] with [`crate::Margins::ZERO`] for a printer-independent
+/// plan, or pass a device-specific plan from [`crate::Spooler::plan_sheets`].
+pub fn preview_sheets<'a>(
+    session: &'a lege_pdf_read::RenderSession,
+    sheets: &'a [Sheet],
+    options: PreviewOptions,
+) -> impl ExactSizeIterator<Item = Result<Vec<u8>, PrintError>> + DoubleEndedIterator + 'a {
+    sheets
+        .iter()
+        .map(move |sheet| render_preview_png(session, sheet, options))
+}
+
 /// Encode an already-composed sheet as PNG.
 ///
 /// Split out from [`render_preview_png`] so a caller that composed for a
@@ -62,13 +76,13 @@ pub fn encode_sheet_png(raster: &SheetRaster) -> Result<Vec<u8>, PrintError> {
     };
     let expected = raster.stride().saturating_mul(raster.height as usize);
     if raster.pixels.len() != expected {
-        return Err(PrintError::Read(ReadError::Encode(format!(
+        return Err(PrintError::Encode(format!(
             "sheet raster is {} bytes, expected {expected} for {}x{}x{}",
             raster.pixels.len(),
             raster.width,
             raster.height,
             raster.channels
-        ))));
+        )));
     }
 
     let mut out = Vec::new();
@@ -88,5 +102,5 @@ pub fn encode_sheet_png(raster: &SheetRaster) -> Result<Vec<u8>, PrintError> {
 }
 
 fn encode_error(stage: &str, error: &png::EncodingError) -> PrintError {
-    PrintError::Read(ReadError::Encode(format!("{stage}: {error}")))
+    PrintError::Encode(format!("{stage}: {error}"))
 }
