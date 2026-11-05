@@ -199,7 +199,10 @@ vars → `/usr/share/lege/models` (Linux). Models required:
   build script derives `cfg(lege_paddle_ocr)` for it on Linux/macOS (and
   Android with the `android` feature). `tesseract-ocr` remains an opt-in
   legacy backend on Linux/macOS only.
-- **Windows**: Direct3D12 wgpu backend, Windows API for system dirs. The old
+- **Windows**: Direct3D12 wgpu backend, Windows API for system dirs. `lege-gpu`
+  enables wgpu's `static-dxc`, linking Microsoft's DXC shader compiler (FXC
+  took 20-30 s per job to compile the layout model). Building needs Visual
+  Studio's "C++ ATL for latest build tools" component (`atls.lib`). The old
   WinRT OCR backend (`lege-process/ocr/winocr.rs`) has been **removed**; what
   remains is the `windows_ocr` availability stub in `lege-process/ocr/mod.rs`.
   Consequently `lege`'s `windows` crate features are only what it actually
