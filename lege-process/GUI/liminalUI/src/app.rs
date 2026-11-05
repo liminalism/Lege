@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 
 use liminalkit_raster::{FillRule, Painter, Path, RasterKernel, Rect, WindowBuffer};
 use liminalkit_shell::{Input, KeyInput, Modifiers, MouseButton, Scale};
-use liminalkit_text::{Align, Hinting, TextCache, TextRendering};
+use liminalkit_text::{Align, Hinting, TextCache, TextRendering, TextStyle};
 use liminalkit_ui::{Focus, ScrollState, TextFieldState, Ui};
 use liminalkit_windowing::{ImeCursorArea, ImeEvent, PixelApp, Waker};
 
@@ -1465,15 +1465,23 @@ impl Dashboard {
                 );
             }
         } else if let Some((right, text)) = note {
-            let w = ui.px(250).min(status.w);
+            // As tall as its wrapped text and no taller.
+            let w = ui.px(TOOLTIP_WIDTH).min(status.w);
+            let inset = ui.px(TOOLTIP_INSET);
+            let style = ui.theme.body;
+            let line_h = ui.text.line_height(style).max(1);
+            let lines = wrap_lines(ui.text, style, w - 2 * inset, text);
+            let shown = lines
+                .len()
+                .min(((status.h - 2 * inset) / line_h).max(1) as usize);
             let area = Rect::new(
                 if right { status.right() - w } else { status.x },
                 status.y,
                 w,
-                status.h.min(ui.px(118)),
+                shown as i32 * line_h + 2 * inset,
             );
             ui.surface(area, ui.theme.panel, ui.theme.panel_edge);
-            wrapped(ui, area.inset(ui.px(7)), text, 6);
+            wrapped(ui, area.inset(inset), text, shown);
         } else {
             let summary = if self.queue.is_empty() {
                 t.status.ready.clone()
@@ -2222,10 +2230,15 @@ impl Dashboard {
     }
 }
 
-fn wrapped(ui: &mut Ui<'_>, area: Rect, text: &str, max_lines: usize) {
-    ui.painter.push_clip(area);
-    let style = ui.theme.body;
-    let line_h = ui.text.line_height(style).max(1);
+/// Hover tooltip width and padding, logical pixels.
+const TOOLTIP_WIDTH: i32 = 250;
+const TOOLTIP_INSET: i32 = 7;
+/// Lines a tooltip shows at most in the smallest window's status card.
+#[cfg(test)]
+const TOOLTIP_MAX_LINES: usize = 6;
+
+/// Greedy word wrap to `width` pixels.
+fn wrap_lines(text_cache: &mut TextCache, style: TextStyle, width: i32, text: &str) -> Vec<String> {
     let mut line = String::new();
     let mut lines = Vec::new();
     for word in text.split_whitespace() {
@@ -2234,7 +2247,7 @@ fn wrapped(ui: &mut Ui<'_>, area: Rect, text: &str, max_lines: usize) {
         } else {
             format!("{line} {word}")
         };
-        if !line.is_empty() && ui.text.measure(&candidate, style) > area.w {
+        if !line.is_empty() && text_cache.measure(&candidate, style) > width {
             lines.push(std::mem::take(&mut line));
         }
         if !line.is_empty() {
@@ -2245,6 +2258,13 @@ fn wrapped(ui: &mut Ui<'_>, area: Rect, text: &str, max_lines: usize) {
     if !line.is_empty() {
         lines.push(line);
     }
+    lines
+}
+fn wrapped(ui: &mut Ui<'_>, area: Rect, text: &str, max_lines: usize) {
+    ui.painter.push_clip(area);
+    let style = ui.theme.body;
+    let line_h = ui.text.line_height(style).max(1);
+    let lines = wrap_lines(ui.text, style, area.w, text);
     for (i, line) in lines.iter().take(max_lines).enumerate() {
         label(
             ui,
@@ -2700,6 +2720,32 @@ mod tests {
             app.dashboard.resolution_edit,
             ResolutionEdit::Displaying
         ));
+    }
+    #[test]
+    fn every_tooltip_fits_without_clipping() {
+        let mut text = TextCache::new(crate::theme::fonts());
+        let style = crate::theme::theme(appearance::active_palette()).body;
+        let width = TOOLTIP_WIDTH - 2 * TOOLTIP_INSET;
+        for json in [
+            include_str!("../../../language_service/en/gui_text.json"),
+            include_str!("../../../language_service/de/gui_text.json"),
+        ] {
+            let locale: serde_json::Value = serde_json::from_str(json).unwrap();
+            let interactive = &locale["interactive"];
+            let notes = [
+                "preserve_note",
+                "preparation_note",
+                "grayscale_pdf",
+                "grayscale_djvu",
+            ]
+            .map(|key| (key, &interactive["liminalui"][key]));
+            let tooltips = interactive["tooltips"].as_object().unwrap();
+            for (key, value) in tooltips.iter().map(|(k, v)| (k.as_str(), v)).chain(notes) {
+                let value = value.as_str().unwrap();
+                let lines = wrap_lines(&mut text, style, width, value).len();
+                assert!(lines <= TOOLTIP_MAX_LINES, "{key}: {lines} lines");
+            }
+        }
     }
     #[test]
     fn compact_resolution_field_fits_height_and_width() {

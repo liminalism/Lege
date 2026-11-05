@@ -44,7 +44,7 @@
       "ocr_thorough": "Line by line OCR. Intended for EPUB creation.",
       "make_epub_also": "Requires thorough OCR.",
       "truetyping_text": "Raster to vector conversion. Smoother text, inconsistent file size.",
-      "jbig2_halftone": "Encode image regions as JBIG2 halftones. Halftone images work with truetyping and JBIG2 text. Experimental spec standard halftone dithering; lower file sizes and lower resolution.",
+      "jbig2_halftone": "Encode image regions as JBIG2 halftones. Experimental spec standard halftone dithering; lower file sizes and lower resolution.",
       "jbig2_symbol_mode": "Reuses matching glyph bitmaps: smaller files, slight risk of substitution.",
       "high_quality_output": "Use higher-quality image encoding. Not intended for e-ink readers.",
       "target_height": "Enter height for proportional output, or height x width / height width, e.g. 1200, 1200x800, or 1200 800.",
