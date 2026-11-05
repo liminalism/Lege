@@ -132,6 +132,7 @@ pub async fn create_and_run_epub_pipeline(
     let source: Arc<dyn PageSource> = Arc::new(PdfPageSource::new(pdf_bytes, config.clone())?);
 
     let inference_handle = if config.enable_layout_detection() {
+        crate::pipeline::helper_functions::report_layout_model_loading(progress_tracker);
         match crate::pipeline::inference::InferenceHandle::new(&config) {
             Ok(handle) => Some(Arc::new(handle)),
             Err(e) if crate::pipeline::inference::is_layout_software_adapter_error(e.as_ref()) => {

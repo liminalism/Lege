@@ -43,6 +43,16 @@ pub fn get_encode_semaphore() -> Option<std::sync::Arc<Semaphore>> {
 /// which had already drifted in log prefixes. Keeping this at the shared
 /// pipeline seam ensures any future adapter policy or warning text applies to
 /// both formats.
+/// Tell the user the layout model is being built before it is: the first
+/// status a job shows would otherwise stay up for the whole build, which
+/// compiles the model's GPU shaders.
+pub(crate) fn report_layout_model_loading(progress: &crate::progress::ProgressTracker) {
+    progress.update(crate::progress::ProcessingStatus::PipelineMessage {
+        stage: "Initializing".to_string(),
+        message: "Loading the layout model onto the GPU...".to_string(),
+    });
+}
+
 pub(crate) fn initialize_inference_or_fallback(
     mut config: Arc<PipelineConfig>,
     progress: &crate::progress::ProgressTracker,
@@ -55,6 +65,7 @@ pub(crate) fn initialize_inference_or_fallback(
         return Ok((config, None));
     }
 
+    report_layout_model_loading(progress);
     match crate::pipeline::inference::InferenceHandle::new(&config) {
         Ok(handle) => Ok((config, Some(Arc::new(handle)))),
         Err(error)

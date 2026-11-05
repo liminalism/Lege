@@ -508,6 +508,7 @@ async fn analyze_and_plan(
         ));
     }
 
+    crate::pipeline::helper_functions::report_layout_model_loading(progress_tracker);
     let inference_handle = crate::pipeline::inference::InferenceHandle::new(config)?;
 
     let document_pages = source.page_count();
