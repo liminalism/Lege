@@ -1,5 +1,6 @@
 use pdf_page_ir::{Rect, SharedBytes};
-use pdf_text::{TextPage, TextPageOptions};
+use pdf_text::{GlyphCache, TextPage, TextPageOptions};
+use std::cell::RefCell;
 use std::sync::Arc;
 
 use crate::session::display_extent;
@@ -54,7 +55,7 @@ pub fn page_text_evidence(
 ) -> Result<PageTextEvidence, ReadError> {
     let geometry = session.page_geometry(page)?;
     let semantic = build_semantic_page(session, page)?;
-    let text_page = TextPage::build(&semantic, &TextPageOptions::default());
+    let text_page = text_page_of(session, &semantic);
     let text = text_page.all_text();
     let words = words_in_pixel_space(&text_page, geometry, source_width, source_height);
     let character_count = text
@@ -209,7 +210,25 @@ fn words_in_pixel_space(
 
 fn build_text_page(session: &RenderSession, page: u32) -> Result<TextPage, ReadError> {
     let semantic = build_semantic_page(session, page)?;
-    Ok(TextPage::build(&semantic, &TextPageOptions::default()))
+    Ok(text_page_of(session, &semantic))
+}
+
+thread_local! {
+    /// The glyph bounds this thread has worked out, for the session it last
+    /// read text from. Without it every page parses its fonts again, which
+    /// is most of the cost of reading text from a long document.
+    static GLYPHS: RefCell<(Option<u64>, GlyphCache)> = RefCell::new((None, GlyphCache::new()));
+}
+
+fn text_page_of(session: &RenderSession, semantic: &pdf_content::SemanticPage) -> TextPage {
+    GLYPHS.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        // Another document: let go of the fonts of the previous one.
+        if slot.0 != Some(session.id()) {
+            *slot = (Some(session.id()), GlyphCache::new());
+        }
+        TextPage::build_with_cache(semantic, &TextPageOptions::default(), &mut slot.1)
+    })
 }
 
 fn build_semantic_page(

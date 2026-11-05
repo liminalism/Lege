@@ -88,7 +88,9 @@ impl SchedulerOptions {
     /// worker counts themselves should set the window through this too, or
     /// the default 12 silently throttles them.
     pub fn reorder_window_for(compile_workers: usize, render_workers: usize) -> usize {
-        (compile_workers.max(1) + render_workers.max(1)).saturating_mul(4).max(12)
+        (compile_workers.max(1) + render_workers.max(1))
+            .saturating_mul(4)
+            .max(12)
     }
 }
 
@@ -171,9 +173,8 @@ impl RenderScheduler {
         // The feeder admits up to a full window at once, so size this to the
         // window: a smaller bound only makes the feeder block for nothing.
         let reorder_window = self.options.reorder_window_depth.max(1) as u64;
-        let (page_tx, page_rx) = bounded::<u32>(
-            (reorder_window as usize).max(self.options.compiled_queue_depth.max(1)),
-        );
+        let (page_tx, page_rx) =
+            bounded::<u32>((reorder_window as usize).max(self.options.compiled_queue_depth.max(1)));
 
         // Stage 1→2: bounded compiled queue (bounds compiled-page memory).
         type Compiled = (u32, Result<RenderRequest, RenderError>);

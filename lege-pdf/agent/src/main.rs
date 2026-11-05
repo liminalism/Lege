@@ -5,14 +5,22 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 use lege_pdf_agent::bounds::Bounds;
-use lege_pdf_agent::commands::{content, images, inspect, mcp, print, render, search, serve, text};
-use lege_pdf_agent::schema::OutputMode;
+use lege_pdf_agent::commands::{
+    annotations, check, content, images, inspect, map, matching, mcp, poppler, print, render,
+    search, serve, tables, text,
+};
+use lege_pdf_agent::deadline;
+use lege_pdf_agent::schema::{Envelope, OutputMode, Status};
 
 #[derive(Debug, Parser)]
 #[command(
     name = "lege-pdf",
     version,
-    about = "Agent-facing structured PDF inspection, text, images, content, render, search, and serve"
+    about = "Agent-facing structured PDF inspection, text, images, content, render, search, and serve",
+    after_help = "Poppler's command lines are answered too:
+  lege-pdf pdftotext [options] <PDF-file> [<text-file>]
+  lege-pdf pdftoppm [options] <PDF-file> [<PPM-file-prefix>]
+See `lege-pdf pdftotext -h` and `lege-pdf pdftoppm -h`."
 )]
 struct Cli {
     /// User/owner password for encrypted documents (never printed).
@@ -31,21 +39,31 @@ struct Cli {
     #[arg(long, global = true)]
     fail_fast: bool,
 
-    /// Maximum pages processed per invocation (0 = unlimited).
-    #[arg(long, global = true, default_value_t = Bounds::default().max_pages)]
-    max_pages: u32,
+    /// Maximum pages processed per invocation (0 = unlimited). Defaults to
+    /// 50 for commands whose output grows with every page (text, images,
+    /// render, inspect --pages); commands that scan and summarise (search,
+    /// map, check, annotations, tables) cover every selected page unless
+    /// this is given.
+    #[arg(long, global = true)]
+    max_pages: Option<u32>,
 
     /// Maximum items (words/ops/images/matches) emitted per page.
     #[arg(long, global = true, default_value_t = Bounds::default().max_items)]
     max_items: u32,
 
-    /// Soft payload size cap in bytes for a single record.
+    /// Size cap in bytes for one text record, and for one `serve`/`mcp`
+    /// response; what does not fit is cut and reported (0 = none).
     #[arg(long, global = true, default_value_t = Bounds::default().max_bytes)]
     max_bytes: u64,
 
-    /// Wall-clock timeout hint in seconds (0 = none; enforced by serve).
+    /// Wall-clock budget in seconds for the command, or for each request to
+    /// `serve`/`mcp` (0 = none). Pages finished before it runs out are kept.
     #[arg(long, global = true, default_value_t = Bounds::default().timeout_secs)]
     timeout: u64,
+
+    /// Worker threads for multi-page work (0 = one per available core).
+    #[arg(long, global = true, default_value_t = 0)]
+    threads: u32,
 
     /// Resolve non-embedded fonts against system fonts (non-deterministic).
     #[arg(long, global = true)]
@@ -60,7 +78,18 @@ enum Command {
     /// Document health, boxes, encryption, features, and page compile status.
     Inspect {
         file: PathBuf,
-        /// One-based page range (e.g. 1,3-5,all). Defaults to all (capped).
+        /// Also report boxes and compile status for these pages (e.g.
+        /// 1,3-5,all). Without it only the document summary is printed.
+        #[arg(long)]
+        pages: Option<String>,
+        /// Outline items listed (0 = all).
+        #[arg(long, default_value_t = 200)]
+        outline_limit: usize,
+    },
+    /// One line per page: size, printed page number, whether it has a text
+    /// layer or is a scan, how much text, how many images, its first line.
+    Map {
+        file: PathBuf,
         #[arg(long)]
         pages: Option<String>,
     },
@@ -127,10 +156,29 @@ enum Command {
         scale: Option<f64>,
         #[arg(long, value_enum, default_value_t = render::ImageFormat::Png)]
         format: render::ImageFormat,
+        /// PDF-space region X0,Y0,X1,Y1 to render instead of the whole page.
         #[arg(long)]
         crop: Option<String>,
+        /// Fit the longest edge to this many pixels. On its own it sets the
+        /// size; with --dpi or --scale it only caps it.
+        #[arg(long)]
+        max_edge: Option<u32>,
+        /// Draft quality at 72 dpi, longest edge capped at 512 pixels.
         #[arg(long)]
         thumbnail: bool,
+        /// Render in grayscale.
+        #[arg(long)]
+        gray: bool,
+        /// JPEG quality, 1-100.
+        #[arg(long, default_value_t = 85)]
+        quality: u8,
+        /// Tile the selected pages into one image, each under its page
+        /// number. --max-edge then sizes the whole sheet.
+        #[arg(long)]
+        contact_sheet: bool,
+        /// Columns of a contact sheet (default: a near-square grid).
+        #[arg(long, default_value_t = 0, requires = "contact_sheet")]
+        columns: u32,
     },
     /// Search text across pages.
     Search {
@@ -138,10 +186,65 @@ enum Command {
         query: String,
         #[arg(long)]
         pages: Option<String>,
-        #[arg(long, default_value_t = 32)]
+        /// Characters of surrounding text shown with each match.
+        #[arg(long, default_value_t = 60)]
         context: usize,
-        #[arg(long)]
+        /// Match case exactly.
+        #[arg(long, alias = "case-sensitive")]
         no_case_insensitive: bool,
+        /// Treat the query as a regular expression (Rust `regex` syntax).
+        /// It sees each page as one line, with runs of whitespace as single
+        /// spaces and ligatures as their letters.
+        #[arg(long, short = 'e', conflicts_with = "exact")]
+        regex: bool,
+        /// Match character for character. By default a phrase also matches
+        /// across line breaks, hyphenation, ligatures and typographic quotes.
+        #[arg(long)]
+        exact: bool,
+        /// Stop after this many matches in total (0 = no limit).
+        #[arg(long, default_value_t = 0)]
+        max_matches: usize,
+        /// OCR policy for pages without trustworthy native text.
+        #[arg(long, value_enum, default_value_t = text::OcrMode::Never)]
+        ocr: text::OcrMode,
+        #[arg(long, default_value = "eng")]
+        ocr_language: String,
+    },
+    /// Links (with the text they sit on and where they go), comments and
+    /// form fields. With none of --links/--comments/--forms, all three.
+    Annotations {
+        file: PathBuf,
+        #[arg(long)]
+        pages: Option<String>,
+        #[arg(long)]
+        links: bool,
+        #[arg(long)]
+        comments: bool,
+        #[arg(long)]
+        forms: bool,
+    },
+    /// Preflight a PDF: failed or half-drawn pages, text that is cut off or
+    /// cannot be searched, fonts not embedded, coarse images, blank pages.
+    /// Exits 1 when there are errors.
+    Check {
+        file: PathBuf,
+        #[arg(long)]
+        pages: Option<String>,
+        /// Report images below this many pixels per inch on the page.
+        #[arg(long, default_value_t = 100)]
+        min_dpi: u32,
+        /// Exit 1 on warnings too.
+        #[arg(long)]
+        strict: bool,
+    },
+    /// Find tables from the alignment of text and print their cells.
+    Tables {
+        file: PathBuf,
+        #[arg(long)]
+        pages: Option<String>,
+        /// How tables are written without --json/--jsonl.
+        #[arg(long, value_enum, default_value_t = tables::TableFormat::Markdown)]
+        format: tables::TableFormat,
         /// OCR policy for pages without trustworthy native text.
         #[arg(long, value_enum, default_value_t = text::OcrMode::Never)]
         ocr: text::OcrMode,
@@ -245,13 +348,32 @@ enum Command {
     },
 }
 
+/// `lege-pdf pdftotext …`, `lege-pdf pdftoppm …`, or this executable under
+/// one of those names: Poppler's command line, not ours.
+fn poppler_request() -> Option<(poppler::Tool, Vec<String>)> {
+    // Not `args()`: an argument that is not Unicode must not abort the run.
+    let mut args = std::env::args_os().map(|arg| arg.to_string_lossy().into_owned());
+    let program = args.next()?;
+    let name = std::path::Path::new(&program).file_name()?.to_str()?;
+    if let Some(tool) = poppler::tool_named(name) {
+        return Some((tool, args.collect()));
+    }
+    let tool = poppler::tool_named(&args.next()?)?;
+    Some((tool, args.collect()))
+}
+
 fn main() -> ExitCode {
+    if let Some((tool, args)) = poppler_request() {
+        return ExitCode::from(poppler::run(tool, &args) as u8);
+    }
     let cli = Cli::parse();
     let bounds = Bounds {
-        max_pages: cli.max_pages,
+        max_pages: cli.max_pages.unwrap_or(Bounds::default().max_pages),
+        scan_pages: cli.max_pages.unwrap_or(0),
         max_items: cli.max_items,
         max_bytes: cli.max_bytes,
         timeout_secs: cli.timeout,
+        threads: cli.threads,
     };
     let output = if cli.jsonl {
         OutputMode::Jsonl
@@ -262,11 +384,46 @@ fn main() -> ExitCode {
     };
     let password = cli.password.as_deref();
 
+    // The document the command is about, for an error record. `print` plans
+    // and spools on its own terms and the services arm a budget per request.
+    let (document, timed) = match &cli.command {
+        Command::Inspect { file, .. }
+        | Command::Map { file, .. }
+        | Command::Text { file, .. }
+        | Command::Images { file, .. }
+        | Command::Content { file, .. }
+        | Command::Render { file, .. }
+        | Command::Search { file, .. }
+        | Command::Tables { file, .. }
+        | Command::Annotations { file, .. }
+        | Command::Check { file, .. } => (Some(file.display().to_string()), true),
+        Command::Print { file, .. } => {
+            (file.as_ref().map(|file| file.display().to_string()), false)
+        }
+        Command::Serve { .. } | Command::Mcp { .. } => (None, false),
+    };
+    let _deadline = timed.then(|| deadline::arm(cli.timeout));
+
     let result = match cli.command {
-        Command::Inspect { file, pages } => inspect::run(inspect::InspectArgs {
+        Command::Map { file, pages } => map::run(map::MapArgs {
             path: &file,
             password,
             pages: pages.as_deref(),
+            system_fonts: cli.system_fonts,
+            bounds,
+            output,
+            snapshot: None,
+            identity: None,
+        }),
+        Command::Inspect {
+            file,
+            pages,
+            outline_limit,
+        } => inspect::run(inspect::InspectArgs {
+            path: &file,
+            password,
+            pages: pages.as_deref(),
+            outline_limit,
             bounds,
             output,
             snapshot: None,
@@ -347,39 +504,120 @@ fn main() -> ExitCode {
             scale,
             format,
             crop,
+            max_edge,
             thumbnail,
-        } => render::run(render::RenderArgs {
-            path: &file,
-            password,
-            pages: pages.as_deref(),
-            output: &out_template,
-            dpi,
-            scale,
-            format,
-            crop: crop.as_deref(),
-            thumbnail,
-            system_fonts: cli.system_fonts,
-            bounds,
-            fail_fast: cli.fail_fast,
-            output_mode: output,
-            snapshot: None,
-            identity: None,
-        }),
+            gray,
+            quality,
+            contact_sheet,
+            columns,
+        } => crop
+            .as_deref()
+            .map(lege_pdf_agent::pages::parse_bbox)
+            .transpose()
+            .and_then(|crop| {
+                render::run(render::RenderArgs {
+                    path: &file,
+                    password,
+                    pages: pages.as_deref(),
+                    output: &out_template,
+                    spec: render::RenderSpec {
+                        dpi,
+                        scale,
+                        max_edge,
+                        crop,
+                        thumbnail,
+                        gray: gray || format == render::ImageFormat::Pgm,
+                        format,
+                        quality,
+                        prefer_small: false,
+                    },
+                    contact_sheet,
+                    columns,
+                    system_fonts: cli.system_fonts,
+                    bounds,
+                    fail_fast: cli.fail_fast,
+                    output_mode: output,
+                    snapshot: None,
+                    identity: None,
+                })
+            }),
         Command::Search {
             file,
             query,
             pages,
             context,
             no_case_insensitive,
+            regex,
+            exact,
+            max_matches,
             ocr,
             ocr_language,
         } => search::run(search::SearchArgs {
             path: &file,
             password,
-            query: &query,
             pages: pages.as_deref(),
-            context,
-            case_insensitive: !no_case_insensitive,
+            spec: search::SearchSpec {
+                query: &query,
+                options: matching::QueryOptions {
+                    regex,
+                    case_insensitive: !no_case_insensitive,
+                    exact,
+                },
+                context,
+                max_matches,
+                ocr,
+                ocr_language: &ocr_language,
+                system_fonts: cli.system_fonts,
+                bounds,
+            },
+            fail_fast: cli.fail_fast,
+            output,
+            snapshot: None,
+            identity: None,
+        }),
+        Command::Annotations {
+            file,
+            pages,
+            links,
+            comments,
+            forms,
+        } => annotations::run(annotations::AnnotationsArgs {
+            path: &file,
+            password,
+            pages: pages.as_deref(),
+            kinds: annotations::Kinds::from_flags(links, comments, forms),
+            bounds,
+            output,
+            snapshot: None,
+            identity: None,
+        }),
+        Command::Check {
+            file,
+            pages,
+            min_dpi,
+            strict,
+        } => check::run(check::CheckArgs {
+            path: &file,
+            password,
+            pages: pages.as_deref(),
+            min_dpi,
+            strict,
+            bounds,
+            output,
+            snapshot: None,
+            identity: None,
+        }),
+        Command::Tables {
+            file,
+            pages,
+            format,
+            ocr,
+            ocr_language,
+        } => tables::run(tables::TablesArgs {
+            path: &file,
+            password,
+            pages: pages.as_deref(),
+            format,
             ocr,
             ocr_language: &ocr_language,
             system_fonts: cli.system_fonts,
@@ -477,7 +715,25 @@ fn main() -> ExitCode {
     match result {
         Ok(code) => ExitCode::from(code as u8),
         Err(err) => {
-            eprintln!("error: {err:#}");
+            let message = if deadline::expired() {
+                format!("timeout of {}s reached: {err:#}", cli.timeout)
+            } else {
+                format!("{err:#}")
+            };
+            eprintln!("error: {message}");
+            // A caller that asked for JSON parses stdout: give it a record
+            // for a failure that happened before any page was reached.
+            if let (Some(document), false) = (document, matches!(output, OutputMode::Human)) {
+                let env = Envelope::ok(document, serde_json::json!({ "error": message }))
+                    .set_status(Status::Failed);
+                let written = match output {
+                    OutputMode::Jsonl => env.write_jsonl(),
+                    _ => env.write_json(),
+                };
+                if let Err(err) = written {
+                    eprintln!("error: writing the failure record: {err:#}");
+                }
+            }
             ExitCode::from(1)
         }
     }

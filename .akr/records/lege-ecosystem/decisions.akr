@@ -121,6 +121,26 @@ record lege-ecosystem.decision.jp2lam-verified-quality-scale/1 : decision {
         """
 }
 
+record lege-ecosystem.decision.lege-pdf-mcp-results-are-text-with-stated-coverage/1 : decision {
+    title "lege-pdf MCP tools answer in readable text, state their coverage, and return images inline"
+    state proposed
+    scope [
+        path "lege-pdf/agent/src/commands/mcp.rs",
+        path "lege-pdf/agent/src/commands/serve.rs"
+    ]
+    topic lege-pdf-mcp-result-shape
+    decision """
+        Every lege-pdf MCP tool returns one text block written to be read (page text under '--- page N ---' headers, one line per search match with page, box and context, tables as Markdown). response_format="json" returns compact JSON text plus structuredContent instead; text and structured content are never both sent. Each result states what it covered: pdf_text stops at max_chars (default 40000) and names the page and start_char to continue from, pdf_search stops at max_matches (default 50) and names the page to resume from, and page, byte and time limits report truncated/next_page the same way. pdf_render without an output path returns the image itself (longest edge 1568 px by default, at most 4096; PNG unless JPEG is under half its size and the PNG exceeds 300 KB; at most six pages per call; contact_sheet for more). Commands that scan and summarise (search, map, check, annotations, tables) cover every selected page unless the caller sets a page limit; the default 50-page cap applies only to commands whose output grows with every page. The Poppler-compatible front ends refuse by name any option they cannot honour rather than ignoring it.
+        """
+    context """
+        The first-draft server sent every result twice (JSON text mirroring structuredContent), had no budget below the 8 MiB byte cap, capped search at 50 pages while reporting it as a complete search, defaulted pdf_text to page 1, and required pdf_render to write a file the model then had to read with another tool. Measured on the 164-page T.88 spec on 2026-11-05, with response_format=json standing in for the old shape: pdf_text of pages 20-29 (31018 characters of page text) is a 31350-byte response as text and 69881 bytes as JSON plus structuredContent; page 50 alone is 1224 against 3313 bytes; pdf_search for 'Huffman' is 8089 against 29735 bytes.
+        """
+    consequences """
+        Clients that parsed structuredContent must pass response_format="json". The JSONL serve protocol is unchanged in being structured-only and still requires an output path for pdf_render. Text formats (the search line, the page header, the coverage warning) are now part of what agents rely on and are pinned by tests/agent_tools.rs and tests/mcp_protocol.rs.
+        """
+    derived_from [ @lege-ecosystem.work.lege-pdf-agent-over-poppler ]
+}
+
 record lege-ecosystem.decision.nup-grid-is-read-in-the-sheets-own-frame/1 : decision {
     title "The N-up cell grid is read in the sheet's own frame, not transposed for a landscape sheet"
     state proposed

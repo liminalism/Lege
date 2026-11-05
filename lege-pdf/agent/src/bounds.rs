@@ -5,21 +5,29 @@
 pub struct Bounds {
     /// Maximum pages processed per invocation (0 = unlimited).
     pub max_pages: u32,
+    /// Page limit for commands that scan pages and report little about each
+    /// (search, map, check, annotations): only a limit the caller asked for,
+    /// never the default one, which exists to bound bulky output.
+    pub scan_pages: u32,
     /// Maximum inventory / op / match items emitted per page or command.
     pub max_items: u32,
     /// Soft cap on serialized payload bytes for a single record.
     pub max_bytes: u64,
     /// Wall-clock timeout hint in seconds (0 = none).
     pub timeout_secs: u64,
+    /// Worker threads for multi-page work (0 = one per available core).
+    pub threads: u32,
 }
 
 impl Default for Bounds {
     fn default() -> Self {
         Self {
             max_pages: 50,
+            scan_pages: 0,
             max_items: 10_000,
             max_bytes: 8 * 1024 * 1024,
             timeout_secs: 60,
+            threads: 0,
         }
     }
 }

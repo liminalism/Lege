@@ -9,7 +9,7 @@ use pdf_page_ir::{ImageCodecKind, ImageColorSpace, ImageMask, Matrix, PaintOrigi
 
 use crate::bounds::Bounds;
 use crate::commands::{
-    default_annotations, emit_failed, page_compiler, parse_context, resolve_snapshot,
+    PageRun, default_annotations, page_compiler, parse_context, resolve_snapshot, run_pages,
 };
 use crate::open::DocumentIdentity;
 use crate::pages::{PageZero, parse_page_range};
@@ -51,43 +51,38 @@ pub fn run(args: ImagesArgs<'_>) -> Result<i32> {
     let (identity, snapshot) =
         resolve_snapshot(args.path, args.password, args.snapshot, args.identity)?;
     let document = identity.display_path();
-    let mut global_warnings = Vec::new();
     let (page_indices, range_warnings) =
         parse_page_range(args.pages, snapshot.page_count(), args.bounds.max_pages)?;
-    global_warnings.extend(range_warnings);
-
-    let compiler = page_compiler(args.system_fonts, default_annotations());
-    let mut exit = 0i32;
     let multi = page_indices.len() > 1 || matches!(args.output, OutputMode::Jsonl);
 
-    for pz in &page_indices {
-        let mut warnings = global_warnings.clone();
-        match inventory_page(
-            &snapshot,
-            &compiler,
-            *pz,
-            args.mode,
-            args.extract_dir,
-            &args.bounds,
-            &mut warnings,
-        ) {
-            Ok(data) => {
-                let env =
-                    Envelope::page_ok(&document, pz.one_based(), serde_json::to_value(&data)?)
-                        .with_warnings(warnings);
-                emit(&env, &data, args.output, multi)?;
-            }
-            Err(err) => {
-                let env = Envelope::page_failed(&document, pz.one_based(), err.to_string());
-                emit_failed(&env, args.output, multi)?;
-                if args.fail_fast {
-                    return Ok(1);
-                }
-                exit = 1;
-            }
-        }
-    }
-    Ok(exit)
+    run_pages(
+        PageRun {
+            document: &document,
+            mode: args.output,
+            multi,
+            fail_fast: args.fail_fast,
+            threads: args.bounds.threads,
+        },
+        &page_indices,
+        range_warnings,
+        || page_compiler(args.system_fonts, default_annotations()),
+        |compiler, pz, warnings| {
+            inventory_page(
+                &snapshot,
+                compiler,
+                pz,
+                args.mode,
+                args.extract_dir,
+                &args.bounds,
+                warnings,
+            )
+        },
+        |pz, data, warnings| {
+            let env = Envelope::page_ok(&document, pz.one_based(), serde_json::to_value(&data)?)
+                .with_warnings(warnings);
+            emit(&env, &data, args.output, multi)
+        },
+    )
 }
 
 pub fn images_value(
@@ -97,7 +92,7 @@ pub fn images_value(
     extract_dir: Option<&Path>,
     system_fonts: bool,
     bounds: Bounds,
-) -> Result<serde_json::Value> {
+) -> Result<(serde_json::Value, Vec<String>)> {
     let pz = crate::pages::to_zero_based(page_one, snapshot.page_count())?;
     let compiler = page_compiler(system_fonts, default_annotations());
     let mut warnings = Vec::new();
@@ -110,7 +105,7 @@ pub fn images_value(
         &bounds,
         &mut warnings,
     )?;
-    Ok(serde_json::to_value(data)?)
+    Ok((serde_json::to_value(data)?, warnings))
 }
 
 fn inventory_page(
@@ -355,15 +350,14 @@ fn extract_one(
             // Rendered appearance is a full-page crop of painted bounds via render command.
             // For agent use we write a small PPM of the image samples when RGB8-like, else
             // fall back to samples dump.
-            if let Some(samples) = &image.samples {
-                if image.bits_per_component == 8
-                    && matches!(image.color_space, Some(ImageColorSpace::Rgb))
-                    && samples.len() >= (image.width as usize * image.height as usize * 3)
-                {
-                    let path = base.with_extension("ppm");
-                    write_rgb_ppm(&path, image.width, image.height, samples)?;
-                    return Ok(path);
-                }
+            if let Some(samples) = &image.samples
+                && image.bits_per_component == 8
+                && matches!(image.color_space, Some(ImageColorSpace::Rgb))
+                && samples.len() >= (image.width as usize * image.height as usize * 3)
+            {
+                let path = base.with_extension("ppm");
+                write_rgb_ppm(&path, image.width, image.height, samples)?;
+                return Ok(path);
             }
             bail!(
                 "rendered extract requires decoded RGB8 samples; use mode inventory/source/decoded or render the page"

@@ -401,6 +401,11 @@ impl RenderSession {
         })
     }
 
+    /// Distinguishes this session from every other one in the process.
+    pub(crate) fn id(&self) -> u64 {
+        self.id
+    }
+
     pub fn page_count(&self) -> u32 {
         self.snapshot.page_count()
     }

@@ -78,9 +78,81 @@ pub struct TextPage {
     text: Vec<u16>,
 }
 
+/// Parsed font programs and glyph extents, kept across the pages of one
+/// extraction run.
+///
+/// A character's tight box needs its glyph's outline bounds, and reading an
+/// outline re-opens the font's tables every time. A page repeats a few dozen
+/// glyphs thousands of times, and a document repeats its fonts on every page,
+/// so the bounds are computed once per glyph and reused.
+///
+/// A font is identified by the address and length of its program bytes plus
+/// the face index. The entry holds those bytes, so the address cannot be
+/// handed to a different font while the entry exists.
+#[derive(Debug, Default)]
+pub struct GlyphCache {
+    fonts: std::collections::HashMap<FontKey, CachedFont>,
+}
+
+type FontKey = (usize, usize, u32);
+
+/// Fonts retained before the cache starts over. Bounds memory on a document
+/// that embeds a fresh subset on every page.
+const MAX_CACHED_FONTS: usize = 256;
+
+#[derive(Debug)]
+struct CachedFont {
+    _data: Arc<[u8]>,
+    program: Option<pdf_font::FontProgram>,
+    bounds: std::collections::HashMap<u32, Option<[f32; 4]>>,
+}
+
+impl GlyphCache {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    fn admit(&mut self, data: &Arc<[u8]>, face_index: u32) -> FontKey {
+        let key = (data.as_ptr() as usize, data.len(), face_index);
+        self.fonts.entry(key).or_insert_with(|| CachedFont {
+            _data: Arc::clone(data),
+            program: pdf_font::FontProgram::parse_indexed(Arc::clone(data), face_index),
+            bounds: std::collections::HashMap::new(),
+        });
+        key
+    }
+
+    fn units_per_em(&self, key: Option<FontKey>) -> Option<f64> {
+        let program = self.fonts.get(&key?)?.program.as_ref()?;
+        Some(program.units_per_em().max(1) as f64)
+    }
+
+    fn outline_bounds(&mut self, key: Option<FontKey>, glyph_id: u32) -> Option<[f32; 4]> {
+        let CachedFont {
+            program, bounds, ..
+        } = self.fonts.get_mut(&key?)?;
+        let program = program.as_ref()?;
+        *bounds.entry(glyph_id).or_insert_with(|| {
+            program
+                .outline(glyph_id)
+                .and_then(|outline| outline.bounds())
+        })
+    }
+}
+
 impl TextPage {
     pub fn build(page: &SemanticPage, options: &TextPageOptions) -> Self {
-        Builder::new(page, options).build()
+        Self::build_with_cache(page, options, &mut GlyphCache::new())
+    }
+
+    /// [`Self::build`] for a caller extracting many pages: pass the same
+    /// cache for each page of a document.
+    pub fn build_with_cache(
+        page: &SemanticPage,
+        options: &TextPageOptions,
+        cache: &mut GlyphCache,
+    ) -> Self {
+        Builder::new(page, options, cache).build()
     }
 
     pub fn char_count(&self) -> usize {
@@ -255,21 +327,31 @@ struct Builder<'a> {
     ctm: Matrix,
     ctm_stack: Vec<Matrix>,
     origins: Vec<PaintOrigin>,
-    programs: Vec<Option<pdf_font::FontProgram>>,
+    cache: &'a mut GlyphCache,
+    /// Cache key of each page font that carries a program.
+    font_keys: Vec<Option<FontKey>>,
     chars: Vec<CharInfo>,
     text: Vec<u16>,
     last_actual_text_span: Option<ActualTextSpanId>,
 }
 
 impl<'a> Builder<'a> {
-    fn new(page: &'a SemanticPage, options: &'a TextPageOptions) -> Self {
-        let programs = page
+    fn new(
+        page: &'a SemanticPage,
+        options: &'a TextPageOptions,
+        cache: &'a mut GlyphCache,
+    ) -> Self {
+        // Only between pages: this page's own fonts must all stay resident.
+        if cache.fonts.len() >= MAX_CACHED_FONTS {
+            cache.fonts.clear();
+        }
+        let font_keys = page
             .fonts
             .iter()
             .map(|font| {
                 font.program
-                    .clone()
-                    .and_then(|data| pdf_font::FontProgram::parse_indexed(data, font.face_index))
+                    .as_ref()
+                    .map(|data| cache.admit(data, font.face_index))
             })
             .collect();
         Self {
@@ -278,7 +360,8 @@ impl<'a> Builder<'a> {
             ctm: Matrix::IDENTITY,
             ctm_stack: Vec::new(),
             origins: Vec::new(),
-            programs,
+            cache,
+            font_keys,
             chars: Vec::new(),
             text: Vec::new(),
             last_actual_text_span: None,
@@ -490,13 +573,21 @@ impl<'a> Builder<'a> {
         let chars_before = self.chars.len();
         let text_before = self.text.len();
         let font = self.page.fonts[run.font.index()].clone();
-        let program = self.programs[run.font.index()].clone();
-        let upem = program
-            .as_ref()
-            .map_or(1000.0, |value| value.units_per_em().max(1) as f64);
+        let font_key = self.font_keys[run.font.index()];
+        let upem = self.cache.units_per_em(font_key).unwrap_or(1000.0);
         let vertical = font.metrics.is_vertical();
         let th = run.horizontal_scale / 100.0;
         let mut cursor = 0.0f64;
+
+        // PDFium's in-object word spacing (`CPDF_TextPage::ProcessTextObject`).
+        // Many producers (TeX, dvips, Distiller) never emit a space glyph:
+        // a word gap is a `TJ` displacement inside one show operator. Without
+        // this, such a run extracts as one unbroken word.
+        let font_size_abs = run.font_size.abs();
+        let base_space = base_space(&run, &font, font_size_abs);
+        let space_threshold = space_glyph_threshold(&font, font_size_abs);
+        let mut spacing = 0.0f64;
+        let mut item_index = 0usize;
 
         for element in run.elements.iter() {
             match element {
@@ -506,9 +597,43 @@ impl<'a> Builder<'a> {
                     } else {
                         -value / 1000.0 * run.font_size * th
                     };
+                    item_index += 1;
+                    // A displacement after nothing, or after a space, cannot
+                    // open a new word.
+                    if self.text.last().is_some_and(|&unit| unit != 0x20) {
+                        spacing = -value / 1000.0 * font_size_abs;
+                    }
                 }
                 TextElement::Show(bytes) => {
                     for decoded in font.metrics.decode(bytes) {
+                        if run.char_spacing.abs() > 0.001 {
+                            spacing += run.char_spacing;
+                        }
+                        spacing -= base_space;
+                        if spacing != 0.0 && item_index > 0 {
+                            let threshold = if space_threshold > 0.0 {
+                                space_threshold
+                            } else {
+                                font_size_abs * normalize_threshold(decoded.advance as f64) / 1000.0
+                            };
+                            if threshold > 0.0 && spacing >= threshold {
+                                self.append_in_object_space(
+                                    id,
+                                    run.font,
+                                    run.text_matrix.then(self.ctm),
+                                    Point {
+                                        x: if vertical { 0.0 } else { cursor },
+                                        y: if vertical {
+                                            cursor + run.rise
+                                        } else {
+                                            run.rise
+                                        },
+                                    },
+                                );
+                            }
+                        }
+                        spacing = 0.0;
+                        item_index += 1;
                         let word_space = if decoded.word_space {
                             run.word_spacing
                         } else {
@@ -538,8 +663,7 @@ impl<'a> Builder<'a> {
                         };
                         let gid = font.glyph_map.gid(decoded.cid);
                         let local_box = glyph_box(
-                            program.as_ref(),
-                            gid,
+                            self.cache.outline_bounds(font_key, gid),
                             font.font_bbox,
                             font.type3_matrix,
                             x,
@@ -639,6 +763,39 @@ impl<'a> Builder<'a> {
         }
     }
 
+    /// A zero-size generated space at `local` (text space), standing for a
+    /// word gap that the producer expressed as a displacement.
+    fn append_in_object_space(
+        &mut self,
+        text_object: TextRunId,
+        font: FontId,
+        matrix: Matrix,
+        local: Point,
+    ) {
+        let origin = matrix.apply(local);
+        let char_box = Rect {
+            x0: origin.x,
+            y0: origin.y,
+            x1: origin.x,
+            y1: origin.y,
+        };
+        self.text.push(0x20);
+        self.chars.push(CharInfo {
+            char_type: CharType::Generated,
+            char_code: 0,
+            cid: 0,
+            glyph_id: 0,
+            font,
+            unicode: 0x20,
+            unicode_source: None,
+            origin,
+            char_box,
+            loose_char_box: char_box,
+            matrix,
+            text_object,
+        });
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn append_decoded(
         &mut self,
@@ -670,7 +827,8 @@ impl<'a> Builder<'a> {
         let duplicate_threshold =
             0.07 * font_size.abs() * matrix.a.hypot(matrix.b).max(matrix.c.hypot(matrix.d));
         let duplicate = self.chars.iter().rev().take(7).any(|previous| {
-            previous.char_code == decoded.char_code
+            previous.char_type != CharType::Generated
+                && previous.char_code == decoded.char_code
                 && previous.font == font_id
                 && (previous.origin.x - origin.x).abs() < duplicate_threshold
                 && (previous.origin.y - origin.y).abs() < duplicate_threshold
@@ -720,9 +878,81 @@ impl<'a> Builder<'a> {
     }
 }
 
+/// PDFium's `CalculateBaseSpace`: the part of every inter-glyph gap that is
+/// uniform letter-spacing (`Tc`) rather than a word boundary, in unscaled
+/// text units. Zero unless the run sets a character spacing.
+fn base_space(
+    run: &pdf_content::semantic::TextRun,
+    font: &pdf_content::semantic::SemFont,
+    font_size: f64,
+) -> f64 {
+    if run.char_spacing == 0.0 {
+        return 0.0;
+    }
+    let mut items = 0usize;
+    let mut all_chars = true;
+    let mut base = run.char_spacing;
+    for element in run.elements.iter() {
+        match element {
+            TextElement::Adjust(value) => {
+                items += 1;
+                all_chars = false;
+                base = base.min(-value / 1000.0 * font_size + run.char_spacing);
+            }
+            TextElement::Show(bytes) => items += font.metrics.decode(bytes).len(),
+        }
+    }
+    if items < 3 || base < 0.0 || (items == 3 && !all_chars) {
+        0.0
+    } else {
+        base
+    }
+}
+
+/// Half the advance of the font's own space glyph, in unscaled text units,
+/// or zero when the font has no usable one (the caller then derives a
+/// threshold from the width of the glyph being placed).
+fn space_glyph_threshold(font: &pdf_content::semantic::SemFont, font_size: f64) -> f64 {
+    if !matches!(*font.metrics, pdf_font::FontMetrics::Simple(_)) {
+        return 0.0;
+    }
+    let is_space = font
+        .unicode_map
+        .get(32)
+        .is_some_and(|mapping| mapping.utf16.as_ref() == [0x20]);
+    if !is_space {
+        return 0.0;
+    }
+    let advance = font
+        .metrics
+        .decode(&[32])
+        .first()
+        .map_or(0.0, |decoded| decoded.advance as f64);
+    let threshold = font_size * advance / 1000.0;
+    if threshold <= 0.0 || threshold > font_size / 3.0 {
+        0.0
+    } else {
+        threshold / 2.0
+    }
+}
+
+/// PDFium's `NormalizeThreshold(width, 300, 500, 700)`: the fraction of a
+/// glyph's advance (thousandths of an em) that a gap must reach to count as
+/// a word boundary when the font has no space glyph to measure against.
+fn normalize_threshold(advance: f64) -> f64 {
+    if advance < 300.0 {
+        advance / 2.0
+    } else if advance < 500.0 {
+        advance / 4.0
+    } else if advance < 700.0 {
+        advance / 5.0
+    } else {
+        advance / 6.0
+    }
+}
+
 fn glyph_box(
-    program: Option<&pdf_font::FontProgram>,
-    glyph_id: u32,
+    outline_bounds: Option<[f32; 4]>,
     font_bbox: Option<[f64; 4]>,
     type3_matrix: Option<Matrix>,
     x: f64,
@@ -746,10 +976,7 @@ fn glyph_box(
         );
         return glyph_bounds.normalized();
     }
-    if let Some([x0, y0, x1, y1]) = program
-        .and_then(|font| font.outline(glyph_id))
-        .and_then(|outline| outline.bounds())
-    {
+    if let Some([x0, y0, x1, y1]) = outline_bounds {
         let scale = font_size / upem;
         return Rect {
             x0: x + x0 as f64 * scale * horizontal_scale,
@@ -839,11 +1066,22 @@ fn finish_object_line(mut objects: Vec<Vec<CharInfo>>, display: Matrix) -> Vec<C
         if let (Some(previous), Some(current)) = (line.last(), object.first()) {
             let previous_box = transform_rect(previous.char_box, display);
             let current_box = transform_rect(current.char_box, display);
-            let gap = current_box.x0 - previous_box.x1;
-            // PDFium's threshold is font-metric based and deliberately
-            // conservative; a normal one-glyph advance must not invent a
-            // separator between adjacent text-show operators.
-            let threshold = char_width(previous).max(char_width(current));
+            // Measured between advance boxes, so side bearings are not part
+            // of the gap: glyphs set one after another by separate show
+            // operators sit at a gap of zero, give or take a kern. A word gap
+            // is a quarter of the wider advance or more (PDFium's
+            // `ProcessInsertObject`); a justified word space shrinks to about
+            // a fifth of an em, half the advance of a lowercase letter.
+            let previous_advance = transform_rect(previous.loose_char_box, display);
+            let current_advance = transform_rect(current.loose_char_box, display);
+            let gap = current_advance.x0 - previous_advance.x1;
+            let widest = (previous_advance.x1 - previous_advance.x0)
+                .max(current_advance.x1 - current_advance.x0);
+            let threshold = if widest > 0.0 {
+                widest * 0.25
+            } else {
+                char_width(previous).max(char_width(current))
+            };
             let overlap = previous_box.y0 < current_box.y1 && current_box.y0 < previous_box.y1;
             if overlap
                 && gap > threshold

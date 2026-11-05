@@ -4,8 +4,11 @@
 pub mod bounds;
 pub mod cache;
 pub mod commands;
+pub mod deadline;
+pub mod objects;
 pub mod open;
 pub mod pages;
+pub mod parallel;
 pub mod schema;
 pub mod views;
 

@@ -23,6 +23,9 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 png = { workspace = true }
 image = { workspace = true }
+jpeg-encoder = { workspace = true }
+base64 = "0.22"
+regex = "1"
 # PP-OCR (pure Rust, on lege-gpu) is the Linux/macOS backend `default_engine()`
 # already prefers. Requesting `tesseract-ocr` here pulled `tesseract` ->
 # `leptonica-sys`, whose build script needs pkg-config plus system leptonica —

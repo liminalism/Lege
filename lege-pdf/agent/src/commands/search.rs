@@ -1,3 +1,4 @@
+use std::ops::ControlFlow;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -6,284 +7,359 @@ use pdf_document::DocumentSnapshot;
 use pdf_text::TextPageOptions;
 
 use crate::bounds::Bounds;
+use crate::commands::matching::{Query, QueryOptions, Span, excerpt};
 use crate::commands::text::{self, OcrMode, TextLayout};
-use crate::commands::{default_annotations, emit_failed, page_compiler, resolve_snapshot};
+use crate::commands::{PageOutcome, emit_failed, for_pages, resolve_snapshot};
 use crate::open::DocumentIdentity;
-use crate::pages::{PageZero, parse_page_range};
-use crate::schema::{Envelope, OutputMode};
-use crate::views::search::{MatchView, SearchPageData};
+use crate::pages::{PageZero, parse_scan_range};
+use crate::schema::{Envelope, OutputMode, Status};
+use crate::views::search::{MatchView, SearchPageData, SearchSummary};
 use crate::views::text::WordView;
 
 #[derive(Debug)]
 pub struct SearchArgs<'a> {
     pub path: &'a Path,
     pub password: Option<&'a str>,
-    pub query: &'a str,
     pub pages: Option<&'a str>,
-    pub context: usize,
-    pub case_insensitive: bool,
-    pub ocr: OcrMode,
-    pub ocr_language: &'a str,
-    pub system_fonts: bool,
-    pub bounds: Bounds,
+    pub spec: SearchSpec<'a>,
     pub fail_fast: bool,
     pub output: OutputMode,
     pub snapshot: Option<Arc<DocumentSnapshot>>,
     pub identity: Option<DocumentIdentity>,
 }
 
+/// What to look for and how much of it to return.
+#[derive(Debug, Clone, Copy)]
+pub struct SearchSpec<'a> {
+    pub query: &'a str,
+    pub options: QueryOptions,
+    /// Characters of surrounding text returned with each match.
+    pub context: usize,
+    /// Stop after this many matches in total (0 = no limit).
+    pub max_matches: usize,
+    pub ocr: OcrMode,
+    pub ocr_language: &'a str,
+    pub system_fonts: bool,
+    pub bounds: Bounds,
+}
+
+/// One thing a search run reports as it goes.
+#[derive(Debug)]
+pub enum SearchEvent {
+    /// A page with at least one match.
+    Page(PageZero, SearchPageData, Vec<String>),
+    /// A page that could not be read.
+    Failed(PageZero, String, Vec<String>),
+}
+
 pub fn run(args: SearchArgs<'_>) -> Result<i32> {
-    if args.query.is_empty() {
-        anyhow::bail!("search query must not be empty");
-    }
     let (identity, snapshot) =
         resolve_snapshot(args.path, args.password, args.snapshot, args.identity)?;
     let document = identity.display_path();
-    let mut global_warnings = Vec::new();
-    let (page_indices, range_warnings) =
-        parse_page_range(args.pages, snapshot.page_count(), args.bounds.max_pages)?;
-    global_warnings.extend(range_warnings);
+    // Searching reads every page it is pointed at: only a page limit the
+    // caller asked for applies, never the default one for bulky output.
+    let scan = parse_scan_range(
+        args.pages,
+        snapshot.page_count(),
+        args.spec.bounds.scan_pages,
+    )?;
+    let page_indices = scan.pages;
+    let mode = args.output;
+    let mut first_warnings = Some(scan.warnings);
 
-    let mut exit = 0i32;
-    let multi = true; // search is always multi-record friendly
-
-    // Built once for the whole run: `page_compiler` re-scans every system
-    // font directory under `--system-fonts`, and the OCR backend starts with
-    // cold glyph/image caches, so neither belongs inside the page loop.
-    let compiler = page_compiler(args.system_fonts, default_annotations());
-    let mut ocr_backend = None;
-
-    for pz in &page_indices {
-        let mut warnings = global_warnings.clone();
-        match search_page(
-            &snapshot,
-            *pz,
-            &compiler,
-            args.query,
-            args.context,
-            args.case_insensitive,
-            args.ocr,
-            args.ocr_language,
-            &args.bounds,
-            &mut warnings,
-            &mut ocr_backend,
-        ) {
-            Ok(data) => {
-                // Skip empty pages in human mode noise reduction, but always emit JSONL.
-                if data.match_count == 0 && matches!(args.output, OutputMode::Human) {
-                    continue;
+    let mut summary = search_pages(&snapshot, &page_indices, &args.spec, |event| {
+        match event {
+            SearchEvent::Page(pz, data, mut warnings) => {
+                if let Some(mut first) = first_warnings.take() {
+                    first.append(&mut warnings);
+                    warnings = first;
                 }
                 let env =
                     Envelope::page_ok(&document, pz.one_based(), serde_json::to_value(&data)?)
                         .with_warnings(warnings);
-                emit(&env, &data, args.output, multi)?;
+                emit(&env, &data, mode)?;
             }
-            Err(err) => {
-                let env = Envelope::page_failed(&document, pz.one_based(), err.to_string());
-                emit_failed(&env, args.output, multi)?;
+            SearchEvent::Failed(pz, error, warnings) => {
+                let env =
+                    Envelope::page_failed(&document, pz.one_based(), error).with_warnings(warnings);
+                emit_failed(&env, mode, true)?;
                 if args.fail_fast {
-                    return Ok(1);
+                    return Ok(ControlFlow::Break(()));
                 }
-                exit = 1;
             }
         }
+        Ok(ControlFlow::Continue(()))
+    })?;
+
+    summary.limited(scan.selected, scan.next_page);
+    let mut warnings = first_warnings.take().unwrap_or_default();
+    warnings.extend(summary.notes());
+    let failed = summary.pages_failed > 0 || summary.timed_out;
+    match mode {
+        OutputMode::Human => {
+            for warning in &warnings {
+                eprintln!("warning: {warning}");
+            }
+            eprintln!(
+                "{} match{} on {} page{} ({} searched)",
+                summary.match_count,
+                if summary.match_count == 1 { "" } else { "es" },
+                summary.pages_with_matches,
+                if summary.pages_with_matches == 1 {
+                    ""
+                } else {
+                    "s"
+                },
+                summary.pages_searched,
+            );
+        }
+        OutputMode::Json | OutputMode::Jsonl => {
+            let truncated = summary.truncated;
+            let env = Envelope::ok(&document, serde_json::json!({ "summary": summary }))
+                .with_warnings(warnings)
+                .set_status(if truncated {
+                    Status::Truncated
+                } else {
+                    Status::Ok
+                });
+            env.write_jsonl()?;
+        }
     }
-    Ok(exit)
+    Ok(i32::from(failed))
 }
 
-pub fn search_value(
+/// Search `pages` in parallel, reporting pages with matches (and pages that
+/// failed) to `on` in page order, and return what the run covered.
+///
+/// Pages without a match are counted, not reported: a search of a long
+/// document is a handful of hits, and a record per empty page buries them.
+pub fn search_pages(
     snapshot: &DocumentSnapshot,
-    page_one: u32,
-    query: &str,
-    context: usize,
-    case_insensitive: bool,
-    system_fonts: bool,
-    bounds: Bounds,
-    ocr: OcrMode,
-    ocr_language: &str,
-) -> Result<serde_json::Value> {
-    let pz = crate::pages::to_zero_based(page_one, snapshot.page_count())?;
-    let mut warnings = Vec::new();
-    let compiler = page_compiler(system_fonts, default_annotations());
-    let mut ocr_backend = None;
-    let data = search_page(
-        snapshot,
-        pz,
-        &compiler,
-        query,
-        context,
-        case_insensitive,
-        ocr,
-        ocr_language,
-        &bounds,
-        &mut warnings,
-        &mut ocr_backend,
-    )?;
-    Ok(serde_json::to_value(data)?)
+    pages: &[PageZero],
+    spec: &SearchSpec<'_>,
+    mut on: impl FnMut(SearchEvent) -> Result<ControlFlow<()>>,
+) -> Result<SearchSummary> {
+    let query = Query::new(spec.query, spec.options)?;
+    let mut summary = SearchSummary {
+        query: spec.query.to_owned(),
+        pages_selected: pages.len(),
+        ..SearchSummary::default()
+    };
+    // Per page, never more than the run may still return in total.
+    let page_limit = match (spec.bounds.max_items as usize, spec.max_matches) {
+        (0, limit) | (limit, 0) => limit,
+        (items, matches) => items.min(matches),
+    };
+    let mut failure: Option<anyhow::Error> = None;
+
+    for_pages(
+        pages,
+        // OCR goes through one engine; its pages are not run side by side.
+        if spec.ocr == OcrMode::Never {
+            spec.bounds.threads
+        } else {
+            1
+        },
+        || text::PageState::new(spec.system_fonts),
+        |state, pz, warnings| search_page(snapshot, pz, state, &query, spec, page_limit, warnings),
+        |index, pz, outcome, warnings| {
+            let step = || -> Result<ControlFlow<()>> {
+                let (mut data, cut) = match outcome {
+                    PageOutcome::Done(found) => found,
+                    PageOutcome::TimedOut => {
+                        summary.timed_out = true;
+                        summary.stop(pz.one_based(), crate::deadline::message(index, pages.len()));
+                        return Ok(ControlFlow::Break(()));
+                    }
+                    PageOutcome::Failed(error) => {
+                        summary.pages_searched += 1;
+                        summary.pages_failed += 1;
+                        return on(SearchEvent::Failed(pz, format!("{error:#}"), warnings));
+                    }
+                };
+                summary.pages_searched += 1;
+                if data.provenance.page_content_kind == "scanned-image"
+                    && data.provenance.source == "native"
+                {
+                    summary.pages_without_text += 1;
+                }
+                if data.matches.is_empty() {
+                    summary.keep_notes(pz, warnings);
+                    return Ok(ControlFlow::Continue(()));
+                }
+
+                // The run's allowance, not just the page's.
+                let (mut reached, mut resume_here) = (false, false);
+                if spec.max_matches > 0 {
+                    let left = spec.max_matches - summary.match_count;
+                    if data.matches.len() > left {
+                        data.matches.truncate(left);
+                        data.match_count = left;
+                        (reached, resume_here) = (true, true);
+                    } else if data.matches.len() == left {
+                        resume_here = cut;
+                        reached = cut || index + 1 < pages.len();
+                    }
+                }
+                let mut warnings = warnings;
+                if cut && !reached {
+                    warnings.push(format!(
+                        "matches on this page truncated to max-items={}",
+                        spec.bounds.max_items
+                    ));
+                }
+                summary.match_count += data.matches.len();
+                summary.pages_with_matches += 1;
+                let flow = on(SearchEvent::Page(pz, data, warnings))?;
+                if reached {
+                    let next = if resume_here || index + 1 >= pages.len() {
+                        pz.one_based()
+                    } else {
+                        pages[index + 1].one_based()
+                    };
+                    summary.stop(
+                        next,
+                        format!("match limit max-matches={} reached", spec.max_matches),
+                    );
+                    return Ok(ControlFlow::Break(()));
+                }
+                Ok(flow)
+            };
+            match step() {
+                Ok(flow) => flow,
+                Err(error) => {
+                    failure = Some(error);
+                    ControlFlow::Break(())
+                }
+            }
+        },
+    );
+
+    match failure {
+        Some(error) => Err(error),
+        None => Ok(summary),
+    }
 }
 
-#[allow(clippy::too_many_arguments)]
+/// The matches on one page, and whether `limit` cut them short.
 fn search_page(
     snapshot: &DocumentSnapshot,
     pz: PageZero,
-    compiler: &pdf_content::PageCompiler,
-    query: &str,
-    context: usize,
-    case_insensitive: bool,
-    ocr: OcrMode,
-    ocr_language: &str,
-    bounds: &Bounds,
+    state: &mut text::PageState,
+    query: &Query,
+    spec: &SearchSpec<'_>,
+    limit: usize,
     warnings: &mut Vec<String>,
-    ocr_backend: &mut Option<pdf_render_cpu::CpuBackend>,
-) -> Result<SearchPageData> {
+) -> Result<(SearchPageData, bool)> {
     let extracted = text::extract_page(
         snapshot,
-        compiler,
+        &state.compiler,
         pz,
         &TextPageOptions::default(),
         TextLayout::Words,
         None,
-        ocr,
-        ocr_language,
-        bounds,
+        spec.ocr,
+        spec.ocr_language,
+        &spec.bounds,
         warnings,
-        ocr_backend,
+        &mut state.ocr_backend,
+        &mut state.glyphs,
     )?;
-    let haystack = extracted.text.clone().unwrap_or_default();
+    let haystack = extracted.text.as_deref().unwrap_or_default();
     let words = extracted.words.as_deref().unwrap_or_default();
-
-    let matches = find_matches(
-        &haystack,
-        words,
-        query,
-        context,
-        case_insensitive,
-        bounds,
-        warnings,
-    );
-
-    let match_count = matches.len();
-    Ok(SearchPageData {
-        unit: "pdf_points",
-        query: query.to_owned(),
-        match_count,
-        matches,
-        provenance: extracted.provenance,
-    })
+    let (matches, cut) = find_matches(haystack, words, query, spec.context, limit);
+    Ok((
+        SearchPageData {
+            unit: "pdf_points",
+            query: spec.query.to_owned(),
+            match_count: matches.len(),
+            matches,
+            provenance: extracted.provenance,
+        },
+        cut,
+    ))
 }
 
-/// Find every occurrence of `query` in `haystack`, honoring `case_insensitive`
-/// and expanding `context` characters (not bytes) on each side.
+/// Every match of `query` in `haystack`, with `context` characters (not
+/// bytes) of surrounding text and the box of the words it covers.
 ///
-/// Works entirely in character space so slicing is always char-boundary safe
-/// and `first_char`/`char_count` stay exact: byte offsets from a *separately
-/// lowercased* copy of `haystack` cannot be trusted against the original
-/// string, because case folding is not byte-length-preserving (e.g. `İ`
-/// U+0130 folds to two characters, `i` + combining dot above). Each match's
-/// character offset is read directly off the single forward scan rather than
-/// recomputed with `haystack[..idx].chars().count()`, which would make the
-/// whole page scan O(n) per match (quadratic overall on match-heavy pages).
+/// `first_char` and `char_count` index the characters of `haystack` itself,
+/// whatever folding the query needed, so they line up with the `words` and
+/// `chars` layouts of the same page.
 fn find_matches(
     haystack: &str,
     words: &[WordView],
-    query: &str,
+    query: &Query,
     context: usize,
-    case_insensitive: bool,
-    bounds: &Bounds,
-    warnings: &mut Vec<String>,
-) -> Vec<MatchView> {
-    let fold = |c: char| -> char {
-        if case_insensitive {
-            c.to_lowercase().next().unwrap_or(c)
-        } else {
-            c
-        }
-    };
-
-    // (byte_offset, char) for every character; index into this vec is the
-    // character offset used throughout.
-    let hay_chars: Vec<(usize, char)> = haystack.char_indices().collect();
-    let hay_fold: Vec<char> = hay_chars.iter().map(|&(_, c)| fold(c)).collect();
-    let q_fold: Vec<char> = query.chars().map(fold).collect();
-
-    let byte_at = |char_idx: usize| -> usize {
-        hay_chars
-            .get(char_idx)
-            .map(|&(o, _)| o)
-            .unwrap_or(haystack.len())
-    };
-
-    let mut matches = Vec::new();
-    let n = hay_fold.len();
-    let m = q_fold.len();
-    if m == 0 {
-        return matches;
+    limit: usize,
+) -> (Vec<MatchView>, bool) {
+    let (spans, cut) = query.find(haystack, limit);
+    if spans.is_empty() {
+        return (Vec::new(), cut);
     }
-
-    let mut start_char = 0usize;
-    while start_char + m <= n {
-        if hay_fold[start_char..start_char + m] == q_fold[..] {
-            let end_char = start_char + m;
-            let idx = byte_at(start_char);
-            let end = byte_at(end_char);
-
-            let ctx_start_char = start_char.saturating_sub(context);
-            let ctx_end_char = (end_char + context).min(n);
-            let ctx_start = byte_at(ctx_start_char);
-            let ctx_end = byte_at(ctx_end_char);
-
-            let first_char = start_char;
-            let char_count = m;
-            let bbox = words
-                .iter()
-                .find(|w| {
-                    let w_end = w.first_char + w.char_count;
-                    w.first_char < first_char + char_count && w_end > first_char
-                })
-                .map(|w| w.bbox);
-
-            matches.push(MatchView {
-                text: haystack[idx..end].to_owned(),
-                context: haystack[ctx_start..ctx_end].to_owned(),
-                bbox,
-                first_char,
-                char_count,
-            });
-
-            start_char = end_char.max(start_char + 1);
-            if bounds.max_items > 0 && matches.len() as u32 >= bounds.max_items {
-                warnings.push(format!(
-                    "matches truncated to max-items={}",
-                    bounds.max_items
-                ));
-                break;
+    let chars: Vec<char> = haystack.chars().collect();
+    let matches = spans
+        .into_iter()
+        .map(|span| {
+            let (text, context) = excerpt(&chars, span, context);
+            MatchView {
+                text,
+                // A contents line is mostly leader dots.
+                context: crate::views::tidy_line(&context),
+                bbox: covering_box(words, span),
+                first_char: span.first_char,
+                char_count: span.char_count,
             }
-        } else {
-            start_char += 1;
-        }
-    }
-
-    matches
+        })
+        .collect();
+    (matches, cut)
 }
 
-fn emit(env: &Envelope, data: &SearchPageData, mode: OutputMode, _multi: bool) -> Result<()> {
+/// The box around every word a match touches: for a phrase, the whole
+/// phrase, not just its first word.
+fn covering_box(words: &[WordView], span: Span) -> Option<[f64; 4]> {
+    let end = span.first_char + span.char_count;
+    let mut covered = words
+        .iter()
+        .filter(|word| word.first_char < end && word.first_char + word.char_count > span.first_char)
+        .map(|word| word.bbox);
+    let first = covered.next()?;
+    Some(covered.fold(first, |a, b| {
+        [
+            a[0].min(b[0]),
+            a[1].min(b[1]),
+            a[2].max(b[2]),
+            a[3].max(b[3]),
+        ]
+    }))
+}
+
+fn emit(env: &Envelope, data: &SearchPageData, mode: OutputMode) -> Result<()> {
     match mode {
         OutputMode::Human => {
-            for m in &data.matches {
-                println!(
-                    "page {}: {:?} context={:?} bbox={:?}",
-                    env.page.unwrap_or(0),
-                    m.text,
-                    m.context,
-                    m.bbox
-                );
+            let page = env.page.unwrap_or(0);
+            for found in &data.matches {
+                println!("{}", match_line(page, found));
             }
-            for w in &env.warnings {
-                eprintln!("warning: {w}");
+            for warning in &env.warnings {
+                eprintln!("warning: {warning}");
             }
             Ok(())
         }
         OutputMode::Json | OutputMode::Jsonl => env.write_jsonl(),
+    }
+}
+
+/// `p.12 [72,540.1,210.3,552]: text around the match`
+pub(crate) fn match_line(page: u32, found: &MatchView) -> String {
+    match found.bbox {
+        Some(bbox) => format!(
+            "p.{page} [{}]: {}",
+            bbox.map(|edge| crate::views::round2(edge).to_string())
+                .join(","),
+            found.context
+        ),
+        None => format!("p.{page}: {}", found.context),
     }
 }
 
@@ -299,17 +375,25 @@ mod tests {
         context: usize,
         case_insensitive: bool,
     ) -> Vec<MatchView> {
-        let bounds = Bounds::default();
-        let mut warnings = Vec::new();
-        find_matches(
-            haystack,
-            &[],
+        let query = Query::new(
             query,
-            context,
-            case_insensitive,
-            &bounds,
-            &mut warnings,
+            QueryOptions {
+                case_insensitive,
+                ..QueryOptions::default()
+            },
         )
+        .expect("query");
+        find_matches(haystack, &[], &query, context, 0).0
+    }
+
+    fn word(text: &str, bbox: [f64; 4], first_char: usize) -> WordView {
+        WordView {
+            text: text.to_owned(),
+            bbox,
+            first_char,
+            char_count: text.chars().count(),
+            continued: false,
+        }
     }
 
     /// Non-ASCII text around a match must never panic, and `context` must be
@@ -325,7 +409,7 @@ mod tests {
         assert_eq!(m.text, "café");
         assert_eq!(m.first_char, 5);
         assert_eq!(m.char_count, 4);
-        // 2 chars of context on each side: "r" + "café" + " i".
+        // 2 chars of context on each side, trimmed: "r" + "café" + " i".
         assert_eq!(m.context, "r café i");
     }
 
@@ -344,11 +428,8 @@ mod tests {
         assert_eq!(m.char_count, 4);
     }
 
-    /// Each match's character offset must come from the single incremental
-    /// scan (O(1) per match), not from re-scanning `haystack[..idx]` with
-    /// `.chars().count()` for every match found so far.
     #[test]
-    fn repeated_matches_get_correct_incremental_char_offsets() {
+    fn repeated_matches_get_correct_char_offsets() {
         let haystack = "café one café two café three";
         let found = matches_for(haystack, "café", 0, false);
         let first_chars: Vec<usize> = found.iter().map(|m| m.first_char).collect();
@@ -359,21 +440,40 @@ mod tests {
         }
     }
 
-    /// Word bboxes are looked up by character offset; confirm that lookup
-    /// still resolves correctly against the fixed char-based offsets.
+    /// Word boxes are looked up by character offset, and a phrase gets the
+    /// box around all of its words, across a line break too.
     #[test]
-    fn bbox_lookup_uses_character_offsets() {
-        let words = [WordView {
-            text: "café".to_owned(),
-            bbox: [1.0, 2.0, 3.0, 4.0],
-            first_char: 0,
-            char_count: 4,
-            continued: false,
-        }];
-        let bounds = Bounds::default();
-        let mut warnings = Vec::new();
-        let found = find_matches("café", &words, "café", 0, false, &bounds, &mut warnings);
+    fn a_match_is_boxed_by_every_word_it_covers() {
+        let haystack = "the halftone\r\nregion here";
+        let words = [
+            word("the", [10.0, 100.0, 25.0, 110.0], 0),
+            word("halftone", [28.0, 100.0, 70.0, 110.0], 4),
+            word("region", [10.0, 88.0, 40.0, 98.0], 14),
+            word("here", [43.0, 88.0, 60.0, 98.0], 21),
+        ];
+        let query = Query::new("halftone region", QueryOptions::default()).expect("query");
+        let (found, _) = find_matches(haystack, &words, &query, 0, 0);
         assert_eq!(found.len(), 1);
-        assert_eq!(found[0].bbox, Some([1.0, 2.0, 3.0, 4.0]));
+        assert_eq!(found[0].text, "halftone region");
+        assert_eq!(found[0].bbox, Some([10.0, 88.0, 70.0, 110.0]));
+
+        let query = Query::new("the", QueryOptions::default()).expect("query");
+        let (found, _) = find_matches(haystack, &words, &query, 0, 0);
+        assert_eq!(found[0].bbox, Some([10.0, 100.0, 25.0, 110.0]));
+    }
+
+    #[test]
+    fn a_match_line_reads_as_page_box_and_context() {
+        let found = MatchView {
+            text: "café".into(),
+            context: "your café is".into(),
+            bbox: Some([72.0, 540.126, 210.3, 552.0]),
+            first_char: 5,
+            char_count: 4,
+        };
+        assert_eq!(
+            match_line(12, &found),
+            "p.12 [72,540.13,210.3,552]: your café is"
+        );
     }
 }

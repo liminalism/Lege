@@ -49,6 +49,43 @@ fn clean_document_reports_ok() {
     assert!(summary.contains("pages: 2"), "{summary}");
 }
 
+/// A caller showing two pages of a long document pays for two pages: the
+/// report covers the pages named, in the order named, and says about each
+/// exactly what the whole-document report says.
+#[test]
+fn an_open_document_can_be_examined_for_selected_pages_only() {
+    let bytes = builder::multipage_classic(5);
+    let whole = examine_bytes(bytes.clone());
+    assert_eq!(whole.pages.len(), 5);
+
+    let source: Arc<dyn PdfSource> = Arc::new(OwnedBytesSource::new(bytes));
+    let snapshot =
+        pdf_document::DocumentSnapshot::open(source, DocumentLimits::default()).expect("open");
+    let some = pdf_read::examine_snapshot(&snapshot, Some(&[3, 1]));
+    assert!(
+        matches!(some.open, OpenOutcome::Ok),
+        "open: {:?}",
+        some.open
+    );
+    assert_eq!(
+        some.pages.iter().map(|page| page.index).collect::<Vec<_>>(),
+        vec![3, 1]
+    );
+    for page in &some.pages {
+        assert_eq!(
+            format!("{page:?}"),
+            format!("{:?}", whole.pages[page.index as usize])
+        );
+    }
+    // What is not per-page is unaffected by the selection.
+    assert_eq!(some.xref.revision_count, whole.xref.revision_count);
+    assert_eq!(some.annotations.total(), whole.annotations.total());
+
+    // No selection is every page, as `examine` reports them.
+    let all = pdf_read::examine_snapshot(&snapshot, None);
+    assert_eq!(format!("{:?}", all.pages), format!("{:?}", whole.pages));
+}
+
 #[test]
 fn object_streams_are_detected() {
     let report = examine_bytes(builder::xref_stream_fixture(1));

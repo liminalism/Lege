@@ -148,6 +148,66 @@ fn separate_text_objects_are_sorted_and_receive_generated_separators() {
     );
 }
 
+/// A font switch in mid-line splits the line into show operators, with the
+/// word gap between them a move of the text position: a third of an em, less
+/// than the width of the letters either side. Operators set one after the
+/// other, or kerned together, are one word.
+#[test]
+fn a_word_gap_between_show_operators_is_a_space_and_a_kern_is_not() {
+    // Helvetica at 10 points: "(or" is 12.22 points wide, "em" 13.89.
+    let page = extract(simple_page(
+        b"BT /F1 10 Tf \
+          1 0 0 1 20 100 Tm (\\(or) Tj \
+          1 0 0 1 35.22 100 Tm (embedded\\)) Tj \
+          1 0 0 1 20 70 Tm (em) Tj \
+          1 0 0 1 33.69 70 Tm (bed) Tj \
+          1 0 0 1 50.57 70 Tm (ded) Tj ET",
+    ));
+    assert_eq!(page.all_text(), "(or embedded)\r\nembedded");
+}
+
+/// TeX, dvips and Distiller output carries no space glyphs: a word gap is a
+/// `TJ` displacement inside one show operator. Kerning pairs use the same
+/// operand at a smaller magnitude, in either direction, and must not split
+/// a word.
+#[test]
+fn tj_displacements_wide_enough_to_be_word_gaps_generate_spaces() {
+    let page = extract(simple_page(
+        b"BT /F1 12 Tf 10 100 Td \
+          [(High)-296(Per)15(for)-20(mance)-299(Scal)40(able)] TJ ET",
+    ));
+    assert_eq!(page.all_text(), "High Performance Scalable");
+    let words = page.words();
+    assert_eq!(
+        words
+            .iter()
+            .map(|word| word.text.as_str())
+            .collect::<Vec<_>>(),
+        vec!["High", "Performance", "Scalable"]
+    );
+    assert!(words[0].bbox.x1 < words[1].bbox.x0);
+    assert_eq!(
+        page.chars()
+            .iter()
+            .filter(|info| info.char_type == CharType::Generated)
+            .count(),
+        2
+    );
+}
+
+/// A displacement next to a real space glyph adds nothing, and uniform
+/// letter-spacing (`Tc`) is not a run of word gaps.
+#[test]
+fn literal_spaces_and_letter_spacing_do_not_gain_generated_spaces() {
+    let page = extract(simple_page(
+        b"BT /F1 12 Tf 10 100 Td [(one )-300(two)-300( three)] TJ ET",
+    ));
+    assert_eq!(page.all_text(), "one two three");
+
+    let page = extract(simple_page(b"BT /F1 12 Tf 6 Tc 10 100 Td (SPACED) Tj ET"));
+    assert_eq!(page.all_text(), "SPACED");
+}
+
 #[test]
 fn pdf_doc_encoding_actual_text_is_decoded_and_normalized() {
     let page = extract(simple_page(

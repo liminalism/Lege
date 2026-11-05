@@ -459,13 +459,25 @@ pub fn examine_with_password(
     let mut audit_limits = limits.clone();
     audit_limits.preserve_section_entries = true;
     match DocumentSnapshot::open_with_password(Arc::clone(&source), audit_limits, password) {
-        Ok(snapshot) => examine_open(&snapshot),
+        Ok(snapshot) => examine_snapshot(&snapshot, None),
         Err(err) => examine_failed(source, limits, err.to_string()),
     }
 }
 
-/// The happy path: the snapshot opened (possibly with recovery).
-fn examine_open(snapshot: &DocumentSnapshot) -> DocumentReport {
+/// Report on a document the caller has already opened (possibly with
+/// recovery), without parsing it a second time.
+///
+/// `pages` limits the per-page work to those zero-based indices; `None`
+/// examines every page. Compiling a page is by far the most expensive part of
+/// a report, so a caller that shows a few pages of a long document should
+/// name them. [`DocumentReport::pages`] then holds only those pages, in the
+/// order given, and [`DocumentReport::fonts`] / [`DocumentReport::images`]
+/// cover only them. Everything else is document-wide either way.
+///
+/// The xref section facts carry per-section entries only if the snapshot was
+/// opened with `DocumentLimits::preserve_section_entries`, as
+/// [`examine_with_password`] does.
+pub fn examine_snapshot(snapshot: &DocumentSnapshot, pages: Option<&[u32]>) -> DocumentReport {
     let recovery = snapshot.recovery_events();
     let open = if recovery.is_empty() {
         OpenOutcome::Ok
@@ -486,7 +498,7 @@ fn examine_open(snapshot: &DocumentSnapshot) -> DocumentReport {
     let mut ctx = ParseContext::new();
     let encryption = read_encryption(snapshot, &mut ctx);
     let linearized = detect_linearized(snapshot, &mut ctx);
-    let (pages, fonts, images) = examine_pages(snapshot);
+    let (pages, fonts, images) = examine_pages(snapshot, pages);
     let annotations = inventory_annotations(snapshot, &mut ctx);
     let features = read_features(snapshot, &mut ctx);
     let identity = read_identity(snapshot, &mut ctx);
@@ -1228,17 +1240,26 @@ fn crypt_filter_is_aes(
 
 fn examine_pages(
     snapshot: &DocumentSnapshot,
+    selected: Option<&[u32]>,
 ) -> (Vec<PageStatus>, Vec<FontRecord>, Vec<ImageRecord>) {
+    let every_page: Vec<u32>;
+    let indices = match selected {
+        Some(indices) => indices,
+        None => {
+            every_page = (0..snapshot.page_count()).collect();
+            &every_page
+        }
+    };
     // Annotations on: the render default is `AnnotationMode::StaticAppearances`,
     // so the doctor's per-page compile health must exercise the same path a
     // default render would (annotation appearance streams included).
     let compiler = PageCompiler::new().with_annotations(true);
-    let mut out = Vec::with_capacity(snapshot.page_count() as usize);
+    let mut out = Vec::with_capacity(indices.len());
     // One inventory for the whole document: it carries the dedup indexes and
     // the `/FontFile*` answers across pages, so a font shared by every page is
     // keyed and resolved once rather than once per page.
     let mut inventory = metrics::Inventory::new();
-    for index in 0..snapshot.page_count() {
+    for &index in indices {
         // Fresh context per page: repairs and budgets attribute to the page.
         let mut ctx = ParseContext::new();
         let media_box_present = page_has_media_box(snapshot, index, &mut ctx);

@@ -3108,6 +3108,24 @@ record lege-ecosystem.work.layout-vertical-bands-ocr-horizontal/1 : work {
     }
 }
 
+record lege-ecosystem.work.lege-pdf-agent-over-poppler/1 : work {
+    title "Make lege-pdf the PDF tool an agent reaches for before Poppler"
+    state completed
+    scope [
+        path "lege-pdf/agent/**",
+        path "lege-pdf/read/src/text.rs",
+        path "lege-pdf/render/crates/pdf-read/**",
+        path "lege-pdf/render/crates/pdf-text/**"
+    ]
+    intent """
+        An agent given a PDF should prefer lege-pdf to pdftotext/pdftoppm/pdfinfo because it answers the questions agents actually ask in one call, says what each answer covered, and is not slower. Scope of this round: fix the trust-breaking defects found in the scoping pass (crop, stdout, failure records, coverage reporting, timeouts); add map, tolerant and regex search with a coverage summary, physical text layout, tables, annotations (links, comments, form fields), check (preflight), a document-summary inspect with outline and page labels; run page loops in parallel; reshape the MCP server to ten tools that return readable text by default, structured JSON on request, inline images from pdf_render, and character/match budgets with resume cursors; accept Poppler's pdftotext and pdftoppm command lines.
+        """
+    note """
+        Behaviour changes callers must know: default inspect prints the document summary only (per-page detail needs --pages); search JSONL writes only matching pages plus a final summary record; scan commands (search, map, check, annotations, tables) ignore the default 50-page cap and report truncated/next_page under an explicit --max-pages; MCP results are text unless response_format=json; pdf_render no longer requires output; pdf_text without pages reads from page 1 within max_chars; word first_char/char_count now count characters of the page text and a hyphen-continued word is two pieces with one box per line; a page that draws nothing has kind blank. Known limits left open: tables sees whitespace-separated columns only; block detection is the same heuristic as before; pdf-text can join two words across a font switch without a space (seen as '(orembedded)' on taubman2000.pdf p.2); physical layout puts sub/superscripts on rows of their own.
+        """
+    author "dk"
+}
+
 record lege-ecosystem.work.level-local-operation/1 : work {
     title "17. Level-local operation"
     state abandoned

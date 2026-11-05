@@ -66,7 +66,7 @@ pub fn content_value(
     objects: bool,
     system_fonts: bool,
     bounds: Bounds,
-) -> Result<serde_json::Value> {
+) -> Result<(serde_json::Value, Vec<String>)> {
     let mut warnings = Vec::new();
     let want_ops = ops || (!resources && !objects);
     let data = content_page(
@@ -79,7 +79,7 @@ pub fn content_value(
         &bounds,
         &mut warnings,
     )?;
-    Ok(serde_json::to_value(data)?)
+    Ok((serde_json::to_value(data)?, warnings))
 }
 
 #[allow(clippy::too_many_arguments)]

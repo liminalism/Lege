@@ -2694,8 +2694,10 @@ name = "lege-pdf-agent"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64",
  "clap",
  "image",
+ "jpeg-encoder",
  "lege-ocr",
  "lege-pdf-print",
  "pdf-content",
@@ -2711,6 +2713,7 @@ dependencies = [
  "pdf-test-support",
  "pdf-text",
  "png 0.18.1",
+ "regex",
  "serde",
  "serde_json",
  "tempfile",
