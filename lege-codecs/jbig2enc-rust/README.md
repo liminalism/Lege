@@ -232,7 +232,7 @@ See [python/README.md](python/README.md).
 | `symboldict` | yes | Symbol-dictionary encoding (implies `encode`). Without it the encoder is generic-only. |
 | `parallel` | no | Rayon in the measured symbol planner's trial encodes and page serialization. Never enabled implicitly; a document-parallel host should leave it off. |
 | `python` | no | The PyO3 extension module. Built by maturin, not by `cargo build`. |
-| `cli` | no | The `tester` and `halftone_tester` binaries (`clap`, `env_logger`). |
+| `cli` | no | The `tester` and `halftone_tester` development binaries (`clap`, `env_logger`). They live in the repository only and are not part of the published crate, so `cargo install` does not offer them. |
 | `halftone_bin` | no | Image loading for the halftone tool. |
 | `refine` | no | Refinement-related configuration paths. |
 | `trace_encoder`, `trace_arith`, `line_verify` | no | Diagnostics. |

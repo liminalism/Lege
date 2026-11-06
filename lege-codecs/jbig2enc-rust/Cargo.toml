@@ -12,12 +12,15 @@ homepage = "https://github.com/liminalism/lege/tree/main/lege-codecs/jbig2enc-ru
 repository = "https://github.com/liminalism/lege"
 keywords = ["jbig2", "encoder", "compression", "image", "pdf"]
 categories = ["multimedia::encoding", "multimedia::images"]
-# Old external scan inputs stay in the checkout for the explicit legacy hash
-# gate, but are not distributed. Default tests use generated original fixtures.
-# `python/` holds the wheel metadata, stubs and tests for the PyO3 binding
+# The published package is the library only. The `tester` and
+# `halftone_tester` binaries (`src/bin/`), the integration tests, fixtures and
+# benchmarks stay in the repository: `cargo package` drops the `[[bin]]`,
+# `[[test]]` and `[[bench]]` targets whose sources are not included, so
+# crates.io lists no installable binaries for this crate.
+# `python/` holds the wheel metadata and stubs for the PyO3 binding
 # (`src/python.rs`, feature `python`), built with maturin; it ships in the
 # crate package so the published source carries both APIs.
-include = ["Cargo.toml", "Cargo.lock", "/README.md", "NOTICE", "LICENSE-MIT", "LICENSE-APACHE", "build.rs", "src/**", "tests/**/*.rs", "tests/fixtures/*.txt", "tests/fixtures/original/**", "benches/**", "python/pyproject.toml", "python/README.md", "python/jbig2enc.pyi", "python/py.typed", "python/tests/*.py"]
+include = ["Cargo.toml", "Cargo.lock", "/README.md", "NOTICE", "LICENSE-MIT", "LICENSE-APACHE", "build.rs", "src/lib.rs", "src/python.rs", "src/decode/**", "src/encode/**", "src/shared/**", "python/pyproject.toml", "python/README.md", "python/jbig2enc.pyi", "python/py.typed"]
 
 [lib]
 name = "jbig2enc_rust"

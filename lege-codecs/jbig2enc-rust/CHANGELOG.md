@@ -29,6 +29,17 @@ are unchanged.
   was too short for the contexts to diverge; streams up to 10×6 cells of
   40×40 patterns now round-trip. The decoder is unchanged.
 
+### Packaging
+
+- The published crate is the library alone. The `tester` and
+  `halftone_tester` development binaries are no longer packaged, so
+  crates.io no longer offers `cargo install jbig2enc-rust`. The integration
+  tests, fixtures, benchmark, example and Python test suite stay in the
+  repository. The `cli` and `halftone_bin` features remain and only matter
+  in a repository checkout.
+- `Cargo.lock`: `spin` 0.10.0 (yanked; reached only through the optional
+  non-Windows `pprof` profiling dependency) → 0.10.1.
+
 ## 0.6.0 — 2026-11-02
 
 Changes since the last published version, 0.5.4. Published to crates.io on
