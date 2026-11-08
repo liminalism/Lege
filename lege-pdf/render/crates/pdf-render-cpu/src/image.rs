@@ -669,7 +669,10 @@ impl PreparedImage {
     /// draws took the generic per-pixel sampler.
     ///
     /// `None` when the image is not exactly that shape or too large to expand
-    /// (then the generic path runs, unchanged).
+    /// (then the generic path runs, unchanged). That includes a colour-key
+    /// `/Mask`: the key is one `[min, max]` pair tested against the *raw*
+    /// gray sample, and after promotion the image has three components, so
+    /// `color_key_hit` would read the key as malformed and never hide a texel.
     pub(crate) fn gray8_promoted_to_rgb8(&self) -> Option<PreparedImage> {
         // 64 Mpx -> 192 MiB of RGB8, the same ceiling as the CMYK conversion.
         const MAX_PROMOTE_PIXELS: usize = 64 * 1024 * 1024;
@@ -677,6 +680,7 @@ impl PreparedImage {
             || self.bpc != 8
             || self.decode.is_some()
             || self.sample_lut.is_some()
+            || matches!(self.mask, Some(ImageMask::ColorKey(_)))
             || !matches!(self.color_space, ImageColorSpace::Gray)
         {
             return None;
