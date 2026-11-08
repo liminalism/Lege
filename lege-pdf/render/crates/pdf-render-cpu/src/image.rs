@@ -728,14 +728,14 @@ impl PreparedImage {
             || !matches!(self.bpc, 8 | 16)
             || self.sample_lut.is_some()
             || matches!(self.mask, Some(ImageMask::ColorKey(_)))
-            || !matches!(
+            || !(matches!(
                 self.color_space,
                 ImageColorSpace::IccRgb { .. }
                     | ImageColorSpace::IccCmyk { .. }
                     | ImageColorSpace::Lab { .. }
                     | ImageColorSpace::TintLut { .. }
                     | ImageColorSpace::TintLut2 { .. }
-            )
+            ) || self.is_sixteen_bit_device_family())
         {
             return false;
         }
@@ -745,6 +745,23 @@ impl PreparedImage {
         n > 0
             && n <= MAX_PROMOTE_PIXELS
             && self.samples.len() >= self.row_bits() / 8 * self.height as usize
+    }
+
+    /// A 16-bit `DeviceGray` / `DeviceRGB` / `DeviceCMYK` image. The 8-bit
+    /// members of the family have dedicated fast paths; the 16-bit ones used
+    /// to run the generic per-tap loop at every draw (30-250 ns per texel).
+    /// They promote through `pixel()`, which reads the 16-bit samples, applies
+    /// `/Decode` and converts, so the promoted texel is what the generic loop
+    /// computes. Promotion moves such an image onto the RGB8 fast paths, which
+    /// paint an unmasked opaque image's border ring by pixel centre rather than
+    /// by A10 edge coverage; the caller in `prepared.rs` therefore promotes
+    /// these only where that cannot differ (see `ring_unchanged_by_promotion`).
+    pub(crate) fn is_sixteen_bit_device_family(&self) -> bool {
+        self.bpc == 16
+            && matches!(
+                self.color_space,
+                ImageColorSpace::Gray | ImageColorSpace::Rgb | ImageColorSpace::Cmyk
+            )
     }
 
     /// The image with its samples resolved to RGB8 (see
@@ -2422,6 +2439,61 @@ mod tests {
                     let o = (row * w + col) as usize * 3;
                     assert_eq!(&rgb[o..o + 3], &want[..3], "({col},{row}) decode {:?}", image.decode);
                 }
+            }
+        }
+    }
+
+    /// 16-bit DeviceGray / DeviceRGB / DeviceCMYK images promote to RGB8 and
+    /// every promoted texel equals what the generic loop's `pixel()` yields on
+    /// the 16-bit source (with and without `/Decode`). 8-bit members of the
+    /// family are not claimed by the generic promotion.
+    #[test]
+    fn sixteen_bit_device_images_promote_exactly() {
+        let (w, h) = (24u32, 20u32);
+        let mut x = 0x1234_5678_9ABC_DEF1u64;
+        let mut next = move || {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            x
+        };
+        for (space, comps) in [
+            (ImageColorSpace::Gray, 1usize),
+            (ImageColorSpace::Rgb, 3),
+            (ImageColorSpace::Cmyk, 4),
+        ] {
+            let mut samples = Vec::new();
+            for _ in 0..(w * h) as usize * comps {
+                let v = (next() >> 16) as u16;
+                samples.extend_from_slice(&v.to_be_bytes());
+            }
+            // Pin the extremes so 0 and 65535 are exercised.
+            samples[..2].copy_from_slice(&0u16.to_be_bytes());
+            samples[2..4].copy_from_slice(&u16::MAX.to_be_bytes());
+            let decodes: [Option<Vec<[f32; 2]>>; 3] = [
+                None,
+                Some(vec![[1.0, 0.0]; comps]),
+                Some(vec![[0.2, 0.7]; comps]),
+            ];
+            for decode in decodes {
+                let mut image = img(w, h, space.clone(), samples.clone(), None);
+                image.bpc = 16;
+                image.sample_lut = None;
+                image.decode = decode.map(Arc::from);
+                assert!(image.generic_promotion_eligible(), "{space:?}");
+                let promoted = image.generic_promoted_to_rgb8().expect("promotes");
+                assert_eq!(promoted.bpc, 8);
+                for row in 0..h {
+                    for col in 0..w {
+                        let want = image.pixel(col, row).unwrap();
+                        let got = promoted.pixel(col, row).unwrap();
+                        assert_eq!(got[..3], want[..3], "{space:?} ({col},{row}) {:?}", image.decode);
+                    }
+                }
+                // The same family at 8 bits keeps its dedicated paths.
+                let mut eight = image.clone();
+                eight.bpc = 8;
+                assert!(!eight.generic_promotion_eligible());
             }
         }
     }

@@ -2617,7 +2617,8 @@ fn lower_image(
         alpha: to_u8(alpha),
         blend,
     });
-    let prepared = promote_through_cache(out, prepared);
+    let ring_ok = placement_ring_unchanged_by_promotion(&ctm);
+    let prepared = promote_through_cache(out, prepared, ring_ok);
     Some((prepared, bounds))
 }
 
@@ -2646,9 +2647,17 @@ const PROMOTION_CACHE_CODEC: u8 = 0x80;
 fn promote_through_cache(
     out: &CpuPreparedPage,
     prepared: Box<crate::image::PreparedImage>,
+    ring_ok: bool,
 ) -> Box<crate::image::PreparedImage> {
     let indexed = prepared.indexed_promotion_eligible();
     if !indexed && !prepared.generic_promotion_eligible() {
+        return prepared;
+    }
+    // 16-bit device-space images are new to promotion: hold them back where
+    // the RGB8 fast paths would repaint the 1-px border ring differently.
+    let unmasked_opaque =
+        prepared.smask.is_none() && prepared.mask.is_none() && prepared.alpha == 255;
+    if prepared.is_sixteen_bit_device_family() && unmasked_opaque && !ring_ok {
         return prepared;
     }
     let cache = out
@@ -2685,6 +2694,27 @@ fn promote_through_cache(
         );
     }
     Box::new(prepared.with_rgb8_samples(samples))
+}
+
+/// Placement half of "promoting an image to RGB8 cannot change its border
+/// ring" (see `promote_through_cache` for the opacity/mask half).
+///
+/// The RGB8 fast paths apply only to axis-aligned draws, and there an unmasked
+/// opaque image's edge is painted by pixel centre where the generic body paints
+/// A10 fractional coverage. On whole-pixel device edges both agree (no ring),
+/// and rotated or skewed draws take the generic body either way. An
+/// axis-aligned placement with a fractional edge is reported unsafe.
+fn placement_ring_unchanged_by_promotion(ctm: &Matrix) -> bool {
+    let scale = ctm.a.abs().max(ctm.b.abs()).max(ctm.c.abs()).max(ctm.d.abs());
+    let tol = 1e-9 * scale.max(1.0);
+    let whole = |v: f64| (v - v.round()).abs() <= 1e-6;
+    if ctm.b.abs() <= tol && ctm.c.abs() <= tol {
+        whole(ctm.e) && whole(ctm.e + ctm.a) && whole(ctm.f) && whole(ctm.f + ctm.d)
+    } else if ctm.a.abs() <= tol && ctm.d.abs() <= tol {
+        whole(ctm.e) && whole(ctm.e + ctm.c) && whole(ctm.f) && whole(ctm.f + ctm.b)
+    } else {
+        true
+    }
 }
 
 /// The cache identity of a promoted image: see [`promote_through_cache`].
@@ -6958,6 +6988,88 @@ mod image_cache_tests {
         assert_eq!(cache.len(), 3, "palette and /Decode are part of the key");
         assert_ne!(prepared_samples(&repaletted), prepared_samples(&cold));
         assert_ne!(prepared_samples(&decoded), prepared_samples(&cold));
+    }
+
+    /// A 16-bit raw image of the given family, drawn under `placement`.
+    fn sixteen_bit_page(space: ImageColorSpace, comps: usize, placement: Matrix) -> CompiledPage {
+        let mut page = dct_page(jpeg_payload(0));
+        let mut image = page.images[0].clone();
+        image.bits_per_component = 16;
+        image.color_space = space;
+        image.width = 16;
+        image.height = 8;
+        let n = 16 * 8 * comps;
+        let mut samples = Vec::with_capacity(n * 2);
+        for i in 0..n {
+            let v = ((i as u32).wrapping_mul(2_654_435_761u32) >> 8) as u16;
+            samples.extend_from_slice(&v.to_be_bytes());
+        }
+        image.samples = Some(Arc::from(samples));
+        image.codec = None;
+        image.codec_data = None;
+        page.images = Arc::from([image]);
+        page.operations = Arc::from([
+            DisplayOp::ConcatTransform(placement),
+            DisplayOp::DrawImage {
+                image: pdf_page_ir::ImageId(0),
+                paint: pdf_page_ir::PaintId(0),
+                transform: Matrix::IDENTITY,
+                alpha: 1.0,
+                blend: pdf_page_ir::BlendMode::Normal,
+            },
+        ]);
+        page
+    }
+
+    /// 16-bit Gray/RGB/CMYK images promote to cached RGB8 where that cannot
+    /// change the output: whole-pixel axis-aligned placements (the promoted
+    /// render equals the generic render of the original 16-bit image byte for
+    /// byte) and rotated ones. An unmasked opaque image on a fractional
+    /// axis-aligned placement keeps the generic body, so its border ring is
+    /// unchanged.
+    #[test]
+    fn sixteen_bit_device_images_promote_only_where_the_ring_is_unchanged() {
+        let whole = Matrix { a: 12.0, b: 0.0, c: 0.0, d: 12.0, e: 2.0, f: 3.0 };
+        let fractional = Matrix { a: 11.5, b: 0.0, c: 0.0, d: 12.0, e: 2.25, f: 3.0 };
+        let rotated = Matrix { a: 8.0, b: 5.0, c: -5.0, d: 8.0, e: 6.0, f: 1.0 };
+        for (space, comps) in [
+            (ImageColorSpace::Gray, 1usize),
+            (ImageColorSpace::Rgb, 3),
+            (ImageColorSpace::Cmyk, 4),
+        ] {
+            for (name, placement, promoted) in [
+                ("whole", whole, true),
+                ("fractional", fractional, false),
+                ("rotated", rotated, true),
+            ] {
+                let page = sixteen_bit_page(space.clone(), comps, placement);
+                let cache = Arc::new(SharedImageCache::default());
+                let mut lowered = lower_page(&page, Some(&cache));
+                let img = prepared_image(&lowered);
+                assert_eq!(img.bpc == 8, promoted, "{space:?} {name}");
+                let got = render_pixels(&lowered);
+                // Reference: the same draw with the original 16-bit samples.
+                for op in lowered.ops.iter_mut() {
+                    if let PreparedOp::Image(img) = op {
+                        let ir = &page.images[0];
+                        **img = crate::image::PreparedImage {
+                            bpc: 16,
+                            color_space: ir.color_space.clone(),
+                            samples: ir.samples.clone().unwrap(),
+                            ..(**img).clone()
+                        };
+                    }
+                }
+                assert_eq!(prepared_image(&lowered).bpc, 16);
+                assert_eq!(got, render_pixels(&lowered), "{space:?} {name}");
+                if promoted {
+                    // A second lowering hits the promotion cache.
+                    let again = lower_page(&page, Some(&cache));
+                    assert_eq!(prepared_image(&again).bpc, 8);
+                    assert_eq!(cache.stats().2, 1, "{space:?} {name}: one promotion hit");
+                }
+            }
+        }
     }
 
     #[test]
