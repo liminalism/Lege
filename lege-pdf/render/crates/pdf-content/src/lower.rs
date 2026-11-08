@@ -556,7 +556,7 @@ impl<'a> Lowerer<'a> {
         let compiled = GlyphRun {
             font,
             font_size: run.font_size,
-            transform: run.text_matrix,
+            transform: run_transform(&run),
             glyphs: glyphs.into(),
             render_mode: run.render_mode,
         };
@@ -806,17 +806,43 @@ fn codec_kind_feature(codec: Option<pdf_page_ir::ImageCodecKind>) -> PageFeature
     }
 }
 
+/// The horizontal scaling `Th` (`Tz` / 100) that [`run_transform`] folds into
+/// the run's matrix: `Th` itself, or 1 when it is 0 or otherwise not a normal
+/// number (a singular or non-finite glyph matrix is never built; such runs
+/// keep the placement-only scaling they always had).
+fn folded_horizontal_scale(run: &TextRun) -> f64 {
+    let th = run.horizontal_scale / 100.0;
+    if th.is_normal() { th } else { 1.0 }
+}
+
+/// The run's glyph-space-to-user-space matrix: `Tm` with the horizontal
+/// scaling folded in, `scale(Th, 1) × Tm`, so `Tz` reaches the glyph *shapes*
+/// (the text rendering matrix of §9.4.4 is `[Tfs·Th 0 0 Tfs 0 Ts] × Tm`), not
+/// only their positions. `Th = 1` keeps `Tm` bit for bit.
+fn run_transform(run: &TextRun) -> Matrix {
+    let th = folded_horizontal_scale(run);
+    if th == 1.0 {
+        run.text_matrix
+    } else {
+        Matrix::scale(th, 1.0).then(run.text_matrix)
+    }
+}
+
 /// Place a run's character codes using the PDF advance widths (fonts.md §3).
 /// **The `glyph` field still carries the raw character code, not a font glyph
 /// index** — encoding→glyph-id resolution and outlines are later font phases —
 /// but horizontal placement is now metric-correct: advance = width·Tfs/1000 +
-/// Tc (+ Tw for code 32), scaled by Th, with `TJ` adjustments applied.
+/// Tc (+ Tw for code 32), with `TJ` adjustments applied.
+///
+/// Placements are in the frame *before* the horizontal scaling, which
+/// [`run_transform`] applies to positions and shapes alike; only an unfolded
+/// (zero or non-normal) `Th` is still applied here.
 fn placed_glyphs(
     run: &TextRun,
     metrics: &pdf_font::FontMetrics,
     glyph_map: &pdf_font::GlyphMap,
 ) -> Vec<PlacedGlyph> {
-    let th = run.horizontal_scale / 100.0;
+    let th = run.horizontal_scale / 100.0 / folded_horizontal_scale(run);
     let fs = run.font_size;
     // Vertical writing (wmode 1, §9.7.4.3): the pen runs down the y axis by
     // the `/W2` vertical displacement (`w1y`, typically negative), and each
