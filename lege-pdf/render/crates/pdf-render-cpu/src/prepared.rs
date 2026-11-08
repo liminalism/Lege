@@ -144,10 +144,11 @@ fn lock_unpoisoned<T>(m: &std::sync::Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 ///
 /// The worker-local [`FontProgramCache`] only survives repeated renders of the
 /// *same* compiled page; different pages of a document that share a font each
-/// re-parse it. Type 1 and bare-CFF programs are expensive to parse (the type1
-/// corpus page spends ~129 ms parsing 19 programs), so those — and only those,
-/// matching [`FontProgram::benefits_from_parse_cache`] — are retained here so
-/// the parse is paid once per document rather than once per page.
+/// re-parse it. Type 1 and bare-CFF programs are expensive to parse (a Type 1
+/// parse decrypts the whole program and every charstring), so those — and
+/// only those, matching [`FontProgram::benefits_from_parse_cache`] — are
+/// retained here so the parse is paid once per document rather than once per
+/// page.
 ///
 /// **Identity** is a 128-bit content hash of the program bytes plus length and
 /// face index ([`FontProgramKey`]): the scheduler compiles each page
@@ -4073,24 +4074,34 @@ fn resolve_font_program(
     program
 }
 
-/// A parse must cost at least this long to be worth retaining document-wide.
-/// Retention trades peak RSS for avoided reparses, so it should pay only when
-/// the reparse it avoids is genuinely expensive. Native Type 1 programs parse in
-/// milliseconds (the type1 corpus page: ~6.8 ms each) and clear this easily;
-/// small subsetted CFF/TrueType programs parse in microseconds and stay
-/// uncached, so a document whose fonts are all cheap to parse (the Latin
-/// control) pays no retention cost — the cache is self-financing.
+/// How long a wrapped bare CFF parse must take for the program to be worth
+/// retaining document-wide. Retention trades peak RSS for avoided reparses, so
+/// it should pay only when the reparse it avoids is genuinely expensive. Small
+/// subsetted CFF programs parse in microseconds and stay uncached, so a
+/// document whose fonts are all cheap to parse (the Latin control) pays no
+/// retention cost — the cache is self-financing. Native Type 1 is not timed;
+/// see [`should_retain_font_program`].
 const MIN_PARSE_TO_CACHE: std::time::Duration = std::time::Duration::from_micros(400);
 
+/// Whether a freshly parsed program is retained document-wide.
+///
+/// A native Type 1 parse decrypts the whole program and then every
+/// charstring, so reparsing it on each page always costs far more than the
+/// content-hash lookup that replaces it: it is retained whatever the parse
+/// took. Timing it stopped working once the parser lost its quadratic
+/// encoding scan. Real Type 1 faces then parsed in 150–380 µs, under the gate
+/// that was meant to keep them, and a 40-page document using six such faces
+/// rendered 28% slower. Wrapped bare CFF still has to earn its place by
+/// parse cost.
 #[inline]
 fn should_retain_font_program(program: &FontProgram, parse_cost: std::time::Duration) -> bool {
-    program.benefits_from_parse_cache() && parse_cost >= MIN_PARSE_TO_CACHE
+    program.is_type1() || (program.benefits_from_parse_cache() && parse_cost >= MIN_PARSE_TO_CACHE)
 }
 
 /// Parse `resource`'s embedded program, consulting the document-scoped cache
-/// first. Only programs that both `benefits_from_parse_cache` (Type 1 / bare
-/// CFF) *and* actually took [`MIN_PARSE_TO_CACHE`] to parse are retained;
-/// everything cheaper is neither read from nor written to the shared cache.
+/// first. A parse is retained only per [`should_retain_font_program`]: native
+/// Type 1 always, wrapped bare CFF when it took [`MIN_PARSE_TO_CACHE`];
+/// anything else is parsed for each page and never written to the cache.
 fn resolve_program_bytes(
     resource: &pdf_page_ir::FontResource,
     shared: Option<&SharedFontProgramCache>,
@@ -6192,6 +6203,13 @@ mod font_cache_tests {
             &sfnt,
             std::time::Duration::from_secs(1)
         ));
+
+        // Native Type 1 is retained however fast it parsed: a reparse always
+        // decrypts the whole program, which a hit never does.
+        let t1 = FontProgram::parse(Arc::from(pdf_test_support::fonts::minimal_type1()))
+            .expect("parse type 1");
+        assert!(t1.is_type1());
+        assert!(should_retain_font_program(&t1, std::time::Duration::ZERO));
     }
 
     #[test]

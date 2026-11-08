@@ -502,6 +502,10 @@ fn parse_encoding(clear: &[u8], by_name: &HashMap<Vec<u8>, u32>) -> Box<[Option<
         }
         return enc;
     }
+    // `readonly def` closes the encoding vector. It is found once: searching
+    // `region` from its start again after every entry made this loop
+    // quadratic (20,000 entries took over 4 s to parse).
+    let end = find(region, b"readonly def");
     let mut p = 0usize;
     while let Some(next) = find(&region[p..], b"dup ") {
         let q = p + next + 4;
@@ -528,10 +532,7 @@ fn parse_encoding(clear: &[u8], by_name: &HashMap<Vec<u8>, u32>) -> Box<[Option<
             enc[code] = Some(gid);
         }
         p = r;
-        // `readonly def` closes the encoding vector.
-        if let Some(end) = find(region, b"readonly def")
-            && p > end
-        {
+        if end.is_some_and(|end| p > end) {
             break;
         }
     }
@@ -1212,6 +1213,29 @@ mod tests {
         let last = i32::try_from(MAX_SUBRS).unwrap();
         assert_eq!(subrs.get(last - 1), Some(&b"\x0b"[..]));
         assert_eq!(subrs.get(last), None);
+    }
+
+    /// A long cleartext `/Encoding` parses in one pass. The loop looked for
+    /// `readonly def` from the start of the region after every entry, which
+    /// was quadratic: 20,000 entries took over 4 s, and at this size it would
+    /// run for minutes.
+    #[test]
+    fn a_long_encoding_parses_in_one_pass() {
+        let by_name = HashMap::from([(b"A".to_vec(), 1), (b"B".to_vec(), 2)]);
+        let mut clear = b"/Encoding 256 array\n".to_vec();
+        for i in 0..50_000 {
+            let entry: &[u8] = if i % 2 == 0 {
+                b"dup 65 /A put\n"
+            } else {
+                b"dup 66 /B put\n"
+            };
+            clear.extend_from_slice(entry);
+        }
+        clear.extend_from_slice(b"readonly def\n");
+        let enc = parse_encoding(&clear, &by_name);
+        assert_eq!(enc[65], Some(1));
+        assert_eq!(enc[66], Some(2));
+        assert_eq!(enc.iter().flatten().count(), 2);
     }
 
     #[test]
