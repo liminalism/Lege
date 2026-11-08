@@ -151,7 +151,9 @@ pub fn to_srgb_with(trc: &[f32], matrix: &[f32; 9], rgb: [f32; 3]) -> [f32; 3] {
 /// Sample one 256-point TRC curve with linear interpolation.
 fn sample_slice(trc: &[f32], v: f32) -> f32 {
     let t = v.clamp(0.0, 1.0) * 255.0;
-    let lo = t.floor() as usize;
+    // `t` is non-negative (or NaN, which both forms cast to 0), so the
+    // truncating cast is `floor` without the libm call `floor()` compiles to.
+    let lo = t as usize;
     let hi = (lo + 1).min(255);
     let f = t - lo as f32;
     trc[lo] * (1.0 - f) + trc[hi] * f
@@ -312,7 +314,8 @@ fn clut_interp(grid: usize, clut: &[[f32; 3]], t: [f32; 4]) -> [f32; 3] {
     let mut frac = [0f32; 4];
     for c in 0..4 {
         let p = t[c].clamp(0.0, 1.0) * last;
-        let lo = (p.floor() as usize).min(grid - 1);
+        // Non-negative or NaN: the truncating cast is `floor` (see `sample_slice`).
+        let lo = (p as usize).min(grid - 1);
         base[c] = lo;
         frac[c] = p - lo as f32;
     }
@@ -450,7 +453,8 @@ fn sample_table(table: &[f32], v: f32) -> f32 {
         return v.clamp(0.0, 1.0);
     }
     let t = v.clamp(0.0, 1.0) * (table.len() - 1) as f32;
-    let lo = t.floor() as usize;
+    // Non-negative or NaN: the truncating cast is `floor` (see `sample_slice`).
+    let lo = t as usize;
     let hi = (lo + 1).min(table.len() - 1);
     let f = t - lo as f32;
     table[lo] * (1.0 - f) + table[hi] * f
