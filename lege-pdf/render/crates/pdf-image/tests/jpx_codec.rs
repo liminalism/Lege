@@ -218,3 +218,55 @@ fn target_size_hint_reduces_decode_resolution() {
     // The reduced raster still stays at or above the requested footprint.
     assert!(reduced.width >= 32 && reduced.height >= 32);
 }
+
+/// `reduction_level` is the wavelet level the decode drops for a footprint:
+/// the decoded size is that level's, footprints at one level decode to the
+/// same raster, and no footprint means full resolution. That makes it a sound
+/// cache identity for reduced decodes.
+#[test]
+fn reduction_level_is_the_level_the_decode_drops() {
+    let (w, h) = (256u32, 192u32);
+    let src: Vec<u8> = (0..w * h).map(|i| (i * 31 % 251) as u8).collect();
+    let image = jp2lam::Image::from_gray_bytes(w, h, &src).expect("build gray image");
+    let jp2 = jp2lam::encode(&image, &lossless()).expect("encode");
+    let limits = DecodeLimits::default();
+    let desc = descriptor(w, h);
+
+    let decode = |target_size| {
+        let params = DecodeParameters {
+            target_size,
+            ..DecodeParameters::default()
+        };
+        let level = JpxCodec
+            .reduction_level(&jp2, &desc, &params, &limits)
+            .expect("level");
+        let out = JpxCodec
+            .decode(&jp2, &desc, &params, &limits)
+            .expect("decode");
+        (level, out)
+    };
+
+    let (full_level, full) = decode(None);
+    assert_eq!(full_level, 0);
+    assert_eq!((full.width, full.height), (w, h));
+
+    let mut by_level: Vec<Option<pdf_image::DecodedImage>> = vec![None; 8];
+    for t in (4..=300u32).step_by(3) {
+        let (level, out) = decode(Some((t, t * 3 / 4)));
+        let halvings = 1u32 << level;
+        assert_eq!(
+            (out.width, out.height),
+            (w.div_ceil(halvings), h.div_ceil(halvings)),
+            "level {level} at footprint {t}"
+        );
+        match &by_level[level as usize] {
+            Some(first) => assert_eq!(first.data, out.data, "level {level} decoded twice"),
+            None => by_level[level as usize] = Some(out),
+        }
+    }
+    assert!(
+        by_level.iter().filter(|level| level.is_some()).count() >= 3,
+        "the sweep must cover several levels"
+    );
+    assert_eq!(by_level[0].as_ref().map(|d| &d.data), Some(&full.data));
+}

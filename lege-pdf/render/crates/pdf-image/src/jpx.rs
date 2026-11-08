@@ -261,20 +261,7 @@ impl ImageCodec for JpxCodec {
             }
         };
 
-        // Phase 2: a device-footprint hint lets the decoder drop wavelet
-        // resolutions for a minified draw. `AtLeast` is inherently conservative
-        // — it never reduces below the destination footprint scaled by the
-        // quality margin, so magnified and near-1:1 draws decode at full
-        // resolution. Absent a hint (whole-document paths, Phase-1 gate) the
-        // resolution is `Full` and output is byte-identical to the legacy path.
-        let resolution = match params.target_size {
-            Some((tw, th)) if tw > 0 && th > 0 => DecodeResolution::AtLeast {
-                width: tw,
-                height: th,
-                quality_margin: jpx_quality_margin(),
-            },
-            _ => DecodeResolution::Full,
-        };
+        let resolution = decode_resolution(params);
 
         // Direct packed 8-bit output is bit-exact with the legacy planar
         // interleave: both level-shift, clamp, and (for 8-bit) map identity to
@@ -351,6 +338,46 @@ impl ImageCodec for JpxCodec {
             return Err(ImageError::Cancelled);
         }
         result
+    }
+
+    /// The wavelet levels the decode drops for this draw, read from the main
+    /// header (SIZ/COD) through jp2lam's own selection rule. A full-resolution
+    /// request needs no header: it never drops a level.
+    fn reduction_level(
+        &self,
+        data: &[u8],
+        _descriptor: &ImageDescriptor,
+        params: &DecodeParameters,
+        limits: &DecodeLimits,
+    ) -> Option<u8> {
+        let resolution = decode_resolution(params);
+        if resolution == DecodeResolution::Full {
+            return Some(0);
+        }
+        jp2lam::inspect_jp2_with_limits(data, &decoder_limits(limits))
+            .ok()?
+            .reduce_levels(resolution)
+            .ok()
+    }
+}
+
+/// The jp2lam resolution request for a draw, shared by the decode and its
+/// [`ImageCodec::reduction_level`].
+///
+/// Phase 2: a device-footprint hint lets the decoder drop wavelet resolutions
+/// for a minified draw. `AtLeast` is inherently conservative — it never reduces
+/// below the destination footprint scaled by the quality margin, so magnified
+/// and near-1:1 draws decode at full resolution. Absent a hint (whole-document
+/// paths, Phase-1 gate) the resolution is `Full` and output is byte-identical
+/// to the legacy path.
+fn decode_resolution(params: &DecodeParameters) -> DecodeResolution {
+    match params.target_size {
+        Some((tw, th)) if tw > 0 && th > 0 => DecodeResolution::AtLeast {
+            width: tw,
+            height: th,
+            quality_margin: jpx_quality_margin(),
+        },
+        _ => DecodeResolution::Full,
     }
 }
 

@@ -57,6 +57,16 @@ impl ImageCodec for JpegCodec {
     ) -> Result<DecodedImage, ImageError> {
         decode_jpeg_scaled(data, limits, Some(descriptor), params.target_size)
     }
+
+    fn reduction_level(
+        &self,
+        data: &[u8],
+        descriptor: &ImageDescriptor,
+        params: &DecodeParameters,
+        limits: &DecodeLimits,
+    ) -> Option<u8> {
+        jpeg_reduction_level(data, limits, Some(descriptor), params.target_size)
+    }
 }
 
 /// Decode a complete JPEG stream. The output dimensions are the stream's
@@ -92,13 +102,33 @@ pub fn decode_jpeg_scaled(
     target_size: Option<(u32, u32)>,
 ) -> Result<DecodedImage, ImageError> {
     limits.check_input(data.len())?;
-    let mut d = Decoder::new(data, limits);
-    d.expected_size = descriptor
-        .filter(|desc| desc.width > 0 && desc.height > 0)
-        .map(|desc| (desc.width as usize, desc.height as usize));
-    d.target_size = target_size.map(|(w, h)| (w as usize, h as usize));
+    let mut d = Decoder::for_draw(data, limits, descriptor, target_size);
     d.run()?;
     d.finish()
+}
+
+/// The scale [`decode_jpeg_scaled`] decodes this stream at for the same
+/// arguments, as halvings of full resolution: `0` for a full-size decode, `1`,
+/// `2` or `3` for a 1/2, 1/4 or 1/8 scaled one.
+///
+/// Only the markers up to the frame header are read; no scan is decoded. They
+/// go through the decoder's own marker loop and [`Decoder::pick_dct_size`], so
+/// the answer cannot drift from the decode. Decodes of one stream at one level
+/// are identical whatever footprint selected it, which makes the level the
+/// cache identity of a scaled decode (see
+/// [`crate::ImageCodec::reduction_level`]). `None` when the decode would fail
+/// at or before the frame header.
+pub fn jpeg_reduction_level(
+    data: &[u8],
+    limits: &DecodeLimits,
+    descriptor: Option<&ImageDescriptor>,
+    target_size: Option<(u32, u32)>,
+) -> Option<u8> {
+    limits.check_input(data.len()).ok()?;
+    let mut d = Decoder::for_draw(data, limits, descriptor, target_size);
+    d.read_frame_header().ok()?;
+    let dct_size = d.frame.as_ref()?.dct_size;
+    Some((8 / dct_size).trailing_zeros() as u8)
 }
 
 fn err(msg: &str) -> ImageError {
@@ -720,6 +750,24 @@ impl<'a> Decoder<'a> {
         }
     }
 
+    /// A decoder for one PDF draw: the dictionary's `/Width`/`/Height` (to
+    /// repair a broken `SOF` height) and the draw's device footprint (to pick
+    /// a scaled decode). Shared by the decode and [`jpeg_reduction_level`], so
+    /// both see the same frame geometry.
+    fn for_draw(
+        data: &'a [u8],
+        limits: &'a DecodeLimits,
+        descriptor: Option<&ImageDescriptor>,
+        target_size: Option<(u32, u32)>,
+    ) -> Self {
+        let mut d = Self::new(data, limits);
+        d.expected_size = descriptor
+            .filter(|desc| desc.width > 0 && desc.height > 0)
+            .map(|desc| (desc.width as usize, desc.height as usize));
+        d.target_size = target_size.map(|(w, h)| (w as usize, h as usize));
+        d
+    }
+
     fn u16_at(&self, p: usize) -> Result<usize, ImageError> {
         if p + 1 >= self.data.len() {
             return Err(err("truncated segment"));
@@ -729,6 +777,28 @@ impl<'a> Decoder<'a> {
 
     /// Parse markers and decode every scan until EOI or end of data.
     fn run(&mut self) -> Result<(), ImageError> {
+        self.parse_markers(false)?;
+        if self.frame.is_none() || self.scans_done == 0 {
+            return Err(err("no image data (missing SOF or SOS)"));
+        }
+        Ok(())
+    }
+
+    /// Parse markers up to and including the frame header, decoding no scan:
+    /// everything [`Decoder::pick_dct_size`] reads. Fails wherever
+    /// [`Decoder::run`] would fail up to that point.
+    fn read_frame_header(&mut self) -> Result<(), ImageError> {
+        self.parse_markers(true)?;
+        if self.frame.is_none() {
+            return Err(err("no image data (missing SOF or SOS)"));
+        }
+        Ok(())
+    }
+
+    /// The marker loop behind [`Decoder::run`] and
+    /// [`Decoder::read_frame_header`]. With `stop_at_frame` it returns as soon
+    /// as the frame header is parsed.
+    fn parse_markers(&mut self, stop_at_frame: bool) -> Result<(), ImageError> {
         // Locate SOI, tolerating leading garbage.
         let soi = self
             .data
@@ -754,7 +824,12 @@ impl<'a> Decoder<'a> {
                 0xD8 => {} // stray SOI
                 0xD9 => break,
                 0x01 | 0xD0..=0xD7 => {} // standalone markers outside a scan
-                0xC0..=0xC2 => self.parse_sof(marker == 0xC2)?,
+                0xC0..=0xC2 => {
+                    self.parse_sof(marker == 0xC2)?;
+                    if stop_at_frame {
+                        return Ok(());
+                    }
+                }
                 0xC3 | 0xC5..=0xC7 | 0xCB | 0xCD..=0xCF => {
                     return Err(err(
                         "unsupported JPEG coding process (lossless/hierarchical)",
@@ -776,9 +851,6 @@ impl<'a> Decoder<'a> {
                     self.pos += len;
                 }
             }
-        }
-        if self.frame.is_none() || self.scans_done == 0 {
-            return Err(err("no image data (missing SOF or SOS)"));
         }
         Ok(())
     }

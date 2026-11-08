@@ -346,3 +346,156 @@ fn a_sof_height_over_the_dictionary_is_clamped() {
         "a larger dictionary height must not win"
     );
 }
+
+// --- reduction level ---------------------------------------------------------
+
+fn dct_descriptor(width: u32, height: u32) -> pdf_image::ImageDescriptor {
+    pdf_image::ImageDescriptor {
+        width,
+        height,
+        bits_per_component: 8,
+        color_space: None,
+        is_mask: false,
+        interpolate: false,
+        filters: vec![pdf_image::StreamFilter::DctDecode],
+        object: None,
+    }
+}
+
+/// `jpeg_reduction_level` is the scale the decode picks, so it can stand in
+/// for the footprint as a cache identity: at every footprint the decoded size
+/// is the level's, every footprint that maps to a level decodes to the same
+/// raster, and the codec's trait method gives the same answer.
+#[test]
+fn reduction_level_is_the_scale_the_decode_picks() {
+    use pdf_image::jpeg::{decode_jpeg_scaled, jpeg_reduction_level};
+    use pdf_image::{DecodeParameters, DecodedImage, ImageCodec, JpegCodec};
+
+    let (w, h) = (128usize, 96usize);
+    let limits = DecodeLimits::default();
+    let desc = dct_descriptor(w as u32, h as u32);
+    // 4:2:0 colour and 4:4:4 gray: the sampling layouts change the MCU grid
+    // and the coefficient budget the frame header yields.
+    let streams = [
+        write_jpeg(&test_rgb(w, h), w as u16, h as u16, true, 90, true).unwrap(),
+        write_jpeg(
+            &gray_of(&test_rgb(w, h)),
+            w as u16,
+            h as u16,
+            false,
+            90,
+            false,
+        )
+        .unwrap(),
+    ];
+    for jpeg in &streams {
+        let mut by_level: Vec<Option<DecodedImage>> = vec![None; 4];
+        for t in 1..=140u32 {
+            let target = Some((t, (t * 3 / 4).max(1)));
+            let level = jpeg_reduction_level(jpeg, &limits, Some(&desc), target).expect("level");
+            let params = DecodeParameters {
+                target_size: target,
+                ..DecodeParameters::default()
+            };
+            assert_eq!(
+                JpegCodec.reduction_level(jpeg, &desc, &params, &limits),
+                Some(level)
+            );
+            let out = decode_jpeg_scaled(jpeg, &limits, Some(&desc), target).unwrap();
+            let halvings = 1usize << level;
+            assert_eq!(
+                (out.width, out.height),
+                (w.div_ceil(halvings) as u32, h.div_ceil(halvings) as u32),
+                "level {level} at {target:?}"
+            );
+            match &by_level[level as usize] {
+                Some(first) => assert_eq!(
+                    first.data, out.data,
+                    "two footprints at level {level} decoded differently"
+                ),
+                None => by_level[level as usize] = Some(out),
+            }
+        }
+        assert!(
+            by_level.iter().all(Option::is_some),
+            "every scale exercised"
+        );
+
+        // No footprint: the full-size decode, level 0.
+        assert_eq!(
+            jpeg_reduction_level(jpeg, &limits, Some(&desc), None),
+            Some(0)
+        );
+        let full = decode_jpeg_scaled(jpeg, &limits, Some(&desc), None).unwrap();
+        assert_eq!(by_level[0].as_ref().unwrap().data, full.data);
+    }
+}
+
+/// The level reads everything the decode's scale depends on besides the
+/// footprint: the pixel budget (an oversized image is reduced to fit) and the
+/// dictionary's `/Height` (which repairs a `0xFFFF` SOF height).
+#[test]
+fn reduction_level_follows_the_size_budget_and_the_dictionary() {
+    use pdf_image::jpeg::{decode_jpeg_scaled, jpeg_reduction_level};
+
+    let (w, h) = (256usize, 256usize);
+    let jpeg = write_jpeg(&test_rgb(w, h), w as u16, h as u16, true, 80, false).unwrap();
+    let tight = DecodeLimits {
+        max_pixels: 4096,
+        ..DecodeLimits::default()
+    };
+    assert_eq!(jpeg_reduction_level(&jpeg, &tight, None, None), Some(2));
+    let out = decode_jpeg_scaled(&jpeg, &tight, None, None).unwrap();
+    assert_eq!((out.width, out.height), (64, 64));
+
+    let (w, h) = (64usize, 48usize);
+    let mut jpeg = write_jpeg(
+        &gray_of(&test_rgb(w, h)),
+        w as u16,
+        h as u16,
+        false,
+        90,
+        false,
+    )
+    .expect("encode");
+    let sof = jpeg
+        .windows(2)
+        .position(|p| p == [0xFF, 0xC0])
+        .expect("has SOF0");
+    jpeg[sof + 5] = 0xFF;
+    jpeg[sof + 6] = 0xFF;
+    let limits = DecodeLimits::default();
+    let desc = dct_descriptor(w as u32, h as u32);
+    // Twice the real height: the repaired 48-row frame cannot halve under it,
+    // the unrepaired 65535-row one can.
+    let target = Some((w as u32 / 2, 2 * h as u32));
+    assert_eq!(
+        jpeg_reduction_level(&jpeg, &limits, Some(&desc), target),
+        Some(0)
+    );
+    assert_eq!(jpeg_reduction_level(&jpeg, &limits, None, target), Some(1));
+    let repaired = decode_jpeg_scaled(&jpeg, &limits, Some(&desc), target).unwrap();
+    assert_eq!((repaired.width, repaired.height), (w as u32, h as u32));
+}
+
+/// No level for a stream the decode would reject before its frame header.
+#[test]
+fn reduction_level_is_none_without_a_frame_header() {
+    use pdf_image::jpeg::jpeg_reduction_level;
+
+    let limits = DecodeLimits::default();
+    assert_eq!(
+        jpeg_reduction_level(b"not a jpeg", &limits, None, None),
+        None
+    );
+    let jpeg = write_jpeg(&gray_of(&test_rgb(16, 16)), 16, 16, false, 90, false).unwrap();
+    let sof = jpeg
+        .windows(2)
+        .position(|p| p == [0xFF, 0xC0])
+        .expect("has SOF0");
+    assert_eq!(
+        jpeg_reduction_level(&jpeg[..sof], &limits, None, None),
+        None
+    );
+    assert_eq!(jpeg_reduction_level(&jpeg, &limits, None, None), Some(0));
+}

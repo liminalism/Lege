@@ -287,6 +287,34 @@ pub trait ImageCodec: Send + Sync + std::fmt::Debug {
         params: &DecodeParameters,
         limits: &DecodeLimits,
     ) -> Result<DecodedImage, ImageError>;
+
+    /// The resolution [`ImageCodec::decode`] would produce for the same
+    /// arguments, as a count of halvings below full resolution: `0` for a
+    /// full-size decode, `n` for one the codec reduces `n` times to serve a
+    /// minified draw ([`DecodeParameters::target_size`]).
+    ///
+    /// Decodes that differ only in `target_size` must produce identical
+    /// rasters whenever this returns the same level for them. The level, not
+    /// the footprint, is then the identity of a reduced decode: a cache keyed
+    /// by it serves every draw the codec decodes at one resolution from one
+    /// entry, and never serves a draw from another resolution's decode. A codec
+    /// that ignores `target_size` returns `Some(0)` whatever the target.
+    ///
+    /// `None`, the default, means the level is not known without decoding. A
+    /// caller must then treat each distinct `target_size` as a distinct
+    /// decode, so a scaling codec that does not implement this stays correct,
+    /// only less cacheable. Implementations should cost a header parse at most,
+    /// and must agree with `decode`.
+    fn reduction_level(
+        &self,
+        data: &[u8],
+        descriptor: &ImageDescriptor,
+        params: &DecodeParameters,
+        limits: &DecodeLimits,
+    ) -> Option<u8> {
+        let _ = (data, descriptor, params, limits);
+        None
+    }
 }
 
 /// True for filters that require an image codec; false for general byte
@@ -449,5 +477,34 @@ mod tests {
         assert_eq!(page_needs.difference(features), F::NEEDS_JPX);
         // Flate imposes no codec requirement.
         assert_eq!(codec_feature(StreamFilter::FlateDecode), F::empty());
+    }
+
+    /// An injected codec that does not report its decode level gets `None`,
+    /// which tells a cache to key by the footprint itself; the in-tree codecs
+    /// that never scale report level 0 for every footprint.
+    #[test]
+    fn reduction_level_defaults_to_unknown_and_non_scaling_codecs_report_zero() {
+        let descriptor = ImageDescriptor {
+            width: 64,
+            height: 64,
+            bits_per_component: 1,
+            color_space: None,
+            is_mask: true,
+            interpolate: false,
+            filters: vec![StreamFilter::Jbig2],
+            object: None,
+        };
+        let limits = DecodeLimits::default();
+        for target_size in [None, Some((1, 1)), Some((8, 8)), Some((640, 640))] {
+            let params = DecodeParameters {
+                target_size,
+                ..DecodeParameters::default()
+            };
+            let level =
+                |codec: &dyn ImageCodec| codec.reduction_level(&[], &descriptor, &params, &limits);
+            assert_eq!(level(&FakeCodec(StreamFilter::DctDecode)), None);
+            assert_eq!(level(&crate::Jbig2Codec::default()), Some(0));
+            assert_eq!(level(&crate::CcittCodec), Some(0));
+        }
     }
 }

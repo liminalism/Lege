@@ -131,6 +131,18 @@ impl ImageCodec for CcittCodec {
             data: out,
         })
     }
+
+    /// CCITT has no reduced-resolution decode: every footprint gets the same
+    /// raster.
+    fn reduction_level(
+        &self,
+        _data: &[u8],
+        _descriptor: &ImageDescriptor,
+        _params: &DecodeParameters,
+        _limits: &DecodeLimits,
+    ) -> Option<u8> {
+        Some(0)
+    }
 }
 
 // ===========================================================================
