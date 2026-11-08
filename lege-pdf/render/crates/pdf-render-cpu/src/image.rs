@@ -1145,12 +1145,15 @@ impl PreparedImage {
     /// means not painted.
     ///
     /// An axis-aligned placement (`inv.b == inv.c == 0` exactly, mirrors
-    /// included) takes the pixel-centre rule at its outer edge, as PDFium
-    /// does and as the axis-aligned opaque fast paths do: a border pixel is
-    /// covered fully (`Some(255)`) when its centre maps into `[0, 1)²` — the
-    /// same half-open test `shade()` and those fast paths apply — and not at
-    /// all otherwise. Masks still apply per sampled pixel; only the
-    /// geometric edge is all-or-nothing.
+    /// included) takes the pixel-centre rule at its outer edge, as the
+    /// axis-aligned opaque fast paths do: a border pixel is covered fully
+    /// (`Some(255)`) when its centre maps into `[0, 1)²` — the same half-open
+    /// test `shade()` and those fast paths apply — and not at all otherwise.
+    /// Masks still apply per sampled pixel; only the geometric edge is
+    /// all-or-nothing. PDFium is all-or-nothing too, but paints every pixel
+    /// the rectangle touches (it stretches the image over the outward-rounded
+    /// rectangle), so a border pixel covered less than half differs; see the
+    /// scoping note `masked-image-ring-20261108.md`.
     ///
     /// Rotated and sheared placements keep A10's fractional coverage: the
     /// pixel square maps under `inv` to a parallelogram in unit-image space,

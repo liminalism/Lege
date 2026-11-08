@@ -1096,8 +1096,8 @@ fn paint_image_generic(
         // Image-edge coverage: pixels straddling the image's device-space
         // quad edge paint at their A10 fractional coverage when the draw is
         // rotated or sheared, and fully or not at all by pixel centre when
-        // it is axis-aligned, masked or not, as PDFium does (`None` =
-        // provably interior, full weight).
+        // it is axis-aligned, masked or not, like the opaque fast paths
+        // (`None` = provably interior, full weight).
         let (dx, dy) = (x as f64 + 0.5, y as f64 + 0.5);
         let edge = img.edge_coverage(dx, dy);
         if edge == Some(0) {
@@ -7253,9 +7253,9 @@ mod rgb8_area_min_tests {
     /// images.
     ///
     /// Every path matches byte for byte on the whole surface, masked or not.
-    /// The ring is the pixel-centre rule PDFium follows for an axis-aligned
-    /// image: a border pixel is painted at full weight when its centre lies
-    /// inside the destination rectangle and not at all otherwise. The opaque
+    /// The ring is the pixel-centre rule for an axis-aligned image: a border
+    /// pixel is painted at full weight when its centre lies inside the
+    /// destination rectangle and not at all otherwise. The opaque
     /// unmasked fast paths paint it that way themselves; the masked ones
     /// leave it to the generic body, whose `edge_coverage` gives axis-aligned
     /// draws exactly that rule
@@ -7442,8 +7442,7 @@ mod rgb8_area_min_tests {
     /// `backdrop_px` after `img` paints the device pixel `(x, y)` at full
     /// geometric weight: `shade()` at the pixel centre composited over it, or
     /// the backdrop untouched where the centre maps outside the image. This
-    /// is the pixel-centre rule the axis-aligned opaque fast paths follow, and
-    /// what PDFium paints at an axis-aligned image's edge.
+    /// is the pixel-centre rule the axis-aligned opaque fast paths follow.
     fn pixel_centre_expected(
         img: &PreparedImage,
         backdrop_px: &[u8],
@@ -7523,9 +7522,9 @@ mod rgb8_area_min_tests {
     /// the generic body paints) follow the pixel-centre rule at their outer
     /// edge. A boundary pixel is the full image/mask result when its centre
     /// lies inside the destination rectangle and the untouched backdrop
-    /// otherwise, never a blend. That is what the axis-aligned opaque fast
-    /// paths paint and what PDFium paints (the 2026-11-08 ring probe and
-    /// `masked-image-ring-20261108.md`). The mask itself still applies per
+    /// otherwise, never a blend, as the axis-aligned opaque fast paths paint
+    /// it (`masked-image-ring-20261108.md` compares both with PDFium, which
+    /// is never a blend either). The mask itself still applies per
     /// sampled pixel. The same draws rotated by 15 degrees keep A10's
     /// fractional edge coverage.
     #[test]

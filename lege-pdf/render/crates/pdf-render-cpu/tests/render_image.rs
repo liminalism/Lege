@@ -966,10 +966,11 @@ fn indexed_over_single_component_codec_still_reinterprets() {
 
 #[test]
 fn fractional_axis_aligned_stencil_edge_snaps_by_pixel_centre() {
-    // A 1x1 all-painting black STENCIL placed at x in [2.25, 13.4]. Like
-    // PDFium, and like the opaque axis-aligned fast paths, an axis-aligned
-    // image's edge pixel is painted fully when its centre lies inside the
-    // destination rectangle and not at all otherwise, masked or not: x=2
+    // A 1x1 all-painting black STENCIL placed at x in [2.25, 13.4]. Like the
+    // opaque axis-aligned fast paths, an axis-aligned image's edge pixel is
+    // painted fully when its centre lies inside the destination rectangle
+    // and not at all otherwise, masked or not (PDFium never blends there
+    // either, but also paints the x=13 sliver): x=2
     // (centre 2.5, 75% covered) is solid, x=13 (centre 13.5, 40% covered)
     // is untouched. Rotated draws keep A10's fractional edge coverage
     // (`rotated_image_edges_are_antialiased`).
