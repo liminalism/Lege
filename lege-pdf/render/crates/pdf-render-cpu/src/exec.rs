@@ -1276,7 +1276,11 @@ fn paint_axis_aligned_stencil_nearest(
         })
         .collect();
     // The bit value that paints, and the paint colour (the table's opaque entry).
-    let (paint_bit, paint) = if zero[3] != 0 { (0u8, zero) } else { (1u8, one) };
+    let (paint_bit, paint) = if zero[3] != 0 {
+        (0u8, zero)
+    } else {
+        (1u8, one)
+    };
     let rgb = [paint[0], paint[1], paint[2]];
     let row_bytes = img.packed_row_bits() / 8;
     let samples: &[u8] = &img.samples;
@@ -1288,8 +1292,7 @@ fn paint_axis_aligned_stencil_nearest(
     let paint_row = |y: usize, row: &mut [u8]| -> (u64, u64, u64) {
         let v = img.inv.d * (y as f64 + 0.5) + img.inv.f;
         let fy = (1.0 - v) * img.height as f64 - 0.5;
-        let source_row =
-            (fy.round() as i64).clamp(0, img.height.saturating_sub(1) as i64) as usize;
+        let source_row = (fy.round() as i64).clamp(0, img.height.saturating_sub(1) as i64) as usize;
         let source = &samples[source_row * row_bytes..][..row_bytes];
         let mut painted = 0u64;
         for (local_x, &col) in columns.iter().enumerate() {
@@ -1421,8 +1424,7 @@ fn paint_binary_box_serial(
     let mut taps = 0u64;
     // Fixed for the whole draw; resolve it once rather than per pixel.
     let clip_win = cmask.map(ClipMask::clip_window);
-    let (output, first_output_y, output_stride) =
-        surface.rows_mut_abs(y0, y0 + source_rows.len());
+    let (output, first_output_y, output_stride) = surface.rows_mut_abs(y0, y0 + source_rows.len());
     // Align the row table with the clipped output window.
     let row_offset = first_output_y.saturating_sub(y0);
     let row_slice = source_rows.get(row_offset..).unwrap_or(&[]);
@@ -6816,8 +6818,7 @@ mod rgb8_area_min_tests {
                         let lut = stencil_fast_lut(&img).expect("an axis-aligned stencil");
                         assert!(
                             interior_span(img.inv.a, img.inv.e, 0, side as usize).is_some()
-                                && interior_span(img.inv.d, img.inv.f, 0, side as usize)
-                                    .is_some(),
+                                && interior_span(img.inv.d, img.inv.f, 0, side as usize).is_some(),
                             "the placement must have an interior for the fast path"
                         );
                         let b = img.bounds;
@@ -6864,7 +6865,10 @@ mod rgb8_area_min_tests {
                 }
             }
         }
-        assert!(minified > 0 && nearest > 0, "{minified} minified, {nearest} nearest");
+        assert!(
+            minified > 0 && nearest > 0,
+            "{minified} minified, {nearest} nearest"
+        );
     }
 
     /// What keeps a stencil on the generic body: a rotated or sheared
@@ -6883,10 +6887,16 @@ mod rgb8_area_min_tests {
         let mut img = stencil_image(5, 4, 1.5, 2.25, 17.3, 12.8, true, &mut rng);
         assert!(stencil_fast_lut(&img).is_some());
         img.interpolation = InterpolationMode::Bilinear;
-        assert!(stencil_fast_lut(&img).is_none(), "magnified Bilinear stays generic");
+        assert!(
+            stencil_fast_lut(&img).is_none(),
+            "magnified Bilinear stays generic"
+        );
         let mut img = stencil_image(40, 30, 1.5, 2.25, 17.3, 12.8, false, &mut rng);
         img.interpolation = InterpolationMode::Bilinear;
-        assert!(stencil_fast_lut(&img).is_some(), "minification ignores the hint");
+        assert!(
+            stencil_fast_lut(&img).is_some(),
+            "minification ignores the hint"
+        );
 
         // Polarity: the painting entry is opaque, the masking one clear.
         let plain = stencil_image(8, 8, 0.0, 0.0, 4.0, 4.0, false, &mut rng);
@@ -6916,13 +6926,19 @@ mod rgb8_area_min_tests {
             width: side,
             height: side,
         };
-        assert!(stencil_fast_lut(&rotated).is_none(), "rotated stays generic");
+        assert!(
+            stencil_fast_lut(&rotated).is_none(),
+            "rotated stays generic"
+        );
         cases.push(("rotated", rotated));
         // Truncated: the last two packed rows are missing.
         let mut short = stencil_image(40, 30, 1.5, 2.25, 17.3, 12.8, false, &mut rng);
         let full = short.samples.len();
         short.samples = Arc::from(&short.samples[..full - 2 * 5]);
-        assert!(stencil_fast_lut(&short).is_none(), "a short buffer stays generic");
+        assert!(
+            stencil_fast_lut(&short).is_none(),
+            "a short buffer stays generic"
+        );
         cases.push(("short", short));
         let mut short_magnified = stencil_image(6, 5, 1.5, 2.25, 17.3, 12.8, true, &mut rng);
         short_magnified.samples = Arc::from(&short_magnified.samples[..3]);
@@ -7084,7 +7100,10 @@ mod rgb8_area_min_tests {
             let bits: Vec<u8> = (0..row_bytes * sh as usize).map(|_| rng.byte()).collect();
             let scale = 1.2 + (rng.next() % 100) as f64 / 25.0;
             let (w, h) = (sw as f64 / scale, sh as f64 / scale);
-            let (ox, oy) = (1.3 + (trial % 3) as f64 * 0.27, 0.6 + (trial % 4) as f64 * 0.21);
+            let (ox, oy) = (
+                1.3 + (trial % 3) as f64 * 0.27,
+                0.6 + (trial % 4) as f64 * 0.21,
+            );
             let mut img = bilevel_image(sw, sh, bits, ox, oy, w, h);
             img.alpha = if trial % 2 == 0 { 255 } else { 140 };
             let lut = if trial % 3 == 2 {
@@ -7127,7 +7146,13 @@ mod rgb8_area_min_tests {
         let (sw, sh) = (5100u32, 6600u32);
         let row_bytes = (sw as usize).div_ceil(8);
         let bits: Vec<u8> = (0..row_bytes * sh as usize)
-            .map(|i| if (i / row_bytes) % 40 < 25 { rng.byte() & rng.byte() } else { 0 })
+            .map(|i| {
+                if (i / row_bytes) % 40 < 25 {
+                    rng.byte() & rng.byte()
+                } else {
+                    0
+                }
+            })
             .collect();
         // 72 dpi: 612 x 792 device pixels at a fractional offset.
         let img = bilevel_image(sw, sh, bits, 0.4, 0.3, 612.0, 792.0);
@@ -7389,9 +7414,8 @@ mod rgb8_area_min_tests {
                 img.interpolation = interpolation;
                 let mut got = dispatched(&img, side);
                 let (mut want, _) = generic_masked_reference(&img, side, side);
-                let what = format!(
-                    "gray1 {interpolation:?} src {sw}x{sh} at ({ox}, {oy}) size {w}x{h}"
-                );
+                let what =
+                    format!("gray1 {interpolation:?} src {sw}x{sh} at ({ox}, {oy}) size {w}x{h}");
                 assert_interior_equal(&img, &mut got, &mut want, &what);
                 checked += 1;
             }

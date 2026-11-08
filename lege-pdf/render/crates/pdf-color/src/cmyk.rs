@@ -1815,13 +1815,31 @@ mod tests {
     #[test]
     fn float_entry_matches_direct_byte_call() {
         let via_float = |c: u8, m: u8, y: u8, k: u8| {
-            let f = adobe_cmyk_to_srgb(c as f32 / 255.0, m as f32 / 255.0, y as f32 / 255.0, k as f32 / 255.0);
+            let f = adobe_cmyk_to_srgb(
+                c as f32 / 255.0,
+                m as f32 / 255.0,
+                y as f32 / 255.0,
+                k as f32 / 255.0,
+            );
             [0, 1, 2].map(|i| (f[i] * 255.0 + 0.5).clamp(0.0, 255.0) as u8)
         };
         for a in 0..=255u8 {
             for b in 0..=255u8 {
-                for (c, m, y, k) in [(a, b, 0, 0), (a, 0, b, 0), (a, 0, 0, b), (0, a, b, 0), (0, a, 0, b), (0, 0, a, b), (a, b, a, b), (a, b, 255 - a, 255 - b)] {
-                    assert_eq!(via_float(c, m, y, k), adobe_cmyk_to_srgb_u8(c, m, y, k), "{c} {m} {y} {k}");
+                for (c, m, y, k) in [
+                    (a, b, 0, 0),
+                    (a, 0, b, 0),
+                    (a, 0, 0, b),
+                    (0, a, b, 0),
+                    (0, a, 0, b),
+                    (0, 0, a, b),
+                    (a, b, a, b),
+                    (a, b, 255 - a, 255 - b),
+                ] {
+                    assert_eq!(
+                        via_float(c, m, y, k),
+                        adobe_cmyk_to_srgb_u8(c, m, y, k),
+                        "{c} {m} {y} {k}"
+                    );
                 }
             }
         }
@@ -1831,7 +1849,11 @@ mod tests {
             x ^= x >> 7;
             x ^= x << 17;
             let [c, m, y, k, ..] = x.to_le_bytes();
-            assert_eq!(via_float(c, m, y, k), adobe_cmyk_to_srgb_u8(c, m, y, k), "{c} {m} {y} {k}");
+            assert_eq!(
+                via_float(c, m, y, k),
+                adobe_cmyk_to_srgb_u8(c, m, y, k),
+                "{c} {m} {y} {k}"
+            );
         }
     }
 

@@ -590,8 +590,7 @@ mod tests {
                 let surface = Surface::new_recycled(w, h, Background::White, recycled);
                 addrs[i].get_or_insert(Arc::as_ptr(&surface.data));
                 assert_eq!(Arc::as_ptr(&surface.data), addrs[i].unwrap());
-                let (_, out) = surface
-                    .into_output_recycling(OutputFormat::Gray8, &mut pool);
+                let (_, out) = surface.into_output_recycling(OutputFormat::Gray8, &mut pool);
                 assert_eq!(out.len(), w * h);
             }
         }
@@ -599,9 +598,7 @@ mod tests {
         assert!(h1 - h0 >= 9 && m1 - m0 >= 3);
         // Recycled output is identical to a fresh surface.
         let fresh = Surface::new(9, 7, Background::White);
-        let again = Surface::new_recycled(
-            9, 7, Background::White, take_recycled(&mut pool, 9, 7),
-        );
+        let again = Surface::new_recycled(9, 7, Background::White, take_recycled(&mut pool, 9, 7));
         assert_eq!(fresh.data, again.data);
     }
 

@@ -897,10 +897,7 @@ impl PreparedImage {
         // 64 Mpx -> 192 MiB of RGB8; above this the generic per-tap path (whose
         // work is bounded by the footprint, not the source area) is preferred.
         const MAX_CONVERT_PIXELS: usize = 64 * 1024 * 1024;
-        if self.is_stencil
-            || self.bpc != 8
-            || !matches!(self.color_space, ImageColorSpace::Cmyk)
-        {
+        if self.is_stencil || self.bpc != 8 || !matches!(self.color_space, ImageColorSpace::Cmyk) {
             return None;
         }
         let luts = match self.decode.as_deref() {
@@ -2494,7 +2491,12 @@ mod tests {
                 for col in 0..w {
                     let want = image.pixel(col, row).unwrap();
                     let o = (row * w + col) as usize * 3;
-                    assert_eq!(&rgb[o..o + 3], &want[..3], "({col},{row}) decode {:?}", image.decode);
+                    assert_eq!(
+                        &rgb[o..o + 3],
+                        &want[..3],
+                        "({col},{row}) decode {:?}",
+                        image.decode
+                    );
                 }
             }
         }
@@ -2544,7 +2546,12 @@ mod tests {
                     for col in 0..w {
                         let want = image.pixel(col, row).unwrap();
                         let got = promoted.pixel(col, row).unwrap();
-                        assert_eq!(got[..3], want[..3], "{space:?} ({col},{row}) {:?}", image.decode);
+                        assert_eq!(
+                            got[..3],
+                            want[..3],
+                            "{space:?} ({col},{row}) {:?}",
+                            image.decode
+                        );
                     }
                 }
                 // The same family at 8 bits keeps its dedicated paths.
