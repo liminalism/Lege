@@ -666,6 +666,18 @@ record lege-ecosystem.papercut.akr-revise-from-body-on-a-completed-work-record/2
     created_at 2026-08-25
 }
 
+record lege-ecosystem.papercut.akr-start-failed-with-akr-c031-working-tree/1 : papercut {
+    title "akr start failed with AKR-C031 (working-tree ledger 10996 errors, HEAD…"
+    state verified
+    statement """
+        akr start failed with AKR-C031 (working-tree ledger 10996 errors, HEAD 3) in the blissful-pascal worktree while orienting the pdf-render-cpu per-core text/vector task; no planning bundle could be read, so no records were written for the font-resource cache / sparse scanline row work. (Carried over from the blissful-pascal worktree, logged 2026-11-04, before deleting it.)
+        """
+    observed_at git:5951f37ae9248a80878bee52481191af832ddf21
+    about "akr"
+    author "claude"
+    created_at 2026-11-08
+}
+
 record lege-ecosystem.papercut.akr-start-for-outstanding-planning-view-failed/1 : papercut {
     title "akr start for outstanding planning view failed with AKR-I022 because…"
     state superseded

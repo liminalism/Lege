@@ -638,6 +638,15 @@ fn paint_image(
     #[cfg(feature = "profiling")]
     let image_start = Instant::now();
     stats.commands += 1;
+    // A minified hard stencil is coverage-averaged, as a one-bit soft mask.
+    let coverage_masked;
+    let img = match img.minified_stencil_as_coverage() {
+        Some(promoted) => {
+            coverage_masked = promoted;
+            &coverage_masked
+        }
+        None => img,
+    };
     let cmask_cid = if img.clip_has_mask {
         // Lowering guarantees a masked draw carries its clip id; a missing id
         // means the IR invariant broke upstream. Skip the draw (never panic a

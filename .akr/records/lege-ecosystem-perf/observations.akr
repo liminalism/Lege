@@ -29,6 +29,32 @@ record lege-ecosystem-perf.observation.decode-flamegraph-lear-2026-08-06/1 : obs
     method command
 }
 
+record lege-ecosystem-perf.renderer-headsup.all-renderers-averages-20261106/1 : observation {
+    title "2026-11-06: Lege 1.34x Hayro, ~1.4x PDFium/MuPDF, ~4.3x zpdf/pdf-render/pdf-toolkit; zpdf tops majority agreement but blackens 9 pages"
+    state superseded
+    statement """
+        Head-to-head on the user's eight private PDFs in D:/pdf-test (1,849 pages, 72 and 144 DPI), 2026-11-06, Lege at HEAD 13109aed. New today: Lege and zpdf 0.18.0 (CPU tiny-skia backend, called as zpdf-cli `render`; one PdfDocument per worker because it is not Sync), timed with Hayro 0.9.0 as anchor, P-core pinned, one repetition, 1 and 8 workers, both DPIs. PDFium/MuPDF/pdf-toolkit speed comes from the interrupted, unpinned 2026-11-04 main run against the pinned 11-04 Hayro run (low confidence; MuPDF only 5 cells); pdf-render 1.3 from the pinned 11-04 section-8 run.
+
+        Speed, geometric mean of per-(document, DPI, workers) pages/s ratios vs Hayro (1 worker / 8 workers / overall): Lege 1.34/1.34/1.34; Hayro 1.00; MuPDF 1.03/0.95/0.98; PDFium 0.90/0.97/0.93; pdf-toolkit 0.30/0.31/0.31; pdf-render 0.29/0.33/0.31; zpdf 0.29/0.33/0.31. Lege overall faster than: Hayro 1.34x, MuPDF 1.37x, PDFium 1.44x, zpdf 4.31x, pdf-render 4.34x, pdf-toolkit 4.40x. Lege vs zpdf per document: 1.6-15.6x, largest on JPX/JBIG2 scan books (chinese-medicine 7-16x, Structures 8-12x); zpdf barely speeds up from 144 to 72 DPI on scans (decode-bound) and peaks at 1.1-2.6 GB RSS at 8 workers vs Lege 0.2-0.95 GB.
+
+        Majority agreement (11-04 metric and clique rule, 7-engine pool, ok pages at 72 / 144 DPI, mean): zpdf 99.2/99.5/99.4%; Hayro 96.4/100/98.2%; MuPDF 95.9/99.9/97.9%; PDFium 93.2/100/96.6%; pdf-render 80.9/99.9/90.4%; Lege 79.3/100/89.6%; pdf-toolkit 44.7/71.7/58.2%. Lege's 72-DPI agreement is unchanged since 11-04 (1,467 in the 6-engine pool both days): thin/broken text on minified bilevel scan layers (chinese-medicine 242, centralpark 94, Structures 44, vogtle 3 non-ok pages); none at 144 DPI. zpdf renders 9 near-blank Structures MRC pages (6, 10, 12, 18, 34, 568, 628-630) solid black at both DPIs. zpdf 0.18.0 does not depend on jbig2enc-rust (own JBIG2 decoder in zpdf-parser; hayro-jpeg2000, zune-jpeg); crates.io reverse dependents of jbig2enc-rust are pdfbull and compress-pdf. Majority agreement is not ground truth. Evidence: .agent/scratch/pdf-render-headsup-20261106/summary.md, averages.json, timing/, accuracy/pool6 and pool7, review/.
+        """
+    observed_at git:13109aed7024d67dbb874238be07c6e64414e78d
+    method command
+    watches [
+        "lege-pdf/render/crates/pdf-render-cpu/src/exec.rs",
+        "lege-pdf/render/crates/pdf-render-cpu/src/prepared.rs",
+        "lege-pdf/render/crates/pdf-image/**",
+        "lege-pdf/CRATES-IO-PLAN.md"
+    ]
+    review_after 2026-12-06
+    derived_from [
+        @lege-ecosystem-perf.renderer-headsup.lege-vs-rust-renderers-20261104,
+        @lege-ecosystem.work.pdf-render-headsup-20261104
+    ]
+    author "dk"
+}
+
 record lege-ecosystem-perf.renderer-headsup.font-index-lazy-sparse-20261104/1 : observation {
     title "System font index made lazy and sparse: cold start 133 -> 8 ms"
     state verified
@@ -71,7 +97,7 @@ record lege-ecosystem-perf.renderer-headsup.jpx-headroom-fix-20261104/1 : observ
 
 record lege-ecosystem-perf.renderer-headsup.lege-vs-rust-renderers-20261104/1 : observation {
     title "Lege vs Hayro/pdf-render after fixes: Hayro ahead 1.2-3.6x on 7 of 8 documents; gaps are per-core kernels and codecs"
-    state verified
+    state superseded
     statement """
         With both fixes in, Hayro 0.9.0 renders faster than Lege on 7 of 8 private test documents at 72 and 144 DPI,
         1.2-3.5x serially (P-core pinned) and 1.3-3.6x at eight workers; Lege leads only centralpark at 72 DPI. pdf-render
@@ -135,6 +161,66 @@ record lege-ecosystem-perf.renderer-headsup.merged-three-areas-20261104/1 : obse
         "lege-pdf/render/crates/pdf-image/src/jpeg/mod.rs",
         "lege-codecs/jp2lam/src/decode/t1.rs",
         "lege-pdf/CRATES-IO-PLAN.md"
+    ]
+    author "dk"
+}
+
+record lege-ecosystem-perf.renderer-headsup.minified-stencil-coverage-20261106/1 : observation {
+    title "Minified stencil /Mask now coverage-averaged: Lege 72 DPI agreement 79.3% -> 97.5%, cost 4-8% on MRC stencil books"
+    state verified
+    statement """
+        Lege's 72 DPI disagreements on chinese-medicine (242 pages) and centralparktest-repair (94) came from MRC pages whose JPX foreground is cut out by a hard 1-bit stencil /Mask (ABBYY/LuraDocument shape). Lege point-sampled that mask all-or-nothing even when it was shrunk ~4x. The result was aliased text with dropped thin strokes, while PDFium, MuPDF and Hayro average the mask's coverage. Fix (working tree on top of 13109aed, uncommitted at observation): `PreparedImage::minified_stencil_as_coverage` (pdf-render-cpu/src/image.rs), called at the top of `paint_image` (exec.rs), re-expresses a 1-bit stencil that the draw minifies as the equivalent 1-bit /SMask, with polarity carried by /Decode ([1 0] by default, [0 1] for an inverted stencil). Draws that do not minify the mask are unchanged. Pool7 majority agreement at 72 DPI: Lege 79.3% -> 97.5%; it is unchanged at 100% at 144 DPI. Remaining 72 DPI disagreements: 44 Structures pages, where Lege agrees with Hayro, zpdf and MuPDF and differs only from PDFium/pdf-render by 5-7% gross, a filter-phase difference that Hayro shares; and 3 vogtle vector-text pages with a slight antialiasing tone difference (Lege's mean is within 0.1 grey level of MuPDF's). Cost, interleaved A/B of a HEAD worktree build against the fix, 5 reps, P-core pinned: chinese-medicine 0.95-0.96x, centralpark 0.92-0.93x, Structures (soft-mask control) 0.98-0.99x. Unit test `minified_stencil_averages_coverage`; pdf-render-cpu tests pass. Data: .agent/scratch/pdf-render-headsup-20261106/{accuracy/pool7, accuracy/pool7-prefix, ab-fix.log}.
+        """
+    observed_at git:13109aed7024d67dbb874238be07c6e64414e78d
+    method command
+    watches [
+        "lege-pdf/render/crates/pdf-render-cpu/src/exec.rs",
+        "lege-pdf/render/crates/pdf-render-cpu/src/image.rs"
+    ]
+    review_after 2026-12-06
+    derived_from [ @lege-ecosystem-perf.renderer-headsup.official-comparison-20261106 ]
+    author "dk"
+}
+
+record lege-ecosystem-perf.renderer-headsup.official-comparison-20261106/1 : observation {
+    title "Renderer comparison 2026-11-06 (idle machine): Lege is faster than all six renderers tested"
+    state superseded
+    statement """
+        Official idle-machine comparison of Lege (lege-pdf renderer at 13109aed) with six renderers on the eight-document D:/pdf-test corpus (1,849 pages). Lege speed multiple = geometric mean, over 8 documents x {72, 144} DPI x {1, 8} workers, of Lege's median whole-document pages/s divided by the other renderer's (above 1 means Lege is faster): PDFium 158.0.8125 1.40x (cells 0.65-2.39x; PDFium is faster only on beans); MuPDF 1.28.6 2.26x (0.86-12.34x); Hayro 0.9.0 1.36x (0.95-1.99x); zpdf 0.18.0 CPU 4.49x (1.80-17.21x); pdf-render 1.3.0 4.54x; pdf-toolkit 0.3.13 5.36x. Majority-agreement accuracy (72 / 144 DPI / mean): Lege 79.3/100/89.6%; PDFium 93.2/100/96.6; MuPDF 95.9/99.9/97.9; Hayro 96.4/100/98.2; zpdf 99.2/99.5/99.4; pdf-render 80.9/99.9/90.4; pdf-toolkit 44.7/71.7/58.2. Lege's gap is entirely at 72 DPI: 383 scanned/bilevel pages where thin text breaks up when minified. zpdf renders 9 Structures MRC pages solid black. Timing protocol: P-core pinned, one child process per job, engines rotated each repetition. Lege, PDFium, MuPDF and Hayro were timed 3 times (median; spread per cell about 8-13% median); zpdf, pdf-render and pdf-toolkit were timed once. PDFium/MuPDF memory was not measured. Full tables: docs/measurements/pdf-renderer-comparison-2026-11-06.md. Supersedes the 2026-11-04 result, which had Hayro ahead.
+        """
+    observed_at git:13109aed7024d67dbb874238be07c6e64414e78d
+    method command
+    watches [
+        "lege-pdf/render/**/exec.rs",
+        "lege-pdf/render/**/prepared.rs",
+        "lege-pdf/render/**/pdf-image/**",
+        "lege-pdf/CRATES-IO-PLAN.md"
+    ]
+    review_after 2026-12-06
+    derived_from [ @lege-ecosystem-perf.renderer-headsup.all-renderers-averages-20261106 ]
+    supersedes [ @lege-ecosystem-perf.renderer-headsup.lege-vs-rust-renderers-20261104/1 ]
+    author "dk"
+}
+
+record lege-ecosystem-perf.renderer-headsup.official-comparison-20261106/2 : observation {
+    title "Renderer comparison 2026-11-06 (idle machine): Lege is faster than all six renderers tested"
+    state verified
+    statement """
+        Official idle-machine comparison of Lege (lege-pdf renderer at 13109aed) with six renderers on the eight-document D:/pdf-test corpus (1,849 pages). Lege speed multiple = geometric mean, over 8 documents x {72, 144} DPI x {1, 8} workers, of Lege's median whole-document pages/s divided by the other renderer's (above 1 means Lege is faster): PDFium 158.0.8125 1.40x (cells 0.65-2.39x; PDFium is faster only on beans); MuPDF 1.28.6 2.26x (0.86-12.34x); Hayro 0.9.0 1.36x (0.95-1.99x); zpdf 0.18.0 CPU 4.49x (1.80-17.21x); pdf-render 1.3.0 4.54x; pdf-toolkit 0.3.13 5.36x. Majority-agreement accuracy (72 / 144 DPI / mean): Lege 79.3/100/89.6%; PDFium 93.2/100/96.6; MuPDF 95.9/99.9/97.9; Hayro 96.4/100/98.2; zpdf 99.2/99.5/99.4; pdf-render 80.9/99.9/90.4; pdf-toolkit 44.7/71.7/58.2. Lege's gap is entirely at 72 DPI: 383 scanned/bilevel pages where thin text breaks up when minified. zpdf renders 9 Structures MRC pages solid black. Timing protocol: P-core pinned, one child process per job, engines rotated each repetition. Lege, PDFium, MuPDF and Hayro were timed 3 times (median; spread per cell about 8-13% median); zpdf, pdf-render and pdf-toolkit were timed once. PDFium/MuPDF memory was not measured. Full tables: docs/measurements/pdf-renderer-comparison-2026-11-06.md. Supersedes the 2026-11-04 result, which had Hayro ahead.
+        """
+    observed_at git:13109aed7024d67dbb874238be07c6e64414e78d
+    method command
+    watches [
+        "lege-pdf/render/**/exec.rs",
+        "lege-pdf/render/**/prepared.rs",
+        "lege-pdf/render/**/pdf-image/**",
+        "lege-pdf/CRATES-IO-PLAN.md"
+    ]
+    review_after 2026-12-06
+    derived_from [ @lege-ecosystem-perf.renderer-headsup.all-renderers-averages-20261106 ]
+    supersedes [
+        @lege-ecosystem-perf.renderer-headsup.all-renderers-averages-20261106/1,
+        @lege-ecosystem-perf.renderer-headsup.official-comparison-20261106/1
     ]
     author "dk"
 }

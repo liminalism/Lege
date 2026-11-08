@@ -607,6 +607,57 @@ impl PreparedImage {
         self.row_bits()
     }
 
+    /// A one-bit stencil `/Mask` that this draw *minifies*, re-expressed as the
+    /// equivalent one-bit `/SMask`: the same bits, with the polarity carried
+    /// by the soft mask's `/Decode` (a stencil sample of 1 hides, so alpha is
+    /// `1 - raw`; a stencil `/Decode [1 0]` paints on 1, so alpha is `raw`).
+    ///
+    /// Point-sampling a hard mask all-or-nothing is what the spec describes
+    /// at device resolution, but when several mask texels fall in one device
+    /// pixel it keeps an arbitrary one of them: on MRC scans (a JPX
+    /// foreground cut out by a 300-600 dpi JBIG2 text layer) drawn at 72 dpi
+    /// it rendered aliased text with dropped hairlines and thin strokes, and
+    /// disagreed with PDFium, MuPDF and Hayro, which all average the mask's
+    /// coverage when minifying. The soft-mask sampler box-filters a one-bit
+    /// mask by coverage when it minifies and point-samples the very texel
+    /// [`stencil_col`]/[`stencil_row`] pick when it does not, so this only
+    /// changes minified draws.
+    ///
+    /// `None` when the image has no such mask or the draw does not minify it.
+    pub(crate) fn minified_stencil_as_coverage(&self) -> Option<PreparedImage> {
+        if self.smask.is_some() {
+            return None;
+        }
+        let Some(ImageMask::Stencil(sm)) = self.mask.as_ref() else {
+            return None;
+        };
+        if sm.bits_per_component != 1 || sm.width == 0 || sm.height == 0 {
+            return None;
+        }
+        let row_bytes = (sm.width as usize).div_ceil(8);
+        if sm.samples.len() < row_bytes.checked_mul(sm.height as usize)? {
+            return None;
+        }
+        let footprint = self.smask_footprint(sm);
+        if !(footprint[0] > 1.0 || footprint[1] > 1.0) {
+            return None;
+        }
+        let inverted = sm
+            .decode
+            .as_ref()
+            .and_then(|d| d.first())
+            .is_some_and(|p| p[0] > p[1]);
+        let decode: [f32; 2] = if inverted { [0.0, 1.0] } else { [1.0, 0.0] };
+        Some(PreparedImage {
+            smask: Some(Arc::new(ImageSMask {
+                decode: Some(Arc::from([decode])),
+                ..(**sm).clone()
+            })),
+            mask: None,
+            ..self.clone()
+        })
+    }
+
     /// An 8-bit gray image re-expressed as RGB8: the same texels with each
     /// gray byte tripled and the colour space marked RGB. `pixel()` answers
     /// `[g, g, g, 255]` for such a gray texel and `[r, g, b, 255]` for an
@@ -2350,6 +2401,36 @@ mod tests {
         assert_eq!(im.shade(0.25, 0.5), None, "mask sample 1 → transparent");
         let blue = im.shade(0.75, 0.5).expect("mask sample 0 → paints");
         assert_eq!(&blue[0..3], &[0, 0, 255]);
+    }
+
+    #[test]
+    fn minified_stencil_averages_coverage() {
+        // One red texel drawn into one device pixel, cut out by an 8x1
+        // stencil whose first three bits hide: a point sample would paint
+        // all or nothing, coverage averaging paints 5/8 of it.
+        let mask = stencil(8, 1, vec![0b1110_0000], None);
+        let im = img(1, 1, ImageColorSpace::Rgb, vec![255, 0, 0], Some(mask));
+        let cov = im.minified_stencil_as_coverage().expect("mask minifies 8x");
+        assert!(cov.mask.is_none() && cov.smask.is_some());
+        let px = cov.shade(0.5, 0.5).expect("partly covered pixel paints");
+        assert_eq!(&px[0..3], &[255, 0, 0]);
+        assert!((px[3] as i32 - 159).abs() <= 1, "alpha {} != 5/8", px[3]);
+
+        // `/Decode [1 0]`: the three set bits now paint.
+        let mask = stencil(8, 1, vec![0b1110_0000], Some([1.0, 0.0]));
+        let im = img(1, 1, ImageColorSpace::Rgb, vec![255, 0, 0], Some(mask));
+        let px = im
+            .minified_stencil_as_coverage()
+            .unwrap()
+            .shade(0.5, 0.5)
+            .unwrap();
+        assert!((px[3] as i32 - 96).abs() <= 1, "alpha {} != 3/8", px[3]);
+
+        // Not minified (one mask texel per device pixel): left alone.
+        // (The helper maps the whole unit square onto one device pixel.)
+        let mask = stencil(1, 1, vec![0x80], None);
+        let im = img(1, 1, ImageColorSpace::Rgb, vec![255, 0, 0], Some(mask));
+        assert!(im.minified_stencil_as_coverage().is_none());
     }
 
     #[test]
