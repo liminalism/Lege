@@ -2,7 +2,7 @@
 build = "build.rs"
 name = "lege"
 default-run = "lege"
-version = "1.5.21"
+version = "1.6.0"
 edition = "2024"
 description = "Document binarization and re-encoding especially for E-Ink ebook readers"
 authors = ["Lege Apps"]

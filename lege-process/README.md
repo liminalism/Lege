@@ -3,7 +3,7 @@
   <img src="page_0002-original.png" alt="Lege Processing" width="45%">
 </div>
 
-# Lege - 1.5.2
+# Lege - 1.6.0
 Releases are updated with every new version --> https://github.com/liminalism/lege/releases/
 
 Lege is a document-processing program (CLI + desktop GUI) that converts scanned documents into reader-optimized **PDF** or **DjVu**, focusing on **better readability**, **smaller output size**, and **fast page turns** on e-ink devices. It uses optional layout-aware processing to detect image areas so that they can be excluded from the text binarization process, which makes the original scanned documents readable on e-ink readers with small file size.

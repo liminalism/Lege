@@ -30,6 +30,8 @@ pub struct LegeApp {
     focus: Focus,
     modal_focus: Focus,
     pub snapshot_mode: bool,
+    /// The native window, for the shell's drag loop (0 until it exists).
+    hwnd: isize,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -160,6 +162,9 @@ struct QueueRow {
     path: PathBuf,
     output: Option<PathBuf>,
     state: DocumentRunState,
+    /// The output exists on disk: it completed and the file is there, so the
+    /// shelf can show it.
+    output_ready: bool,
 }
 
 pub struct Dashboard {
@@ -188,6 +193,7 @@ pub struct Dashboard {
     sender: SyncSender<Message>,
     receiver: Receiver<Message>,
     waker: Waker,
+    shelf: crate::file_tiles::Shelf,
 }
 
 impl LegeApp {
@@ -198,17 +204,29 @@ impl LegeApp {
             // Status text and queue paths change continuously. Keep their
             // raster cache bounded instead of retaining every past label.
             // Vertical hinting puts cap height and ascenders on whole pixels;
-            // `theme::crisp` sizes already have whole-pixel x-heights.
+            // `theme::crisp` sizes already have whole-pixel x-heights. Stem
+            // darkening gives Inter's thin stems back the weight
+            // gamma-correct blending takes from them at UI sizes, which is
+            // most of what read as fuzzy text.
             text: TextCache::with_limits(crate::theme::fonts(), 512, 2 * 1024 * 1024)
-                .with_rendering(TextRendering::DEFAULT.with_hinting(Hinting::Vertical)),
+                .with_rendering(
+                    TextRendering::DEFAULT
+                        .with_hinting(Hinting::Vertical)
+                        .with_stem_darkening(STEM_DARKENING),
+                ),
             kernel: RasterKernel::new(),
             input: Input::new(),
             focus: Focus::new(),
             modal_focus: Focus::new(),
             snapshot_mode: false,
+            hwnd: 0,
         }
     }
 }
+
+/// Horizontal stem widening for GUI text, as a multiple of the macOS amount
+/// (`TextRendering::with_stem_darkening`).
+const STEM_DARKENING: f32 = 1.0;
 
 impl PixelApp for LegeApp {
     fn render(&mut self, buffer: &mut WindowBuffer, scale: Scale) {
@@ -244,7 +262,8 @@ impl PixelApp for LegeApp {
                 scale,
                 &mut self.kernel,
             )
-            .with_focus(&mut self.focus);
+            .with_focus(&mut self.focus)
+            .with_smooth_edges(true);
             crate::theme::snap_fonts(&mut ui.theme);
             ui.painter.clear(crate::theme::rgb(palette.app_bg));
             self.dashboard.draw(&mut ui, &bands, self.snapshot_mode);
@@ -258,7 +277,8 @@ impl PixelApp for LegeApp {
                 scale,
                 &mut self.kernel,
             )
-            .with_focus(&mut self.modal_focus);
+            .with_focus(&mut self.modal_focus)
+            .with_smooth_edges(true);
             crate::theme::snap_fonts(&mut ui.theme);
             self.dashboard.draw_modal(&mut ui);
         }
@@ -273,6 +293,15 @@ impl PixelApp for LegeApp {
         self.input.cancel_pointer();
     }
     fn on_native_window(&mut self, window: &winit::window::Window) {
+        #[cfg(target_os = "windows")]
+        {
+            use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+            if let Ok(handle) = window.window_handle()
+                && let RawWindowHandle::Win32(win32) = handle.as_raw()
+            {
+                self.hwnd = win32.hwnd.get();
+            }
+        }
         if let Ok(bitmap) =
             liminalkit_raster::png::decode(include_bytes!("../../../../lege-misc/assets/icon.png"))
         {
@@ -311,6 +340,16 @@ impl PixelApp for LegeApp {
     }
     fn tick(&mut self) {
         self.dashboard.poll();
+        // A tile drag starts here, after the frame that saw the pointer move:
+        // the shell's drag loop is modal and must not run inside a paint.
+        if let Some(path) = self.dashboard.shelf.pending_drag.take() {
+            crate::shell_files::drag_out(self.hwnd, &path);
+            self.dashboard.shelf.recent_drag = Some((path, Instant::now()));
+            // The release happened inside the shell's loop; the window never
+            // saw it, so nothing here may think the button is still down.
+            self.input.cancel_pointer();
+            self.dashboard.waker.wake();
+        }
     }
     fn on_key(&mut self, key: &KeyInput) {
         if self.input.modifiers().accel()
@@ -359,6 +398,10 @@ impl PixelApp for LegeApp {
         self.input.scrolled(dx, dy);
     }
     fn on_file_drop(&mut self, path: PathBuf) {
+        // A tile dragged out and let go over this window again.
+        if self.dashboard.shelf.is_own_drop(&path) {
+            return;
+        }
         if !self.dashboard.running() && !self.dashboard.input_busy() {
             self.dashboard.probe_paths(vec![path]);
         }
@@ -464,6 +507,7 @@ impl Dashboard {
             generation: 0,
             handles: Vec::new(),
             notices: VecDeque::new(),
+            shelf: crate::file_tiles::Shelf::default(),
             modal: None,
             modal_scroll: ScrollState::new(),
             log: crate::logging::load_log_entries().unwrap_or_default(),
@@ -564,6 +608,7 @@ impl Dashboard {
                             path: info.input_path,
                             output: Some(info.output_path),
                             state: DocumentRunState::Queued,
+                            output_ready: false,
                         })
                         .collect();
                     self.handles = handles.take();
@@ -690,6 +735,10 @@ impl Dashboard {
                     return;
                 }
                 self.rows[index].state = DocumentRunState::Completed;
+                self.rows[index].output_ready = self.rows[index]
+                    .output
+                    .as_ref()
+                    .is_some_and(|output| output.exists());
                 self.status = (tr("processing").into(), message.clone(), String::new());
                 self.notice(message, 6);
                 let path = &self.rows[index].path;
@@ -1576,7 +1625,7 @@ impl Dashboard {
         let mut bottom = if notice_x < actions.primary.right() {
             actions.primary.y - ui.px(6)
         } else {
-            ui.painter.height() - ui.px(12)
+            bands.status.bottom() - ui.px(4)
         };
         for (index, notice) in self.notices.iter().enumerate().rev() {
             let area = Rect::new(notice_x, bottom - ui.px(68), ui.px(328), ui.px(68));
@@ -1594,6 +1643,42 @@ impl Dashboard {
         if let Some(index) = remove {
             self.notices.remove(index);
         }
+        self.draw_shelf(ui, bands.shelf);
+    }
+    /// The file shelf: drawn after the frozen-input section, so finished
+    /// outputs can be dragged out while the rest of a batch is still running.
+    fn draw_shelf(&mut self, ui: &mut Ui<'_>, area: Rect) {
+        let inside = card(ui, area);
+        let inputs = self.shelf_inputs();
+        let outputs = self.shelf_outputs();
+        let size = ui.px(crate::file_tiles::ICON) as u32;
+        let shown: Vec<PathBuf> = inputs.iter().chain(&outputs).cloned().collect();
+        self.shelf.retain_icons(&shown, size);
+        if let Some(crate::file_tiles::ShelfAction::Open(path)) =
+            self.shelf.draw(ui, inside, &inputs, &outputs)
+            && let Err(error) = backend::open_with_system(&path.to_string_lossy())
+        {
+            self.notice(error.to_string(), 6);
+        }
+    }
+    /// Every input of the current (or last) run, then whatever is queued after
+    /// it: what the user added, in the order they added it.
+    fn shelf_inputs(&self) -> Vec<PathBuf> {
+        let mut inputs: Vec<PathBuf> = self.rows.iter().map(|row| row.path.clone()).collect();
+        for item in &self.queue {
+            if !inputs.contains(&item.file_path) {
+                inputs.push(item.file_path.clone());
+            }
+        }
+        inputs
+    }
+    /// The outputs that are on disk, in the order they finished being queued.
+    fn shelf_outputs(&self) -> Vec<PathBuf> {
+        self.rows
+            .iter()
+            .filter(|row| row.output_ready)
+            .filter_map(|row| row.output.clone())
+            .collect()
     }
     fn draw_left(
         &mut self,
@@ -2333,6 +2418,67 @@ fn progress_fraction(m: WorkerProgressMetrics) -> f64 {
 mod tests {
     use super::*;
 
+    /// Visual review of the file shelf with real files and their shell icons:
+    /// `LEGE_SHELF_SNAPSHOT_DIR=<dir> cargo test -p lege-gui-liminalui
+    /// shelf_review -- --ignored` writes `shelf-1x.png` and `shelf-1.5x.png`.
+    #[test]
+    #[ignore = "writes review PNGs; run on demand"]
+    fn shelf_review_snapshot() {
+        let Some(out) = std::env::var_os("LEGE_SHELF_SNAPSHOT_DIR").map(PathBuf::from) else {
+            return;
+        };
+        std::fs::create_dir_all(&out).unwrap();
+        let dir = std::env::temp_dir().join(format!("lege-shelf-review-{}", std::process::id()));
+        let scans = dir.join("Scans 1923");
+        std::fs::create_dir_all(&scans).unwrap();
+        let input = dir
+            .join("The Buddha and the Sahibs - The Men Who Discovered India's Lost Religion.pdf");
+        let second = dir.join("Structures.pdf");
+        let output = dir.join("The Buddha and the Sahibs_processed_2026-11-08.pdf");
+        let djvu = dir.join("Structures_processed_2026-11-08.djvu");
+        for file in [&input, &second, &output, &djvu] {
+            std::fs::write(
+                file,
+                b"%PDF-1.4
+%%EOF
+",
+            )
+            .unwrap();
+        }
+        for (scale, name, (w, h)) in [
+            (1.0, "shelf-1x.png", (1040, 830)),
+            (1.5, "shelf-1.5x.png", (1560, 1245)),
+        ] {
+            let mut app = LegeApp::new();
+            app.snapshot_mode = true;
+            let d = &mut app.dashboard;
+            for (id, (path, out)) in [
+                (&input, Some(&output)),
+                (&second, Some(&djvu)),
+                (&scans, None),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                d.rows.push(QueueRow {
+                    task_id: id as u64,
+                    path: path.clone(),
+                    output: out.cloned(),
+                    state: if out.is_some() {
+                        DocumentRunState::Completed
+                    } else {
+                        DocumentRunState::Queued
+                    },
+                    output_ready: out.is_some(),
+                });
+            }
+            let mut buffer = WindowBuffer::new(w, h);
+            app.render(&mut buffer, Scale(scale));
+            liminalkit_raster::png::write(out.join(name), &buffer).unwrap();
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     fn active_batch() -> Dashboard {
         let mut dashboard = Dashboard::new();
         dashboard.batch = BatchState::Running;
@@ -2345,6 +2491,7 @@ mod tests {
                 path,
                 output: None,
                 state: DocumentRunState::Queued,
+                output_ready: false,
             });
         }
         dashboard
@@ -2657,6 +2804,7 @@ mod tests {
                 fraction: 0.0,
                 reflow_phase: None,
             },
+            output_ready: false,
         });
         dashboard.batch = BatchState::Running;
         dashboard.cancel();

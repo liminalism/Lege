@@ -7,7 +7,13 @@ pub struct Bands {
     pub left: Rect,
     pub right: Rect,
     pub status: Rect,
+    /// The file shelf along the bottom: inputs left, outputs right.
+    pub shelf: Rect,
 }
+
+/// Logical height of the file shelf card: a tile (icon and two lines of name)
+/// inside the card's padding.
+pub const SHELF_H: i32 = 120;
 
 impl Bands {
     pub fn new(width: i32, height: i32, s: Scale) -> Self {
@@ -24,14 +30,23 @@ impl Bands {
         let col = (w - gap) / 2;
         let left = Rect::new(p, y, col, settings_h);
         let right = Rect::new(p + col + gap, y, w - col - gap, settings_h);
-        // The process button sits inside the status card's bottom edge.
+        // The process button sits inside the status card's bottom edge. The
+        // file shelf takes a fixed band under it; status keeps the surplus.
         let status_y = left.bottom() + row_gap;
-        let status = Rect::new(p, status_y, w, (height - status_y - p).max(1));
+        let shelf_h = s.px(SHELF_H);
+        let status = Rect::new(
+            p,
+            status_y,
+            w,
+            (height - status_y - p - shelf_h - row_gap).max(1),
+        );
+        let shelf = Rect::new(p, status.bottom() + row_gap, w, shelf_h);
         Self {
             files,
             left,
             right,
             status,
+            shelf,
         }
     }
 }
@@ -185,6 +200,12 @@ mod tests {
                 assert_eq!(b.left.bottom(), b.right.bottom());
                 assert!(b.status.h >= s.px(40));
                 assert!(b.status.bottom() <= s.px(h));
+                // The shelf is a band of its own under status: no text area
+                // above it reaches into it.
+                assert_eq!(b.shelf.y - b.status.bottom(), s.px(10));
+                assert_eq!(b.shelf.h, s.px(SHELF_H));
+                assert!(b.shelf.bottom() <= s.px(h));
+                assert_eq!((b.shelf.x, b.shelf.w), (b.status.x, b.status.w));
             }
         }
     }

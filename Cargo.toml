@@ -216,6 +216,16 @@ jbig2enc-rust = { path = "lege-codecs/jbig2enc-rust" }
 [patch."https://github.com/LegeApp/jp2lam.git"]
 jp2lam = { path = "lege-codecs/jp2lam" }
 
+# liminalkit from the sibling checkout (D:\projects\liminalkit) until the
+# smooth-edges commit is on GitHub; then drop this block and run
+# `cargo update -p liminalkit-ui` to pin the published commit.
+[patch."https://github.com/liminalism/liminalkit"]
+liminalkit-shell = { path = "../liminalkit/crates/liminalkit-shell" }
+liminalkit-windowing = { path = "../liminalkit/crates/liminalkit-windowing" }
+liminalkit-ui = { path = "../liminalkit/crates/liminalkit-ui" }
+liminalkit-raster = { path = "../liminalkit/crates/liminalkit-raster" }
+liminalkit-text = { path = "../liminalkit/crates/liminalkit-text" }
+
 # ---------------------------------------------------------------------------
 # Build profiles (must live in the workspace root).
 # ---------------------------------------------------------------------------

@@ -3,6 +3,7 @@ mod appearance;
 #[allow(dead_code, unused_imports)]
 mod backend;
 #[allow(dead_code)]
+mod file_tiles;
 mod gui_text;
 mod layout;
 #[cfg(target_os = "linux")]
@@ -15,6 +16,7 @@ mod models;
 mod sanzowada;
 #[allow(dead_code)]
 mod settings;
+mod shell_files;
 mod theme;
 mod version;
 #[allow(dead_code)]
@@ -79,7 +81,7 @@ pub fn run() -> anyhow::Result<()> {
     // The preview must not replace the shipping GUI's lege.desktop launcher.
     // Reuse desktop registration when the default frontend switches.
     let mut config =
-        liminalkit_windowing::WindowConfig::new("Lege", 1040.0, 700.0).min_size(720.0, 600.0);
+        liminalkit_windowing::WindowConfig::new("Lege", 1040.0, 830.0).min_size(720.0, 730.0);
     config.app_id = Some("org.lege.Lege".into());
     liminalkit_windowing::run_app(app, config).map_err(|e| anyhow::anyhow!("{e}"))
 }

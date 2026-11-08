@@ -1823,6 +1823,50 @@ record lege-ecosystem.work.glyph-font-text-output/1 : work {
     implements [ @lege-ecosystem.decision.jbig2-is-the-default-pdf-text-format-again ]
 }
 
+record lege-ecosystem.work.gui-smooth-edges-and-file-shelf/1 : work {
+    title "GUI: smooth edges, crisper text, and a file shelf with draggable shell-icon tiles"
+    state completed
+    scope [
+        path "Cargo.toml",
+        path "lege-process/GUI/liminalUI/Cargo.toml",
+        path "lege-process/GUI/liminalUI/src/app.rs",
+        path "lege-process/GUI/liminalUI/src/file_tiles.rs",
+        path "lege-process/GUI/liminalUI/src/layout.rs",
+        path "lege-process/GUI/liminalUI/src/lib.rs",
+        path "lege-process/GUI/liminalUI/src/shell_files.rs",
+        path "lege-process/language_service/de/gui_text.json",
+        path "lege-process/language_service/en/gui_text.json"
+    ]
+    intent """
+        Make the desktop GUI look sharp and show files as objects. Button, field and panel corners are drawn
+        anti-aliased (liminalkit's opt-in Ui::set_smooth_edges, built from the sibling liminalkit checkout
+        through a [patch] until its commit is on GitHub) and GUI text gets stem darkening. A file shelf band
+        along the bottom of the window shows every input (files and folders) at the bottom-left and every
+        finished output at the bottom-right as tiles with the file's own shell icon at physical resolution and
+        its name; a tile can be dragged out of the window to Explorer or any app (the shell's data object and
+        SHDoDragDrop, copy only) and double-clicked to open. The band is its own layout row, so it covers no
+        text; the window's default and minimum heights grow by the band.
+        """
+    acceptance {
+        check tests {
+            statement """
+                The GUI crate's tests pass, including the shelf layout (inputs left, outputs right, no overlap, every file shown or counted, the band clear of status), two-line names that keep their extension, real shell icons for a .pdf and a folder at the requested size, the shell data object offering CF_HDROP for a drop, and alpha handling.
+                """
+            method command
+            command "cargo test -p lege-gui-liminalui"
+            verified_by [ @lege-ecosystem.evidence.gui-smooth-edges-and-file-shelf-20261108/1 ]
+        }
+        check visual {
+            statement """
+                Rendered at 1x and 1.5x, corners are smooth, text is heavier and clear, and the shelf shows real icons and names without covering text.
+                """
+            method observation
+            verified_by [ @lege-ecosystem.evidence.gui-smooth-edges-and-file-shelf-20261108/1 ]
+        }
+    }
+    author "dk"
+}
+
 record lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps/1 : work {
     title "Handoff: remaining `jp2lam` JPEG 2000 decode gaps"
     state abandoned

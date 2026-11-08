@@ -5,7 +5,7 @@ build {
     tool "akr 0.6.2"
     grammar "0.1"
     vocabulary "0.2"
-    source_graph "sha256:0fdd2527b10c107ea8267d8907c919bc62165a59b9be5cded713f527653f36ef"
+    source_graph "sha256:733de007e3f3005810428c1fc8f11998bfe63d86b02dbe51ab0473b3e2f164ab"
 }
 
 source ".akr/project.akr" {
@@ -64,8 +64,8 @@ source ".akr/records/lege-ecosystem/decisions.akr" {
 }
 
 source ".akr/records/lege-ecosystem/evidence.akr" {
-    hash "sha256:a1303447ee19310eee2e1e70a446ae892ab785c7978400912b3549b0c8d2bff7"
-    records 286
+    hash "sha256:03ecdea9386c60b0201c2d6168fbd131e377461a97f17e50e3823c6725b73011"
+    records 287
 }
 
 source ".akr/records/lege-ecosystem/milestones.akr" {
@@ -99,8 +99,8 @@ source ".akr/records/lege-ecosystem/requirements.akr" {
 }
 
 source ".akr/records/lege-ecosystem/work.akr" {
-    hash "sha256:30b12df6b2a8f6b7de3033ccb6a10bb7eb3ab7065380c844509579d7119a6630"
-    records 153
+    hash "sha256:528401f54a24c1b9895ea20b42f6a072b1c60ce1b26d45a6827de86b4ea8619e"
+    records 154
 }
 
 resolution @lege-ecosystem.assessment.glyph-outlines-rasterized-into-a-jbig2-layer/1 {
@@ -1523,6 +1523,11 @@ seal @lege-ecosystem.evidence.glyphfont-stage3-verification/1 {
 seal @lege-ecosystem.evidence.glyphfont-stage4-verification/1 {
     state verified
     hash "sha256:d0712a7aca4c8c5070cebde637d6624158c3377c116c6f92712dca92e95d1f11"
+}
+
+seal @lege-ecosystem.evidence.gui-smooth-edges-and-file-shelf-20261108/1 {
+    state verified
+    hash "sha256:337a37a3a9e72082f4040cd8e2103bc7d93306e811e1088120f2e0fd7923a698"
 }
 
 seal @lege-ecosystem.evidence.image-detection-policy-tests/1 {
@@ -4653,6 +4658,11 @@ seal @lege-ecosystem.work.fuse-operations-where-useful/1 {
 seal @lege-ecosystem.work.fuse-tier-1-output-and-dequantization/1 {
     state abandoned
     hash "sha256:6c6ecf277d7311ee34d46840b7c60c5da182c27747f61a1eea3a3d8542fdefb9"
+}
+
+seal @lege-ecosystem.work.gui-smooth-edges-and-file-shelf/1 {
+    state completed
+    hash "sha256:4ca5dee6fe2e05c4380372add0bda78890a26f802d25a88b70c2c90bebb87ed9"
 }
 
 seal @lege-ecosystem.work.handoff-remaining-jp2lam-jpeg-2000-decode-gaps/1 {

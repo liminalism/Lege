@@ -14,8 +14,8 @@ android {
         applicationId = "com.legeapp.lege"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.5.0"
+        versionCode = 3
+        versionName = "1.6.0"
 
         ndk {
             abiFilters += "arm64-v8a"
