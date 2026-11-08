@@ -3855,6 +3855,12 @@ fn render_tiling(
                 .note_degraded("tiling fill skipped: masked clip without a clip id".into());
             return;
         };
+        // Share the nearest path-clip ancestor's mask across rect
+        // descendants, as every other draw does: a rect clip contributes only
+        // its bounds, which the tile bounds are already intersected with, so
+        // inside them the ancestor's mask is this clip's mask, and it is
+        // rasterized once instead of once per descendant.
+        let cid = page.clips[cid as usize].mask_source.unwrap_or(cid);
         if masks[cid as usize].is_none() {
             let Some(mask) = build_render_clip_mask(page, raster, cid, stats) else {
                 return;
@@ -4454,7 +4460,14 @@ fn paint_command(
             let (bx0, by0) = (b.x as usize, b.y as usize);
             let bx1 = (b.x as i64 + b.width as i64) as usize; // exclusive
             let by1 = (b.y as i64 + b.height as i64) as usize;
-            let mask = mask_cid.and_then(|cid| masks[cid].as_ref());
+            // A path clip that rasterized to full coverage over its envelope
+            // is rectangular for this fill, as for glyphs and images: drop the
+            // mask so a solid fill keeps the run-aware path. Exact: the mask
+            // multiply already skips 255, and the fill lies inside the mask
+            // (checked, since pixels outside it would read `outside`).
+            let mask = mask_cid
+                .and_then(|cid| masks[cid].as_ref())
+                .filter(|m| !(m.all_opaque && rect_contains(m.bounds, b)));
             let (rgb, alpha, opaque, premul) = (cmd.rgb, cmd.alpha, cmd.opaque, cmd.premul);
             let blend = choose_blend(cmd.blend);
             let shading = cmd.shading.as_deref();
@@ -4539,6 +4552,22 @@ fn paint_command(
             }
         }
     }
+}
+
+/// Whether `inner` lies entirely inside `outer` (an empty `inner` always does).
+fn rect_contains(outer: DeviceRect, inner: DeviceRect) -> bool {
+    if inner.width == 0 || inner.height == 0 {
+        return true;
+    }
+    let (ox1, oy1) = (
+        outer.x as i64 + outer.width as i64,
+        outer.y as i64 + outer.height as i64,
+    );
+    let (ix1, iy1) = (
+        inner.x as i64 + inner.width as i64,
+        inner.y as i64 + inner.height as i64,
+    );
+    inner.x >= outer.x && inner.y >= outer.y && ix1 <= ox1 && iy1 <= oy1
 }
 
 /// Composite an isolated group's offscreen surface back onto `parent` with
@@ -6230,6 +6259,26 @@ mod rgb8_area_min_tests {
         let row = surface.row_mut(4);
         let px = &row[2 * 4..2 * 4 + 4];
         assert_eq!(px, [223, 0, 31, 255]);
+    }
+
+    #[test]
+    fn rect_contains_is_inclusive_and_treats_empty_as_contained() {
+        let r = |x, y, width, height| DeviceRect {
+            x,
+            y,
+            width,
+            height,
+        };
+        let outer = r(2, 3, 10, 5);
+        assert!(rect_contains(outer, outer));
+        assert!(rect_contains(outer, r(5, 4, 7, 4)));
+        assert!(
+            !rect_contains(outer, r(5, 4, 8, 4)),
+            "one column past the right edge"
+        );
+        assert!(!rect_contains(outer, r(1, 4, 2, 2)), "left of it");
+        assert!(!rect_contains(outer, r(3, 2, 2, 2)), "above it");
+        assert!(rect_contains(outer, r(100, 100, 0, 3)), "empty");
     }
 
     /// Compare only the pixels the generic body paints at full weight
