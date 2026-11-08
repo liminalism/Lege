@@ -33,16 +33,37 @@ pub fn resolve_user_path_str(raw: &str) -> PathBuf {
 }
 
 fn strip_file_url_host(rest: &str) -> String {
-    if rest.starts_with('/') {
-        return rest.to_string();
+    let path = if rest.starts_with('/') {
+        rest.to_string()
+    } else if let Some(slash) = rest.find('/')
+        && (rest[..slash].is_empty() || rest[..slash].eq_ignore_ascii_case("localhost"))
+    {
+        rest[slash..].to_string()
+    } else {
+        format!("/{rest}")
+    };
+    strip_windows_drive_slash(path)
+}
+
+/// `file:///C:/x` and the bare `file://C:\x` a Windows shell produces both
+/// arrive here as `/C:...`; a Windows path must not start with that slash.
+#[cfg(windows)]
+fn strip_windows_drive_slash(path: String) -> String {
+    let bytes = path.as_bytes();
+    if bytes.len() >= 3
+        && bytes[0] == b'/'
+        && bytes[1].is_ascii_alphabetic()
+        && bytes[2] == b':'
+        && bytes.get(3).is_none_or(|c| matches!(c, b'/' | b'\\'))
+    {
+        return path[1..].to_string();
     }
-    if let Some(slash) = rest.find('/') {
-        let host = &rest[..slash];
-        if host.is_empty() || host.eq_ignore_ascii_case("localhost") {
-            return rest[slash..].to_string();
-        }
-    }
-    format!("/{rest}")
+    path
+}
+
+#[cfg(not(windows))]
+fn strip_windows_drive_slash(path: String) -> String {
+    path
 }
 
 pub fn percent_decode(input: &str) -> String {
