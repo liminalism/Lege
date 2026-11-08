@@ -524,6 +524,10 @@ struct DecodeCacheKey {
 /// Every decode-relevant parameter is part of the identity:
 /// - `codec`, declared `width`/`height`/`bpc`, `is_mask` — inputs to the
 ///   codec's descriptor;
+/// - `space` — the declared colour space's family tag and component count,
+///   exactly as the descriptor carries them. JPX reads both: an `/Indexed`
+///   family returns the raw index plane instead of expanding a container
+///   palette, and a two-component space keeps a duotone's two channels;
 /// - `scale` — the resolution the codec decodes this draw at. JPX and DCT
 ///   decode a minified draw at a reduced resolution, so a reduced decode must
 ///   never be served for a draw that needs more (see [`DecodeScaleKey`]);
@@ -544,6 +548,7 @@ struct ImageCacheKey {
     height: u32,
     bpc: u8,
     is_mask: bool,
+    space: Option<(u8, u8)>,
     scale: DecodeScaleKey,
     parms: u64,
 }
@@ -576,10 +581,13 @@ impl ImageCacheKey {
         height: u32,
         bpc: u8,
         is_mask: bool,
+        space: Option<&pdf_color::ColorSpaceDesc>,
         parms: Option<&pdf_page_ir::CodecParms>,
         scale: DecodeScaleKey,
     ) -> Self {
         let (h0, h1) = content_hash_128(data);
+        // `ColorSpaceFamily` is fieldless, so its discriminant is a faithful tag.
+        let space = space.map(|cs| (cs.family as u8, cs.components));
         let parms_hash = match parms {
             None => 0,
             Some(p) => {
@@ -619,6 +627,7 @@ impl ImageCacheKey {
             height,
             bpc,
             is_mask,
+            space,
             scale,
             parms: parms_hash,
         }
@@ -2681,6 +2690,8 @@ fn promotion_cache_key(img: &crate::image::PreparedImage) -> ImageCacheKey {
         height: img.height,
         bpc: img.bpc,
         is_mask: false,
+        // The colour space is folded into `parms` below.
+        space: None,
         // A promotion expands samples already at their final resolution,
         // which `width`/`height` and the content hash pin.
         scale: DecodeScaleKey::Level(0),
@@ -2978,9 +2989,11 @@ fn decode_codec_samples(
         width,
         height,
         bits_per_component,
-        // Only the *family* is consulted, by codecs whose container carries a
-        // colour space the PDF dictionary overrides (JPX: ISO 32000-1 §7.4.9).
-        // `components` is the declared count, and no codec keys off `object`.
+        // Read by codecs whose container carries a colour space the PDF
+        // dictionary overrides (JPX: ISO 32000-1 §7.4.9): the family (an
+        // `/Indexed` space bypasses a container palette) and the declared
+        // component count (two keep a duotone's channels). Both are part of
+        // the cache key below; no codec keys off `object`.
         color_space: declared_space.map(|space| pdf_color::ColorSpaceDesc {
             family: declared_space_family(space),
             components: space.components() as u8,
@@ -3028,6 +3041,7 @@ fn decode_codec_samples(
             height,
             bits_per_component,
             is_mask,
+            descriptor.color_space.as_ref(),
             parms.as_ref(),
             scale,
         );
@@ -6771,6 +6785,7 @@ mod image_cache_tests {
             height: 1,
             bpc: 8,
             is_mask: false,
+            space: None,
             scale: DecodeScaleKey::Level(0),
             parms: 0,
         }
@@ -7080,6 +7095,100 @@ mod image_cache_tests {
         );
         assert_eq!(unknown.decodes.load(Ordering::Relaxed), 3);
         assert_eq!(cache.stats(), (1, 3, 3), "only the repeated size hits");
+    }
+
+    /// A JPX stand-in whose output depends on the declared colour space, as
+    /// `JpxCodec`'s does: under an `/Indexed` family it returns the raw index
+    /// plane (bypassing a container palette), otherwise the expanded RGB.
+    #[derive(Debug, Default)]
+    struct SpaceAwareJpxCodec {
+        decodes: AtomicUsize,
+    }
+
+    impl pdf_image::ImageCodec for SpaceAwareJpxCodec {
+        fn filter(&self) -> pdf_image::StreamFilter {
+            pdf_image::StreamFilter::Jpx
+        }
+        fn decode(
+            &self,
+            _data: &[u8],
+            descriptor: &pdf_image::ImageDescriptor,
+            _params: &pdf_image::DecodeParameters,
+            _limits: &pdf_image::DecodeLimits,
+        ) -> Result<pdf_image::DecodedImage, pdf_image::ImageError> {
+            self.decodes.fetch_add(1, Ordering::Relaxed);
+            let indexed = descriptor
+                .color_space
+                .as_ref()
+                .is_some_and(|cs| cs.family == pdf_color::ColorSpaceFamily::Indexed);
+            let (format, channels) = if indexed {
+                (pdf_image::DecodedFormat::Gray8, 1)
+            } else {
+                (pdf_image::DecodedFormat::Rgb8, 3)
+            };
+            let (width, height) = (descriptor.width, descriptor.height);
+            let len = width as usize * height as usize * channels;
+            Ok(pdf_image::DecodedImage {
+                width,
+                height,
+                format,
+                stride: width as usize * channels,
+                data: Arc::from((0..len).map(|i| (i * 7 % 251) as u8).collect::<Vec<u8>>()),
+            })
+        }
+        fn reduction_level(
+            &self,
+            _data: &[u8],
+            _descriptor: &pdf_image::ImageDescriptor,
+            _params: &pdf_image::DecodeParameters,
+            _limits: &pdf_image::DecodeLimits,
+        ) -> Option<u8> {
+            Some(0)
+        }
+    }
+
+    /// The declared colour space is part of a decode's identity: one JPX
+    /// payload drawn under `/Indexed` and under `/DeviceRGB` decodes to
+    /// different rasters, so a cache shared by both draws must keep both and
+    /// serve each the raster an uncached render would decode.
+    #[test]
+    fn declared_colour_space_is_part_of_the_decode_identity() {
+        let mut indexed = dct_page_sized(b"one JPX payload, two dictionaries".to_vec(), 16);
+        let mut image = indexed.images[0].clone();
+        image.codec = Some(pdf_page_ir::ImageCodecKind::Jpx);
+        image.color_space = ImageColorSpace::Indexed {
+            base: Box::new(ImageColorSpace::Rgb),
+            hival: 255,
+            lookup: Arc::from((0..768).map(|i| (i * 13 % 256) as u8).collect::<Vec<u8>>()),
+        };
+        indexed.images = Arc::from([image.clone()]);
+        let mut rgb = indexed.clone();
+        image.color_space = ImageColorSpace::Rgb;
+        rgb.images = Arc::from([image]);
+
+        let codec = Arc::new(SpaceAwareJpxCodec::default());
+        let codecs =
+            pdf_image::CodecRegistry::new([codec.clone() as Arc<dyn pdf_image::ImageCodec>]);
+        let lower = |page: &CompiledPage, cache: Option<&Arc<SharedImageCache>>| {
+            lower_with_codecs(page, 1.0, 16, &codecs, cache)
+        };
+        let cache = Arc::new(SharedImageCache::default());
+        let indexed_cached = lower(&indexed, Some(&cache));
+        let rgb_cached = lower(&rgb, Some(&cache));
+        assert_eq!(
+            codec.decodes.load(Ordering::Relaxed),
+            2,
+            "one decode per declared colour space"
+        );
+        for (cached, page) in [(&indexed_cached, &indexed), (&rgb_cached, &rgb)] {
+            let uncached = lower(page, None);
+            assert_eq!(
+                prepared_image(cached).color_space,
+                prepared_image(&uncached).color_space
+            );
+            assert_eq!(prepared_samples(cached), prepared_samples(&uncached));
+            assert_eq!(render_pixels(cached), render_pixels(&uncached));
+        }
     }
 
     /// A 16×16 Indexed page: 4-bit samples over an RGB palette of `lookup`.
