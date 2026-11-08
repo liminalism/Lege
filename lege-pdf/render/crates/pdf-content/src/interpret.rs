@@ -225,6 +225,12 @@ pub(crate) struct Interpreter<'a> {
     /// Resolved pattern resources, keyed by resource name, so a pattern used
     /// on many draws is compiled once.
     pattern_cache: HashMap<NameId, Option<SemColor>>,
+    /// An uncoloured (`PaintType 2`) tiling pattern used with a further
+    /// underlying colour: (resource name, RGBA bits) → the tiling entry that
+    /// shares the first use's compiled cell under that colour. The colour is
+    /// part of the tiling entry, so `pattern_cache` alone would paint every
+    /// later use in the first use's colour.
+    uncolored_tiling_cache: HashMap<(NameId, [u32; 4]), TilingId>,
     /// Resolved `/Separation` and `/DeviceN` spaces, keyed by resource name.
     /// Their tint transform is a PDF function that must be evaluated per
     /// colour, so it is parsed once and reused (a page typically sets the
@@ -369,6 +375,7 @@ struct ResourceCaches {
     font: HashMap<NameId, FontId>,
     type3: HashMap<NameId, Option<Arc<Type3Font>>>,
     pattern: HashMap<NameId, Option<SemColor>>,
+    uncolored_tiling: HashMap<(NameId, [u32; 4]), TilingId>,
     tint: HashMap<NameId, Option<Arc<TintSpace>>>,
     cie: HashMap<NameId, Option<CieSpace>>,
 }
@@ -543,6 +550,7 @@ impl<'a> Interpreter<'a> {
             shadings: Vec::new(),
             tilings: Vec::new(),
             pattern_cache: HashMap::new(),
+            uncolored_tiling_cache: HashMap::new(),
             tint_cache: HashMap::new(),
             type3_cache: HashMap::new(),
             cie_cache: HashMap::new(),
@@ -5093,6 +5101,7 @@ impl<'a> Interpreter<'a> {
             font: std::mem::take(&mut self.font_cache),
             type3: std::mem::take(&mut self.type3_cache),
             pattern: std::mem::take(&mut self.pattern_cache),
+            uncolored_tiling: std::mem::take(&mut self.uncolored_tiling_cache),
             tint: std::mem::take(&mut self.tint_cache),
             cie: std::mem::take(&mut self.cie_cache),
         }
@@ -5102,6 +5111,7 @@ impl<'a> Interpreter<'a> {
         self.font_cache = saved.font;
         self.type3_cache = saved.type3;
         self.pattern_cache = saved.pattern;
+        self.uncolored_tiling_cache = saved.uncolored_tiling;
         self.tint_cache = saved.tint;
         self.cie_cache = saved.cie;
     }
@@ -5111,13 +5121,40 @@ impl<'a> Interpreter<'a> {
     /// `under` are the numeric operands preceding the name (the underlying
     /// color for an uncolored tiling pattern). Returns `None` when the pattern
     /// cannot be resolved so the caller falls back to the symbolic form.
+    ///
+    /// The cache is by name, but an uncoloured tiling pattern's entry carries
+    /// the underlying colour of the use that compiled it. A later use with a
+    /// different colour gets its own entry, sharing the compiled cell (see
+    /// `uncolored_tiling_cache`).
     fn resolve_pattern(&mut self, name: NameId, under: &[f64]) -> Option<SemColor> {
-        if let Some(cached) = self.pattern_cache.get(&name) {
-            return cached.clone();
+        let Some(cached) = self.pattern_cache.get(&name).cloned() else {
+            let resolved = self.resolve_pattern_uncached(name, under);
+            self.pattern_cache.insert(name, resolved.clone());
+            return resolved;
+        };
+        let Some(SemColor::TilingPattern { tiling, matrix }) = cached else {
+            return cached;
+        };
+        let first = &self.tilings[tiling.0 as usize];
+        let under_color = under_rgba(under);
+        let bits = under_color.map(f32::to_bits);
+        if !first.uncolored || bits == first.under_color.map(f32::to_bits) {
+            return cached;
         }
-        let resolved = self.resolve_pattern_uncached(name, under);
-        self.pattern_cache.insert(name, resolved.clone());
-        resolved
+        let id = match self.uncolored_tiling_cache.get(&(name, bits)) {
+            Some(&id) => id,
+            None => {
+                let recoloured = SemTiling {
+                    under_color,
+                    ..first.clone()
+                };
+                let id = TilingId(self.tilings.len() as u32);
+                self.tilings.push(recoloured);
+                self.uncolored_tiling_cache.insert((name, bits), id);
+                id
+            }
+        };
+        Some(SemColor::TilingPattern { tiling: id, matrix })
     }
 
     fn resolve_pattern_uncached(&mut self, name: NameId, under: &[f64]) -> Option<SemColor> {
@@ -5714,7 +5751,7 @@ impl<'a> Interpreter<'a> {
         let bbox = read_rect(dict, self.intern(b"BBox")).unwrap_or([0.0, 0.0, 1.0, 1.0]);
         let x_step = dict_num(dict, self.intern(b"XStep")).unwrap_or(bbox[2] - bbox[0]);
         let y_step = dict_num(dict, self.intern(b"YStep")).unwrap_or(bbox[3] - bbox[1]);
-        let under_color = comps_to_rgba(&under.iter().map(|v| *v as f32).collect::<Vec<_>>());
+        let under_color = under_rgba(under);
         let content = self.snapshot.decode_stream_data(stream, self.ctx).ok()?;
         let pattern_res = match stream.dict.get(self.names.known.resources).cloned() {
             Some(res) => self.resolve_obj(&res),
@@ -6206,6 +6243,12 @@ fn cs_to_rgba(cs: &ImageColorSpace, comps: &[f32]) -> [f32; 4] {
             [rgb[0], rgb[1], rgb[2], 1.0]
         }
     }
+}
+
+/// The underlying colour of an uncoloured tiling pattern, from the numeric
+/// operands that precede the pattern name in `scn`/`SCN`.
+fn under_rgba(under: &[f64]) -> [f32; 4] {
+    comps_to_rgba(&under.iter().map(|v| *v as f32).collect::<Vec<_>>())
 }
 
 fn comps_to_rgba(comps: &[f32]) -> [f32; 4] {
