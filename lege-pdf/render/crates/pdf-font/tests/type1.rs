@@ -138,6 +138,30 @@ fn charstrings_decrypt_and_draw() {
     assert_eq!(o.points, vec![[100.0, 50.0], [900.0, 50.0], [500.0, 650.0]]);
 }
 
+/// Through real encryption: subroutine 0 draws a segment and calls itself
+/// ten times, so `B`, which calls it, would make over a billion subroutine
+/// calls and grow its outline until the process aborted. `B` is dropped once
+/// it spends its token budget, and the rest of the font is untouched.
+#[test]
+fn a_runaway_subroutine_drops_only_its_glyph() {
+    let mut fan_out = [type1_number(0), type1_number(0), vec![5]].concat(); // rlineto
+    for _ in 0..10 {
+        fan_out.extend([type1_number(0), vec![10]].concat()); // 0 callsubr
+    }
+    fan_out.push(11); // return
+    let mut subrs = b"/Subrs 1 array\n".to_vec();
+    subrs.extend(type1_subr("0", &fan_out));
+    let p = FontProgram::parse(Arc::from(type1_with(&subrs, &[("B", &calls_subr(0))])))
+        .expect("parses");
+    let b = p.gid_for_name(b"B").unwrap();
+    assert!(
+        p.outline(b).is_none(),
+        "B is dropped, not run to exhaustion"
+    );
+    let a = p.gid_for_name(b"A").unwrap();
+    assert_eq!(p.outline(a).unwrap().verbs.len(), 4, "A still draws");
+}
+
 /// The font caches charge `retained_bytes`. It counts the parsed program as
 /// well as its bytes, and it stays proportional to the font. When a
 /// `/Subrs` index sized the table, `dup 1000000` in a ~1 KB font retained

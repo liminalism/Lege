@@ -585,10 +585,23 @@ struct Interp<'a> {
     open: bool,
     /// Flex point collection (othersubrs 0–2).
     flex: Option<Vec<[f32; 2]>>,
+    /// Charstring tokens this glyph may still execute.
+    budget: u32,
 }
 
 /// Depth cap for `callsubr`/`seac` recursion (malformed fonts).
 const MAX_DEPTH: u32 = 10;
+
+/// Most charstring tokens (operands and operators) one glyph may execute,
+/// counting its own and those of every subroutine and `seac` component it
+/// runs. [`MAX_DEPTH`] bounds how deeply calls nest, not how many calls a
+/// subroutine makes: one that calls itself `k` times ran about `k^9` times,
+/// so a few dozen bytes of font could pin a CPU and grow the outline until
+/// the allocator gave up, an abort that no `catch_unwind` contains. A glyph
+/// that runs out is dropped, like any charstring the interpreter rejects.
+/// The heaviest glyph in 26 real faces measured runs about 2,500 tokens; the
+/// cap is a hundred times that.
+const MAX_GLYPH_TOKENS: u32 = 1 << 18;
 
 impl<'a> Interp<'a> {
     fn new(font: &'a Type1Font) -> Self {
@@ -603,6 +616,7 @@ impl<'a> Interp<'a> {
             left_side_bearing: 0.0,
             open: false,
             flex: None,
+            budget: MAX_GLYPH_TOKENS,
         }
     }
 
@@ -666,6 +680,7 @@ impl<'a> Interp<'a> {
         }
         let mut i = 0usize;
         while i < code.len() {
+            self.budget = self.budget.checked_sub(1)?;
             let b = code[i];
             i += 1;
             // Operands.
@@ -1324,6 +1339,33 @@ mod tests {
         // subr 0: `0 callsubr` — infinite
         font.subrs = Subrs::from_definitions(vec![(0, vec![n(0), 10])]);
         assert!(font.advance(0).is_some(), "recursion is capped, not fatal");
+    }
+
+    /// Depth was capped, fan-out was not: a subroutine that calls itself `k`
+    /// times ran about `k^9` times. At k = 8, rendering a page that shows
+    /// one such glyph took 10.7 s and 2.5 GB; at k = 9 under a 2 GB limit the
+    /// process aborted on an allocation failure. Here k = 12 (some 5.6e9
+    /// calls) is dropped once it spends its token budget.
+    #[test]
+    fn callsubr_fan_out_is_bounded() {
+        let n = |v: i32| (v + 139) as u8;
+        // subr 0: `0 0 rlineto`, then `0 callsubr` twelve times, `return`.
+        let mut subr = vec![n(0), n(0), 5];
+        for _ in 0..12 {
+            subr.extend_from_slice(&[n(0), 10]);
+        }
+        subr.push(11);
+        // 0 100 hsbw, 0 0 rmoveto, 0 callsubr, endchar
+        let mut font = synthetic(vec![n(0), n(100), 13, n(0), n(0), 21, n(0), 10, 14]);
+        font.subrs = Subrs::from_definitions(vec![(0, subr)]);
+        assert!(font.outline(0).is_none(), "the runaway glyph is dropped");
+        assert_eq!(font.advance(0), None);
+
+        // The budget is per glyph: each outline starts with a full one.
+        let mut ctx = Interp::new(&font);
+        assert!(ctx.run_glyph(0, 0).is_none());
+        assert_eq!(ctx.budget, 0);
+        assert_eq!(Interp::new(&font).budget, MAX_GLYPH_TOKENS);
     }
 
     #[test]
