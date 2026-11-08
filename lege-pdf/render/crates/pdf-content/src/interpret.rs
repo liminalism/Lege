@@ -400,6 +400,16 @@ pub(crate) struct Interpreter<'a> {
     /// images. Kept separately because fills use the evaluator above while the
     /// page IR must not depend on `pdf-color`.
     icc_cmyk_image_cache: HashMap<ObjectId, Option<Arc<pdf_page_ir::IccCmykTransform>>>,
+    /// Image XObjects already built on this page, by stream object: a page
+    /// that draws one image many times (a logo per column, a tiled texture)
+    /// decodes and lowers it once. An entry is only made when the build did
+    /// not read the current resource dictionary (`image_cs_resource_relative`),
+    /// so a `/ColorSpace /CS0` that another resource context could resolve
+    /// differently is rebuilt each time.
+    image_xobject_cache: HashMap<ObjectId, SemImage>,
+    /// Set while building an image when its colour space was looked up in the
+    /// current `/ColorSpace` resource subdictionary rather than given inline.
+    image_cs_resource_relative: bool,
     /// An ExtGState enabled overprint (`/OP` or `/op` true). Feeds
     /// `PageFeatures::OVERPRINT`; compositing itself is unchanged.
     uses_overprint: bool,
@@ -628,6 +638,8 @@ impl<'a> Interpreter<'a> {
             icc_cache: HashMap::new(),
             icc_cmyk_cache: HashMap::new(),
             icc_cmyk_image_cache: HashMap::new(),
+            image_xobject_cache: HashMap::new(),
+            image_cs_resource_relative: false,
             uses_overprint: false,
         }
     }
@@ -3486,6 +3498,15 @@ impl<'a> Interpreter<'a> {
     }
 
     fn draw_image_xobject(&mut self, obj_id: Option<ObjectId>, stream: &PdfStream) {
+        if let Some(id) = obj_id
+            && let Some(cached) = self.image_xobject_cache.get(&id)
+        {
+            let img = cached.clone();
+            let id = ImageId(self.images.len() as u32);
+            self.images.push(img);
+            self.emit(SemanticOp::DrawImage(id));
+            return;
+        }
         let dict = &stream.dict;
         let w_key = self.intern(b"Width");
         let width = self.dict_int_indirect(dict, w_key).unwrap_or(0).max(0) as u32;
@@ -3505,6 +3526,7 @@ impl<'a> Interpreter<'a> {
 
         // Color space: absent for a stencil mask; else resolve the space.
         self.image_cs_degraded = false;
+        self.image_cs_resource_relative = false;
         let color_space = if is_mask {
             None
         } else {
@@ -3586,6 +3608,11 @@ impl<'a> Interpreter<'a> {
             smask_in_data,
             lowering_degraded,
         };
+        if let Some(obj) = obj_id
+            && !self.image_cs_resource_relative
+        {
+            self.image_xobject_cache.insert(obj, img.clone());
+        }
         let id = ImageId(self.images.len() as u32);
         self.images.push(img);
         self.emit(SemanticOp::DrawImage(id));
@@ -3779,6 +3806,8 @@ impl<'a> Interpreter<'a> {
                     .as_dict()?
                     .get(nid)?
                     .clone();
+                // Found in the page's resources (a device name never is).
+                self.image_cs_resource_relative = true;
                 match &*self.resolve_obj(&entry)? {
                     PdfObject::Array(a) => a.to_vec(),
                     _ => return None,
@@ -3992,6 +4021,7 @@ impl<'a> Interpreter<'a> {
                     b"DeviceCMYK" | b"CMYK" => Some(Cs::Cmyk),
                     // A named resource space (`/CS0`): look it up and recurse.
                     _ => {
+                        self.image_cs_resource_relative = true;
                         // Already an interned name: no lookup needed.
                         let nid = *n;
                         let entry = self

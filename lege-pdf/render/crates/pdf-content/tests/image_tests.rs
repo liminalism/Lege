@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use pdf_content::PageCompiler;
 use pdf_document::{DocumentLimits, DocumentSnapshot, PageIndex, ParseContext};
-use pdf_page_ir::{CompiledPage, ImageColorSpace, ImageMask, PageFeatures};
+use pdf_page_ir::{CompiledPage, DisplayOp, ImageColorSpace, ImageMask, PageFeatures};
 use pdf_source::{OwnedBytesSource, PdfSource};
 use pdf_test_support::builder::PdfBuilder;
 
@@ -863,5 +863,81 @@ fn a_mask_stream_that_is_not_an_image_mask_has_the_opposite_polarity() {
         mask_decode(false, "/Decode[1 0]"),
         Some(vec![[0.0, 1.0]]),
         "an explicit /Decode composes with the flip"
+    );
+}
+
+/// One image XObject drawn many times is decoded once per page compile; a
+/// resource-relative colour space (`/CS0`) is not cached, since another
+/// resource context could resolve the name differently.
+#[test]
+fn repeated_image_xobject_is_decoded_once_per_compile() {
+    // The unfiltered content stream is charged to the budget by length, so a
+    // page with n draws costs (n - 1) more copies of this than a page with one.
+    const PER_DRAW: &str = "q 8 0 0 8 0 0 cm /Im Do Q ";
+    const IMAGE_BYTES: usize = 48;
+    fn doc(cs: &str, extra_resources: &str, draws: usize) -> DocumentSnapshot {
+        let mut b = PdfBuilder::new();
+        b.add_object(1, "<</Type/Catalog/Pages 2 0 R>>");
+        b.add_object(
+            2,
+            "<</Type/Pages/Kids[3 0 R]/Count 1/MediaBox[0 0 100 100]>>",
+        );
+        b.add_object(
+            3,
+            &format!(
+                "<</Type/Page/Parent 2 0 R/Contents 4 0 R/Resources<</XObject<</Im 5 0 R>>{extra_resources}>>>>"
+            ),
+        );
+        let content = PER_DRAW.repeat(draws);
+        b.add_stream(4, "", content.as_bytes());
+        // 4x4 RGB raw image: 48 bytes, charged to the decode budget per decode.
+        let pixels: Vec<u8> = (0..48u8).collect();
+        b.add_stream(
+            5,
+            &format!(
+                "/Type/XObject/Subtype/Image/Width 4/Height 4/BitsPerComponent 8/ColorSpace{cs}"
+            ),
+            &pixels,
+        );
+        b.finish_classic_xref("/Root 1 0 R");
+        open(b.into_bytes())
+    }
+    fn compile_counting(snapshot: &DocumentSnapshot) -> (CompiledPage, usize) {
+        let mut ctx = ParseContext::new();
+        let page = PageCompiler::new()
+            .compile(snapshot, PageIndex(0), &mut ctx)
+            .expect("compile failed");
+        (page, ctx.decoded_bytes_used)
+    }
+    let draws = |page: &CompiledPage| {
+        page.operations
+            .iter()
+            .filter(|op| matches!(op, DisplayOp::DrawImage { .. }))
+            .count()
+    };
+
+    let (once, bytes_once) = compile_counting(&doc("/DeviceRGB", "", 1));
+    let (many, bytes_many) = compile_counting(&doc("/DeviceRGB", "", 6));
+    assert_eq!(draws(&once), 1);
+    assert_eq!(draws(&many), 6, "every Do still draws");
+    assert!(
+        bytes_once >= IMAGE_BYTES + PER_DRAW.len(),
+        "the raw bodies are charged"
+    );
+    assert_eq!(
+        bytes_many,
+        bytes_once + 5 * PER_DRAW.len(),
+        "six draws of one image decode it once"
+    );
+
+    // A named resource space is rebuilt per draw.
+    let named = "/ColorSpace<</CS0/DeviceRGB>>";
+    let (_, named_once) = compile_counting(&doc("/CS0", named, 1));
+    let (named_many_page, named_many) = compile_counting(&doc("/CS0", named, 6));
+    assert_eq!(draws(&named_many_page), 6);
+    assert_eq!(
+        named_many,
+        named_once + 5 * (PER_DRAW.len() + IMAGE_BYTES),
+        "resource-relative spaces are not cached"
     );
 }
