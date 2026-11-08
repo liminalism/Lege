@@ -119,6 +119,13 @@ pub struct RasterKernel {
     aet_touched: Vec<(u32, u32)>,
     /// The current row's runs in run-aware mode (see [`CovRun`]).
     row_runs: Vec<CovRun>,
+    /// Set for the duration of a fill. Still set at the next fill's start,
+    /// it means the previous fill unwound (a panic in a row callback or in
+    /// the kernel) with deposits possibly left in the scratch, which is then
+    /// cleared before use. A worker context that outlives a caught panic
+    /// (the read seam keeps one per thread) cannot leak coverage into the
+    /// next render.
+    dirty: bool,
     pub last_edges: u64,
     pub last_rows: u64,
     pub last_covered: u64,
@@ -204,9 +211,40 @@ impl RasterKernel {
     }
 
     /// The fill driver behind both entries; `runs_mode` selects the
-    /// run-aware hand-over of the scanline (AET) path.
+    /// run-aware hand-over of the scanline (AET) path. Clears scratch a
+    /// previous, unwound fill may have left dirty (see `dirty`).
     #[allow(clippy::too_many_arguments)]
     fn fill_impl(
+        &mut self,
+        points: &[[f32; 2]],
+        subpaths: &[(usize, usize)],
+        width: usize,
+        height: usize,
+        rule: FillRule,
+        should_cancel: Option<&(dyn Fn() -> bool + Send + Sync)>,
+        runs_mode: bool,
+        row: impl FnMut(usize, usize, usize, &mut [u8], &[CovRun]) -> bool,
+    ) -> bool {
+        if self.dirty {
+            self.reset_cancelled_fill();
+        }
+        self.dirty = true;
+        let finished = self.fill_inner(
+            points,
+            subpaths,
+            width,
+            height,
+            rule,
+            should_cancel,
+            runs_mode,
+            row,
+        );
+        self.dirty = false;
+        finished
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn fill_inner(
         &mut self,
         points: &[[f32; 2]],
         subpaths: &[(usize, usize)],
@@ -480,8 +518,9 @@ impl RasterKernel {
         true
     }
 
-    /// Cancellation may leave signed-area deposits in reusable scratch. Clear
-    /// them on the exceptional path so the next render cannot inherit coverage.
+    /// Cancellation (or an unwound fill) may leave signed-area deposits in
+    /// reusable scratch. Clear them on the exceptional path so the next
+    /// render cannot inherit coverage.
     fn reset_cancelled_fill(&mut self) {
         self.acc.fill(0.0);
         self.acc_row.fill(0.0);
@@ -489,6 +528,7 @@ impl RasterKernel {
         self.aet_active.clear();
         self.aet_active_next.clear();
         self.aet_touched.clear();
+        self.row_runs.clear();
     }
 
     /// Original per-scanline implementation: for each row, every edge is clipped
@@ -1361,6 +1401,55 @@ mod tests {
             },
         );
         assert_eq!(recovered, vec![255; 4]);
+    }
+
+    /// A fill that unwinds out of its row callback leaves its deposits in the
+    /// kernel's scratch. A worker that catches the panic and keeps the kernel
+    /// must still fill the next path exactly as a fresh kernel does, on both
+    /// the compact (2D accumulator) and the wide (AET) path.
+    #[test]
+    fn a_fill_after_an_unwound_fill_matches_a_fresh_kernel() {
+        let grid = |kernel: &mut RasterKernel, g: &Geometry, w: usize, h: usize| {
+            let mut out = vec![0u8; w * h];
+            kernel.fill(&g.0, &g.1, w, h, FillRule::NonZero, |y, x0, x1, cov| {
+                out[y * w + x0..=y * w + x1].copy_from_slice(&cov[x0..=x1]);
+            });
+            out
+        };
+        // (width, height, the fill that panics, the fill after it)
+        let cases: [(usize, usize, Geometry, Geometry); 2] = [
+            (
+                48,
+                48,
+                (vec![[1.3, 0.7], [46.2, 3.1], [20.5, 47.4]], vec![(0, 3)]),
+                rect(4.25, 4.75, 40.5, 41.0),
+            ),
+            (
+                1193,
+                24,
+                (vec![[0.4, 0.2], [1192.7, 11.3], [3.1, 23.9]], vec![(0, 3)]),
+                rect(2.0, 5.5, 1150.0, 6.0),
+            ),
+        ];
+        for (w, h, first, second) in cases {
+            let want = grid(&mut RasterKernel::default(), &second, w, h);
+            let mut kernel = RasterKernel::default();
+            let unwound = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let mut rows = 0;
+                kernel.fill(&first.0, &first.1, w, h, FillRule::NonZero, |_, _, _, _| {
+                    rows += 1;
+                    if rows == 3 {
+                        panic!("synthetic panic inside a fill");
+                    }
+                });
+            }));
+            assert!(unwound.is_err());
+            let got = grid(&mut kernel, &second, w, h);
+            assert!(
+                got == want,
+                "{w}x{h}: the fill after an unwound fill differs from a fresh kernel's"
+            );
+        }
     }
 
     #[test]

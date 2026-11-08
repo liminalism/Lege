@@ -360,7 +360,9 @@ impl PsValue {
             PsValue::Int(i) => i,
             PsValue::Real(r) => {
                 if r.is_finite() {
-                    r.trunc() as i64
+                    // `as` truncates toward zero (and saturates) by itself;
+                    // `trunc()` only added a libm call.
+                    r as i64
                 } else {
                     0
                 }

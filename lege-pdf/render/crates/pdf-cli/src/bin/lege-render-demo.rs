@@ -17,8 +17,16 @@
 //! also means the PNGs are byte-exact renderer output, which is what an
 //! evaluator wants to inspect.
 //!
-//! Page writing happens on its own small thread pool so disk I/O never stalls
-//! the render pipeline; the report separates "render" from "render + write".
+//! Page writing happens on its own small thread pool behind a bounded queue,
+//! so finished pages cannot pile up in RAM. Time the pipeline spends blocked
+//! on a full queue is measured and reported on its own line, so a slow disk
+//! does not read as a slow renderer; the report separates "render" from
+//! "render + write".
+//!
+//! Options (all optional; anything else is the PDF path):
+//!   `--dpi N`               skip the resolution prompt
+//!   `--compile-workers N`   page-compile workers (default: scheduler's)
+//!   `--render-workers N`    render workers (default: scheduler's)
 
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
@@ -68,17 +76,61 @@ fn banner() {
     println!();
 }
 
+/// Command-line options. A bare argument is the PDF path ("drag the PDF onto
+/// the .exe"); without one the path is prompted for (a plain double-click).
+#[derive(Debug, Default)]
+struct Args {
+    path: Option<PathBuf>,
+    dpi: Option<f64>,
+    compile_workers: Option<usize>,
+    render_workers: Option<usize>,
+}
+
+fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Args> {
+    let mut out = Args::default();
+    let mut args = args.into_iter();
+    while let Some(arg) = args.next() {
+        let mut value = |name: &str| args.next().ok_or_else(|| anyhow!("{name} needs a value"));
+        match arg.as_str() {
+            "--dpi" => {
+                let v = value("--dpi")?;
+                out.dpi = Some(parse_dpi(&v)?);
+            }
+            "--compile-workers" => {
+                let v = value("--compile-workers")?;
+                out.compile_workers = Some(parse_workers("--compile-workers", &v)?);
+            }
+            "--render-workers" => {
+                let v = value("--render-workers")?;
+                out.render_workers = Some(parse_workers("--render-workers", &v)?);
+            }
+            flag if flag.starts_with("--") => bail!("unknown option {flag}"),
+            path => out.path = Some(PathBuf::from(unquote(path))),
+        }
+    }
+    Ok(out)
+}
+
+fn parse_workers(name: &str, value: &str) -> Result<usize> {
+    match value.trim().parse::<usize>() {
+        Ok(n) if n > 0 => Ok(n),
+        _ => bail!("{name} must be a positive whole number, got '{value}'"),
+    }
+}
+
 fn run() -> Result<()> {
-    // A path on the command line covers "drag the PDF onto the .exe"; the
-    // prompt covers a plain double-click.
-    let path = match std::env::args().skip(1).find(|a| !a.starts_with('-')) {
-        Some(arg) => PathBuf::from(unquote(&arg)),
+    let args = parse_args(std::env::args().skip(1))?;
+    let path = match args.path {
+        Some(path) => path,
         None => prompt_path()?,
     };
     if !path.is_file() {
         bail!("not a file: {}", path.display());
     }
-    let dpi = prompt_dpi()?;
+    let dpi = match args.dpi {
+        Some(dpi) => dpi,
+        None => prompt_dpi()?,
+    };
     let scale = dpi / 72.0;
 
     // ---- open ------------------------------------------------------------
@@ -93,18 +145,28 @@ fn run() -> Result<()> {
 
     // ---- fonts -----------------------------------------------------------
     // Resolving non-embedded fonts against the machine's installed faces costs
-    // one directory scan; it is done before the timed section so the font scan
-    // never lands inside the render number.
+    // one directory scan. The provider builds its index lazily, on the first
+    // lookup, so it is forced here: otherwise the scan would land inside the
+    // render number and this line would time an empty constructor.
     let t_fonts = Instant::now();
-    let system_fonts: Arc<dyn pdf_font::SystemFontProvider> =
-        Arc::new(pdf_font::FolderFontProvider::system());
+    let provider = pdf_font::FolderFontProvider::system();
+    let font_families = provider.family_count();
     let font_scan = t_fonts.elapsed();
+    let system_fonts: Arc<dyn pdf_font::SystemFontProvider> = Arc::new(provider);
 
     // ---- output folder ---------------------------------------------------
     let out_dir = output_dir()?;
     std::fs::create_dir_all(&out_dir).with_context(|| format!("creating {}", out_dir.display()))?;
 
-    let options = SchedulerOptions::default();
+    let mut options = SchedulerOptions::default();
+    if args.compile_workers.is_some() || args.render_workers.is_some() {
+        options.compile_workers = args.compile_workers.unwrap_or(options.compile_workers);
+        options.render_workers = args.render_workers.unwrap_or(options.render_workers);
+        // Keep the reorder window in step, or the default silently throttles
+        // a larger worker count (see `SchedulerOptions::reorder_window_for`).
+        options.reorder_window_depth =
+            SchedulerOptions::reorder_window_for(options.compile_workers, options.render_workers);
+    }
     let compile_workers = options.compile_workers;
     let render_workers = options.render_workers;
 
@@ -158,6 +220,10 @@ fn run() -> Result<()> {
     let mut rendered = 0u32;
     let mut failures: Vec<(u32, String)> = Vec::new();
     let mut pixels = 0u64;
+    // Time this collector spent blocked handing pages to the writers. The
+    // pipeline cannot deliver the next page meanwhile, so this is disk
+    // back-pressure, not rendering.
+    let mut write_stall = Duration::ZERO;
     let t_render = Instant::now();
     scheduler.render_range(
         &snapshot,
@@ -172,7 +238,12 @@ fn run() -> Result<()> {
                     pixels += u64::from(host.width) * u64::from(host.height);
                     // A closed channel means every writer died; the joins below
                     // surface the real error, so drop the page quietly here.
-                    let _ = tx.send(WriteJob { page, host });
+                    let job = WriteJob { page, host };
+                    if let Err(crossbeam_channel::TrySendError::Full(job)) = tx.try_send(job) {
+                        let t_stall = Instant::now();
+                        let _ = tx.send(job);
+                        write_stall += t_stall.elapsed();
+                    }
                 }
                 Ok(RenderedPage::Resident(_)) => {
                     failures.push((page, "backend kept the page GPU-resident".to_owned()));
@@ -182,7 +253,10 @@ fn run() -> Result<()> {
             progress(page + 1, page_count);
         },
     );
-    let render_time = t_render.elapsed();
+    let render_wall = t_render.elapsed();
+    // What the renderer took: the pipeline's wall time minus the time it was
+    // held up by a full write queue.
+    let render_time = render_wall.saturating_sub(write_stall);
 
     // ---- drain writers ---------------------------------------------------
     drop(tx);
@@ -201,8 +275,17 @@ fn run() -> Result<()> {
     let row = |label: &str, value: String| println!("  {label:<24}{value}");
     println!("──────────────────────────────────────────────────────────");
     row("open (mmap + xref)", fmt_dur(open_time));
-    row("system font scan", fmt_dur(font_scan));
+    row(
+        "system font scan",
+        format!("{}   ({font_families} families)", fmt_dur(font_scan)),
+    );
     row(&format!("render ({rendered} pages)"), fmt_dur(render_time));
+    if !write_stall.is_zero() {
+        row(
+            "  + PNG queue stalls",
+            format!("{}   (excluded above)", fmt_dur(write_stall)),
+        );
+    }
     row(
         "throughput",
         format!(
@@ -303,6 +386,11 @@ fn prompt_dpi() -> Result<f64> {
     if answer.is_empty() {
         return Ok(DEFAULT_DPI);
     }
+    parse_dpi(answer)
+}
+
+fn parse_dpi(answer: &str) -> Result<f64> {
+    let answer = answer.trim();
     let dpi: f64 = answer
         .parse()
         .with_context(|| format!("'{answer}' is not a number"))?;

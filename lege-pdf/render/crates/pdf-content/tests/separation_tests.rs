@@ -522,3 +522,58 @@ fn two_colorant_devicen_image_lowers_to_a_two_input_lut() {
         "the first colorant must affect the baked colour"
     );
 }
+
+/// Decode bytes charged to the parse context compiling a page that sets a
+/// Separation space with a sampled (stream) tint transform `n` times.
+fn decoded_bytes_for_scn_count(n: usize) -> usize {
+    let mut b = PdfBuilder::new();
+    b.add_object(1, "<</Type/Catalog/Pages 2 0 R>>");
+    b.add_object(
+        2,
+        "<</Type/Pages/Kids[3 0 R]/Count 1/MediaBox[0 0 100 100]>>",
+    );
+    b.add_object(
+        3,
+        "<</Type/Page/Parent 2 0 R/Contents 4 0 R/Resources<</ColorSpace<</Cs 5 0 R>>>>>>",
+    );
+    let mut content = b"/Cs cs".to_vec();
+    for i in 0..n {
+        content.extend_from_slice(format!(" 0.{} scn 0 0 10 10 re f", i % 10).as_bytes());
+    }
+    // A fixed-length content stream, so its own decode charge is the same
+    // whatever `n` is.
+    assert!(content.len() <= 8192);
+    content.resize(8192, b' ');
+    b.add_stream(4, "", &content);
+    b.add_object(5, "[/Separation/Spot/DeviceGray 6 0 R]");
+    let samples: Vec<u8> = (0..4096u32).map(|i| 255 - (i / 16) as u8).collect();
+    b.add_stream(
+        6,
+        "/FunctionType 0/Domain[0 1]/Range[0 1]/Size[4096]/BitsPerSample 8",
+        &samples,
+    );
+    b.finish_classic_xref("/Root 1 0 R");
+    let source: Arc<dyn PdfSource> = Arc::new(OwnedBytesSource::new(b.into_bytes()));
+    let snap = DocumentSnapshot::open(source, DocumentLimits::default()).expect("open");
+    let mut ctx = ParseContext::new();
+    PageCompiler::new()
+        .compile(&snap, PageIndex(0), &mut ctx)
+        .expect("compile");
+    ctx.decoded_bytes_used
+}
+
+/// Each `sc`/`scn` in a named space checks whether the space is `/Indexed`.
+/// That check used to build the whole image colour space each time — for a
+/// Separation, a tint LUT through a freshly decoded transform — and the
+/// decodes were charged to the page's decode budget, so a page with enough
+/// colour operators silently lost its later images, forms and soft masks.
+#[test]
+fn colour_operators_do_not_redecode_their_space_per_operator() {
+    let one = decoded_bytes_for_scn_count(1);
+    let many = decoded_bytes_for_scn_count(200);
+    assert_eq!(
+        many, one,
+        "200 scn charged {many} decoded bytes against {one} for one: \
+         the space is being rebuilt per operator"
+    );
+}

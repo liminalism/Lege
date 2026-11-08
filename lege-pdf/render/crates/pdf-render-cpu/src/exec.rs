@@ -3855,6 +3855,12 @@ fn render_tiling(
                 .note_degraded("tiling fill skipped: masked clip without a clip id".into());
             return;
         };
+        // Share the nearest path-clip ancestor's mask across rect
+        // descendants, as every other draw does: a rect clip contributes only
+        // its bounds, which the tile bounds are already intersected with, so
+        // inside them the ancestor's mask is this clip's mask, and it is
+        // rasterized once instead of once per descendant.
+        let cid = page.clips[cid as usize].mask_source.unwrap_or(cid);
         if masks[cid as usize].is_none() {
             let Some(mask) = build_render_clip_mask(page, raster, cid, stats) else {
                 return;
@@ -4454,7 +4460,14 @@ fn paint_command(
             let (bx0, by0) = (b.x as usize, b.y as usize);
             let bx1 = (b.x as i64 + b.width as i64) as usize; // exclusive
             let by1 = (b.y as i64 + b.height as i64) as usize;
-            let mask = mask_cid.and_then(|cid| masks[cid].as_ref());
+            // A path clip that rasterized to full coverage over its envelope
+            // is rectangular for this fill, as for glyphs and images: drop the
+            // mask so a solid fill keeps the run-aware path. Exact: the mask
+            // multiply already skips 255, and the fill lies inside the mask
+            // (checked, since pixels outside it would read `outside`).
+            let mask = mask_cid
+                .and_then(|cid| masks[cid].as_ref())
+                .filter(|m| !(m.all_opaque && rect_contains(m.bounds, b)));
             let (rgb, alpha, opaque, premul) = (cmd.rgb, cmd.alpha, cmd.opaque, cmd.premul);
             let blend = choose_blend(cmd.blend);
             let shading = cmd.shading.as_deref();
@@ -4541,6 +4554,22 @@ fn paint_command(
     }
 }
 
+/// Whether `inner` lies entirely inside `outer` (an empty `inner` always does).
+fn rect_contains(outer: DeviceRect, inner: DeviceRect) -> bool {
+    if inner.width == 0 || inner.height == 0 {
+        return true;
+    }
+    let (ox1, oy1) = (
+        outer.x as i64 + outer.width as i64,
+        outer.y as i64 + outer.height as i64,
+    );
+    let (ix1, iy1) = (
+        inner.x as i64 + inner.width as i64,
+        inner.y as i64 + inner.height as i64,
+    );
+    inner.x >= outer.x && inner.y >= outer.y && ix1 <= ox1 && iy1 <= oy1
+}
+
 /// Composite an isolated group's offscreen surface back onto `parent` with
 /// constant `opacity` and blend mode.
 fn composite_group(
@@ -4606,10 +4635,18 @@ fn composite_group_seeded(
         return;
     }
     let pox = parent.origin_x;
+    // Fully opaque and unmasked, every pixel takes the `t == 255` copy below,
+    // so whole rows can be copied at once (the common wrapper group).
+    let whole_rows = opacity == 255 && soft.is_none();
     for ly in 0..group.height {
         let abs_y = group.origin_y + ly;
         let grow = group.local_row(ly);
         let prow = parent.row_mut(abs_y);
+        if whole_rows {
+            let plx = group.origin_x - pox;
+            prow[plx * 4..(plx + group.width) * 4].copy_from_slice(&grow[..group.width * 4]);
+            continue;
+        }
         for lx in 0..group.width {
             let src = &grow[lx * 4..lx * 4 + 4];
             // Masking the lerp weight is exactly right here: at mask 0 the
@@ -4698,8 +4735,24 @@ fn composite_px_blended(px: &mut [u8], rgb: [u8; 3], a: u8, blend: BlendChoice) 
 }
 
 /// Composite one premultiplied group pixel `src` onto `dst` at group opacity.
+///
+/// An opaque source at full opacity under Normal replaces `dst` outright:
+/// the general path below returns exactly `src` for every source value and
+/// every backdrop (`opaque_normal_layer_composite_is_a_copy` checks all
+/// 256 x 256 x 256 channel, backdrop and backdrop-alpha combinations), so
+/// the copy skips its float work for the bulk of a typical group.
 #[inline]
 fn composite_layer_px(dst: &mut [u8], src: &[u8], opacity: u8, blend: BlendChoice) {
+    if src[3] == 255 && opacity == 255 && matches!(blend, BlendChoice::Normal) {
+        dst[..4].copy_from_slice(&src[..4]);
+        return;
+    }
+    composite_layer_px_general(dst, src, opacity, blend);
+}
+
+/// [`composite_layer_px`] without the opaque-copy shortcut.
+#[inline]
+fn composite_layer_px_general(dst: &mut [u8], src: &[u8], opacity: u8, blend: BlendChoice) {
     let sa = src[3] as f32 / 255.0;
     if sa <= 0.0 {
         return;
@@ -6230,6 +6283,241 @@ mod rgb8_area_min_tests {
         let row = surface.row_mut(4);
         let px = &row[2 * 4..2 * 4 + 4];
         assert_eq!(px, [223, 0, 31, 255]);
+    }
+
+    /// The shortcut in `composite_layer_px` must be what the general path
+    /// computes: an opaque source at full opacity under Normal yields the
+    /// source byte for every channel value, backdrop value and backdrop alpha
+    /// (the general path's result depends on nothing else).
+    #[test]
+    fn opaque_normal_layer_composite_is_a_copy() {
+        for s in 0..=255u8 {
+            for da in 0..=255u8 {
+                for d in 0..=255u8 {
+                    let src = [s, s, s, 255];
+                    let mut dst = [d, d, d, da];
+                    composite_layer_px_general(&mut dst, &src, 255, BlendChoice::Normal);
+                    assert_eq!(dst, src, "source {s}, backdrop {d}, backdrop alpha {da}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn rect_contains_is_inclusive_and_treats_empty_as_contained() {
+        let r = |x, y, width, height| DeviceRect {
+            x,
+            y,
+            width,
+            height,
+        };
+        let outer = r(2, 3, 10, 5);
+        assert!(rect_contains(outer, outer));
+        assert!(rect_contains(outer, r(5, 4, 7, 4)));
+        assert!(
+            !rect_contains(outer, r(5, 4, 8, 4)),
+            "one column past the right edge"
+        );
+        assert!(!rect_contains(outer, r(1, 4, 2, 2)), "left of it");
+        assert!(!rect_contains(outer, r(3, 2, 2, 2)), "above it");
+        assert!(rect_contains(outer, r(100, 100, 0, 3)), "empty");
+    }
+
+    /// Compare only the pixels the generic body paints at full weight
+    /// (`edge_coverage` is `None`). A magnified bilinear draw is allowed ±1
+    /// per channel there: the generic bilinear tap weights can sum to 254/255
+    /// on an opaque image, where the fast path keeps it opaque.
+    fn assert_interior_equal(
+        img: &PreparedImage,
+        got: &mut Surface,
+        want: &mut Surface,
+        what: &str,
+    ) {
+        let bilinear_magnified = img.interpolation == InterpolationMode::Bilinear
+            && img.footprint[0] <= 1.0
+            && img.footprint[1] <= 1.0;
+        for y in 0..got.height {
+            let (g, r) = (got.row_mut(y).to_vec(), want.row_mut(y).to_vec());
+            for x in 0..got.width {
+                if img.edge_coverage(x as f64 + 0.5, y as f64 + 0.5).is_some() {
+                    continue;
+                }
+                let (gp, rp) = (&g[x * 4..x * 4 + 4], &r[x * 4..x * 4 + 4]);
+                let close = gp.iter().zip(rp).all(|(a, b)| a.abs_diff(*b) <= 1);
+                assert!(
+                    gp == rp || (bilinear_magnified && close),
+                    "{what}: interior pixel ({x}, {y}) is {gp:?}, generic body {rp:?}"
+                );
+            }
+        }
+    }
+
+    /// `img` re-placed at device `(ox, oy)` with device size `w x h`, all
+    /// fractional, so the draw has a partially covered border ring.
+    fn place(mut img: PreparedImage, ox: f64, oy: f64, w: f64, h: f64) -> PreparedImage {
+        img.inv = Matrix {
+            a: 1.0 / w,
+            b: 0.0,
+            c: 0.0,
+            d: 1.0 / h,
+            e: -ox / w,
+            f: -oy / h,
+        };
+        let (x0, y0) = (ox.floor() as i32, oy.floor() as i32);
+        img.bounds = DeviceRect {
+            x: x0,
+            y: y0,
+            width: ((ox + w).ceil() as i32 - x0) as u32,
+            height: ((oy + h).ceil() as i32 - y0) as u32,
+        };
+        img.footprint = [img.width as f64 / w, img.height as f64 / h];
+        img
+    }
+
+    /// Run `img` through the real image dispatcher (`execute` → `paint_image`,
+    /// with whatever promotion and fast path it picks) onto a transparent
+    /// `side x side` surface.
+    fn dispatched(img: &PreparedImage, side: u32) -> Surface {
+        let page = crate::prepared::CpuPreparedPage {
+            size: pdf_page_ir::DeviceSize {
+                width: side,
+                height: side,
+            },
+            ops: vec![PreparedOp::Image(Box::new(img.clone()))],
+            clips: Vec::new(),
+            points: Vec::new(),
+            subpaths: Vec::new(),
+            codecs: pdf_image::CodecRegistry::default(),
+            decode_limits: pdf_image::DecodeLimits::default(),
+            hinting: pdf_font::HintingPolicy::None,
+            color_policy: pdf_render_api::RenderColorPolicy::Original,
+            diagnostics: Default::default(),
+            image_cache: None,
+            #[cfg(feature = "profiling")]
+            profile: Default::default(),
+            #[cfg(feature = "profiling")]
+            decode_cache: None,
+        };
+        let mut surface = Surface::new(side as usize, side as usize, Background::Transparent);
+        let mut ctx = CpuWorkerContext::default();
+        let mut stats = RenderStats::default();
+        execute(&page, &mut surface, &mut ctx, &mut stats);
+        surface
+    }
+
+    /// Every image fast path must equal the full generic body — interior
+    /// *and* the anti-aliased border ring — when the image lands on
+    /// fractional device coordinates. The other equivalence tests here place
+    /// images on whole pixels, where the ring does not exist, or compare
+    /// against a `shade()`-only reference that has no edge coverage, so a
+    /// fast path that got the ring wrong passed them.
+    ///
+    /// Covers RGB8, Gray8 (promoted), Indexed (expanded) and CMYK sources,
+    /// unmasked and under a stencil, a one-bit and an eight-bit soft mask;
+    /// minified, near 1:1 and magnified; nearest and bilinear.
+    ///
+    /// Every masked path matches byte for byte, ring included. The opaque
+    /// *unmasked* fast paths (`fast_rgb8`, `fast_rgb8_bilinear`,
+    /// `fast_rgb8_area`, the CMYK area path, and Gray8/Indexed through their
+    /// RGB8 promotions) do not: they paint the ring by pixel centre, at full
+    /// weight or not at all, where the generic body paints its A10 fractional
+    /// edge coverage. That divergence predates this test and is a rendering
+    /// decision, not a fix to slip in (it changes every opaque image that
+    /// lands on fractional device coordinates); see the 2026-11-08 scoping
+    /// note. Until it is decided, those paths are held to the interior.
+    #[test]
+    fn fractional_placements_match_the_generic_body_including_the_border_ring() {
+        let mut rng = Rng(0xb0d5_7a11_0f0f_1234);
+        // (source w, h, device x, y, w, h)
+        let placements: [(u32, u32, f64, f64, f64, f64); 5] = [
+            (37, 23, 1.3, 2.6, 9.4, 6.2),
+            (16, 16, 0.25, 0.75, 15.5, 15.5),
+            (64, 48, 2.5, 1.125, 20.3, 14.7),
+            (5, 7, 0.6, 1.4, 17.8, 21.3),
+            (9, 33, 3.7, 0.2, 4.6, 11.9),
+        ];
+        let spaces: [(&str, ImageColorSpace, usize); 4] = [
+            ("rgb", ImageColorSpace::Rgb, 3),
+            ("gray", ImageColorSpace::Gray, 1),
+            ("cmyk", ImageColorSpace::Cmyk, 4),
+            (
+                "indexed",
+                ImageColorSpace::Indexed {
+                    base: Box::new(ImageColorSpace::Rgb),
+                    hival: 255,
+                    lookup: Arc::from(
+                        (0..256 * 3)
+                            .map(|i| (i * 73 % 256) as u8)
+                            .collect::<Vec<_>>(),
+                    ),
+                },
+                1,
+            ),
+        ];
+        let mut checked = 0;
+        for &(sw, sh, ox, oy, w, h) in &placements {
+            let side = (ox + w).max(oy + h).ceil() as u32 + 2;
+            for (space_name, space, comps) in &spaces {
+                for mask_kind in ["none", "stencil", "smask1", "smask8"] {
+                    for interpolation in [InterpolationMode::Nearest, InterpolationMode::Bilinear] {
+                        let samples: Vec<u8> = (0..sw as usize * sh as usize * comps)
+                            .map(|_| rng.byte())
+                            .collect();
+                        let mut img = place(
+                            make_image_cs(sw, sh, 1, 1, space.clone(), samples),
+                            ox,
+                            oy,
+                            w,
+                            h,
+                        );
+                        img.interpolation = interpolation;
+                        let (mw, mh) = (sw.div_ceil(2) + 1, sh + 3);
+                        match mask_kind {
+                            "stencil" => {
+                                img.mask = Some(pdf_page_ir::ImageMask::Stencil(bilevel(
+                                    mw, mh, &mut rng,
+                                )));
+                            }
+                            "smask1" => img.smask = Some(bilevel(mw, mh, &mut rng)),
+                            "smask8" => {
+                                let mask: Vec<u8> = (0..mw * mh)
+                                    .map(|_| if rng.byte() < 60 { rng.byte() } else { 255 })
+                                    .collect();
+                                img.smask = Some(Arc::new(pdf_page_ir::ImageSMask {
+                                    width: mw,
+                                    height: mh,
+                                    bits_per_component: 8,
+                                    decode: None,
+                                    samples: Arc::from(mask),
+                                    codec: None,
+                                    codec_data: None,
+                                    codec_parms: None,
+                                }));
+                            }
+                            _ => {}
+                        }
+                        let mut got = dispatched(&img, side);
+                        // `paint_image` turns a minified hard stencil into a
+                        // coverage soft mask before choosing any path.
+                        let generic_img = img
+                            .minified_stencil_as_coverage()
+                            .unwrap_or_else(|| img.clone());
+                        let (mut want, _) = generic_masked_reference(&generic_img, side, side);
+                        let what = format!(
+                            "{space_name} {mask_kind} {interpolation:?} src {sw}x{sh} at \
+                             ({ox}, {oy}) size {w}x{h}"
+                        );
+                        if mask_kind != "none" {
+                            assert_surfaces_equal(&mut got, &mut want, &what);
+                        } else {
+                            assert_interior_equal(&img, &mut got, &mut want, &what);
+                        }
+                        checked += 1;
+                    }
+                }
+            }
+        }
+        assert_eq!(checked, 5 * 4 * 4 * 2);
     }
 }
 

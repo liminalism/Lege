@@ -122,8 +122,12 @@ fn tj_adjustments_move_along_y_unscaled_by_th() {
     // Glyph 2 pen y: −10 (advance) + 5 (adjust −(−500)/1000·10) = −5;
     // drawn at −5 − 8.8 = −13.8.
     assert!((run.glyphs[1].y - -13.8).abs() < 1e-9);
-    // vx displacement IS horizontal → scaled by Th: −(1000/2)/1000·10·0.5 = −2.5.
-    assert!((run.glyphs[1].x - -2.5).abs() < 1e-9);
+    // vx displacement IS horizontal → scaled by Th: −(1000/2)/1000·10·0.5 = −2.5
+    // in text space. Th is folded into the run matrix, so the placement is
+    // the pre-Th −5 and the matrix halves it.
+    assert!((run.glyphs[1].x - -5.0).abs() < 1e-9);
+    let at = |x: f64| run.transform.apply(pdf_page_ir::Point { x, y: 0.0 }).x;
+    assert!((at(run.glyphs[1].x) - at(0.0) - -2.5).abs() < 1e-9);
 }
 
 #[test]

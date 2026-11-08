@@ -242,3 +242,70 @@ fn nested_clips_intersect() {
     assert!(white(px(&host, 10, 6)), "clipped by second rect");
     assert!(white(px(&host, 6, 10)), "clipped by first rect");
 }
+
+/// A path clip whose mask comes out fully opaque over its envelope (here a
+/// pixel-aligned rectangle spelled with an extra collinear point, so it is
+/// not recognised as a rect clip) is dropped for fills, as for glyphs and
+/// images, so a solid fill keeps the run-aware path. The result must be
+/// byte-identical to clipping by the equivalent rectangle, for an opaque and
+/// a translucent fill with anti-aliased edges.
+#[test]
+fn a_fully_opaque_path_clip_paints_like_its_rectangle() {
+    let five_point_rect = PathData {
+        verbs: Arc::from([
+            PathVerb::MoveTo,
+            PathVerb::LineTo,
+            PathVerb::LineTo,
+            PathVerb::LineTo,
+            PathVerb::LineTo,
+            PathVerb::Close,
+        ]),
+        points: Arc::from([
+            Point { x: 4.0, y: 4.0 },
+            Point { x: 10.0, y: 4.0 },
+            Point { x: 16.0, y: 4.0 },
+            Point { x: 16.0, y: 16.0 },
+            Point { x: 4.0, y: 16.0 },
+        ]),
+    };
+    let fill = tri_path(
+        Point { x: 1.3, y: 2.7 },
+        Point { x: 18.6, y: 5.2 },
+        Point { x: 6.4, y: 19.1 },
+    );
+    for alpha in [1.0, 0.5] {
+        let draw = |clip: PathData| {
+            let ops = vec![
+                DisplayOp::PushClip {
+                    path: PathId(0),
+                    rule: FillRule::NonZero,
+                },
+                DisplayOp::FillPath {
+                    path: PathId(1),
+                    paint: PaintId(0),
+                    rule: FillRule::NonZero,
+                    alpha,
+                    blend: pdf_page_ir::BlendMode::Normal,
+                },
+                DisplayOp::PopClip,
+            ];
+            render(
+                page(
+                    20.0,
+                    vec![clip, fill.clone()],
+                    ops,
+                    PageFeatures::BASIC_PATHS | PageFeatures::CLIPPING,
+                ),
+                20,
+            )
+        };
+        let by_path = draw(five_point_rect.clone());
+        let by_rect = draw(rect_path(4.0, 4.0, 16.0, 16.0));
+        assert!(
+            by_path.pixels == by_rect.pixels,
+            "alpha {alpha}: the opaque path clip painted differently from its rectangle"
+        );
+        assert!(red(px(&by_path, 8, 8)) || alpha < 1.0, "the fill painted");
+        assert!(white(px(&by_path, 2, 10)), "outside the clip stays white");
+    }
+}

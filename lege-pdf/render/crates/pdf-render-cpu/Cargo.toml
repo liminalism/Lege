@@ -13,6 +13,9 @@ pdf-image = { workspace = true }
 pdf-render-api = { workspace = true }
 pdf-color = { workspace = true }
 pdf-font = { version = "0.4.0", path = "../pdf-font" }
+# Seeded fast hasher for the shared glyph cache (see `GlyphHashState`).
+# foldhash 0.2.0 is already in the lockfile through hashbrown.
+foldhash = "0.2.0"
 pdf-profiling = { workspace = true, optional = true }
 
 [features]

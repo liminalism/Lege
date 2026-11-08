@@ -677,8 +677,17 @@ fn rgb_surface_from_rgba(rendered: &HostPage, page_index: u32) -> Result<RgbSurf
         page: page_index,
         message: message.to_string(),
     };
-    let mut pixels = Vec::with_capacity(capacity);
-    for row in 0..rendered.height as usize {
+    // Built in its final shared allocation (`repeat_n` is exact-size, so the
+    // `Arc` is allocated once) and filled three bytes per pixel. Extending a
+    // `Vec` through `flat_map` pushed byte by byte with a capacity check each,
+    // and `Arc::from` then copied the whole plane again: together about as
+    // long as rendering the page.
+    let mut pixels: Arc<[u8]> = std::iter::repeat_n(0u8, capacity).collect();
+    let Some(out) = Arc::get_mut(&mut pixels) else {
+        return Err(malformed("RGB surface is shared before it is filled"));
+    };
+    for (row, out_row) in (0..rendered.height as usize).zip(out.chunks_exact_mut(rgb_stride.max(1)))
+    {
         let start = row
             .checked_mul(rendered.stride)
             .ok_or_else(|| malformed("renderer row offset overflow"))?;
@@ -689,13 +698,15 @@ fn rgb_surface_from_rgba(rendered: &HostPage, page_index: u32) -> Result<RgbSurf
             .pixels
             .get(start..end)
             .ok_or_else(|| malformed("renderer returned a truncated RGBA surface"))?;
-        pixels.extend(row.chunks_exact(4).flat_map(|pixel| &pixel[..3]));
+        for (rgb, rgba) in out_row.chunks_exact_mut(3).zip(row.chunks_exact(4)) {
+            rgb.copy_from_slice(&rgba[..3]);
+        }
     }
     Ok(RgbSurface {
         width: rendered.width,
         height: rendered.height,
         stride: rgb_stride,
-        pixels: Arc::from(pixels),
+        pixels,
     })
 }
 
@@ -1080,6 +1091,30 @@ mod tests {
         CodecParms, ImageColorSpace, ImageId, ImageIr, InterpolationMode, PageBounds, PaintId,
         Rect, ResourceKey,
     };
+
+    /// RGB8 output drops alpha from each pixel and skips any row padding the
+    /// renderer's stride carries; a truncated surface is an error, not a panic.
+    #[test]
+    fn rgb_surface_drops_alpha_and_row_padding() {
+        // 2x2 RGBA, stride 12 (one pixel of padding per row).
+        let pixels: Vec<u8> = (0u8..24).collect();
+        let host = HostPage {
+            width: 2,
+            height: 2,
+            stride: 12,
+            format: OutputFormat::Rgba8PremultipliedSrgb,
+            pixels: Arc::from(pixels),
+        };
+        let rgb = rgb_surface_from_rgba(&host, 0).unwrap();
+        assert_eq!(rgb.stride, 6);
+        assert_eq!(&*rgb.pixels, &[0, 1, 2, 4, 5, 6, 12, 13, 14, 16, 17, 18]);
+
+        let truncated = HostPage {
+            pixels: Arc::from(vec![0u8; 15]),
+            ..host
+        };
+        assert!(rgb_surface_from_rgba(&truncated, 0).is_err());
+    }
 
     fn eligible_page() -> CompiledPage {
         let smask = Arc::new(ImageSMask {

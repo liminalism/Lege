@@ -1,0 +1,35 @@
+diff --git a/lege-pdf/render/crates/pdf-render-cpu/src/prepared.rs b/lege-pdf/render/crates/pdf-render-cpu/src/prepared.rs
+index 680d11f..81d3d15 100644
+--- a/lege-pdf/render/crates/pdf-render-cpu/src/prepared.rs
++++ b/lege-pdf/render/crates/pdf-render-cpu/src/prepared.rs
+@@ -565,9 +565,27 @@ impl ImageCacheKey {
+         // the same samples whatever the draw size; keying them by target
+         // would decode the same JBIG2 or JPEG again for every render size of
+         // the page (Lege renders each page at two).
+-        let target = matches!(kind, pdf_page_ir::ImageCodecKind::Jpx)
+-            .then_some(target)
+-            .flatten();
++        // P1 PROBE FIX CANDIDATE (scratch worktree only): JPEG also decodes at
++        // a reduced 1/2, 1/4 or 1/8 DCT scale chosen from the target
++        // (pdf-image jpeg `pick_dct_size` minification rule), so key DCT by
++        // that *scale class* rather than dropping the target: draws that
++        // pick the same scale still share one decode, different scales never
++        // alias. A full-size class (8) shares the untargeted key.
++        let target = match kind {
++            pdf_page_ir::ImageCodecKind::Jpx => target,
++            pdf_page_ir::ImageCodecKind::Dct => target.and_then(|(tw, th)| {
++                let scaled = |n: u32, dct: u64| (u64::from(n) * dct).div_ceil(8).max(1);
++                let mut dct = 8u64;
++                while dct > 1
++                    && scaled(width, dct / 2) >= u64::from(tw.max(1))
++                    && scaled(height, dct / 2) >= u64::from(th.max(1))
++                {
++                    dct /= 2;
++                }
++                (dct < 8).then_some((dct as u32, 0))
++            }),
++            _ => None,
++        };
+         let parms_hash = match parms {
+             None => 0,
+             Some(p) => {

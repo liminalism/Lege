@@ -23,22 +23,34 @@ use crate::raster::FillRule;
 use crate::stroke;
 use crate::surface::{unique_arc_mut, zeroed_arc};
 
-/// Worker-local parsed-font residency. A document shares each program's
-/// `Arc<[u8]>` across compiled pages, so pointer identity remains stable while
-/// this cache retains the corresponding parsed program.
+/// Worker-local parsed-font residency, keyed by the page's font table.
+///
+/// The map is indexed by per-page `FontId`, so it is valid only for the exact
+/// font table it was built from. Identity is that table's allocation, held
+/// through a [`Weak`](std::sync::Weak): while the `Weak` lives the allocation
+/// cannot be freed and reused, so an address match cannot be an ABA match.
+/// (Keying by the `CompiledPage`'s own address did have that hole: a later
+/// page allocated where a freed one was inherited its font programs and drew
+/// with them.) A `Weak` keeps only the allocation, not the font table's
+/// contents or program bytes, so nothing is retained past the page's life.
 #[derive(Debug, Default)]
 pub(crate) struct FontProgramCache {
-    page_ptr: usize,
+    fonts: Option<std::sync::Weak<[pdf_page_ir::FontResource]>>,
     programs: HashMap<u32, Option<FontProgram>>,
 }
 
 impl FontProgramCache {
+    fn is_for(&self, page: &CompiledPage) -> bool {
+        self.fonts
+            .as_ref()
+            .is_some_and(|held| std::ptr::addr_eq(held.as_ptr(), Arc::as_ptr(&page.fonts)))
+    }
+
     fn take_for_page(&mut self, page: &CompiledPage) -> (HashMap<u32, Option<FontProgram>>, bool) {
-        let page_ptr = page as *const CompiledPage as usize;
-        if self.page_ptr == page_ptr {
+        if self.is_for(page) {
             (std::mem::take(&mut self.programs), true)
         } else {
-            self.page_ptr = page_ptr;
+            self.fonts = Some(Arc::downgrade(&page.fonts));
             self.programs.clear();
             (HashMap::new(), false)
         }
@@ -54,7 +66,9 @@ impl FontProgramCache {
                 .as_ref()
                 .is_some_and(FontProgram::benefits_from_parse_cache)
         });
-        self.page_ptr = page as *const CompiledPage as usize;
+        if !self.is_for(page) {
+            self.fonts = Some(Arc::downgrade(&page.fonts));
+        }
         self.programs = programs;
     }
 }
@@ -286,14 +300,19 @@ impl Default for SharedFontProgramCache {
 /// - `font` — the 128-bit content identity of the embedded program (so the same
 ///   glyph shared across pages of a document hits, matching the parse cache).
 /// - `glyph` — glyph index within that program.
-/// - `la..ld` — the effective device-space linear map applied to the design-unit
-///   outline (`(font_size/upem)·CTM_linear`), quantized ×10000 as PDFium
-///   quantizes its matrix a,b,c,d. This folds in font size, page scale, and any
-///   skew/rotation; two runs with the same quantized map produce identical
-///   coverage.
-/// - `hinted` — grid-fitted vs exact. Hinted outlines depend on ppem (implied by
-///   `ld`) and produce different pixels, so they must not share a slot with the
-///   unhinted outline (the review's explicit requirement).
+/// - `la_bits`, `ld_bits` — the exact `f64` bits of the device-space scale
+///   applied to the design-unit outline (`(font_size/upem)·CTM_linear`, whose
+///   off-diagonal terms are ~0 because only axis-aligned runs are cached). These
+///   are exactly the values a miss rasterises with, so a cached bitmap is a pure
+///   function of its key and output cannot depend on which run filled the slot
+///   first. An earlier key rounded the map ×10000 per design unit (about
+///   0.1–0.2 px per em) while rasterising the exact values, so near-equal sizes
+///   shared whichever bitmap was inserted first and page bytes depended on render
+///   order and thread count.
+/// - `ppem_bits` — for hinted glyphs, the exact `f32` ppem the hinter ran at
+///   (hinted outlines come from ppem, not from `la`/`ld`); 0 when unhinted.
+/// - `hinted` — grid-fitted vs exact. Hinted outlines produce different pixels,
+///   so they must not share a slot with the unhinted outline.
 ///
 /// - `sx`, `sy` — the quantized sub-pixel phase of the glyph origin (fractional
 ///   part × `GLYPH_SUBPIXEL_STEPS`, PDFium's LCD 3-phase idea generalized to a
@@ -309,10 +328,9 @@ impl Default for SharedFontProgramCache {
 struct GlyphCacheKey {
     font: FontProgramKey,
     glyph: u32,
-    la: i32,
-    lb: i32,
-    lc: i32,
-    ld: i32,
+    la_bits: u64,
+    ld_bits: u64,
+    ppem_bits: u32,
     sx: i16,
     sy: i16,
     hinted: bool,
@@ -355,16 +373,40 @@ impl GlyphBitmap {
 pub struct SharedGlyphCache {
     shards: Box<[std::sync::Mutex<GlyphCacheShard>]>,
     per_shard_bytes: usize,
-    hits: std::sync::atomic::AtomicU64,
-    misses: std::sync::atomic::AtomicU64,
     inserts: std::sync::atomic::AtomicU64,
+}
+
+/// Hasher for the glyph-cache shard maps. The derived `Hash` of
+/// [`GlyphCacheKey`] makes about ten small `write_*` calls per key and the map
+/// is probed once per glyph occurrence, so std's SipHash-1-3 was 10-16% of a
+/// text page's instructions. foldhash is far cheaper but must stay seeded:
+/// font bytes, glyph ids and matrices all come from the PDF, so a fixed hash
+/// would let a crafted document pre-compute collisions. Each shard map's
+/// per-hasher seed is drawn from the OS through std's `RandomState` (see
+/// [`glyph_hash_state`]), on top of foldhash's process-wide seed.
+type GlyphHashState = foldhash::fast::SeedableRandomState;
+
+/// A fresh, OS-seeded [`GlyphHashState`] for one shard map.
+fn glyph_hash_state() -> GlyphHashState {
+    use std::hash::{BuildHasher, Hasher};
+    // std seeds `RandomState` from the OS; the finish of an empty hash under
+    // its keys is a uniformly distributed secret u64.
+    let os_seed = std::collections::hash_map::RandomState::new()
+        .build_hasher()
+        .finish();
+    foldhash::fast::SeedableRandomState::with_seed(os_seed, foldhash::SharedSeed::global_random())
 }
 
 #[derive(Debug, Default)]
 struct GlyphCacheShard {
-    map: HashMap<GlyphCacheKey, GlyphCacheEntry>,
+    map: HashMap<GlyphCacheKey, GlyphCacheEntry, GlyphHashState>,
     bytes: usize,
     clock: u64,
+    /// Lookup counters, bumped while the shard lock is already held, so the
+    /// per-glyph probe performs no extra atomic read-modify-write on a line
+    /// shared by every render worker. Summed across shards by `stats()`.
+    hits: u64,
+    misses: u64,
 }
 
 #[derive(Debug)]
@@ -385,14 +427,17 @@ impl SharedGlyphCache {
 
     pub fn new(total_bytes: usize) -> Self {
         let shards = (0..Self::SHARDS)
-            .map(|_| std::sync::Mutex::new(GlyphCacheShard::default()))
+            .map(|_| {
+                std::sync::Mutex::new(GlyphCacheShard {
+                    map: HashMap::with_hasher(glyph_hash_state()),
+                    ..GlyphCacheShard::default()
+                })
+            })
             .collect::<Vec<_>>()
             .into_boxed_slice();
         Self {
             shards,
             per_shard_bytes: (total_bytes / Self::SHARDS).max(1),
-            hits: std::sync::atomic::AtomicU64::new(0),
-            misses: std::sync::atomic::AtomicU64::new(0),
             inserts: std::sync::atomic::AtomicU64::new(0),
         }
     }
@@ -400,11 +445,13 @@ impl SharedGlyphCache {
     /// Lifetime `(hits, misses, inserts)` for the cache measurement report.
     pub fn stats(&self) -> (u64, u64, u64) {
         use std::sync::atomic::Ordering::Relaxed;
-        (
-            self.hits.load(Relaxed),
-            self.misses.load(Relaxed),
-            self.inserts.load(Relaxed),
-        )
+        let (mut hits, mut misses) = (0u64, 0u64);
+        for shard in self.shards.iter() {
+            let shard = lock_unpoisoned(shard);
+            hits += shard.hits;
+            misses += shard.misses;
+        }
+        (hits, misses, self.inserts.load(Relaxed))
     }
 
     fn shard(&self, key: &GlyphCacheKey) -> &std::sync::Mutex<GlyphCacheShard> {
@@ -415,19 +462,17 @@ impl SharedGlyphCache {
     }
 
     fn get(&self, key: &GlyphCacheKey) -> Option<Arc<GlyphBitmap>> {
-        use std::sync::atomic::Ordering::Relaxed;
-        let mut shard = lock_unpoisoned(self.shard(key));
+        let mut guard = lock_unpoisoned(self.shard(key));
+        let shard = &mut *guard;
         shard.clock += 1;
         let clock = shard.clock;
         let Some(entry) = shard.map.get_mut(key) else {
-            drop(shard);
-            self.misses.fetch_add(1, Relaxed);
+            shard.misses += 1;
             return None;
         };
         entry.last_used = clock;
         let bitmap = entry.bitmap.clone();
-        drop(shard);
-        self.hits.fetch_add(1, Relaxed);
+        shard.hits += 1;
         Some(bitmap)
     }
 
@@ -4225,10 +4270,9 @@ fn try_cached_glyph_run(
     }
 
     // Effective device-space linear map applied to the design-unit outline
-    // (`(font_size/upem)·CTM_linear`); axis-aligned, so `lb == lc == 0`.
-    let (la, lb, lc, ld) = (m.a * scale, m.b * scale, m.c * scale, m.d * scale);
-    let q = |v: f64| (v * 10000.0).round() as i32;
-    let (qla, qlb, qlc, qld) = (q(la), q(lb), q(lc), q(ld));
+    // (`(font_size/upem)·CTM_linear`); axis-aligned, so only `la` and `ld` reach
+    // the rasteriser, and the key carries exactly those values.
+    let (la, ld) = (m.a * scale, m.d * scale);
 
     // Run-level hinting decision, fixed *without* building the (expensive)
     // hinting instance so it is deterministic and matches the key. Type 1 is
@@ -4264,10 +4308,9 @@ fn try_cached_glyph_run(
         let key = GlyphCacheKey {
             font: font_id,
             glyph: gph.glyph,
-            la: qla,
-            lb: qlb,
-            lc: qlc,
-            ld: qld,
+            la_bits: la.to_bits(),
+            ld_bits: ld.to_bits(),
+            ppem_bits: if hinted { (ppem as f32).to_bits() } else { 0 },
             sx,
             sy,
             hinted,
@@ -6355,10 +6398,9 @@ mod glyph_cache_tests {
         GlyphCacheKey {
             font: font_key(),
             glyph,
-            la: 100,
-            lb: 0,
-            lc: 0,
-            ld: -100,
+            la_bits: 0.01f64.to_bits(),
+            ld_bits: (-0.01f64).to_bits(),
+            ppem_bits: 0,
             sx: 0,
             sy: 0,
             hinted: false,
@@ -6404,9 +6446,9 @@ mod glyph_cache_tests {
         };
         assert!(cache.get(&hinted).is_none(), "hinting state is part of key");
 
-        // Same glyph, different quantized transform → distinct slot.
+        // Same glyph, different transform → distinct slot.
         let scaled = GlyphCacheKey {
-            ld: -200,
+            ld_bits: (-0.02f64).to_bits(),
             ..unhinted
         };
         assert!(cache.get(&scaled).is_none(), "transform is part of key");

@@ -268,10 +268,7 @@ impl Surface {
                 let out_mut = unique_arc_mut(&mut out);
                 let mut written = 0usize;
                 for (dst, px) in out_mut.iter_mut().zip(self.data.chunks_exact(4)) {
-                    // Rec. 709 luma of the premultiplied (composited-over-black)
-                    // color.
-                    let y = 0.2126 * px[0] as f32 + 0.7152 * px[1] as f32 + 0.0722 * px[2] as f32;
-                    dst.write(y.round().clamp(0.0, 255.0) as u8);
+                    dst.write(gray8_luma(px[0], px[1], px[2]));
                     written += 1;
                 }
                 for dst in &mut out_mut[written..] {
@@ -289,6 +286,23 @@ impl Surface {
             }
         }
     }
+}
+
+/// The Gray8 output value of one premultiplied (composited-over-black) RGB
+/// pixel: its Rec. 709 luma, rounded half away from zero.
+///
+/// Byte-identical to `y.round().clamp(0.0, 255.0) as u8` over all 2^24 inputs
+/// (`gray8_luma_matches_round_on_every_input`), without the `roundf` libm call
+/// that `round()` compiles to at the baseline x86-64 ISA, which made this
+/// conversion cost more than rendering a whole text page. `y` lies in
+/// `[0, 255.00002]`, so `y as i32` is `floor(y)`, `y - floor(y)` is exact,
+/// and comparing it with 0.5 is exact round-half-away-from-zero. The sum is
+/// kept in its original order; reassociating it changes results.
+#[inline(always)]
+fn gray8_luma(r: u8, g: u8, b: u8) -> u8 {
+    let y = 0.2126 * r as f32 + 0.7152 * g as f32 + 0.0722 * b as f32;
+    let floor = y as i32;
+    (floor + i32::from(y - floor as f32 >= 0.5)).min(255) as u8
 }
 
 /// Allocate the render buffer directly in the `Arc<[u8]>` layout returned by
@@ -445,6 +459,23 @@ mod tests {
         let surface = Surface::new_recycled(2, 1, Background::White, Some(wrong));
         assert_ne!(Arc::as_ptr(&surface.data), ptr);
         assert_eq!(&*surface.data, &[255; 8]);
+    }
+
+    /// The integer-rounded Gray8 conversion must equal the `round()` form it
+    /// replaced on every (r, g, b). Over 2^24 inputs, 2,752 land on exact .5
+    /// ties, which is why `(y + 0.5) as u8` and round-half-even are not
+    /// substitutes.
+    #[test]
+    fn gray8_luma_matches_round_on_every_input() {
+        for r in 0..=255u8 {
+            for g in 0..=255u8 {
+                for b in 0..=255u8 {
+                    let y = 0.2126 * r as f32 + 0.7152 * g as f32 + 0.0722 * b as f32;
+                    let want = y.round().clamp(0.0, 255.0) as u8;
+                    assert_eq!(gray8_luma(r, g, b), want, "rgb ({r}, {g}, {b})");
+                }
+            }
+        }
     }
 
     #[test]

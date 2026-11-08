@@ -7,7 +7,10 @@ use wide::i32x8;
 // Disabled by default — see the matching constant in `dwt::irrev97` for why:
 // both a snapshot-copy and a zero-copy version of this parallelism measured
 // as net regressions on real images. Kept and directly unit-tested (see
-// `dwt::rev53::tests`) for a future lower-overhead attempt.
+// `dwt::rev53::tests`) for a future lower-overhead attempt. Re-enabling it on
+// the inverse (decode) path must also gate on the request's worker budget
+// (`DecodeScratch::workers`): a serial decode may be running on a worker of
+// another multi-thread pool and must not spawn Rayon work there.
 const PARALLEL_COLUMN_THRESHOLD: usize = usize::MAX / 2;
 
 // Number of columns processed per vertical-lift band. The vertical 5/3 lift is

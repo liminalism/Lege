@@ -1,0 +1,49 @@
+# Measurement harness for the Lege PDF renderer (scratch; not part of the repo).
+[package]
+name = "lege-render-probe"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+pdf-content = { path = "../../../../../../lege-pdf/render/crates/pdf-content" }
+pdf-document = { path = "../../../../../../lege-pdf/render/crates/pdf-document" }
+pdf-source = { path = "../../../../../../lege-pdf/render/crates/pdf-source" }
+pdf-page-ir = { path = "../../../../../../lege-pdf/render/crates/pdf-page-ir" }
+pdf-render-api = { path = "../../../../../../lege-pdf/render/crates/pdf-render-api" }
+pdf-render-cpu = { path = "../../../../../../lege-pdf/render/crates/pdf-render-cpu" }
+pdf-render-scheduler = { path = "../../../../../../lege-pdf/render/crates/pdf-render-scheduler" }
+pdf-font = { path = "../../../../../../lege-pdf/render/crates/pdf-font" }
+pdf-image = { path = "../../../../../../lege-pdf/render/crates/pdf-image" }
+pdf-profiling = { path = "../../../../../../lege-pdf/render/crates/pdf-profiling", optional = true }
+
+[features]
+profiling = [
+  "dep:pdf-profiling",
+  "pdf-content/profiling",
+  "pdf-document/profiling",
+  "pdf-render-cpu/profiling",
+  "pdf-render-scheduler/profiling",
+  "pdf-image/profiling",
+]
+
+[workspace]
+
+# Mirror of the Lege root workspace profiles.
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "unwind"
+opt-level = 3
+debug = false
+strip = "symbols"
+incremental = false
+overflow-checks = false
+
+[profile.debug-fast]
+inherits = "release"
+lto = false
+codegen-units = 16
+incremental = true
+debug = true
+strip = false

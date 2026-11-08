@@ -494,6 +494,41 @@ fn gray8_draws_match_their_rgb8_twins() {
     }
 }
 
+/// A colour-key `/Mask` on an 8-bit gray image must hide the keyed texels
+/// however the image is drawn. Minified, the draw used to be promoted to RGB8
+/// first, and the promoted image read the one-pair key as malformed: every
+/// keyed texel painted.
+#[test]
+fn gray8_colour_key_hides_keyed_texels_when_minified() {
+    // 64x64: the left half is the keyed value 0, the right half mid-grey.
+    let gray: Vec<u8> = (0..64 * 64)
+        .map(|i| if i % 64 < 32 { 0 } else { 128 })
+        .collect();
+    let backend = CpuBackend::default();
+    for (name, dim) in [("minified", 8u32), ("magnified", 256)] {
+        let mut img = image_ir(64, 64, 8, ImageColorSpace::Gray, gray.clone(), false, None);
+        img.mask = Some(pdf_page_ir::ImageMask::ColorKey(Arc::from(vec![[0, 0]])));
+        // The image fills the whole `dim`-pixel output.
+        let (host, _) = backend
+            .render_to_host(&request(page(img, Color::BLACK, f64::from(dim)), dim))
+            .unwrap();
+        let d = dim as usize;
+        for y in [d / 8, d / 2, d - 1 - d / 8] {
+            assert_eq!(
+                px(&host, d / 8, y),
+                [255, 255, 255, 255],
+                "{name}: a keyed texel painted at ({}, {y})",
+                d / 8
+            );
+            let right = px(&host, d - 1 - d / 8, y);
+            assert!(
+                right[0] < 200 && right[3] == 255,
+                "{name}: the unkeyed half did not paint: {right:?}"
+            );
+        }
+    }
+}
+
 #[test]
 fn magnified_images_still_honour_the_interpolation_flag() {
     // Blowing 2x1 up to 8x8 is magnification: the footprint is under a texel,

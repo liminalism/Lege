@@ -39,6 +39,15 @@ function.
   decodes every pass prefix of segmark-styled blocks across five coding styles.
   The default single-segment path is unchanged.
 
+### Decoder fix
+
+- A `Serial` or `Budgeted(1)` decode now stays on the calling thread after
+  Tier-1 too. The per-plane 9/7 synthesis and the fused RGB(A) packers used
+  to fan out over whatever Rayon pool was ambient, so a decode on a worker
+  of the PDF renderer's pool spread across that whole pool. They now follow
+  the request's worker budget. Output bytes are unchanged for every budget.
+  A test decodes beside a work-stealing thief worker and checks it gets no job.
+
 ## 0.3.0 — 2026-11-03
 
 First crates.io release with multiple quality layers, the six code-block

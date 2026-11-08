@@ -528,3 +528,41 @@ fn embedded_type1_fontfile_renders_through_the_native_engine() {
     // Three filled triangles: real ink, and nothing like a solid box.
     assert_glyph_like(&host, "embedded Type 1");
 }
+
+/// Horizontal extent in device pixels of the inked columns.
+fn ink_width(host: &HostPage) -> usize {
+    let inked =
+        |x: usize| (0..host.height as usize).any(|y| host.pixels[y * host.stride + x * 4] < 200);
+    let cols: Vec<usize> = (0..host.width as usize).filter(|&x| inked(x)).collect();
+    match (cols.first(), cols.last()) {
+        (Some(a), Some(b)) => b - a + 1,
+        _ => 0,
+    }
+}
+
+/// `Tz` (horizontal scaling) scales the glyph *shapes*, not just the pen
+/// advance: the text rendering matrix is `[Tfs·Th 0 0 Tfs 0 Ts] × Tm`
+/// (ISO 32000-1 §9.4.4). It used to reach positions only, so condensed text
+/// drew full-width glyphs that overlapped into a blob.
+#[test]
+fn horizontal_scaling_scales_glyph_shapes() {
+    let width = |tz: u32| {
+        let content = format!("BT /F1 40 Tf {tz} Tz 5 40 Td (M) Tj ET");
+        ink_width(&render_text(
+            "<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>",
+            content.as_bytes(),
+            200,
+        ))
+    };
+    let (half, normal, double) = (width(50), width(100), width(200));
+    assert!(normal > 40, "the M drew: {normal} px wide");
+    for (tz, got, want) in [
+        (50, half, normal as f64 / 2.0),
+        (200, double, normal as f64 * 2.0),
+    ] {
+        assert!(
+            (got as f64 - want).abs() <= 2.0,
+            "Tz {tz}: an M {got} px wide, expected ~{want} (Tz 100: {normal} px)"
+        );
+    }
+}
