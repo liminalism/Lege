@@ -91,3 +91,86 @@ So the same image can get a soft or a hard edge depending on which path it takes
 Bringing the fast paths into line would change every opaque image placed on fractional device coordinates. Changing the generic body would undo A10's PDFium-matching edges. That choice is for the project, not a refactor; the test pins the interior and documents the ring.
 
 The test also showed that the generic bilinear sampler can return alpha 254 for an opaque image, because the tap weights sum to 254/255. The magnified bilinear fast path keeps the image opaque.
+
+---
+
+# Local round, 2026-11-08 (Windows host, branch `lege-pdf-agent-over-poppler`)
+
+The second half of the plan was landed locally after merging the three cloud
+branches. Plan and scout reports: [`LOCAL-CONTINUATION-PLAN.md`](LOCAL-CONTINUATION-PLAN.md),
+[`scouting/`](scouting/). Three workers ran in their own worktrees
+(`scoping-r1-correctness`, `scoping-r2-stencil`, `scoping-r2-small`); the parent
+merged each with `--no-ff`, ran the suites and the corpus gate.
+
+## Integration
+
+| Merge | Contents | Gate |
+|---|---|---|
+| `05e1ded1` dazzling-planck | the first half above | cloud gate (2,364 renders) |
+| `5763a86b` gifted-pascal | B9 Type 1 hardening | suites |
+| `27debaee` jolly-ride | B1 decode-level cache keys, per-page decode reference | **layout-detection A/B passed**: detections identical on 5 of 6 documents, viaduct's two image boxes move ≤ 0.5 px ([measurements/layout-ab-jolly-20261108.md](measurements/layout-ab-jolly-20261108.md)) |
+
+After the three merges: 78 suites, 825 tests, 0 failures; jp2lam 467 passed.
+
+## Landed locally
+
+| ID | Commit | What changed | Tests | Output |
+|---|---|---|---|---|
+| B6 | `0116b204` | `codec_target_size` hands codecs per-image-axis extents `(ceil(abs(a)+abs(b)), ceil(abs(c)+abs(d)))`; the B1 decode-level key follows. Correction to the review: the swapped box also *under*-decoded (1000x400 at device 100x300 got 1/2 scale), so rotated draws were losing sharpness. | `codec_target_size_reads_image_axes`; `quarter_turn_dct_draw_decodes_at_the_upright_level` (32 px differed before) | rotated / sheared image draws only |
+| B11 | `7a21b4fb` | `CpuPreparedPage.sanity_extent` carries the page crop's device extent; `device_bounds_sane` and the stroke-width clamp (`max_output`, a second size-relative limit the review missed) use it instead of the request size. | `small_crop_window_keeps_page_spanning_paths` | renders smaller than the page (lege region crops, zoom windows) |
+| B14 | `42e69c9a` | groups and soft masks rasterise against the device-plane width, so content crossing the offscreen's right edge keeps its coverage. Not last-column only: a shallow edge changes several columns of its row. | `group_content_crossing_the_offscreen_right_edge_keeps_its_coverage`; `mask_content_crossing_...` | edge pixels of affected rows |
+| N1 / A8 | `7d3b73a8` | on a repaired `Parsed` whose declared `/Length` runs past the window, the resolver grows once to the declared end (capped at EOF) and retries. | `pdf-document/tests/stream_window.rs` (direct and indirect `/Length`, wrong-length control) | rare correct-length streams > 64 KiB |
+| B15 | `ba929e33` | `lookup` at the eight read-only sites; inline images count as one op; inline-image names outside the spec set map to one placeholder. Three sites still intern by design (`cs`, `scn` pattern names, `Tf`): they keep the id. | `missing_resource_names_do_not_grow_the_name_table` (+120,009 names before); `inline_image_name_arrays_...` (+50,000 before); `inline_images_count_against_the_operator_budget` | none for valid PDFs |
+| B12 | `6d050161` | `FileSpooler::submit_raster_stream` composes, writes and drops one sheet at a time; a failed job deletes its partial files. | `streamed_submission_holds_one_composed_sheet_at_a_time`, `streamed_and_slice_submissions_write_identical_files`, `a_failed_streamed_submission_leaves_no_sheets` | PNG bytes identical |
+| B8 | `7bd9b9ee` | `ParseContext::with_cache_budget` (default 256 MiB per thread) enforced in `begin_job()`. | `begin_job_enforces_the_cache_budget`; `decrypted_stream_cache_stays_within_the_context_budget_across_jobs` | none |
+| G1 level 2 | `e3f4a199`, `f6c80760` | `pdf-cli/tests/determinism.rs` (scheduler, {1,2,4} workers x two orders x two sizes vs cold hashes; catches B1 and B3 when put back) and `lege-pdf/read/tests/determinism.rs` (page-cache capacity 0, real threads, alternating fonts; catches B2). | both pass on the base | n/a |
+| Tier B1 | `b08ec442` | `/ImageMask` stencil fast path: two-entry LUT through the bilevel box filter (minified) or a transparent-skip nearest path; the interior only, the generic body paints the border band, so output is identical. SAT build declines truncated buffers instead of indexing past them. | `stencil_fast_path_matches_the_generic_body`, `stencil_fast_path_eligibility_and_generic_fallbacks`; ring test extended to stencils and 1-bit gray | none (2118/2118) |
+| Tier B2 | `e3922b30` | row-band weighted popcount replaces the per-draw summed-area table; Rayon over 16-row bands; the SAT stays as the `#[cfg(test)]` oracle. A 600-dpi letter page (33.7M bits) exceeded the old 32M-entry cap and took the serial loop. | `row_band_weighted_ones_match_the_sat_and_the_direct_count`, `row_band_paint_matches_the_per_pixel_loop`, `row_band_paints_a_600_dpi_page_and_declines_a_truncated_one` | none (2118/2118) |
+| Bilinear alpha | `4a175132` | the generic bilinear sampler keeps an opaque image's alpha at 255 (tap weights summed to 254). | `bilinear_keeps_an_opaque_image_opaque` | ≤ 1/255 alpha on magnified bilinear generic draws |
+| A21 | `09b11d29` | three parked-surface slots keyed by size, `surface_slot_stats()`. | `alternating_sizes_reuse_their_parked_buffers` | none (48/48) |
+| A16 | `960ca095` | `cmyk_source_as_rgb8` calls `adobe_cmyk_to_srgb_u8` directly (both float round trips proven identities on bytes); `/Decode` byte tables (unreachable until the CMYK area path accepts `/Decode`). | `byte_components_round_trip_exactly`, `float_entry_matches_direct_byte_call`, `cmyk_rgb8_conversion_matches_pixel_with_and_without_decode` | none (60/60) |
+| A18 | `5145ff46` | 16-bit Gray/RGB/CMYK promote through `pixel()` and the promotion cache; unmasked opaque axis-aligned draws with a fractional edge stay generic so the ring is unchanged. | `sixteen_bit_device_images_promote_exactly`, `..._only_where_the_ring_is_unchanged` | none (96/96) |
+| Harness | `998851eb`, `3a3c9a25` | Windows bring-up: `ab.cmd` (P-core pinning), `sessionbench --alternate/--threads` and a `mimalloc` feature, `PROBE_GRAY8=1`. | n/a | n/a |
+
+## Measured (Windows, debug-fast, pinned to P-cores, one Rayon thread, 9 interleaved rounds; other builds were running, so ratios and wins are the reliable figures)
+
+| Change | Document | Before → after | Rounds won |
+|---|---|---|---|
+| Tier B1 | stencil_jbig2 (MRC, JBIG2 `/ImageMask`), Gray8 150 dpi | 663 → 167 ms (x0.25) | 9/9 |
+| Tier B1 | stencil_flate | 935 → 476 ms (x0.51) | 9/9 |
+| Tier B1 | bilevel_600 (600-dpi 1-bit + stencil) | 622 → 194 ms | 9/9 |
+| Tier B2 (after B1) | stencil_jbig2 | 177 → 130 ms (x0.71) | 9/9 |
+| Tier B2 (after B1) | bilevel_600 | 184 → 82 ms (x0.43) | 9/9 |
+| B1 + B2 | stencil_jbig2 / bilevel_600 / stencil_flate | x0.16 / x0.13 / x0.43 | 9/9 |
+| A21 | vogtle, `--alternate 100` | x0.79–0.80 | 9/9 |
+| A21 | beans / viaduct, `--alternate 100` | x0.82–0.89 / x0.86–0.87 | — |
+| A16 | synthetic 2000x2800 CMYK cover | x0.50 | 9/9 |
+| A18 | 1200x1600 16-bit pages, warm 150 dpi | x0.065–0.10 | 7/7 |
+| mimalloc (A/B only, not adopted) | beans / vogtle / viaduct / sahib, pinned | x0.88–0.92; +13–30% peak working set | 5–7/7 |
+| mimalloc (A/B only) | same, 4 threads unpinned | x0.76–0.90; +20–65% peak working set | 5–7/7 |
+
+beans, viaduct and sahib (no `/ImageMask`; its JBIG2 layers are 1-bit DeviceGray images and go through B2 and the LUT-nearest path) stayed within ±5% on B1/B2.
+
+## The border ring: decided
+
+Option A (soften the opaque unmasked fast paths' ring) was implemented as
+`107f7b8b` and then **reverted** (`bc8ffffc`) after the PDFium probe showed
+PDFium snaps an axis-aligned image's destination rectangle to whole pixels and
+paints it solid, which is the fast paths' pixel-centre rule
+([measurements/image-edge-ring-pdfium-probe-20261108.md](measurements/image-edge-ring-pdfium-probe-20261108.md)).
+Rotated and sheared draws stay on the generic body with A10 coverage. What
+remains open is the opposite direction: masked images (including Lege's own MRC
+output) paint a soft ring on axis-aligned fractional placements where PDFium
+would paint a hard one.
+
+## Final gate
+
+`probe run --hash --fresh-backend`, scales 1.0 / 1.37 / 2.0, RGBA and Gray8, pre-worker base binary (5763a86b) against the final HEAD: beans, viaduct, vogtle, xenosystems (305 pages), sahib_processed_1794115972, the stencil, bilevel, ring and 8/16-bit fixtures. **2,148 renders: every real document identical at every scale and format.** The only differences are stencil_flate page 2 (the `/Interpolate` stencils) in all six combinations, which is the bilinear alpha fix (≤ 1/255). B6 and B14 changed no corpus page (no rotated images or right-edge-crossing groups in it); their effect is pinned by their tests.
+
+## Not landed
+
+- A4 hoist (subsumed by Tier B1), A5 caching half, A11c, A14: declined, reasons in the plan.
+- A7, A9 remainder, A12, A20 remainder: deferred, minor.
+- mimalloc: measured only; adoption is a product decision (peak working set grows 13–65%).
+- B8 per-thread contexts still linger for a closed document until the thread serves another; the budget bounds them.
+- B14 was not A/B'd for speed on group-heavy pages.
