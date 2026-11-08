@@ -54,7 +54,7 @@ cargo build --profile debug-fast --manifest-path harness/sessionbench/Cargo.toml
 Both `sessionbench` and `probe` build unchanged on Windows. Pinned, single-thread A/B (logical CPUs 0-11 are the P-cores on an i7-13700H; the E-cores otherwise get single-thread renders):
 
 ```bat
-harnessb.cmd C:\path	o\python.exe 7 A.exe B.exe -- D:\pdf-testogtle.pdf 150 rgb8 3
+harness\ab.cmd C:\path\to\python.exe 7 A.exe B.exe -- D:\pdf-test\vogtle.pdf 150 rgb8 3
 ```
 
 `ab.cmd` sets the single-thread environment, runs `start "" /affinity FFF /b /wait python -I ab.py ...`, and the children inherit the affinity. Use full `.exe` paths. `sessionbench` extras: `--alternate <dpi2>` renders each page at `dpi2` then `dpi` on one thread (lege's analysis/base alternation, for surface-slot and cache-key effects; the checksum covers the base renders), `--threads N` shares one session across N threads, and the `mimalloc` Cargo feature swaps the global allocator.
