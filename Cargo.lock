@@ -3953,6 +3953,7 @@ dependencies = [
 name = "pdf-render-cpu"
 version = "0.4.0"
 dependencies = [
+ "jp2lam",
  "pdf-color",
  "pdf-font",
  "pdf-image",

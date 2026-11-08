@@ -29,3 +29,6 @@ workspace = true
 
 [dev-dependencies]
 pdf-test-support = { path = "../pdf-test-support" }
+# Encodes the JPX payloads the decoded-image cache tests draw (already linked
+# through pdf-image).
+jp2lam = { workspace = true }

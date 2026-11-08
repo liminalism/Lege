@@ -10,6 +10,24 @@ work since the native renderer was promoted on 2026-07-26: three performance
 passes with byte-identical output, a hardened codec boundary, and the read,
 print and agent surfaces built on it.
 
+### Fixes, 2026-11-08
+
+- Image cache: reduced decodes are keyed by the scale the codec decodes
+  at. The DCT codec decodes a minified draw at 1/2, 1/4 or 1/8 scale, but
+  the shared image cache kept the draw footprint in its key only for JPX,
+  so a page's first render fixed its JPEG resolution for every later
+  render through the same backend: a thumbnail, a zoomed-out view, or
+  Lege's 800-pixel analysis render followed by a full-size render magnified
+  the small decode, and output depended on render history. Codecs now
+  report the level a draw selects (`ImageCodec::reduction_level`: the DCT
+  scale from the frame header, the JPX wavelet level from the main header
+  through jp2lam's own rule, 0 for JBIG2 and CCITT), and the cache keys by
+  that level, so draw sizes that select one level still share a decode. An
+  injected codec that reports no level is keyed by the raw footprint. A
+  page rendered once is unchanged unless it draws one JPEG at two sizes
+  that select different scales (it used the first draw's decode for both);
+  a page rendered at two such sizes now decodes the JPEG once per scale.
+
 ### Performance, 2026-11-04, round 4 (follow-ups to round 3)
 
 Byte-identical to round 3 on the full private corpus except where noted;

@@ -524,8 +524,9 @@ struct DecodeCacheKey {
 /// Every decode-relevant parameter is part of the identity:
 /// - `codec`, declared `width`/`height`/`bpc`, `is_mask` — inputs to the
 ///   codec's descriptor;
-/// - `target` — the reduced-decode footprint hint (a JPX decode at half
-///   resolution must not be served for a full-resolution draw);
+/// - `scale` — the resolution the codec decodes this draw at. JPX and DCT
+///   decode a minified draw at a reduced resolution, so a reduced decode must
+///   never be served for a draw that needs more (see [`DecodeScaleKey`]);
 /// - `parms` — a hash over `CodecParms` (CCITT `/K`/`/Columns`/… and the
 ///   JBIG2 globals stream), which select entirely different bitstream
 ///   interpretations.
@@ -543,8 +544,27 @@ struct ImageCacheKey {
     height: u32,
     bpc: u8,
     is_mask: bool,
-    target: Option<(u32, u32)>,
+    scale: DecodeScaleKey,
     parms: u64,
+}
+
+/// The resolution part of an [`ImageCacheKey`].
+///
+/// The key is the level the codec reports it will decode the draw at
+/// ([`pdf_image::ImageCodec::reduction_level`]), not the draw's footprint:
+/// the footprint picks a level, and every footprint that picks the same level
+/// gets the same raster. Keying by level gives a thumbnail and a full-size
+/// render separate decodes, while draws that select one level share a decode:
+/// a viewer zooming within a level, or every draw of a JBIG2 or CCITT image,
+/// which never scales (always level 0).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum DecodeScaleKey {
+    /// Halvings below full resolution, as the codec reported for this draw.
+    Level(u8),
+    /// The codec could not report a level (an injected codec without
+    /// `reduction_level`, or a stream whose header does not parse), so the
+    /// footprint hint itself, exact but less shareable, is the identity.
+    Target(Option<(u32, u32)>),
 }
 
 impl ImageCacheKey {
@@ -557,17 +577,9 @@ impl ImageCacheKey {
         bpc: u8,
         is_mask: bool,
         parms: Option<&pdf_page_ir::CodecParms>,
-        target: Option<(u32, u32)>,
+        scale: DecodeScaleKey,
     ) -> Self {
         let (h0, h1) = content_hash_128(data);
-        // Only JPX decodes at a reduced resolution for a small footprint, so
-        // only its payload varies with the target. Every other codec yields
-        // the same samples whatever the draw size; keying them by target
-        // would decode the same JBIG2 or JPEG again for every render size of
-        // the page (Lege renders each page at two).
-        let target = matches!(kind, pdf_page_ir::ImageCodecKind::Jpx)
-            .then_some(target)
-            .flatten();
         let parms_hash = match parms {
             None => 0,
             Some(p) => {
@@ -607,7 +619,7 @@ impl ImageCacheKey {
             height,
             bpc,
             is_mask,
-            target,
+            scale,
             parms: parms_hash,
         }
     }
@@ -627,7 +639,9 @@ impl ImageCacheKey {
 /// Serving a cached decode is byte-identical to decoding again by
 /// construction — codecs are deterministic pure functions of
 /// `(payload, descriptor, params)`, all of which are part of
-/// [`ImageCacheKey`] — and is asserted by `image_cache_tests`.
+/// [`ImageCacheKey`], the footprint hint through the reduction level the
+/// codec reports for it — and is asserted by `image_cache_tests`, including
+/// for a page rendered at several sizes in any order.
 #[derive(Debug)]
 pub(crate) struct SharedImageCache {
     shards: Box<[std::sync::Mutex<ImageCacheShard>]>,
@@ -2324,10 +2338,11 @@ fn lower_image(
             .note_degraded("image draw degraded during IR lowering (lowering_degraded)".into());
     }
     // Phase 2: destination footprint in device pixels, derived from the
-    // placement CTM before decode. A codec that can scale resolution (JPX)
-    // decodes a minified draw at a reduced wavelet resolution; other codecs
-    // ignore the hint. Computed once and shared by the base image, its soft
-    // mask, and any stencil mask (they share the placement).
+    // placement CTM before decode. A codec that can scale resolution decodes
+    // a minified draw at a reduced one (JPX drops wavelet levels, DCT decodes
+    // at 1/2, 1/4 or 1/8 scale); JBIG2 and CCITT ignore the hint. Computed
+    // once and shared by the base image, its soft mask, and any stencil mask
+    // (they share the placement).
     let target_size = codec_target_size(ctm);
 
     // Direct samples, or a codec decode through the injected registry (no
@@ -2666,7 +2681,9 @@ fn promotion_cache_key(img: &crate::image::PreparedImage) -> ImageCacheKey {
         height: img.height,
         bpc: img.bpc,
         is_mask: false,
-        target: None,
+        // A promotion expands samples already at their final resolution,
+        // which `width`/`height` and the content hash pin.
+        scale: DecodeScaleKey::Level(0),
         parms: h | 1,
     }
 }
@@ -2945,27 +2962,6 @@ fn decode_codec_samples(
             .borrow_mut()
             .increment("codec.decode_cache.misses", 1);
     }
-    // Production decoded-image cache: content-hash probe before any decode.
-    let image_cache_key = out.image_cache.as_ref().map(|cache| {
-        let key = ImageCacheKey::new(
-            kind,
-            data,
-            width,
-            height,
-            bits_per_component,
-            is_mask,
-            parms.as_ref(),
-            target_size,
-        );
-        (cache, key)
-    });
-    let image_decode_flight = match image_cache_key {
-        Some((cache, key)) => match cache.probe(key) {
-            ImageCacheProbe::Hit(cached) => return Some(cached),
-            ImageCacheProbe::Leader(flight) => Some(flight),
-        },
-        None => None,
-    };
     let filter = match kind {
         pdf_page_ir::ImageCodecKind::Dct => StreamFilter::DctDecode,
         pdf_page_ir::ImageCodecKind::Jpx => StreamFilter::Jpx,
@@ -2996,7 +2992,7 @@ fn decode_codec_samples(
         object: None,
     };
     // Translate the IR's backend-neutral parms into the codec API's.
-    let params = match parms {
+    let params = match &parms {
         Some(p) => DecodeParameters {
             decode: None,
             jbig2_globals: p.jbig2_globals.clone(),
@@ -3015,6 +3011,34 @@ fn decode_codec_samples(
             target_size,
             ..DecodeParameters::default()
         },
+    };
+    // Production decoded-image cache: content-hash probe before any decode.
+    // The codec names the resolution it will decode this draw at, from the
+    // same descriptor and parameters the decode below receives, so a reduced
+    // decode is only ever served to draws the codec would reduce the same way.
+    let image_cache_key = out.image_cache.as_ref().map(|cache| {
+        let scale = match codec.reduction_level(data, &descriptor, &params, &out.decode_limits) {
+            Some(level) => DecodeScaleKey::Level(level),
+            None => DecodeScaleKey::Target(target_size),
+        };
+        let key = ImageCacheKey::new(
+            kind,
+            data,
+            width,
+            height,
+            bits_per_component,
+            is_mask,
+            parms.as_ref(),
+            scale,
+        );
+        (cache, key)
+    });
+    let image_decode_flight = match image_cache_key {
+        Some((cache, key)) => match cache.probe(key) {
+            ImageCacheProbe::Hit(cached) => return Some(cached),
+            ImageCacheProbe::Leader(flight) => Some(flight),
+        },
+        None => None,
     };
     #[cfg(feature = "profiling")]
     let decode_start = std::time::Instant::now();
@@ -5248,6 +5272,8 @@ fn flatten_polylines(path: &PathData, ctm: Matrix) -> Vec<(Vec<[f32; 2]>, bool)>
 
 /// Whether the reduced-resolution decode hint is disabled by environment. Read
 /// once; a measurement/debug switch, not a production toggle (default: enabled).
+/// Despite the variable's name it covers every codec that scales, DCT as well
+/// as JPX, since both read the same hint.
 fn jpx_reduce_disabled() -> bool {
     use std::sync::OnceLock;
     static DISABLED: OnceLock<bool> = OnceLock::new();
@@ -5300,16 +5326,17 @@ fn codec_target_size(ctm: Matrix) -> Option<(u32, u32)> {
     if !w.is_finite() || !h.is_finite() || w < 1.0 || h < 1.0 {
         return None;
     }
-    // The codecs reduce to the smallest wavelet scale that still covers the
-    // hint, so hinting the bare footprint hands the resampler between 1 and 2
-    // source texels per device pixel. An earlier 2x headroom asked for a full
-    // extra octave; on the MRC scan corpus that rejected the one-level
-    // reduction at viewer resolution (a 2929x4424 layer drawn at 1240x2020 was
-    // decoded in full, 300-380 ms per layer against ~45 ms reduced) and cost
-    // more than every renderer-side image optimisation combined, while PDFium
-    // itself decodes JPX at the reduced level for such draws. The headroom is
-    // therefore 1.0 by default; `PDF_RENDERER_JPX_HEADROOM=<f32 >= 1>` restores
-    // the extra octave for paired quality A/B on one binary.
+    // The codecs reduce to the smallest scale that still covers the hint (a
+    // JPX wavelet level, a 1/2, 1/4 or 1/8 DCT scale), so hinting the bare
+    // footprint hands the resampler between 1 and 2 source texels per device
+    // pixel. An earlier 2x headroom asked for a full extra octave; on the MRC
+    // scan corpus that rejected the one-level reduction at viewer resolution
+    // (a 2929x4424 layer drawn at 1240x2020 was decoded in full, 300-380 ms
+    // per layer against ~45 ms reduced) and cost more than every
+    // renderer-side image optimisation combined, while PDFium itself decodes
+    // JPX at the reduced level for such draws. The headroom is therefore 1.0
+    // by default; `PDF_RENDERER_JPX_HEADROOM=<f32 >= 1>` restores the extra
+    // octave for paired quality A/B on one binary.
     let headroom = jpx_headroom() as f64;
     Some((
         (w * headroom).ceil().min(u32::MAX as f64) as u32,
@@ -6647,22 +6674,34 @@ mod image_cache_tests {
 
     /// A tiny valid grayscale JPEG payload produced by the in-house encoder.
     fn jpeg_payload(seed: u8) -> Vec<u8> {
-        let (w, h) = (16u16, 16u16);
-        let px: Vec<u8> = (0..w as usize * h as usize)
+        jpeg_payload_sized(16, seed)
+    }
+
+    /// A `size`x`size` grayscale JPEG of high-frequency content, so a decode
+    /// the codec reduces to 1/2, 1/4 or 1/8 scale differs from the full one.
+    fn jpeg_payload_sized(size: u16, seed: u8) -> Vec<u8> {
+        let px: Vec<u8> = (0..size as usize * size as usize)
             .map(|i| (i as u8).wrapping_mul(31).wrapping_add(seed))
             .collect();
-        pdf_image::jpeg::encoder::write_jpeg(&px, w, h, false, 90, false).expect("encode")
+        pdf_image::jpeg::encoder::write_jpeg(&px, size, size, false, 90, false).expect("encode")
     }
 
     fn dct_page(payload: Vec<u8>) -> CompiledPage {
+        dct_page_sized(payload, 16)
+    }
+
+    /// A `size`x`size` user-space page whose only draw is a `size`x`size` DCT
+    /// image filling it.
+    fn dct_page_sized(payload: Vec<u8>, size: u32) -> CompiledPage {
+        let extent = f64::from(size);
         let image = ImageIr {
             key: ResourceKey {
                 object_number: 7,
                 generation: 0,
                 variant: 0,
             },
-            width: 16,
-            height: 16,
+            width: size,
+            height: size,
             is_stencil: false,
             interpolation: InterpolationMode::Nearest,
             soft_mask: None,
@@ -6684,14 +6723,14 @@ mod image_cache_tests {
                 crop: Rect {
                     x0: 0.0,
                     y0: 0.0,
-                    x1: 16.0,
-                    y1: 16.0,
+                    x1: extent,
+                    y1: extent,
                 },
                 rotate: 0,
             },
             content_bounds: None,
             operations: Arc::from([
-                DisplayOp::ConcatTransform(Matrix::scale(16.0, 16.0)),
+                DisplayOp::ConcatTransform(Matrix::scale(extent, extent)),
                 DisplayOp::DrawImage {
                     image: pdf_page_ir::ImageId(0),
                     paint: pdf_page_ir::PaintId(0),
@@ -6717,7 +6756,8 @@ mod image_cache_tests {
 
     fn registry() -> pdf_image::CodecRegistry {
         pdf_image::CodecRegistry::new([
-            Arc::new(pdf_image::JpegCodec) as Arc<dyn pdf_image::ImageCodec>
+            Arc::new(pdf_image::JpegCodec) as Arc<dyn pdf_image::ImageCodec>,
+            Arc::new(pdf_image::JpxCodec),
         ])
     }
 
@@ -6731,7 +6771,7 @@ mod image_cache_tests {
             height: 1,
             bpc: 8,
             is_mask: false,
-            target: None,
+            scale: DecodeScaleKey::Level(0),
             parms: 0,
         }
     }
@@ -6749,14 +6789,36 @@ mod image_cache_tests {
     }
 
     fn lower_page(page: &CompiledPage, cache: Option<&Arc<SharedImageCache>>) -> CpuPreparedPage {
+        lower_page_at(page, 1.0, 16, cache)
+    }
+
+    /// Lower `page` at `scale` device pixels per user unit onto a square
+    /// `device`-pixel surface: the draw size a viewer zoom or one of Lege's
+    /// per-page render products would request.
+    fn lower_page_at(
+        page: &CompiledPage,
+        scale: f64,
+        device: u32,
+        cache: Option<&Arc<SharedImageCache>>,
+    ) -> CpuPreparedPage {
+        lower_with_codecs(page, scale, device, &registry(), cache)
+    }
+
+    fn lower_with_codecs(
+        page: &CompiledPage,
+        scale: f64,
+        device: u32,
+        codecs: &pdf_image::CodecRegistry,
+        cache: Option<&Arc<SharedImageCache>>,
+    ) -> CpuPreparedPage {
         lower_impl(
             page,
-            Matrix::IDENTITY,
+            Matrix::scale(scale, scale),
             DeviceSize {
-                width: 16,
-                height: 16,
+                width: device,
+                height: device,
             },
-            &registry(),
+            codecs,
             &pdf_image::DecodeLimits::default(),
             pdf_font::HintingPolicy::None,
             pdf_render_api::RenderColorPolicy::Original,
@@ -6771,7 +6833,11 @@ mod image_cache_tests {
     }
 
     fn render_pixels(prepared: &CpuPreparedPage) -> Vec<u8> {
-        let mut surface = crate::surface::Surface::new(16, 16, pdf_render_api::Background::White);
+        let mut surface = crate::surface::Surface::new(
+            prepared.size.width as usize,
+            prepared.size.height as usize,
+            pdf_render_api::Background::White,
+        );
         let mut ctx = crate::exec::CpuWorkerContext::new();
         let mut stats = crate::stats::RenderStats::default();
         crate::exec::execute(prepared, &mut surface, &mut ctx, &mut stats);
@@ -6816,6 +6882,204 @@ mod image_cache_tests {
         let base = render_pixels(&uncached);
         assert_eq!(base, render_pixels(&cold), "cache-off vs cache-cold pixels");
         assert_eq!(base, render_pixels(&warm), "cache-off vs cache-warm pixels");
+    }
+
+    fn decoded_size(prepared: &CpuPreparedPage) -> (u32, u32) {
+        let image = prepared_image(prepared);
+        (image.width, image.height)
+    }
+
+    /// Output must not depend on render history. The DCT codec decodes a
+    /// minified draw at 1/2, 1/4 or 1/8 scale, so a cache that kept one decode
+    /// per payload whatever the draw size let a page's first render fix the
+    /// JPEG resolution of every later render through the same backend: a
+    /// thumbnail (or Lege's analysis render) followed by a full-size render
+    /// magnified the thumbnail's decode.
+    #[test]
+    fn reduced_dct_decode_never_serves_a_larger_draw() {
+        let page = dct_page_sized(jpeg_payload_sized(64, 5), 64);
+        let shared = Arc::new(SharedImageCache::default());
+
+        // A 16-pixel footprint decodes the 64x64 JPEG at 1/4 scale.
+        let thumbnail = lower_page_at(&page, 0.25, 16, Some(&shared));
+        assert_eq!(decoded_size(&thumbnail), (16, 16), "reduced decode");
+
+        let after_thumbnail = lower_page_at(&page, 1.0, 64, Some(&shared));
+        let fresh = lower_page_at(&page, 1.0, 64, Some(&Arc::new(SharedImageCache::default())));
+        let uncached = lower_page_at(&page, 1.0, 64, None);
+        assert_eq!(decoded_size(&fresh), (64, 64), "full-size decode");
+        assert_eq!(prepared_samples(&fresh), prepared_samples(&uncached));
+
+        assert_eq!(
+            decoded_size(&after_thumbnail),
+            (64, 64),
+            "the thumbnail's reduced decode served the full-size draw"
+        );
+        assert_eq!(prepared_samples(&after_thumbnail), prepared_samples(&fresh));
+        assert_eq!(
+            render_pixels(&after_thumbnail),
+            render_pixels(&fresh),
+            "full-size pixels depend on what was rendered before"
+        );
+    }
+
+    /// Draws whose footprints the codec serves at the same DCT scale share
+    /// one decode, and each scale gets its own entry: the key is the scale
+    /// the codec picks, not the raw footprint, so a viewer zooming between
+    /// nearby sizes keeps hitting.
+    #[test]
+    fn dct_draws_share_one_entry_per_decode_scale() {
+        let page = dct_page_sized(jpeg_payload_sized(64, 9), 64);
+        let cache = Arc::new(SharedImageCache::default());
+
+        // 20 and 30 device pixels both decode at 1/2 scale...
+        let a = lower_page_at(&page, 20.0 / 64.0, 20, Some(&cache));
+        let b = lower_page_at(&page, 30.0 / 64.0, 30, Some(&cache));
+        assert_eq!(cache.stats(), (1, 1, 1), "miss+insert then hit");
+        assert_eq!(decoded_size(&a), (32, 32));
+        assert!(Arc::ptr_eq(&prepared_samples(&a), &prepared_samples(&b)));
+
+        // ...while 48 and 64 both need the full-size decode.
+        let c = lower_page_at(&page, 48.0 / 64.0, 48, Some(&cache));
+        let d = lower_page_at(&page, 1.0, 64, Some(&cache));
+        assert_eq!(cache.stats(), (2, 2, 2), "a new scale is a new entry");
+        assert_eq!(decoded_size(&d), (64, 64));
+        assert!(Arc::ptr_eq(&prepared_samples(&c), &prepared_samples(&d)));
+        assert_eq!(cache.len(), 2);
+    }
+
+    /// JPX entries are keyed by the wavelet level the decode drops: a
+    /// thumbnail's reduced decode never serves the full-size draw, and two
+    /// footprints that drop the same level share one decode.
+    #[test]
+    fn jpx_draws_are_keyed_by_the_decoded_wavelet_level() {
+        let size = 64u32;
+        let src: Vec<u8> = (0..size * size).map(|i| (i * 31 % 251) as u8).collect();
+        let image = jp2lam::Image::from_gray_bytes(size, size, &src).expect("gray image");
+        let options = jp2lam::EncodeOptions {
+            quality: 100,
+            ..Default::default()
+        };
+        let mut page = dct_page_sized(jp2lam::encode(&image, &options).expect("encode"), size);
+        let mut jpx = page.images[0].clone();
+        jpx.codec = Some(pdf_page_ir::ImageCodecKind::Jpx);
+        page.images = Arc::from([jpx]);
+        let shared = Arc::new(SharedImageCache::default());
+
+        let thumbnail = lower_page_at(&page, 0.25, 16, Some(&shared));
+        assert_eq!(decoded_size(&thumbnail), (16, 16), "two levels dropped");
+        let full = lower_page_at(&page, 1.0, 64, Some(&shared));
+        let fresh = lower_page_at(&page, 1.0, 64, Some(&Arc::new(SharedImageCache::default())));
+        assert_eq!(decoded_size(&fresh), (64, 64));
+        assert_eq!(prepared_samples(&full), prepared_samples(&fresh));
+        assert_eq!(render_pixels(&full), render_pixels(&fresh));
+        assert_eq!(shared.stats(), (0, 2, 2));
+
+        // 20 and 30 device pixels both drop one level (32x32).
+        let a = lower_page_at(&page, 20.0 / 64.0, 20, Some(&shared));
+        let b = lower_page_at(&page, 30.0 / 64.0, 30, Some(&shared));
+        assert_eq!(decoded_size(&a), (32, 32));
+        assert!(Arc::ptr_eq(&prepared_samples(&a), &prepared_samples(&b)));
+        assert_eq!(shared.stats(), (1, 3, 3));
+    }
+
+    /// Returns a flat raster of the declared size and counts its decodes.
+    fn flat_decode(
+        decodes: &AtomicUsize,
+        descriptor: &pdf_image::ImageDescriptor,
+    ) -> Result<pdf_image::DecodedImage, pdf_image::ImageError> {
+        decodes.fetch_add(1, Ordering::Relaxed);
+        let (width, height) = (descriptor.width, descriptor.height);
+        Ok(pdf_image::DecodedImage {
+            width,
+            height,
+            format: pdf_image::DecodedFormat::Gray8,
+            stride: width as usize,
+            data: Arc::from(vec![128u8; width as usize * height as usize]),
+        })
+    }
+
+    /// An injected DCT codec that, like JBIG2 and CCITT, never scales and says
+    /// so: level 0 for every footprint.
+    #[derive(Debug, Default)]
+    struct FixedScaleCodec {
+        decodes: AtomicUsize,
+    }
+
+    impl pdf_image::ImageCodec for FixedScaleCodec {
+        fn filter(&self) -> pdf_image::StreamFilter {
+            pdf_image::StreamFilter::DctDecode
+        }
+        fn decode(
+            &self,
+            _data: &[u8],
+            descriptor: &pdf_image::ImageDescriptor,
+            _params: &pdf_image::DecodeParameters,
+            _limits: &pdf_image::DecodeLimits,
+        ) -> Result<pdf_image::DecodedImage, pdf_image::ImageError> {
+            flat_decode(&self.decodes, descriptor)
+        }
+        fn reduction_level(
+            &self,
+            _data: &[u8],
+            _descriptor: &pdf_image::ImageDescriptor,
+            _params: &pdf_image::DecodeParameters,
+            _limits: &pdf_image::DecodeLimits,
+        ) -> Option<u8> {
+            Some(0)
+        }
+    }
+
+    /// An injected DCT codec that keeps the trait's default: no level known.
+    #[derive(Debug, Default)]
+    struct UnknownScaleCodec {
+        decodes: AtomicUsize,
+    }
+
+    impl pdf_image::ImageCodec for UnknownScaleCodec {
+        fn filter(&self) -> pdf_image::StreamFilter {
+            pdf_image::StreamFilter::DctDecode
+        }
+        fn decode(
+            &self,
+            _data: &[u8],
+            descriptor: &pdf_image::ImageDescriptor,
+            _params: &pdf_image::DecodeParameters,
+            _limits: &pdf_image::DecodeLimits,
+        ) -> Result<pdf_image::DecodedImage, pdf_image::ImageError> {
+            flat_decode(&self.decodes, descriptor)
+        }
+    }
+
+    /// A codec that reports level 0 for every footprint decodes a page drawn
+    /// at several sizes once. One that cannot report a level is keyed by the
+    /// footprint itself: exact, at one decode per draw size.
+    #[test]
+    fn the_reported_level_decides_sharing_across_draw_sizes() {
+        let page = dct_page_sized(jpeg_payload_sized(64, 1), 64);
+        let draw = |codecs: &pdf_image::CodecRegistry, cache: &Arc<SharedImageCache>| {
+            for device in [16u32, 32, 64, 16] {
+                lower_with_codecs(&page, f64::from(device) / 64.0, device, codecs, Some(cache));
+            }
+        };
+
+        let fixed = Arc::new(FixedScaleCodec::default());
+        let cache = Arc::new(SharedImageCache::default());
+        draw(
+            &pdf_image::CodecRegistry::new([fixed.clone() as Arc<dyn pdf_image::ImageCodec>]),
+            &cache,
+        );
+        assert_eq!(fixed.decodes.load(Ordering::Relaxed), 1);
+        assert_eq!(cache.stats(), (3, 1, 1));
+
+        let unknown = Arc::new(UnknownScaleCodec::default());
+        let cache = Arc::new(SharedImageCache::default());
+        draw(
+            &pdf_image::CodecRegistry::new([unknown.clone() as Arc<dyn pdf_image::ImageCodec>]),
+            &cache,
+        );
+        assert_eq!(unknown.decodes.load(Ordering::Relaxed), 3);
+        assert_eq!(cache.stats(), (1, 3, 3), "only the repeated size hits");
     }
 
     /// A 16×16 Indexed page: 4-bit samples over an RGB palette of `lookup`.
