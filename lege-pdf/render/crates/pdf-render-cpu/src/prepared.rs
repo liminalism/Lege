@@ -8,9 +8,9 @@
 //! then walks compact commands with **no `Arc` indexing, transform
 //! composition, or resource lookup in the hot loop** (advice §14).
 
-use std::collections::HashMap;
 #[cfg(feature = "profiling")]
 use std::collections::HashSet;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use pdf_font::FontProgram;
@@ -188,6 +188,10 @@ struct FontCacheShard {
     map: HashMap<FontProgramKey, FontCacheEntry>,
     bytes: usize,
     clock: u64,
+    /// Recency index: `last_used` clock to key, so eviction pops the oldest
+    /// entry in O(log n) instead of scanning the map. Every `last_used`
+    /// write updates it (clocks are unique within a shard).
+    lru: BTreeMap<u64, FontProgramKey>,
 }
 
 #[derive(Debug)]
@@ -231,13 +235,16 @@ impl SharedFontProgramCache {
 
     /// Serve the cached program for `key` (a 128-bit content identity).
     fn get(&self, key: &FontProgramKey) -> Option<FontProgram> {
-        let mut shard = lock_unpoisoned(self.shard(key));
+        let mut guard = lock_unpoisoned(self.shard(key));
+        let shard = &mut *guard;
         shard.clock += 1;
         let clock = shard.clock;
         let entry = shard.map.get_mut(key)?;
+        shard.lru.remove(&entry.last_used);
         entry.last_used = clock;
+        shard.lru.insert(clock, *key);
         let program = entry.program.clone();
-        drop(shard);
+        drop(guard);
         self.hits.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         Some(program)
     }
@@ -257,17 +264,14 @@ impl SharedFontProgramCache {
             },
         ) {
             shard.bytes = shard.bytes.saturating_sub(prev.charge);
+            shard.lru.remove(&prev.last_used);
         }
+        shard.lru.insert(clock, key);
         shard.bytes += charge;
         // Evict least-recently-used entries until back under the per-shard cap.
         // Font sets are small and stable, so this rarely runs.
         while shard.bytes > self.per_shard_bytes && shard.map.len() > 1 {
-            let Some(victim) = shard
-                .map
-                .iter()
-                .min_by_key(|(_, e)| e.last_used)
-                .map(|(k, _)| *k)
-            else {
+            let Some((_, victim)) = shard.lru.pop_first() else {
                 break;
             };
             if let Some(removed) = shard.map.remove(&victim) {
@@ -403,6 +407,8 @@ struct GlyphCacheShard {
     map: HashMap<GlyphCacheKey, GlyphCacheEntry, GlyphHashState>,
     bytes: usize,
     clock: u64,
+    /// Recency index (`last_used` clock to key); see `FontCacheShard::lru`.
+    lru: BTreeMap<u64, GlyphCacheKey>,
     /// Lookup counters, bumped while the shard lock is already held, so the
     /// per-glyph probe performs no extra atomic read-modify-write on a line
     /// shared by every render worker. Summed across shards by `stats()`.
@@ -471,7 +477,9 @@ impl SharedGlyphCache {
             shard.misses += 1;
             return None;
         };
+        shard.lru.remove(&entry.last_used);
         entry.last_used = clock;
+        shard.lru.insert(clock, *key);
         let bitmap = entry.bitmap.clone();
         shard.hits += 1;
         Some(bitmap)
@@ -493,15 +501,12 @@ impl SharedGlyphCache {
             },
         ) {
             shard.bytes = shard.bytes.saturating_sub(prev.charge);
+            shard.lru.remove(&prev.last_used);
         }
+        shard.lru.insert(clock, key);
         shard.bytes += charge;
         while shard.bytes > self.per_shard_bytes && shard.map.len() > 1 {
-            let Some(victim) = shard
-                .map
-                .iter()
-                .min_by_key(|(_, e)| e.last_used)
-                .map(|(k, _)| *k)
-            else {
+            let Some((_, victim)) = shard.lru.pop_first() else {
                 break;
             };
             if let Some(removed) = shard.map.remove(&victim) {
@@ -712,6 +717,10 @@ pub(crate) struct SharedImageCache {
 #[derive(Debug, Default)]
 struct ImageCacheShard {
     map: HashMap<ImageCacheKey, ImageCacheEntry>,
+    /// Recency index (`last_used` clock to key). Clocks come from the cache's
+    /// global counter, so the oldest entry overall is the minimum over the
+    /// shards' first keys.
+    lru: BTreeMap<u64, ImageCacheKey>,
 }
 
 #[derive(Debug)]
@@ -838,18 +847,21 @@ impl SharedImageCache {
 
     fn get_inner(&self, key: &ImageCacheKey, record_stats: bool) -> Option<CodecSamples> {
         use std::sync::atomic::Ordering::Relaxed;
-        let mut shard = lock_unpoisoned(self.shard(key));
+        let mut guard = lock_unpoisoned(self.shard(key));
+        let shard = &mut *guard;
         let clock = self.clock.fetch_add(1, Relaxed);
         let Some(entry) = shard.map.get_mut(key) else {
-            drop(shard);
+            drop(guard);
             if record_stats {
                 self.misses.fetch_add(1, Relaxed);
             }
             return None;
         };
+        shard.lru.remove(&entry.last_used);
         entry.last_used = clock;
+        shard.lru.insert(clock, *key);
         let decoded = entry.decoded.clone();
-        drop(shard);
+        drop(guard);
         if record_stats {
             self.hits.fetch_add(1, Relaxed);
         }
@@ -947,26 +959,39 @@ impl SharedImageCache {
                 },
             ) {
                 *total_bytes = total_bytes.saturating_sub(previous.charge);
+                shard.lru.remove(&previous.last_used);
             }
+            shard.lru.insert(clock, key);
             *total_bytes = total_bytes.saturating_add(charge);
         }
 
         while *total_bytes > self.total_budget_bytes {
-            let mut victim: Option<(usize, ImageCacheKey, u64)> = None;
+            // The oldest entry overall is the minimum of the shards' oldest
+            // (each a `BTreeMap` first key), not a scan of every entry.
+            let mut victim: Option<(usize, u64, ImageCacheKey)> = None;
             for (index, shard) in self.shards.iter().enumerate() {
                 let shard = lock_unpoisoned(shard);
-                if let Some((key, entry)) =
-                    shard.map.iter().min_by_key(|(_, entry)| entry.last_used)
-                    && victim.is_none_or(|(_, _, oldest)| entry.last_used < oldest)
+                if let Some((&clock, &key)) = shard.lru.first_key_value()
+                    && victim.is_none_or(|(_, oldest, _)| clock < oldest)
                 {
-                    victim = Some((index, *key, entry.last_used));
+                    victim = Some((index, clock, key));
                 }
             }
-            let Some((index, key, _)) = victim else {
+            let Some((index, clock, key)) = victim else {
                 break;
             };
-            if let Some(removed) = lock_unpoisoned(&self.shards[index]).map.remove(&key) {
-                *total_bytes = total_bytes.saturating_sub(removed.charge);
+            let mut shard = lock_unpoisoned(&self.shards[index]);
+            // A hit between the peek and this lock moved the entry to a newer
+            // clock; leave it and pick again.
+            if shard
+                .map
+                .get(&key)
+                .is_some_and(|entry| entry.last_used == clock)
+            {
+                shard.lru.remove(&clock);
+                if let Some(removed) = shard.map.remove(&key) {
+                    *total_bytes = total_bytes.saturating_sub(removed.charge);
+                }
             }
         }
     }
@@ -2754,7 +2779,12 @@ fn promote_through_cache(
 /// and rotated or skewed draws take the generic body either way. An
 /// axis-aligned placement with a fractional edge is reported unsafe.
 fn placement_ring_unchanged_by_promotion(ctm: &Matrix) -> bool {
-    let scale = ctm.a.abs().max(ctm.b.abs()).max(ctm.c.abs()).max(ctm.d.abs());
+    let scale = ctm
+        .a
+        .abs()
+        .max(ctm.b.abs())
+        .max(ctm.c.abs())
+        .max(ctm.d.abs());
     let tol = 1e-9 * scale.max(1.0);
     let whole = |v: f64| (v - v.round()).abs() <= 1e-6;
     if ctm.b.abs() <= tol && ctm.c.abs() <= tol {
@@ -6581,6 +6611,32 @@ mod font_cache_tests {
     }
 
     #[test]
+    fn evicts_the_least_recently_used_entry_first() {
+        // Per-shard cap of two programs (8 shards x 2 x 4096). The keys share
+        // the high 32 bits of `h0`, so they land in one shard.
+        let cache = SharedFontProgramCache::new(8 * 2 * 4096);
+        let program = FontProgram::parse(bare_cff()).expect("parse");
+        let key = |i: u64| FontProgramKey {
+            h0: (7u64 << 32) | i,
+            h1: i,
+            len: 4096,
+            face: 0,
+        };
+        cache.insert(key(1), program.clone(), 4096);
+        cache.insert(key(2), program.clone(), 4096);
+        // Touch 1 so 2 becomes the oldest.
+        assert!(cache.get(&key(1)).is_some());
+        cache.insert(key(3), program.clone(), 4096);
+        assert!(
+            cache.get(&key(2)).is_none(),
+            "the least recently used entry goes"
+        );
+        assert!(cache.get(&key(1)).is_some(), "the touched entry stays");
+        assert!(cache.get(&key(3)).is_some(), "the new entry stays");
+        assert_eq!(cache.len(), 2);
+    }
+
+    #[test]
     fn none_shared_cache_still_parses() {
         let res = resource(bare_cff());
         let p = resolve_program_bytes(&res, None).expect("parse without cache");
@@ -7726,9 +7782,30 @@ mod image_cache_tests {
     /// unchanged.
     #[test]
     fn sixteen_bit_device_images_promote_only_where_the_ring_is_unchanged() {
-        let whole = Matrix { a: 12.0, b: 0.0, c: 0.0, d: 12.0, e: 2.0, f: 3.0 };
-        let fractional = Matrix { a: 11.5, b: 0.0, c: 0.0, d: 12.0, e: 2.25, f: 3.0 };
-        let rotated = Matrix { a: 8.0, b: 5.0, c: -5.0, d: 8.0, e: 6.0, f: 1.0 };
+        let whole = Matrix {
+            a: 12.0,
+            b: 0.0,
+            c: 0.0,
+            d: 12.0,
+            e: 2.0,
+            f: 3.0,
+        };
+        let fractional = Matrix {
+            a: 11.5,
+            b: 0.0,
+            c: 0.0,
+            d: 12.0,
+            e: 2.25,
+            f: 3.0,
+        };
+        let rotated = Matrix {
+            a: 8.0,
+            b: 5.0,
+            c: -5.0,
+            d: 8.0,
+            e: 6.0,
+            f: 1.0,
+        };
         for (space, comps) in [
             (ImageColorSpace::Gray, 1usize),
             (ImageColorSpace::Rgb, 3),
