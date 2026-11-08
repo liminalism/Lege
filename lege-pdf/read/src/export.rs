@@ -216,6 +216,7 @@ impl RenderSession {
             height,
             format: options.raster_format(),
             crop: None,
+            decode_reference: None,
         };
         let plane = self.render_cancellable(page, &product, cancellation)?;
         encode_plane(&plane, options.format)

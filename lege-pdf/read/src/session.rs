@@ -13,7 +13,9 @@ use pdf_render_api::{
     AnnotationMode, Background, HostPage, OutputFormat, OutputResidency, PageTransform,
     RenderColorPolicy, RenderLimits, RenderQuality, RenderRequest,
 };
-use pdf_render_cpu::{CpuBackend, CpuBackendOptions, CpuWorkerContext, DecodedBilevelSmask};
+use pdf_render_cpu::{
+    CpuBackend, CpuBackendOptions, CpuRenderOptions, CpuWorkerContext, DecodedBilevelSmask,
+};
 
 use crate::intake::source;
 use crate::page_cache::PageCache;
@@ -237,6 +239,28 @@ pub struct RasterProduct {
     pub height: u32,
     pub format: RasterFormat,
     pub crop: Option<DeviceCrop>,
+    /// Decode images at no less than the resolution this full-page raster
+    /// needs; see [`DecodeReference`]. `None`: each image decodes for its own
+    /// footprint on this product.
+    pub decode_reference: Option<DecodeReference>,
+}
+
+/// A whole-page raster size whose image footprints set the lowest resolution
+/// a product's images are decoded at.
+///
+/// JPEG and JPEG 2000 images decode a minified draw at a reduced resolution
+/// chosen from its footprint, so products of one page rendered at different
+/// sizes would each decode the page's scan at their own resolution. Products
+/// that name the same reference decode each image once, at the reference's
+/// resolution, and render from those same pixels; a product larger than the
+/// reference still decodes at its own. Which resolution is decoded follows
+/// from the product alone, never from what was rendered or cached before.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DecodeReference {
+    /// Width of the full, uncropped page raster.
+    pub width: u32,
+    /// Height of the full, uncropped page raster.
+    pub height: u32,
 }
 
 impl RasterProduct {
@@ -246,6 +270,7 @@ impl RasterProduct {
             height,
             format: RasterFormat::Rgb8,
             crop: None,
+            decode_reference: None,
         }
     }
 
@@ -255,11 +280,19 @@ impl RasterProduct {
             height,
             format: RasterFormat::Gray8,
             crop: None,
+            decode_reference: None,
         }
     }
 
     pub fn with_crop(mut self, crop: DeviceCrop) -> Self {
         self.crop = Some(crop);
+        self
+    }
+
+    /// Decode this product's images at no less than a `width` x `height`
+    /// rendering of the whole page needs (see [`DecodeReference`]).
+    pub fn with_decode_reference(mut self, width: u32, height: u32) -> Self {
+        self.decode_reference = Some(DecodeReference { width, height });
         self
     }
 }
@@ -523,13 +556,14 @@ impl RenderSession {
             limits: render_limits(cancellation),
             residency: OutputResidency::HostRequired,
         };
+        let options = render_options(&page.raster, product);
 
         let rendered = catch_unwind(AssertUnwindSafe(|| {
             WORKER_CONTEXTS.with(|worker| {
                 let mut worker = worker.borrow_mut();
                 worker.select_document(self.id);
                 self.backend
-                    .render_with(&request, &mut worker.raster)
+                    .render_with_options(&request, &options, &mut worker.raster)
                     .map(|(page, _stats)| page)
             })
         }))
@@ -1055,6 +1089,20 @@ fn page_to_device_matrix(page: &CompiledPage, output_width: u32, output_height: 
     }
 }
 
+/// The renderer policy for one product: its decode reference, as the
+/// transform of the whole page onto the reference raster. A zero-sized
+/// reference names no raster and is ignored.
+fn render_options(page: &CompiledPage, product: &RasterProduct) -> CpuRenderOptions {
+    CpuRenderOptions {
+        image_decode_reference: product
+            .decode_reference
+            .filter(|reference| reference.width > 0 && reference.height > 0)
+            .map(|reference| PageTransform {
+                matrix: page_to_device_matrix(page, reference.width, reference.height),
+            }),
+    }
+}
+
 fn product_matrix(page: &CompiledPage, product: &RasterProduct) -> Matrix {
     let Some(crop) = product.crop else {
         return page_to_device_matrix(page, product.width, product.height);
@@ -1326,5 +1374,40 @@ mod tests {
         };
         let working = resize_smask_coverage(decoded, 3, 1).expect("valid coverage");
         assert_eq!(&working.pixels[..], &[0, 255, 7]);
+    }
+
+    /// A product's decode reference becomes the whole-page transform onto the
+    /// reference raster, whatever the product's own size and crop; without a
+    /// reference, or with a zero-sized one, the renderer gets no policy.
+    #[test]
+    fn decode_reference_maps_to_the_whole_page_transform() {
+        let page = eligible_page();
+        let crop = DeviceCrop {
+            x: 3,
+            y: 4,
+            width: 5,
+            height: 6,
+            page_width: 40,
+            page_height: 60,
+        };
+        let region = RasterProduct::rgb8(10, 12)
+            .with_crop(crop)
+            .with_decode_reference(40, 60);
+        assert_eq!(
+            render_options(&page, &region)
+                .image_decode_reference
+                .map(|reference| reference.matrix),
+            Some(page_to_device_matrix(&page, 40, 60))
+        );
+        for product in [
+            RasterProduct::gray8(8, 8),
+            RasterProduct::gray8(8, 8).with_decode_reference(0, 60),
+        ] {
+            assert!(
+                render_options(&page, &product)
+                    .image_decode_reference
+                    .is_none()
+            );
+        }
     }
 }

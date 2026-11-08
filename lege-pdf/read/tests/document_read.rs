@@ -614,3 +614,62 @@ fn export_rejects_unusable_resolutions_and_oversized_pages() {
         (1, 1)
     );
 }
+
+/// A one-page scan: a 64x64-point page whose only content is a 64x64
+/// grayscale JPEG of high-frequency samples filling it.
+fn jpeg_scan() -> Vec<u8> {
+    let samples: Vec<u8> = (0..64u32 * 64)
+        .map(|i| (i as u8).wrapping_mul(31).wrapping_add(5))
+        .collect();
+    let mut jpeg = Vec::new();
+    jpeg_encoder::Encoder::new(&mut jpeg, 90)
+        .encode(&samples, 64, 64, jpeg_encoder::ColorType::Luma)
+        .unwrap();
+    let mut builder = PdfBuilder::new();
+    builder.add_object(1, "<</Type/Catalog/Pages 2 0 R>>");
+    builder.add_object(2, "<</Type/Pages/Kids[3 0 R]/Count 1/MediaBox[0 0 64 64]>>");
+    builder.add_object(
+        3,
+        "<</Type/Page/Parent 2 0 R/Contents 4 0 R/Resources<</XObject<</Im 5 0 R>>>>>>",
+    );
+    builder.add_stream(4, "", b"q 64 0 0 64 0 0 cm /Im Do Q");
+    builder.add_stream(
+        5,
+        "/Type/XObject/Subtype/Image/Width 64/Height 64/BitsPerComponent 8/ColorSpace/DeviceGray/Filter/DCTDecode",
+        &jpeg,
+    );
+    builder.finish_classic_xref("/Root 1 0 R");
+    builder.into_bytes()
+}
+
+fn gray_pixels(session: &RenderSession, product: &RasterProduct) -> Arc<[u8]> {
+    let page = session.compile(0).unwrap();
+    match session.render(&page, product).unwrap() {
+        RasterPlane::Gray8(surface) => surface.pixels,
+        RasterPlane::Rgb8(_) => panic!("a Gray8 product must return a Gray8 plane"),
+    }
+}
+
+/// A decode reference is a rendering policy carried by the product: an
+/// analysis-sized render naming the base raster as its reference decodes the
+/// scan for the base, so it paints differently from the same render without
+/// one, and identically in a fresh session and in one whose earlier renders
+/// at other sizes filled the decoded-image cache.
+#[test]
+fn decode_reference_is_a_product_policy_independent_of_render_history() {
+    let bytes = shared(jpeg_scan());
+    let analysis = RasterProduct::gray8(16, 16).with_decode_reference(32, 32);
+    let fresh = RenderSession::open(Arc::clone(&bytes), None).unwrap();
+    let alone = gray_pixels(&fresh, &analysis);
+    assert_ne!(
+        alone,
+        gray_pixels(&fresh, &RasterProduct::gray8(16, 16)),
+        "the reference changed which decode the draw used"
+    );
+
+    let warm = RenderSession::open(bytes, None).unwrap();
+    for size in [64, 8, 16, 32] {
+        gray_pixels(&warm, &RasterProduct::gray8(size, size));
+    }
+    assert_eq!(gray_pixels(&warm, &analysis), alone);
+}

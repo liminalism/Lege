@@ -643,6 +643,7 @@ fn render_placement(
         height: crop.height(),
         format: options.raster_format(),
         crop: None,
+        decode_reference: None,
     };
     let whole_page =
         crop.x0 == 0 && crop.y0 == 0 && crop.x1 == plan.page_width && crop.y1 == plan.page_height;
