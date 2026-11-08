@@ -127,3 +127,13 @@ bilevel box fast paths), so no real document in the corpus changes. MRC pages
 whose text layer is an `/ImageMask` (Lege's own output, `stencil_jbig2.pdf`)
 change at scales where the page edge is fractional, like bilevel_600 page 2;
 stencil_jbig2 was not regenerated here (it needs `mkjbig2`).
+
+### Addendum: full gate after the merge (`9c0b9fe3`)
+
+The 16-document gate (scales 1.0/1.37/2.0, RGBA and Gray8) against the
+round-3 hashes gives 2,162 of 2,202 renders identical. Besides the stencil
+pages above, `cmyk16`, `gray16` and `rgb16` change at 1.37 only: full-page
+16-bit images that `ring_unchanged_by_promotion` keeps on the generic body,
+whose far edge (column 838 of 838.44, row 1085 of 1085.04) was an A10 blend
+and is now the backdrop, with the previous column and row fully painted.
+Edge-only, the same rule as the stencils.

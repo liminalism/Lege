@@ -212,6 +212,59 @@ The warm pass is flat on every document (the page and image caches serve it). A2
 ## Still open
 
 - A5 caching half, A11c, A14, A4 hoist: declined, as in the plan.
-- Snapping masked-image edges to match PDFium (the ring follow-up).
+- ~~Snapping masked-image edges to match PDFium (the ring follow-up).~~ Landed
+  below; what remains is the outward rounding PDFium actually does.
 - mimalloc adoption (measured; product decision).
 - The three `cs`/`scn`/`Tf` intern sites keep interning by design.
+
+---
+
+# Local round 3, continued (2026-11-08): the masked-image border ring
+
+Branch `scoping-r3-ring`, merged as `9c0b9fe3`. Worker brief: give axis-aligned
+masked draws the hard edge PDFium has, without touching the opaque fast paths.
+
+| Commit | What changed | Tests |
+|---|---|---|
+| `cd576089` | `PreparedImage::edge_coverage` (image.rs): when the draw is exactly axis-aligned (`inv.b == inv.c == 0`, mirrors included) a border pixel is `Some(255)` if its centre maps into `[0,1)²`, else `Some(0)`; the interior `None` is unchanged, so `interior_span`, the fast-path interiors and the stencil hole are untouched. Rotated and sheared draws keep A10. | `axis_aligned_masked_edges_follow_the_pixel_centre_rule` (stencils in both `/Decode` polarities, mirrored, 1- and 8-bit `/SMask`, `/Mask`, 1-bit gray, nearest and bilinear, four placements; the same draws rotated 15° must still blend); `fractional_axis_aligned_stencil_edge_snaps_by_pixel_centre` replaces `fractional_image_edge_paints_partial_coverage`; the ring test now holds every path, fast or generic, to the whole surface |
+| `34f036eb`, `0f214339` | Comments and the measurement note corrected: the pixel-centre rule is the fast paths' rule, **not PDFium's**. PDFium paints every pixel the rectangle touches, at full weight, i.e. it rounds the destination rectangle outward (`GetOuterRect`) and stretches the image over it. The first probe's row for ring image I's top edge was a misread. | n/a |
+
+## Measured
+
+[measurements/masked-image-ring-20261108.md](measurements/masked-image-ring-20261108.md):
+of 3,344 boundary pixels whose centre is inside the rectangle, 3,343 now equal
+PDFium (1,162 before, the fast-path images only); the 2,741 whose centre is
+outside still differ, PDFium painting them in full where Lege leaves the
+backdrop, as the opaque fast paths always have.
+
+## Gate
+
+`gate-r4`: probe at `9c0b9fe3` against the round-3 hashes of `0f3a6516`
+(16 documents, scales 1.0/1.37/2.0, RGBA and Gray8): **2,162 of 2,202 renders
+identical**. The 40 that differ are all the new hard edge, verified:
+
+- `stencil_flate` pages 2-5 at every scale and page 1 at 1.37 (the `/ImageMask`
+  stencils); `bilevel_600` page 2 at 1.37 (full-page `/ImageMask`).
+- `cmyk16`, `gray16`, `rgb16` at 1.37 only: full-page 16-bit images that are
+  *not* promoted to the RGB8 fast paths (`ring_unchanged_by_promotion` keeps
+  them generic exactly where the ring could differ), so their far edge took
+  A10 before. At 1.37 the page is 838.44 × 1085.04 px; column 838 and row 1085
+  are now pure backdrop and column 837 / row 1084 fully painted. The worker's
+  own hash run did not cover these fixtures.
+- beans, vogtle, viaduct, xenosystems, sahib, ring, groups, gray_jpx,
+  repeat_image and the four stencil/MRC-free fixtures: unchanged.
+
+With the generic body and the fast paths now agreeing byte for byte, the
+`ring_unchanged_by_promotion` gate on 16-bit promotion is no longer load-bearing
+and can be removed in a later round (promotion is then purely a speed choice).
+
+## Still open after this
+
+- **Outward rounding to match PDFium fully**: snap each axis-aligned image's
+  destination rectangle outward to whole pixels at preparation and stretch
+  the image over it (recompute `inv`, `bounds`, `footprint`). This changes
+  every fractional-placement image on the fast paths too (far-side slivers
+  gain a pixel, sampling phase shifts by up to one pixel), so it needs a
+  product decision and its own gate. Written up in the measurement note.
+- Near-axis-aligned draws (off-diagonals within 1e-12 of zero but not zero)
+  still get A10 edges: the gate is exact zero by design.
