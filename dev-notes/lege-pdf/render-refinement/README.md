@@ -23,6 +23,9 @@ The remaining material is grouped by purpose:
   [`PLAN-GPU-POSTPROCESS-EXECUTOR.md`](plans/PLAN-GPU-POSTPROCESS-EXECUTOR.md).
   The next renderer-focused ticket is
   [`PLAN-GPU-IMAGE-RENDERING.md`](plans/PLAN-GPU-IMAGE-RENDERING.md).
+  The 2026-11-08 speed and memory scoping review covers past runs,
+  confirmed bugs, ranked opportunities and measurement fixes:
+  [`optimization-scoping-20261108.md`](plans/optimization-scoping-20261108.md).
 - `handoffs/` — historical queues and handoffs. These are provenance, not a
   current unchecked task list; later memories close many of their items.
 - `performance-history/` — dated benchmark notes formerly under
