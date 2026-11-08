@@ -962,21 +962,24 @@ fn indexed_over_single_component_codec_still_reinterprets() {
     );
 }
 
-// --- A10: image-edge partial-coverage anti-aliasing --------------------------
+// --- A10: image-edge coverage ------------------------------------------------
 
 #[test]
-fn fractional_image_edge_paints_partial_coverage() {
-    // A 1x1 all-painting black STENCIL placed at x in [2.25, 13.75]: the edge
-    // device pixels are covered 75% and must paint at ~75% alpha (edge AA),
-    // not 0 or 100%. (Stencils/Type 3 glyphs are the workstream-H boldness
-    // family; the opaque axis-aligned RGB fast paths deliberately keep hard
-    // edges, matching PDFium's own blit there.)
+fn fractional_axis_aligned_stencil_edge_snaps_by_pixel_centre() {
+    // A 1x1 all-painting black STENCIL placed at x in [2.25, 13.4]. Like the
+    // opaque axis-aligned fast paths, an axis-aligned image's edge pixel is
+    // painted fully when its centre lies inside the destination rectangle
+    // and not at all otherwise, masked or not (PDFium never blends there
+    // either, but also paints the x=13 sliver): x=2
+    // (centre 2.5, 75% covered) is solid, x=13 (centre 13.5, 40% covered)
+    // is untouched. Rotated draws keep A10's fractional edge coverage
+    // (`rotated_image_edges_are_antialiased`).
     let img = image_ir(1, 1, 1, ImageColorSpace::Gray, vec![0x00], true, None);
     let page = {
         let mut p = page(img, Color::BLACK, 1.0);
         p.operations = Arc::from([
             DisplayOp::ConcatTransform(
-                Matrix::scale(11.5, 16.0).then(Matrix::translate(2.25, 0.0)),
+                Matrix::scale(11.15, 16.0).then(Matrix::translate(2.25, 0.0)),
             ),
             DisplayOp::DrawImage {
                 image: pdf_page_ir::ImageId(0),
@@ -993,19 +996,17 @@ fn fractional_image_edge_paints_partial_coverage() {
 
     // Interior: solid black. Outside: white.
     assert_eq!(px(&host, 8, 8), [0, 0, 0, 255], "interior solid");
-    assert_eq!(px(&host, 0, 8), [255, 255, 255, 255], "outside untouched");
-    assert_eq!(px(&host, 15, 8), [255, 255, 255, 255], "outside untouched");
-    // Left edge pixel x=2 is 75% covered -> ~25% white shows through.
-    let p = px(&host, 2, 8);
-    assert!(
-        (p[0] as i32 - 64).abs() <= 3 && p[0] == p[1] && p[1] == p[2],
-        "left edge at ~75% coverage: {p:?}"
+    assert_eq!(px(&host, 1, 8), [255, 255, 255, 255], "outside untouched");
+    assert_eq!(px(&host, 14, 8), [255, 255, 255, 255], "outside untouched");
+    assert_eq!(
+        px(&host, 2, 8),
+        [0, 0, 0, 255],
+        "left edge pixel, centre inside: solid, not a 75% blend"
     );
-    // Right edge pixel x=13 is 75% covered too.
-    let p = px(&host, 13, 8);
-    assert!(
-        (p[0] as i32 - 64).abs() <= 3,
-        "right edge at ~75% coverage: {p:?}"
+    assert_eq!(
+        px(&host, 13, 8),
+        [255, 255, 255, 255],
+        "right edge pixel, centre outside: untouched, not a 40% blend"
     );
 }
 

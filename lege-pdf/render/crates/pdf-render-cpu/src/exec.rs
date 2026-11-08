@@ -1048,14 +1048,15 @@ fn paint_image(
     }
 }
 
-/// The generic per-pixel image body: the clip and soft-clip coverage, A10
-/// image-edge anti-aliasing, the full `shade()` sampler and the general
+/// The generic per-pixel image body: the clip and soft-clip coverage, the
+/// image-edge coverage (`edge_coverage`: whole pixels by centre for an
+/// axis-aligned draw, A10 fractional area otherwise), the full `shade()` sampler and the general
 /// compositor, for every destination pixel of `[x0, x1) × [y0, y1)`.
 ///
 /// `hole`, as `[hx0, hx1, hy0, hy1]`, is a rectangle of whole destination
 /// columns and rows a fast path has already painted; it is skipped. The fast
 /// paths that pass one paint exactly the pixels whose `edge_coverage` is
-/// `None` there, so the anti-aliased border band around it is still drawn by
+/// `None` there, so the border band around it is still drawn by
 /// this body, and the draw stays byte-identical to running it everywhere.
 ///
 /// Returns `(covered, sample_attempts, sample_taps)`; the last two stay zero
@@ -1092,11 +1093,11 @@ fn paint_image_generic(
         if cov == 0 {
             return;
         }
-        // A10 image-edge anti-aliasing: pixels straddling the image's
-        // device-space quad edge paint at their fractional coverage
-        // (`None` = provably interior, full weight — byte-identical
-        // to the pre-A10 path there). Matches PDFium's softer
-        // Type 3 / stencil edges (workstream H).
+        // Image-edge coverage: pixels straddling the image's device-space
+        // quad edge paint at their A10 fractional coverage when the draw is
+        // rotated or sheared, and fully or not at all by pixel centre when
+        // it is axis-aligned, masked or not, like the opaque fast paths
+        // (`None` = provably interior, full weight).
         let (dx, dy) = (x as f64 + 0.5, y as f64 + 0.5);
         let edge = img.edge_coverage(dx, dy);
         if edge == Some(0) {
@@ -1218,7 +1219,7 @@ fn interior_span(scale: f64, offset: f64, lo: usize, hi: usize) -> Option<(usize
 /// (`lut`, from `PreparedImage::stencil_bilevel_lut`). The interior rectangle,
 /// where `edge_coverage` is `None`, takes the bilevel box filter when the draw
 /// minifies, or a nearest walk that skips masked texels when it does not; the
-/// anti-aliased border band around it keeps the generic per-pixel body. Both
+/// border band around it keeps the generic per-pixel body. Both
 /// fast paths compute the generic stencil sampler's integers term for term,
 /// so the draw is byte-identical to the generic body. The caller has checked
 /// Normal blend, no soft clip, `inv.b == inv.c == 0` and, for a draw that
@@ -2944,7 +2945,7 @@ fn paint_axis_aligned_rgb8_area_min_masked(
     // when the mapped pixel square stays inside the unit square on both axes.
     // With `inv.b == inv.c == 0` that test separates, so the interior is a
     // rectangle of whole destination columns and rows: the prepared body runs
-    // there, and the anti-aliased border band keeps the generic per-pixel
+    // there, and the border band keeps the generic per-pixel
     // treatment. The draw therefore stays pixel-identical, edges included.
     let half_u = 0.5 * img.inv.a.abs();
     let half_v = 0.5 * img.inv.d.abs();
@@ -4293,8 +4294,8 @@ fn render_tiling(
     }
 
     // An /ImageMask stencil painted with this pattern: the pattern shows only
-    // through the stencil's per-pixel coverage. Sampled with the same edge-AA
-    // path as an ordinary stencil blit, then folded into the fill mask.
+    // through the stencil's per-pixel coverage. Sampled with the same edge
+    // coverage as an ordinary stencil blit, then folded into the fill mask.
     if let Some(stencil) = &t.stencil {
         for ly in 0..h {
             for lx in 0..w {
@@ -7183,35 +7184,6 @@ mod rgb8_area_min_tests {
         assert_surfaces_equal(&mut got, &mut want, "truncated");
     }
 
-    /// Compare only the pixels the generic body paints at full weight
-    /// (`edge_coverage` is `None`). A magnified bilinear draw is allowed ±1
-    /// per channel there: the generic bilinear tap weights can sum to 254/255
-    /// on an opaque image, where the fast path keeps it opaque.
-    fn assert_interior_equal(
-        img: &PreparedImage,
-        got: &mut Surface,
-        want: &mut Surface,
-        what: &str,
-    ) {
-        let bilinear_magnified = img.interpolation == InterpolationMode::Bilinear
-            && img.footprint[0] <= 1.0
-            && img.footprint[1] <= 1.0;
-        for y in 0..got.height {
-            let (g, r) = (got.row_mut(y).to_vec(), want.row_mut(y).to_vec());
-            for x in 0..got.width {
-                if img.edge_coverage(x as f64 + 0.5, y as f64 + 0.5).is_some() {
-                    continue;
-                }
-                let (gp, rp) = (&g[x * 4..x * 4 + 4], &r[x * 4..x * 4 + 4]);
-                let close = gp.iter().zip(rp).all(|(a, b)| a.abs_diff(*b) <= 1);
-                assert!(
-                    gp == rp || (bilinear_magnified && close),
-                    "{what}: interior pixel ({x}, {y}) is {gp:?}, generic body {rp:?}"
-                );
-            }
-        }
-    }
-
     /// `img` re-placed at device `(ox, oy)` with device size `w x h`, all
     /// fractional, so the draw has a partially covered border ring.
     fn place(mut img: PreparedImage, ox: f64, oy: f64, w: f64, h: f64) -> PreparedImage {
@@ -7268,26 +7240,30 @@ mod rgb8_area_min_tests {
     }
 
     /// Every image fast path must equal the full generic body — interior
-    /// *and* the anti-aliased border ring — when the image lands on
-    /// fractional device coordinates. The other equivalence tests here place
-    /// images on whole pixels, where the ring does not exist, or compare
-    /// against a `shade()`-only reference that has no edge coverage, so a
-    /// fast path that got the ring wrong passed them.
+    /// *and* the border ring — when the image lands on fractional device
+    /// coordinates. The other equivalence tests here place images on whole
+    /// pixels, where the ring does not exist, or compare against a
+    /// `shade()`-only reference that has no edge coverage, so a fast path
+    /// that got the ring wrong passed them.
     ///
     /// Covers RGB8, Gray8 (promoted), Indexed (expanded) and CMYK sources,
     /// unmasked and under a stencil, a one-bit and an eight-bit soft mask;
     /// minified, near 1:1 and magnified; nearest and bilinear. Also covers
-    /// `/ImageMask` stencils in both `/Decode` polarities.
+    /// `/ImageMask` stencils in both `/Decode` polarities and one-bit gray
+    /// images.
     ///
-    /// Every masked path matches byte for byte, ring included. The opaque
-    /// *unmasked* fast paths (`fast_rgb8`, `fast_rgb8_bilinear`,
-    /// `fast_rgb8_area`, the CMYK area path, and Gray8/Indexed through their
-    /// RGB8 promotions) do not: they paint the ring by pixel centre, at full
-    /// weight or not at all, where the generic body paints its A10 fractional
-    /// edge coverage. That divergence predates this test and is a rendering
-    /// decision, not a fix to slip in (it changes every opaque image that
-    /// lands on fractional device coordinates); see the 2026-11-08 scoping
-    /// note. Until it is decided, those paths are held to the interior.
+    /// Every path matches byte for byte on the whole surface, masked or not.
+    /// The ring is the pixel-centre rule for an axis-aligned image: a border
+    /// pixel is painted at full weight when its centre lies inside the
+    /// destination rectangle and not at all otherwise. The opaque
+    /// unmasked fast paths paint it that way themselves; the masked ones
+    /// leave it to the generic body, whose `edge_coverage` gives axis-aligned
+    /// draws exactly that rule
+    /// (`axis_aligned_masked_edges_follow_the_pixel_centre_rule` checks the
+    /// generic body against it directly). Until 2026-11-08 the generic body
+    /// painted A10 fractional coverage there, so masked draws had a soft ring
+    /// and unmasked ones a hard one; see `image-edge-ring-pdfium-probe-20261108.md`
+    /// and `masked-image-ring-20261108.md` in the scoping notes.
     #[test]
     fn fractional_placements_match_the_generic_body_including_the_border_ring() {
         let mut rng = Rng(0xb0d5_7a11_0f0f_1234);
@@ -7370,11 +7346,7 @@ mod rgb8_area_min_tests {
                             "{space_name} {mask_kind} {interpolation:?} src {sw}x{sh} at \
                              ({ox}, {oy}) size {w}x{h}"
                         );
-                        if mask_kind != "none" {
-                            assert_surfaces_equal(&mut got, &mut want, &what);
-                        } else {
-                            assert_interior_equal(&img, &mut got, &mut want, &what);
-                        }
+                        assert_surfaces_equal(&mut got, &mut want, &what);
                         checked += 1;
                     }
                 }
@@ -7383,7 +7355,7 @@ mod rgb8_area_min_tests {
         assert_eq!(checked, 5 * 4 * 4 * 2);
 
         // `/ImageMask` stencils: the fast path paints only the interior and
-        // leaves the ring to the generic body, so the whole surface matches.
+        // leaves the ring to the generic body.
         for &(sw, sh, ox, oy, w, h) in &placements {
             let side = (ox + w).max(oy + h).ceil() as u32 + 2;
             for inverted in [false, true] {
@@ -7403,7 +7375,8 @@ mod rgb8_area_min_tests {
         assert_eq!(checked, 5 * 4 * 4 * 2 + 5 * 2 * 2);
 
         // One-bit gray images: the low-bit LUT nearest path when magnified,
-        // the bilevel box filter when minified, ring left to the generic body.
+        // the bilevel box filter when minified; both paint the ring by pixel
+        // centre themselves.
         for &(sw, sh, ox, oy, w, h) in &placements {
             let side = (ox + w).max(oy + h).ceil() as u32 + 2;
             for interpolation in [InterpolationMode::Nearest, InterpolationMode::Bilinear] {
@@ -7416,11 +7389,253 @@ mod rgb8_area_min_tests {
                 let (mut want, _) = generic_masked_reference(&img, side, side);
                 let what =
                     format!("gray1 {interpolation:?} src {sw}x{sh} at ({ox}, {oy}) size {w}x{h}");
-                assert_interior_equal(&img, &mut got, &mut want, &what);
+                assert_surfaces_equal(&mut got, &mut want, &what);
                 checked += 1;
             }
         }
         assert_eq!(checked, 5 * 4 * 4 * 2 + 5 * 2 * 2 + 5 * 2);
+    }
+
+    /// `img` re-placed by the forward map `[a b c d e f]` from its unit
+    /// square to device space (any orientation, rotation or mirror), with its
+    /// device bounds and footprint recomputed to match.
+    fn place_forward(mut img: PreparedImage, forward: Matrix) -> PreparedImage {
+        img.inv = forward.invert().expect("an invertible placement");
+        let corners = [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)]
+            .map(|(u, v)| forward.apply(pdf_page_ir::Point { x: u, y: v }));
+        let lx = corners.iter().map(|p| p.x).fold(f64::INFINITY, f64::min);
+        let hx = corners
+            .iter()
+            .map(|p| p.x)
+            .fold(f64::NEG_INFINITY, f64::max);
+        let ly = corners.iter().map(|p| p.y).fold(f64::INFINITY, f64::min);
+        let hy = corners
+            .iter()
+            .map(|p| p.y)
+            .fold(f64::NEG_INFINITY, f64::max);
+        img.bounds = DeviceRect {
+            x: lx.floor() as i32,
+            y: ly.floor() as i32,
+            width: (hx.ceil() - lx.floor()) as u32,
+            height: (hy.ceil() - ly.floor()) as u32,
+        };
+        let du = forward.a.hypot(forward.b);
+        let dv = forward.c.hypot(forward.d);
+        img.footprint = [img.width as f64 / du, img.height as f64 / dv];
+        img
+    }
+
+    /// The forward map of a `w x h` device rectangle at `(ox, oy)` rotated by
+    /// `deg` degrees about its origin corner; a negative `w` or `h` mirrors.
+    fn forward_rect(ox: f64, oy: f64, w: f64, h: f64, deg: f64) -> Matrix {
+        let (s, c) = deg.to_radians().sin_cos();
+        Matrix {
+            a: w * c,
+            b: w * s,
+            c: -h * s,
+            d: h * c,
+            e: ox,
+            f: oy,
+        }
+    }
+
+    /// `backdrop_px` after `img` paints the device pixel `(x, y)` at full
+    /// geometric weight: `shade()` at the pixel centre composited over it, or
+    /// the backdrop untouched where the centre maps outside the image. This
+    /// is the pixel-centre rule the axis-aligned opaque fast paths follow.
+    fn pixel_centre_expected(
+        img: &PreparedImage,
+        backdrop_px: &[u8],
+        x: usize,
+        y: usize,
+    ) -> Vec<u8> {
+        let mut out = backdrop_px.to_vec();
+        if let Some(c) = img.shade(x as f64 + 0.5, y as f64 + 0.5) {
+            let a = mul_div_255(c[3] as u16, img.alpha as u16);
+            if a > 0 {
+                composite_px_blended(&mut out, [c[0], c[1], c[2]], a as u8, BlendChoice::Normal);
+            }
+        }
+        out
+    }
+
+    /// Paint `img` with the generic body over a seeded backdrop. Returns
+    /// `(mismatches, partial, border)`: the pixels that differ from the
+    /// pixel-centre expectation, the border pixels (those `edge_coverage`
+    /// does not call interior) that are partial blends — neither the
+    /// untouched backdrop nor a full-weight composite of the centre sample
+    /// or of the nearest edge sample — and the border pixel count.
+    fn generic_edge_census(img: &PreparedImage, side: u32, seed: u64) -> (usize, usize, usize) {
+        let mut before = backdrop(side, seed);
+        let mut got = backdrop(side, seed);
+        let b = img.bounds;
+        let (x0, y0) = (b.x.max(0) as usize, b.y.max(0) as usize);
+        let x1 = ((b.x + b.width as i32) as usize).min(side as usize);
+        let y1 = ((b.y + b.height as i32) as usize).min(side as usize);
+        paint_image_generic(
+            img,
+            &mut got,
+            None,
+            None,
+            BlendChoice::Normal,
+            x0,
+            y0,
+            x1,
+            y1,
+            None,
+        );
+        let (mut mismatches, mut partial, mut border) = (0, 0, 0);
+        for y in 0..side as usize {
+            let (g, r) = (got.row_mut(y).to_vec(), before.row_mut(y).to_vec());
+            for x in 0..side as usize {
+                let (gp, rp) = (&g[x * 4..x * 4 + 4], &r[x * 4..x * 4 + 4]);
+                let full = pixel_centre_expected(img, rp, x, y);
+                if gp != full.as_slice() {
+                    mismatches += 1;
+                }
+                if img.edge_coverage(x as f64 + 0.5, y as f64 + 0.5).is_some() {
+                    border += 1;
+                    let mut clamped = rp.to_vec();
+                    if let Some(c) = img.shade_clamped(x as f64 + 0.5, y as f64 + 0.5) {
+                        let a = mul_div_255(c[3] as u16, img.alpha as u16);
+                        if a > 0 {
+                            composite_px_blended(
+                                &mut clamped,
+                                [c[0], c[1], c[2]],
+                                a as u8,
+                                BlendChoice::Normal,
+                            );
+                        }
+                    }
+                    if gp != rp && gp != full.as_slice() && gp != clamped.as_slice() {
+                        partial += 1;
+                    }
+                }
+            }
+        }
+        (mismatches, partial, border)
+    }
+
+    /// Masked images on an axis-aligned placement with fractional device
+    /// edges (`/ImageMask` stencils, also mirrored on either axis, `/SMask`
+    /// soft masks, `/Mask` stencil masks and one-bit gray images: everything
+    /// the generic body paints) follow the pixel-centre rule at their outer
+    /// edge. A boundary pixel is the full image/mask result when its centre
+    /// lies inside the destination rectangle and the untouched backdrop
+    /// otherwise, never a blend, as the axis-aligned opaque fast paths paint
+    /// it (`masked-image-ring-20261108.md` compares both with PDFium, which
+    /// is never a blend either). The mask itself still applies per
+    /// sampled pixel. The same draws rotated by 15 degrees keep A10's
+    /// fractional edge coverage.
+    #[test]
+    fn axis_aligned_masked_edges_follow_the_pixel_centre_rule() {
+        let mut rng = Rng(0x71c3_e05e_a117_0001);
+        // (source w, h, device x, y, w, h): magnified, near 1:1, minified.
+        let placements: [(u32, u32, f64, f64, f64, f64); 4] = [
+            (5, 7, 2.6, 1.4, 17.8, 21.3),
+            (16, 16, 2.25, 2.75, 15.5, 15.5),
+            (64, 48, 2.5, 3.125, 20.3, 14.7),
+            (37, 23, 3.3, 2.6, 9.4, 6.2),
+        ];
+        let side = 40u32;
+        let mut cases = 0;
+        for &(sw, sh, ox, oy, w, h) in &placements {
+            let mut images: Vec<(String, PreparedImage)> = Vec::new();
+            for inverted in [false, true] {
+                let img = stencil_image(sw, sh, ox, oy, w, h, inverted, &mut rng);
+                images.push((format!("imagemask inverted {inverted}"), img));
+            }
+            let img = stencil_image(sw, sh, ox, oy, w, h, false, &mut rng);
+            images.push((
+                "imagemask mirrored x".into(),
+                place_forward(img, forward_rect(ox + w, oy, -w, h, 0.0)),
+            ));
+            let img = stencil_image(sw, sh, ox, oy, w, h, false, &mut rng);
+            images.push((
+                "imagemask mirrored y".into(),
+                place_forward(img, forward_rect(ox, oy + h, w, -h, 0.0)),
+            ));
+            let rgb: Vec<u8> = (0..sw as usize * sh as usize * 3)
+                .map(|_| rng.byte())
+                .collect();
+            let base = place(
+                make_image_cs(sw, sh, 1, 1, ImageColorSpace::Rgb, rgb),
+                ox,
+                oy,
+                w,
+                h,
+            );
+            let (mw, mh) = (sw.div_ceil(2) + 1, sh + 3);
+            let mut smask8 = base.clone();
+            let mask: Vec<u8> = (0..mw * mh)
+                .map(|_| if rng.byte() < 60 { rng.byte() } else { 255 })
+                .collect();
+            smask8.smask = Some(Arc::new(pdf_page_ir::ImageSMask {
+                width: mw,
+                height: mh,
+                bits_per_component: 8,
+                decode: None,
+                samples: Arc::from(mask),
+                codec: None,
+                codec_data: None,
+                codec_parms: None,
+            }));
+            images.push(("smask8".into(), smask8));
+            let mut smask1 = base.clone();
+            smask1.smask = Some(bilevel(mw, mh, &mut rng));
+            images.push(("smask1".into(), smask1));
+            let mut stencil_mask = base.clone();
+            stencil_mask.mask = Some(pdf_page_ir::ImageMask::Stencil(bilevel(mw, mh, &mut rng)));
+            // `paint_image` turns a minified hard stencil mask into coverage.
+            let stencil_mask = stencil_mask
+                .minified_stencil_as_coverage()
+                .unwrap_or(stencil_mask);
+            images.push(("mask stencil".into(), stencil_mask));
+            let bits: Vec<u8> = (0..(sw as usize).div_ceil(8) * sh as usize)
+                .map(|_| rng.byte())
+                .collect();
+            images.push(("gray1".into(), bilevel_image(sw, sh, bits, ox, oy, w, h)));
+
+            for (name, img) in &images {
+                for interpolation in [InterpolationMode::Nearest, InterpolationMode::Bilinear] {
+                    let mut img = img.clone();
+                    img.interpolation = interpolation;
+                    let what = format!(
+                        "{name} {interpolation:?} src {sw}x{sh} at ({ox}, {oy}) size {w}x{h}"
+                    );
+                    let seed = rng.next();
+                    let (mismatches, partial, border) = generic_edge_census(&img, side, seed);
+                    assert!(border > 0, "{what}: the placement must have a border ring");
+                    assert_eq!(
+                        (mismatches, partial),
+                        (0, 0),
+                        "{what}: axis-aligned edge pixels must be all-or-nothing by pixel centre"
+                    );
+
+                    // The same draw rotated 15 degrees about its first corner
+                    // keeps fractional edge coverage.
+                    let unit = [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)].map(|(u, v)| {
+                        let m = img.inv.invert().expect("invertible");
+                        m.apply(pdf_page_ir::Point { x: u, y: v })
+                    });
+                    let forward = forward_rect(
+                        unit[0].x + 6.0,
+                        unit[0].y,
+                        unit[1].x - unit[0].x,
+                        unit[2].y - unit[0].y,
+                        15.0,
+                    );
+                    let rotated = place_forward(img.clone(), forward);
+                    let (_, partial, _) = generic_edge_census(&rotated, side + 8, seed);
+                    assert!(
+                        partial > 0,
+                        "{what} rotated 15 degrees: no partial edge pixels"
+                    );
+                    cases += 1;
+                }
+            }
+        }
+        assert_eq!(cases, 4 * 8 * 2);
     }
 }
 

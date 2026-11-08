@@ -61,3 +61,10 @@ surface, and documents the divergence.
 Interior note from the same probe: on the magnified nearest image PDFium
 samples (80,0,160) where we produce (75,0,160); a pre-existing nearest-sampling
 difference unrelated to the ring.
+
+**Correction (same day):** the I top row above is wrong. A re-render with the
+same PDFium build paints y=78 in image colour, (80,0,160); y=77 is the
+backdrop. PDFium paints every pixel an axis-aligned image's rectangle touches
+(it stretches the image over the outward-rounded rectangle), not a
+pixel-centre split; the I bottom row (30 % covered, painted) already showed
+it. See [masked-image-ring-20261108.md](masked-image-ring-20261108.md).
