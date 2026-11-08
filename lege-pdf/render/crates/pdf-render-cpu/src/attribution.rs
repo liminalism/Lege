@@ -373,6 +373,7 @@ mod tests {
             diagnostics: RenderDiagnostics::default(),
             image_cache: None,
             decode_floor: None,
+            sanity_extent: 4.0,
         }
     }
 

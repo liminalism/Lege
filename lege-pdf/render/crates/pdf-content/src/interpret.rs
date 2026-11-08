@@ -31,6 +31,39 @@ use crate::{ContentError, ContentLimits};
 /// applies an operator.
 const MAX_OPERAND_STACK: usize = 1 << 16;
 
+/// Names with a meaning inside an inline image's parameters (ISO 32000-1
+/// Tables 92-94 and the filter, colour-space and decode-parameter names an
+/// image XObject accepts). Only these, plus names already interned, get
+/// their own name-table entry from inline-image operands (B15).
+#[rustfmt::skip]
+const INLINE_SPEC_NAMES: &[&[u8]] = &[
+    // Keys (full and abbreviated).
+    b"BitsPerComponent", b"BPC", b"ColorSpace", b"CS", b"Decode", b"D",
+    b"DecodeParms", b"DP", b"Filter", b"F", b"Height", b"H", b"ImageMask",
+    b"IM", b"Interpolate", b"I", b"Width", b"W", b"Intent", b"Length", b"L",
+    b"Mask",
+    // Colour spaces (full and abbreviated).
+    b"DeviceGray", b"G", b"DeviceRGB", b"RGB", b"DeviceCMYK", b"CMYK",
+    b"Indexed", b"CalGray", b"CalRGB", b"Lab", b"ICCBased", b"Separation",
+    b"DeviceN", b"Pattern", b"All", b"None",
+    // Filters (full and abbreviated).
+    b"ASCIIHexDecode", b"AHx", b"ASCII85Decode", b"A85", b"LZWDecode",
+    b"LZW", b"FlateDecode", b"Fl", b"RunLengthDecode", b"RL",
+    b"CCITTFaxDecode", b"CCF", b"DCTDecode", b"DCT", b"JBIG2Decode",
+    b"JPXDecode", b"Crypt",
+    // Decode-parameter keys.
+    b"Predictor", b"Colors", b"Columns", b"EarlyChange", b"K", b"EndOfLine",
+    b"EncodedByteAlign", b"Rows", b"EndOfBlock", b"BlackIs1",
+    b"DamagedRowsBeforeError", b"ColorTransform",
+    // Rendering intents.
+    b"AbsoluteColorimetric", b"RelativeColorimetric", b"Saturation",
+    b"Perceptual",
+];
+
+/// The placeholder every other inline-image name maps to. A parsed PDF name
+/// cannot contain a NUL byte, so it never equals a real key or family name.
+const UNKNOWN_INLINE_NAME: &[u8] = b"\0lege-unknown-inline-name";
+
 /// A hard cap on a Type 0 sampled function's total sample count (`size *
 /// n_out`), bounding allocation from an absurd `/Size` (malformed-resource
 /// guard). Shadings need only modest resolution.
@@ -662,6 +695,14 @@ impl<'a> Interpreter<'a> {
                             self.operands.clear();
                         }
                         Lexeme::InlineImage { dict, data } => {
+                            // One operation against the page budget, like the
+                            // operator it replaces (B15): otherwise a stream
+                            // of inline images is bounded only by the decode
+                            // budget.
+                            self.ops_executed += 1;
+                            if self.ops_executed > self.limits.max_ops {
+                                return Err(ContentError::OperatorBudget(self.ops_executed));
+                            }
                             if self.record_trace {
                                 // `pos_before` is the `BI` start; `pos` sits
                                 // just past `EI`: the span is the whole image.
@@ -750,6 +791,34 @@ impl<'a> Interpreter<'a> {
 
     fn intern(&self, bytes: &[u8]) -> NameId {
         self.names.intern(bytes)
+    }
+
+    /// The id of a content-stream name that is only used as a key into a
+    /// resource dictionary, which the caller must already have resolved.
+    /// Resolving a dictionary interns its keys, so a name that was never
+    /// interned cannot be one of them: `None` is a miss, exactly as a lookup
+    /// would have been. Interning it instead grew the document-wide,
+    /// append-only name table with every distinct missing name (B15).
+    fn lookup_name(&self, bytes: &[u8]) -> Option<NameId> {
+        self.names.lookup(bytes)
+    }
+
+    /// The id of a name inside an inline image's parameters (`/F`, `/CS`
+    /// arrays and dictionaries). Names already interned keep their id; the
+    /// closed set of names the spec gives meaning there is interned; any
+    /// other name maps to one shared placeholder that matches no key and no
+    /// filter or colour-space family, so an adversarial array costs at most
+    /// one table entry (B15). Callers resolve the resource categories an
+    /// inline name may refer to first, so a resource name is already
+    /// interned.
+    fn inline_name(&self, bytes: &[u8]) -> NameId {
+        if let Some(id) = self.names.lookup(bytes) {
+            return id;
+        }
+        if INLINE_SPEC_NAMES.contains(&bytes) {
+            return self.names.intern(bytes);
+        }
+        self.names.intern(UNKNOWN_INLINE_NAME)
     }
 
     // --- dispatch ----------------------------------------------------------
@@ -1539,8 +1608,10 @@ impl<'a> Interpreter<'a> {
     /// True when a `/ColorSpace` resource named `name` is a Pattern space
     /// (`/Pattern` or `[/Pattern base]`).
     fn named_space_is_pattern(&mut self, name: &[u8]) -> bool {
-        let nid = self.intern(name);
         let Some(cs) = self.resource_subdict(self.names.known.color_space) else {
+            return false;
+        };
+        let Some(nid) = self.lookup_name(name) else {
             return false;
         };
         let Some(entry) = cs.as_dict().and_then(|d| d.get(nid)).cloned() else {
@@ -1752,10 +1823,12 @@ impl<'a> Interpreter<'a> {
         let Some(prop_name) = self.operands[n - 1].as_name().map(<[u8]>::to_vec) else {
             return false;
         };
-        let nid = self.intern(&prop_name);
+        let Some(properties) = self.resource_subdict(self.intern(b"Properties")) else {
+            return false;
+        };
         let Some(entry) = self
-            .resource_subdict(self.intern(b"Properties"))
-            .and_then(|d| d.as_dict().and_then(|d| d.get(nid)).cloned())
+            .lookup_name(&prop_name)
+            .and_then(|nid| properties.as_dict().and_then(|d| d.get(nid)).cloned())
         else {
             return false;
         };
@@ -1775,14 +1848,13 @@ impl<'a> Interpreter<'a> {
                 .and_then(|(_, value)| value.as_string())
                 .map(<[u8]>::to_vec),
             Operand::Name(name) => {
-                let property_name = self.intern(&name);
                 let category = self.intern(b"Properties");
-                let entry = self.resource_subdict(category).and_then(|properties| {
-                    properties
-                        .as_dict()
-                        .and_then(|dict| dict.get(property_name))
-                        .cloned()
-                })?;
+                let properties = self.resource_subdict(category)?;
+                let property_name = self.lookup_name(&name)?;
+                let entry = properties
+                    .as_dict()
+                    .and_then(|dict| dict.get(property_name))
+                    .cloned()?;
                 let object = self.resolve_obj(&entry)?;
                 let dict = object.as_dict()?;
                 match dict.get(self.intern(b"ActualText")) {
@@ -3369,8 +3441,10 @@ impl<'a> Interpreter<'a> {
         else {
             return Ok(());
         };
-        let nid = self.intern(&name);
         let Some(xobjects) = self.resource_subdict(self.names.known.x_object) else {
+            return Ok(());
+        };
+        let Some(nid) = self.lookup_name(&name) else {
             return Ok(());
         };
         let Some(entry) = xobjects.as_dict().and_then(|d| d.get(nid)).cloned() else {
@@ -3917,8 +3991,9 @@ impl<'a> Interpreter<'a> {
                     b"DeviceRGB" | b"RGB" | b"CalRGB" | b"Lab" => Some(Cs::Rgb),
                     b"DeviceCMYK" | b"CMYK" => Some(Cs::Cmyk),
                     // A named resource space (`/CS0`): look it up and recurse.
-                    other => {
-                        let nid = self.intern(other);
+                    _ => {
+                        // Already an interned name: no lookup needed.
+                        let nid = *n;
                         let entry = self
                             .resource_subdict(self.names.known.color_space)?
                             .as_dict()?
@@ -4794,8 +4869,11 @@ impl<'a> Interpreter<'a> {
                 b"RGB" | b"DeviceRGB" | b"CalRGB" => ImageColorSpace::Rgb,
                 b"CMYK" | b"DeviceCMYK" => ImageColorSpace::Cmyk,
                 other => {
-                    // A named resource color space.
-                    let name = PdfObject::Name(self.intern(other));
+                    // A named resource color space (or a spec family name
+                    // such as `/Lab`). Resolve the category first, so a
+                    // resource name is interned when it exists.
+                    let _ = self.resource_subdict(self.names.known.color_space);
+                    let name = PdfObject::Name(self.inline_name(other));
                     self.resolve_image_colorspace(&name)
                         .unwrap_or(ImageColorSpace::Gray)
                 }
@@ -4807,6 +4885,7 @@ impl<'a> Interpreter<'a> {
             // custom/image_inline_5 index 1 is a light blue but reads as near
             // black, and the page rendered at ink 0.53 against PDFium's 0.06.
             Some(other @ (Operand::Array(_) | Operand::Dict(_))) => {
+                let _ = self.resource_subdict(self.names.known.color_space);
                 let obj = self.operand_to_object(other);
                 self.resolve_image_colorspace(&obj)
                     .unwrap_or(ImageColorSpace::Gray)
@@ -4826,7 +4905,7 @@ impl<'a> Interpreter<'a> {
             Operand::Real(v) => PdfObject::Real(*v),
             Operand::Bool(v) => PdfObject::Boolean(*v),
             Operand::Null => PdfObject::Null,
-            Operand::Name(n) => PdfObject::Name(self.intern(n)),
+            Operand::Name(n) => PdfObject::Name(self.inline_name(n)),
             Operand::String(s) => PdfObject::String(pdf_object::PdfString::new(s.as_slice())),
             Operand::Array(items) => {
                 PdfObject::Array(items.iter().map(|i| self.operand_to_object(i)).collect())
@@ -4834,7 +4913,7 @@ impl<'a> Interpreter<'a> {
             Operand::Dict(pairs) => {
                 let entries: Vec<(NameId, PdfObject)> = pairs
                     .iter()
-                    .map(|(k, v)| (self.intern(k), self.operand_to_object(v)))
+                    .map(|(k, v)| (self.inline_name(k), self.operand_to_object(v)))
                     .collect();
                 PdfObject::Dictionary(Arc::new(Dictionary::from_pairs(entries)))
             }
@@ -4858,12 +4937,12 @@ impl<'a> Interpreter<'a> {
             return (Some(Arc::from(data)), None, None);
         }
         let filter_obj = if filters.len() == 1 {
-            PdfObject::Name(self.intern(&filters[0]))
+            PdfObject::Name(self.inline_name(&filters[0]))
         } else {
             PdfObject::Array(
                 filters
                     .iter()
-                    .map(|f| PdfObject::Name(self.intern(f)))
+                    .map(|f| PdfObject::Name(self.inline_name(f)))
                     .collect(),
             )
         };
@@ -4893,8 +4972,10 @@ impl<'a> Interpreter<'a> {
         else {
             return Ok(());
         };
-        let nid = self.intern(&name);
         let Some(egs) = self.resource_subdict(self.names.known.ext_g_state) else {
+            return Ok(());
+        };
+        let Some(nid) = self.lookup_name(&name) else {
             return Ok(());
         };
         let Some(entry) = egs.as_dict().and_then(|d| d.get(nid)).cloned() else {
@@ -5094,8 +5175,10 @@ impl<'a> Interpreter<'a> {
         else {
             return Ok(());
         };
-        let nid = self.intern(&name);
         let Some(shadings) = self.resource_subdict(self.names.known.shading) else {
+            return Ok(());
+        };
+        let Some(nid) = self.lookup_name(&name) else {
             return Ok(());
         };
         let Some(entry) = shadings.as_dict().and_then(|d| d.get(nid)).cloned() else {

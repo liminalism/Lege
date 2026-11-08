@@ -1166,3 +1166,91 @@ fn image_decode_reference_output_does_not_depend_on_render_history() {
     }
     assert_eq!(render(&warm, 16, &floored), fresh);
 }
+
+/// A 32x32-pixel page whose only draw is `image` placed by `placement`.
+fn placed_page(image: ImageIr, placement: Matrix) -> CompiledPage {
+    let mut page = page(image, Color::BLACK, 1.0);
+    page.bounds.crop = Rect {
+        x0: 0.0,
+        y0: 0.0,
+        x1: 32.0,
+        y1: 32.0,
+    };
+    page.operations = Arc::from([
+        DisplayOp::ConcatTransform(placement),
+        DisplayOp::DrawImage {
+            image: pdf_page_ir::ImageId(0),
+            paint: pdf_page_ir::PaintId(0),
+            transform: Matrix::IDENTITY,
+            alpha: 1.0,
+            blend: pdf_page_ir::BlendMode::Normal,
+        },
+    ]);
+    page
+}
+
+/// B6: a quarter-turn placement decodes a non-square DCT image at the same
+/// reduced scale as the upright draw of the same footprint, so the rotated
+/// render is the upright render turned by 90 degrees. The codec hint used to
+/// be the device bounding box, i.e. (height, width) for a quarter turn: the
+/// 64x16 image drawn 8 wide and 32 tall asked for (8, 32), which the 1/2 DCT
+/// scale (32x8) cannot cover, so it decoded at full size and painted
+/// different pixels from the upright draw.
+#[test]
+fn quarter_turn_dct_draw_decodes_at_the_upright_level() {
+    let samples: Vec<u8> = (0..64u32 * 16)
+        .map(|i| {
+            let (x, y) = (i % 64, i / 64);
+            (((x * 37) ^ (y * 91)).wrapping_mul(13) & 0xff) as u8
+        })
+        .collect();
+    let jpeg = pdf_image::jpeg::encoder::write_jpeg(&samples, 64, 16, false, 90, false).unwrap();
+    let mut image = image_ir(64, 16, 8, ImageColorSpace::Gray, Vec::new(), false, None);
+    image.samples = None;
+    image.codec = Some(pdf_page_ir::ImageCodecKind::Dct);
+    image.codec_data = Some(jpeg.into());
+
+    // Upright: the image fills device x 0..32, y 12..20 (32x8 pixels).
+    let upright = Matrix {
+        a: 32.0,
+        b: 0.0,
+        c: 0.0,
+        d: 8.0,
+        e: 0.0,
+        f: 12.0,
+    };
+    // The same draw turned by 90 degrees: device (X, Y) of the upright draw
+    // lands at (Y, 32 - X), i.e. x 12..20, y 0..32.
+    let turned = Matrix {
+        a: 0.0,
+        b: -32.0,
+        c: 8.0,
+        d: 0.0,
+        e: 12.0,
+        f: 32.0,
+    };
+    let render = |placement: Matrix| {
+        let mut req = request(placed_page(image.clone(), placement), 32);
+        req.transform.matrix = Matrix::IDENTITY;
+        CpuBackend::default().render_to_host(&req).unwrap().0
+    };
+    let (up, rot) = (render(upright), render(turned));
+    let mut differing = Vec::new();
+    for j in 0..32 {
+        for i in 0..32 {
+            // Rotated pixel (i, j) covers upright pixel (31 - j, i).
+            if px(&rot, i, j) != px(&up, 31 - j, i) {
+                differing.push((i, j, px(&rot, i, j), px(&up, 31 - j, i)));
+            }
+        }
+    }
+    assert!(
+        differing.is_empty(),
+        "{} pixels differ from the turned upright render, first {:?}",
+        differing.len(),
+        differing.first()
+    );
+    // The draw is not flat: the comparison has something to see.
+    let distinct: std::collections::BTreeSet<u8> = (0..32).map(|x| px(&up, x, 15)[0]).collect();
+    assert!(distinct.len() > 4, "{distinct:?}");
+}

@@ -270,6 +270,11 @@ pub struct ParseContext {
     /// Worker-local decompressed object-stream containers: N members cost
     /// one inflate per worker, not N.
     objstm: HashMap<u32, Arc<ObjStmCached>>,
+    /// Bytes accounted to `cache` and `objstm` (see [`Self::cached_bytes`]).
+    cache_bytes: usize,
+    /// Above this many accounted bytes, the next [`Self::begin_job`] empties
+    /// both caches (see [`DEFAULT_PARSE_CACHE_BUDGET`]).
+    cache_budget: usize,
     /// Repairs performed during resolution *by this worker* (wrong-offset
     /// fixes, stream-length repairs discovered lazily). Open-time repairs
     /// live on the snapshot's recovery log instead; post-open the snapshot
@@ -279,6 +284,38 @@ pub struct ParseContext {
     /// worker. Kept out of document-global state so independent page jobs can
     /// be cancelled without affecting one another.
     cancellation: Option<Arc<std::sync::atomic::AtomicBool>>,
+}
+
+/// Default byte budget of a [`ParseContext`]'s worker-local caches.
+///
+/// Persistent workers (the read seam keeps one context per thread for a
+/// document's lifetime) would otherwise retain every object they resolved.
+/// For an encrypted document that includes every decrypted stream body (an
+/// `Owned` copy, images included), so a long document grew a worker's
+/// context without bound (B8). The budget is generous: it only ever takes
+/// effect between page jobs, and a miss after it does only re-parses or
+/// re-decrypts, so output cannot change.
+pub const DEFAULT_PARSE_CACHE_BUDGET: usize = 256 << 20;
+
+/// Fixed per-entry charge for a cached object: map slot, `Arc` header and a
+/// small object's own size. Only a rough floor; stream bodies and object
+/// stream containers are charged their real byte length on top.
+const CACHE_ENTRY_BYTES: usize = 64;
+
+/// Bytes charged for caching `value`.
+fn cached_object_bytes(value: &PdfObject) -> usize {
+    match value {
+        PdfObject::Stream(stream) => match &stream.data {
+            pdf_object::StreamData::Owned(bytes) => CACHE_ENTRY_BYTES + bytes.len(),
+            pdf_object::StreamData::InSource { .. } => CACHE_ENTRY_BYTES,
+        },
+        _ => CACHE_ENTRY_BYTES,
+    }
+}
+
+/// Bytes charged for caching an object-stream container.
+fn cached_objstm_bytes(entry: &ObjStmCached) -> usize {
+    CACHE_ENTRY_BYTES + entry.data.len()
 }
 
 /// A decompressed object-stream container plus its parsed pair table.
@@ -304,9 +341,27 @@ impl ParseContext {
             object_stream_inflates: 0,
             cache: HashMap::new(),
             objstm: HashMap::new(),
+            cache_bytes: 0,
+            cache_budget: DEFAULT_PARSE_CACHE_BUDGET,
             recovery: Vec::new(),
             cancellation: None,
         }
+    }
+
+    /// A context whose worker-local caches are emptied at the next job
+    /// boundary once they hold more than `bytes` (see
+    /// [`DEFAULT_PARSE_CACHE_BUDGET`]).
+    pub fn with_cache_budget(bytes: usize) -> Self {
+        let mut context = Self::new();
+        context.cache_budget = bytes;
+        context
+    }
+
+    /// Bytes currently accounted to the worker-local object and object-stream
+    /// caches: decrypted stream bodies and decompressed object-stream
+    /// containers at their length, every other entry at a small fixed charge.
+    pub fn cached_bytes(&self) -> usize {
+        self.cache_bytes
     }
 
     /// Start a new page-compilation job while retaining worker-local caches.
@@ -328,6 +383,14 @@ impl ParseContext {
         }
         self.recovery.clear();
         self.cancellation = None;
+        // The cache budget is enforced here, between jobs, never inside
+        // `resolve`: a job never thrashes, and nothing a caller of the
+        // previous job still holds is invalidated (entries are `Arc`s).
+        if self.cache_bytes > self.cache_budget {
+            self.cache.clear();
+            self.objstm.clear();
+            self.cache_bytes = 0;
+        }
     }
 
     pub fn set_cancellation_flag(
@@ -348,7 +411,10 @@ impl ParseContext {
     }
 
     fn cache_put(&mut self, id: ObjectId, value: Arc<PdfObject>) {
-        self.cache.insert(id, value);
+        self.cache_bytes = self.cache_bytes.saturating_add(cached_object_bytes(&value));
+        if let Some(old) = self.cache.insert(id, value) {
+            self.cache_bytes = self.cache_bytes.saturating_sub(cached_object_bytes(&old));
+        }
     }
 
     fn objstm_get(&self, container: u32) -> Option<Arc<ObjStmCached>> {
@@ -356,7 +422,10 @@ impl ParseContext {
     }
 
     fn objstm_put(&mut self, container: u32, entry: Arc<ObjStmCached>) {
-        self.objstm.insert(container, entry);
+        self.cache_bytes = self.cache_bytes.saturating_add(cached_objstm_bytes(&entry));
+        if let Some(old) = self.objstm.insert(container, entry) {
+            self.cache_bytes = self.cache_bytes.saturating_sub(cached_objstm_bytes(&old));
+        }
     }
 
     /// RAII-free cycle guard: push before resolving `id`, pop after.
@@ -1102,6 +1171,45 @@ mod tests {
         assert_eq!(ctx.objects_visited, 0);
         assert!(ctx.recovery.is_empty());
         assert!(ctx.cache.contains_key(&id));
+    }
+
+    fn owned_stream(len: usize) -> Arc<PdfObject> {
+        Arc::new(PdfObject::Stream(Arc::new(pdf_object::PdfStream {
+            dict: pdf_object::Dictionary::default(),
+            data: pdf_object::StreamData::Owned(Arc::from(vec![7u8; len])),
+        })))
+    }
+
+    /// B8: owned stream bodies are charged their length; a context over its
+    /// budget empties its caches at the next job boundary, one under it
+    /// keeps them.
+    #[test]
+    fn begin_job_enforces_the_cache_budget() {
+        let mut ctx = ParseContext::with_cache_budget(10_000);
+        ctx.cache_put(ObjectId::new(1, 0), owned_stream(4_000));
+        ctx.cache_put(ObjectId::new(2, 0), Arc::new(PdfObject::Null));
+        assert_eq!(ctx.cached_bytes(), 4_000 + 2 * CACHE_ENTRY_BYTES);
+        // Replacing an entry releases its old charge.
+        ctx.cache_put(ObjectId::new(1, 0), owned_stream(5_000));
+        assert_eq!(ctx.cached_bytes(), 5_000 + 2 * CACHE_ENTRY_BYTES);
+        ctx.begin_job();
+        assert_eq!(ctx.cache.len(), 2, "under budget: kept");
+
+        ctx.objstm_put(
+            9,
+            Arc::new(ObjStmCached {
+                data: vec![0; 6_000],
+                layout: pdf_structure::objstm::ObjectStreamLayout {
+                    members: Vec::new(),
+                },
+            }),
+        );
+        assert!(ctx.cached_bytes() > 10_000);
+        // Still usable within the job that went over.
+        assert!(ctx.cache_get(ObjectId::new(1, 0)).is_some());
+        ctx.begin_job();
+        assert_eq!(ctx.cached_bytes(), 0);
+        assert!(ctx.cache.is_empty() && ctx.objstm.is_empty());
     }
 
     #[test]

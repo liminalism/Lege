@@ -207,6 +207,143 @@ fn rgb_sheets_round_trip_through_png() {
     assert_eq!(pixels, raster.pixels);
 }
 
+/// A composed sheet whose lifetime a test can observe: `live` counts the
+/// instances not yet dropped, `peak` the most ever alive at once.
+struct TrackedSheet {
+    raster: SheetRaster,
+    live: std::rc::Rc<std::cell::Cell<usize>>,
+}
+
+impl std::borrow::Borrow<SheetRaster> for TrackedSheet {
+    fn borrow(&self) -> &SheetRaster {
+        &self.raster
+    }
+}
+
+impl Drop for TrackedSheet {
+    fn drop(&mut self) {
+        self.live.set(self.live.get() - 1);
+    }
+}
+
+/// B12: a streamed submission composes, writes and drops one sheet at a
+/// time. Sheet k-1 is on disk before sheet k is composed, and at most one
+/// composed raster is alive; the `Sheets` payload used to compose every
+/// sheet before writing any (2.7 GB for a 100-sheet A4 job at 300 DPI).
+#[test]
+fn streamed_submission_holds_one_composed_sheet_at_a_time() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let spooler = FileSpooler::new(dir.path());
+    let live = std::rc::Rc::new(std::cell::Cell::new(0usize));
+    let peak = std::cell::Cell::new(0usize);
+    let sheets = (0..5u8).map(|k| {
+        if k > 0 {
+            let previous = dir.path().join(format!("sheet-{k:04}.png"));
+            assert!(
+                previous.exists(),
+                "sheet {k} composed before {} was written",
+                previous.display()
+            );
+        }
+        live.set(live.get() + 1);
+        peak.set(peak.get().max(live.get()));
+        Ok(TrackedSheet {
+            raster: solid(6, 3, 1, 0x10 * k),
+            live: live.clone(),
+        })
+    });
+    spooler
+        .submit_raster_stream(
+            &PrinterId::new("file"),
+            "Streamed",
+            &PrintOptions::default(),
+            ComposeOptions::default(),
+            sheets,
+        )
+        .expect("streamed submit");
+    assert_eq!(peak.get(), 1, "more than one composed sheet was alive");
+    assert_eq!(live.get(), 0);
+    let job = spooler.last_job().expect("a recorded job");
+    assert_eq!(job.files.len(), 5);
+    for (k, path) in job.files.iter().enumerate() {
+        assert_eq!(decode_png(path).1, vec![0x10 * k as u8; 18]);
+    }
+}
+
+/// B12: streaming changes when sheets are written, not what: the same
+/// rasters give byte-identical PNG files and an equal record through the
+/// slice seam and through the stream.
+#[test]
+fn streamed_and_slice_submissions_write_identical_files() {
+    let rasters = vec![
+        solid(8, 4, 1, 0x20),
+        solid(5, 7, 3, 0x90),
+        solid(3, 3, 1, 0xff),
+    ];
+    let (a, b) = (
+        tempfile::tempdir().expect("temp dir"),
+        tempfile::tempdir().expect("temp dir"),
+    );
+    let (sa, sb) = (FileSpooler::new(a.path()), FileSpooler::new(b.path()));
+    let (printer, options, compose) = (
+        PrinterId::new("file"),
+        PrintOptions::default(),
+        ComposeOptions::default(),
+    );
+    sa.submit_rasters(&printer, "Job", &options, compose, &rasters)
+        .expect("slice submit");
+    sb.submit_raster_stream(
+        &printer,
+        "Job",
+        &options,
+        compose,
+        rasters.iter().cloned().map(Ok),
+    )
+    .expect("streamed submit");
+    let (ja, jb) = (sa.last_job().expect("job"), sb.last_job().expect("job"));
+    assert_eq!(file_names(&ja.files), file_names(&jb.files));
+    for (pa, pb) in ja.files.iter().zip(&jb.files) {
+        assert_eq!(std::fs::read(pa).expect("a"), std::fs::read(pb).expect("b"));
+    }
+    assert_eq!((ja.id, ja.title, ja.compose), (jb.id, jb.title, jb.compose));
+}
+
+/// B12: when composing a later sheet fails, the sheets already written for
+/// the job are removed, nothing is recorded, and the next job numbers its
+/// sheets from where it would have before the failed one.
+#[test]
+fn a_failed_streamed_submission_leaves_no_sheets() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let spooler = FileSpooler::new(dir.path());
+    let (printer, options, compose) = (
+        PrinterId::new("file"),
+        PrintOptions::default(),
+        ComposeOptions::default(),
+    );
+    let sheets = (0..5u8).map(|k| {
+        if k == 2 {
+            Err(lege_pdf_print::PrintError::Spool("compose failed".into()))
+        } else {
+            Ok(solid(4, 4, 1, k))
+        }
+    });
+    let result = spooler.submit_raster_stream(&printer, "Broken", &options, compose, sheets);
+    assert!(result.is_err());
+    let leftovers: Vec<_> = std::fs::read_dir(dir.path())
+        .expect("read dir")
+        .filter_map(|e| e.ok()?.file_name().into_string().ok())
+        .collect();
+    assert!(leftovers.is_empty(), "{leftovers:?}");
+    assert_eq!(spooler.last_job(), None);
+    spooler
+        .submit_rasters(&printer, "Next", &options, compose, &[solid(2, 2, 1, 0)])
+        .expect("next job");
+    assert_eq!(
+        file_names(&spooler.last_job().expect("job").files),
+        vec!["sheet-0001.png".to_string()]
+    );
+}
+
 fn file_names(paths: &[PathBuf]) -> Vec<String> {
     paths
         .iter()

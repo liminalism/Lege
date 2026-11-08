@@ -334,3 +334,69 @@ fn transfer_lut_inverts_a_luminosity_mask() {
         px(&host, 15, 10)
     );
 }
+
+/// B14: soft-mask content crossing the mask offscreen's right edge
+/// anti-aliases its last column exactly as a wider mask offscreen does (see
+/// `render_group.rs`, `group_content_crossing_the_offscreen_right_edge_...`).
+/// The reference widens the mask content with a 1-px white mark at (60, 62).
+#[test]
+fn mask_content_crossing_the_offscreen_right_edge_keeps_its_coverage() {
+    let shallow = PathData {
+        verbs: Arc::from([
+            PathVerb::MoveTo,
+            PathVerb::LineTo,
+            PathVerb::LineTo,
+            PathVerb::Close,
+        ]),
+        points: Arc::from([
+            Point { x: 2.0, y: 10.0 },
+            Point { x: 62.0, y: 20.5 },
+            Point { x: 2.0, y: 44.0 },
+        ]),
+    };
+    let paths = vec![
+        rect(0.0, 0.0, 40.0, 64.0),
+        shallow,
+        rect(60.0, 62.0, 61.0, 63.0),
+        rect(0.0, 0.0, 64.0, 64.0),
+    ];
+    let paints = vec![
+        Paint::Solid(Color::from_rgb(1.0, 1.0, 1.0)),
+        Paint::Solid(Color::from_rgb(1.0, 0.0, 0.0)),
+    ];
+    let ops = |widen: bool| {
+        let mut ops = vec![
+            DisplayOp::BeginSoftMask {
+                kind: MaskKind::Luminosity,
+                transfer: None,
+            },
+            DisplayOp::PushClip {
+                path: PathId(0),
+                rule: FillRule::NonZero,
+            },
+            fill(1, 0),
+            DisplayOp::PopClip,
+        ];
+        if widen {
+            ops.push(fill(2, 0));
+        }
+        ops.push(DisplayOp::EndSoftMask);
+        ops.push(fill(3, 1));
+        ops
+    };
+    let tight = render(paths.clone(), paints.clone(), ops(false), 64);
+    let wide = render(paths, paints, ops(true), 64);
+    let mut edge_pixels = 0;
+    for y in 0..64 {
+        for x in 0..64 {
+            if (x, y) == (60, 62) {
+                continue;
+            }
+            assert_eq!(px(&tight, x, y), px(&wide, x, y), "pixel ({x},{y})");
+            if x == 39 && !matches!(px(&tight, x, y)[1], 0 | 255) {
+                edge_pixels += 1;
+            }
+        }
+    }
+    assert!(edge_pixels > 0, "the mask edge crosses column 39");
+}

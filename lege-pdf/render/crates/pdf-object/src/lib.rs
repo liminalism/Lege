@@ -376,6 +376,15 @@ impl NameTable {
     pub fn resolve(&self, id: NameId) -> Arc<[u8]> {
         self.interner.resolve(id)
     }
+
+    /// Number of interned names (the table is append-only; a growth gauge).
+    pub fn len(&self) -> usize {
+        self.interner.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 impl Default for NameTable {

@@ -362,3 +362,126 @@ fn type1_font_with_hostile_subr_index_compiles_with_its_own_glyphs() {
         assert_eq!(glyphs, vec![1, 2], "dup {index}");
     }
 }
+
+/// A one-page document whose content stream is `body`, under resources
+/// that carry every category a name operand is looked up in (so each
+/// operator reaches its resource lookup rather than an early exit).
+fn page_with_resource_categories(body: &[u8]) -> Vec<u8> {
+    let mut b = PdfBuilder::new();
+    b.add_object(1, "<</Type/Catalog/Pages 2 0 R>>");
+    b.add_object(
+        2,
+        "<</Type/Pages/Kids[3 0 R]/Count 1/MediaBox[0 0 100 100]>>",
+    );
+    b.add_object(
+        3,
+        "<</Type/Page/Parent 2 0 R/Contents 4 0 R/Resources<</XObject<</X0 5 0 R>>\
+         /ExtGState<</G0<</CA 0.5>>>>/Shading<<>>/Properties<<>>/ColorSpace<<>>>>>>",
+    );
+    b.add_stream(4, "", body);
+    b.add_stream(
+        5,
+        "/Type/XObject/Subtype/Form/BBox[0 0 10 10]",
+        b"0 0 10 10 re f",
+    );
+    b.finish_classic_xref("/Root 1 0 R");
+    b.into_bytes()
+}
+
+/// Compile page 0 and report the document name table's growth.
+fn name_growth(bytes: Vec<u8>) -> (Result<(), pdf_content::ContentError>, usize) {
+    let snap = open(bytes);
+    let before = snap.names().len();
+    let mut ctx = ParseContext::new();
+    let result = PageCompiler::new()
+        .compile(&snap, PageIndex(0), &mut ctx)
+        .map(|_| ());
+    (result, snap.names().len() - before)
+}
+
+/// B15: names that a content stream only *looks up* in a resource
+/// dictionary (`Do`, `gs`, `sh`, a `BDC` property list, an inline image's
+/// named `/CS`) must not be interned: a name the resource dictionary lacks
+/// was never interned, so it cannot match a key. The interner is
+/// document-wide and append-only, so each distinct missing name used to
+/// cost an entry for the session's lifetime.
+#[test]
+fn missing_resource_names_do_not_grow_the_name_table() {
+    let mut body = Vec::new();
+    for i in 0..20_000 {
+        body.extend_from_slice(
+            format!(
+                "/X{i} Do /G{i} gs /S{i} sh /OC /P{i} BDC EMC /Span /A{i} BDC EMC\n\
+                 BI /W 1 /H 1 /BPC 8 /CS /C{i} ID x EI\n"
+            )
+            .as_bytes(),
+        );
+    }
+    // Valid names still resolve.
+    body.extend_from_slice(b"/G0 gs /X0 Do\n");
+    let (result, growth) = name_growth(page_with_resource_categories(&body));
+    assert!(result.is_ok(), "{result:?}");
+    assert!(
+        growth < 64,
+        "120,000 missing names grew the table by {growth}"
+    );
+}
+
+/// B15: an inline image's `/F` and `/CS` arrays are converted to objects for
+/// decoding; only the spec's closed set of filter and colour-space names
+/// may be interned, so a 50,000-element array of distinct names costs at
+/// most one entry.
+#[test]
+fn inline_image_name_arrays_do_not_grow_the_name_table() {
+    let names = |prefix: &str| -> String {
+        (0..50_000)
+            .map(|i| format!("/{prefix}{i}"))
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+    let filters = format!("BI /W 1 /H 1 /BPC 8 /CS /G /F [{}] ID x EI\n", names("F"));
+    let spaces = format!(
+        "BI /W 1 /H 1 /BPC 8 /CS [/I /RGB 0 <000000> {}] ID x EI\n",
+        names("K")
+    );
+    for body in [filters, spaces] {
+        let (result, growth) = name_growth(page_with_resource_categories(body.as_bytes()));
+        assert!(result.is_ok(), "{result:?}");
+        assert!(
+            growth < 64,
+            "a 50,000-name array grew the table by {growth}"
+        );
+    }
+    // An inline image with a spec filter and an indexed space still decodes.
+    let (result, _) = name_growth(page_with_resource_categories(
+        b"BI /W 1 /H 1 /BPC 8 /CS [/I /RGB 0 <ff0000>] /F /AHx ID 00> EI\n",
+    ));
+    assert!(result.is_ok(), "{result:?}");
+}
+
+/// B15: each inline image counts as one operation against `max_ops`, so a
+/// stream of inline images stops at the page's operator budget like any
+/// other operator stream.
+#[test]
+fn inline_images_count_against_the_operator_budget() {
+    let compile = |n: usize| {
+        let body = "BI /W 1 /H 1 /BPC 8 /CS /G ID \u{0}\u{0} EI\n".repeat(n);
+        let snap = open(one_page_doc(body.as_bytes()));
+        let mut ctx = ParseContext::new();
+        PageCompiler::with_limits(pdf_content::ContentLimits {
+            max_ops: 100,
+            ..Default::default()
+        })
+        .compile(&snap, PageIndex(0), &mut ctx)
+        .map(|_| ())
+    };
+    assert!(compile(100).is_ok());
+    assert!(
+        matches!(
+            compile(101),
+            Err(pdf_content::ContentError::OperatorBudget(101))
+        ),
+        "{:?}",
+        compile(101)
+    );
+}

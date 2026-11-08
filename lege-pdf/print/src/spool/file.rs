@@ -86,21 +86,76 @@ impl FileSpooler {
         compose: ComposeOptions,
         rasters: &[SheetRaster],
     ) -> Result<JobId, PrintError> {
+        self.submit_raster_stream(printer, title, options, compose, rasters.iter().map(Ok))
+    }
+
+    /// Write sheets as `rasters` yields them: each is written to disk and
+    /// dropped before the next one is pulled, so a lazy iterator that
+    /// composes on demand keeps at most one composed sheet alive. This is how
+    /// [`Spooler::submit`] spools a `Sheets` payload; composing every sheet
+    /// first held the whole job in memory (26 MB per A4 sheet at 300 DPI).
+    ///
+    /// When an item is an error, or a sheet cannot be written, the files
+    /// already written for this job are removed (best effort), nothing is
+    /// recorded, and the sheet counter is rolled back when no other job has
+    /// advanced it meanwhile, so the next job's names are unaffected.
+    pub fn submit_raster_stream<R, I>(
+        &self,
+        printer: &PrinterId,
+        title: &str,
+        options: &PrintOptions,
+        compose: ComposeOptions,
+        rasters: I,
+    ) -> Result<JobId, PrintError>
+    where
+        R: std::borrow::Borrow<SheetRaster>,
+        I: IntoIterator<Item = Result<R, PrintError>>,
+    {
         std::fs::create_dir_all(&self.dir)?;
-        let mut files = Vec::with_capacity(rasters.len());
-        for raster in rasters {
-            let path = self.dir.join(self.next_sheet_name());
-            write_sheet_png(&path, raster)?;
-            files.push(path);
+        let mut files = Vec::new();
+        let mut numbers = Vec::new();
+        let write_all = || -> Result<(), PrintError> {
+            for raster in rasters {
+                let raster = raster?;
+                let number = self.next_sheet_number();
+                let path = self.dir.join(sheet_name(number));
+                // Recorded before writing, so a partly written file is
+                // removed on failure too.
+                numbers.push(number);
+                files.push(path.clone());
+                write_sheet_png(&path, raster.borrow())?;
+            }
+            Ok(())
+        };
+        if let Err(error) = write_all() {
+            self.discard_sheets(&files, &numbers);
+            return Err(error);
         }
         Ok(self.record(printer, title, options, files, false, Some(compose)))
     }
 
-    /// The name of the next sheet file, consuming one from the counter.
-    fn next_sheet_name(&self) -> String {
+    /// Consume one number from the sheet counter.
+    fn next_sheet_number(&self) -> u32 {
         let mut count = lock(&self.sheets_written);
         *count += 1;
-        format!("sheet-{:04}.png", *count)
+        *count
+    }
+
+    /// Undo a failed job's sheets: remove its files and, when its numbers
+    /// are still the counter's latest (no other job interleaved), give them
+    /// back.
+    fn discard_sheets(&self, files: &[PathBuf], numbers: &[u32]) {
+        for path in files {
+            let _ = std::fs::remove_file(path);
+        }
+        let (Some(&first), Some(&last)) = (numbers.first(), numbers.last()) else {
+            return;
+        };
+        let mut count = lock(&self.sheets_written);
+        let contiguous = (last - first) as usize + 1 == numbers.len();
+        if contiguous && *count == last {
+            *count = first - 1;
+        }
     }
 
     fn record(
@@ -178,11 +233,12 @@ impl Spooler for FileSpooler {
                 sheets,
                 compose,
             } => {
-                let mut rasters = Vec::with_capacity(sheets.len());
-                for sheet in sheets {
-                    rasters.push(crate::compose::compose_sheet(session, sheet, &compose)?);
-                }
-                self.submit_rasters(&job.printer, &job.title, job.options, compose, &rasters)
+                // Composed lazily: each sheet is written and dropped before
+                // the next is composed (B12).
+                let rasters = sheets
+                    .iter()
+                    .map(|sheet| crate::compose::compose_sheet(session, sheet, &compose));
+                self.submit_raster_stream(&job.printer, &job.title, job.options, compose, rasters)
             }
         }
     }
@@ -197,6 +253,11 @@ impl Spooler for FileSpooler {
     fn cancel(&self, _job: &JobId) -> Result<(), PrintError> {
         Ok(())
     }
+}
+
+/// The file name of sheet `number`.
+fn sheet_name(number: u32) -> String {
+    format!("sheet-{number:04}.png")
 }
 
 /// Encode `raster` as an 8-bit PNG at `path`.

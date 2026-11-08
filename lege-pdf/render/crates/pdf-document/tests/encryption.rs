@@ -218,3 +218,64 @@ fn objstm_members_are_not_double_decrypted() {
         other => panic!("expected string, got {other:?}"),
     }
 }
+
+/// B8: a persistent worker's context holds every decrypted stream body it
+/// resolved (`StreamData::Owned`), so on an encrypted document its caches
+/// grew without bound across page jobs. The context's byte budget empties
+/// them at a job boundary once exceeded; a later miss only re-decrypts, so
+/// every job still reads the same plaintext.
+#[test]
+fn decrypted_stream_cache_stays_within_the_context_budget_across_jobs() {
+    const STREAMS: u32 = 8;
+    const LEN: usize = 1 << 20;
+    const BUDGET: usize = 3 * LEN;
+    let handler = StandardHandler::open(&encrypt_dict()).expect("handler");
+    let plain = |n: u32| -> Vec<u8> {
+        (0..LEN)
+            .map(|i| (i as u32).wrapping_mul(2654435761).wrapping_add(n) as u8)
+            .collect()
+    };
+    let mut b = PdfBuilder::new();
+    b.add_object(1, "<</Type/Catalog/Pages 2 0 R>>");
+    b.add_object(
+        2,
+        "<</Type/Pages/Kids[3 0 R]/Count 1/MediaBox[0 0 612 792]>>",
+    );
+    b.add_object(3, "<</Type/Page/Parent 2 0 R/Resources<<>>>>");
+    b.add_object(4, &encrypt_dict_body());
+    for n in 10..10 + STREAMS {
+        let mut ciphertext = plain(n);
+        handler.decrypt(n, 0, &mut ciphertext); // RC4 symmetric -> ciphertext
+        b.add_stream(n, "", &ciphertext);
+    }
+    b.finish_classic_xref(&format!("/Root 1 0 R/Encrypt 4 0 R{}", id_trailer()));
+    let snapshot = open_bytes(b.into_bytes());
+
+    let mut ctx = ParseContext::with_cache_budget(BUDGET);
+    let mut peak = 0;
+    // Two passes, one stream per job, as a persistent worker would.
+    for n in (10..10 + STREAMS).chain(10..10 + STREAMS) {
+        ctx.begin_job();
+        assert!(
+            ctx.cached_bytes() <= BUDGET,
+            "{} after begin_job",
+            ctx.cached_bytes()
+        );
+        let object = snapshot
+            .objects()
+            .resolve(&snapshot, ObjectId::new(n, 0), &mut ctx)
+            .unwrap();
+        let PdfObject::Stream(stream) = &*object else {
+            panic!("object {n} is not a stream");
+        };
+        assert_eq!(
+            snapshot.decode_stream_data(stream, &mut ctx).unwrap(),
+            plain(n),
+            "object {n}"
+        );
+        peak = peak.max(ctx.cached_bytes());
+    }
+    // Within a job the budget may be exceeded by that job's own objects.
+    assert!(peak <= BUDGET + LEN + 4096, "peak {peak}");
+    assert!(peak > LEN, "the decrypted bodies are accounted: {peak}");
+}
