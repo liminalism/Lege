@@ -1,6 +1,20 @@
 //! Phase 6 page output plan.
 //!
 //! Lege builds the plan; the renderer executes one request per product.
+//!
+//! Every product of a page names the base output raster as its image decode
+//! reference ([`lege_pdf_read::DecodeReference`]). A JPEG or JPEG 2000 scan
+//! is decoded at a reduced resolution chosen from the draw's footprint, so
+//! without a shared reference the 800-pixel analysis render and the base
+//! render would decode the page's scan twice, at two resolutions. With it the
+//! analysis render decodes at the base's resolution, the base render reuses
+//! that decode, and both render from the same source pixels; this holds with
+//! the renderer's decoded-image cache on or off, since the reference is part
+//! of each request. Products larger than the base (the slow-OCR surface, 2x
+//! region crops, or the analysis render itself when the output target is
+//! under the inference size) still decode at their own resolution. Only the
+//! base sets the shared level, so the base pixels are the same whichever
+//! other products the configuration enables.
 
 use lege_pdf_read::{
     AnalysisTarget, BaseTarget, DeviceCrop, GraySuitability, OcrTarget, PageOutputPlan,
@@ -26,12 +40,20 @@ pub fn base_is_gray(config: &PipelineConfig, suitability: GraySuitability) -> bo
     }
 }
 
+/// The base output raster's size: the decode reference of every product of
+/// the page (see the module documentation).
+fn base_size(input: PagePlanInput) -> (u32, u32) {
+    (input.output_width.max(1), input.output_height.max(1))
+}
+
 fn base_product(config: &PipelineConfig, input: PagePlanInput) -> RasterProduct {
-    if base_is_gray(config, input.gray_suitability) {
-        RasterProduct::gray8(input.output_width.max(1), input.output_height.max(1))
+    let (width, height) = base_size(input);
+    let product = if base_is_gray(config, input.gray_suitability) {
+        RasterProduct::gray8(width, height)
     } else {
-        RasterProduct::rgb8(input.output_width.max(1), input.output_height.max(1))
-    }
+        RasterProduct::rgb8(width, height)
+    };
+    product.with_decode_reference(width, height)
 }
 
 fn analysis_target(config: &PipelineConfig, input: PagePlanInput) -> Option<AnalysisTarget> {
@@ -50,8 +72,9 @@ fn analysis_target(config: &PipelineConfig, input: PagePlanInput) -> Option<Anal
             .max(1) as u32;
         (w, long_edge)
     };
+    let (base_width, base_height) = base_size(input);
     Some(AnalysisTarget {
-        product: RasterProduct::rgb8(w, h),
+        product: RasterProduct::rgb8(w, h).with_decode_reference(base_width, base_height),
     })
 }
 
@@ -66,8 +89,10 @@ fn ocr_target(config: &PipelineConfig, input: PagePlanInput) -> Option<OcrTarget
     let width = ((input.output_width.max(1) as u64 * ocr_height as u64)
         / input.output_height.max(1) as u64)
         .max(1) as u32;
+    let (base_width, base_height) = base_size(input);
     Some(OcrTarget {
-        product: RasterProduct::rgb8(width, ocr_height),
+        product: RasterProduct::rgb8(width, ocr_height)
+            .with_decode_reference(base_width, base_height),
     })
 }
 
@@ -117,16 +142,18 @@ pub fn region_target(
         render_scale
     };
     Some(RegionTarget {
-        product: RasterProduct::rgb8(width * render_scale, height * render_scale).with_crop(
-            DeviceCrop {
+        product: RasterProduct::rgb8(width * render_scale, height * render_scale)
+            .with_crop(DeviceCrop {
                 x: x1,
                 y: y1,
                 width,
                 height,
                 page_width: output_width,
                 page_height: output_height,
-            },
-        ),
+            })
+            // The crop's page is the base output raster, the page's shared
+            // decode reference; a 2x region still decodes at its own scale.
+            .with_decode_reference(output_width.max(1), output_height.max(1)),
     })
 }
 
@@ -235,5 +262,35 @@ mod tests {
     #[test]
     fn degenerate_region_is_dropped() {
         assert!(region_target([10.0, 10.0, 10.0, 40.0], 900, 1200, 1).is_none());
+    }
+
+    /// Every product of a page names the base output raster as its decode
+    /// reference, so the analysis render decodes the page's scan at the
+    /// base's resolution and shares that decode; the OCR surface and regions
+    /// carry the same reference and never set it.
+    #[test]
+    fn every_product_names_the_base_raster_as_decode_reference() {
+        let mut config = base_config();
+        config.set_enable_layout_detection(true);
+        config.set_enable_ocr(true);
+        config.set_slow_ocr(true);
+        config.set_slow_ocr_scale(2.0);
+        let plan = plan_page_output(&config, input(GraySuitability::Exact));
+        let base = Some(lege_pdf_read::DecodeReference {
+            width: 900,
+            height: 1200,
+        });
+        let analysis = plan.analysis.expect("analysis").product;
+        let ocr = plan.ocr.expect("ocr").product;
+        assert!(analysis.height < 1200 && ocr.height > 1200);
+        for product in [analysis, plan.base.product, ocr] {
+            assert_eq!(product.decode_reference, base, "{product:?}");
+        }
+        for scale in [1, 2] {
+            let region = region_target([10.0, 20.0, 110.0, 220.0], 900, 1200, scale)
+                .expect("region")
+                .product;
+            assert_eq!(region.decode_reference, base);
+        }
     }
 }

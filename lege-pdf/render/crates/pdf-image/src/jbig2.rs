@@ -182,6 +182,18 @@ impl ImageCodec for Jbig2Codec {
             data,
         })
     }
+
+    /// JBIG2 has no reduced-resolution decode: every footprint gets the same
+    /// raster, so a page rendered at several sizes decodes its mask once.
+    fn reduction_level(
+        &self,
+        _data: &[u8],
+        _descriptor: &ImageDescriptor,
+        _params: &DecodeParameters,
+        _limits: &DecodeLimits,
+    ) -> Option<u8> {
+        Some(0)
+    }
 }
 
 impl Jbig2Codec {

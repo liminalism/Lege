@@ -36,6 +36,45 @@ unchanged, and so are the hashes of 52 pages that embed them.
   these changes. One whose StandardEncoding faces the gate never retained is
   about 34% faster. Peak RSS is the same.
 
+### Fixes, 2026-11-08
+
+- Image cache: reduced decodes are keyed by the scale the codec decodes
+  at. The DCT codec decodes a minified draw at 1/2, 1/4 or 1/8 scale, but
+  the shared image cache kept the draw footprint in its key only for JPX,
+  so a page's first render fixed its JPEG resolution for every later
+  render through the same backend: a thumbnail, a zoomed-out view, or
+  Lege's 800-pixel analysis render followed by a full-size render magnified
+  the small decode, and output depended on render history. Codecs now
+  report the level a draw selects (`ImageCodec::reduction_level`: the DCT
+  scale from the frame header, the JPX wavelet level from the main header
+  through jp2lam's own rule, 0 for JBIG2 and CCITT), and the cache keys by
+  that level, so draw sizes that select one level still share a decode. An
+  injected codec that reports no level is keyed by the raw footprint. A
+  page rendered once is unchanged unless it draws one JPEG at two sizes
+  that select different scales (it used the first draw's decode for both);
+  a page rendered at two such sizes now decodes the JPEG once per scale.
+- Image cache: the declared colour space is part of a decode's identity.
+  The JPX codec reads its family (an `/Indexed` space bypasses a container
+  palette) and component count (two keep a duotone's channels), so two
+  images with byte-identical JPX streams under different `/ColorSpace`
+  entries shared one entry and the second drawn got the first one's raster.
+- Decode reference (`CpuRenderOptions::image_decode_reference`, through
+  `CpuBackend::render_with_options`): a request can name another raster of
+  the same page whose image footprints set the lowest resolution its images
+  decode at. Renders that share a reference decode each JPEG or JPX image
+  once and render from the same source pixels; a draw larger than the
+  reference keeps its own resolution, tiling cells inherit the reference,
+  and the decoded resolution follows from the request alone, with the
+  cache on or off. `lege_pdf_read::RasterProduct::with_decode_reference`
+  carries it; Lege's page plan names the base output raster for every
+  product of a page, so the analysis render no longer decodes a smaller
+  copy of each scan before the base render. On a synthetic six-page book
+  of 2550x3300 JPEG scans (debug-fast build) the analysis-plus-base
+  sequence takes 398 ms against 569 ms with per-size decoding (medians of
+  five). Base, region and OCR rasters are unchanged; the 800-px analysis
+  raster changes, and is closer to one area-averaged from a full-resolution
+  decode (mean channel distance 1.7 against 6.2).
+
 ### Performance, 2026-11-04, round 4 (follow-ups to round 3)
 
 Byte-identical to round 3 on the full private corpus except where noted;

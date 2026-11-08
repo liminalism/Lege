@@ -6393,6 +6393,7 @@ mod rgb8_area_min_tests {
             color_policy: pdf_render_api::RenderColorPolicy::Original,
             diagnostics: Default::default(),
             image_cache: None,
+            decode_floor: None,
             #[cfg(feature = "profiling")]
             profile: Default::default(),
             #[cfg(feature = "profiling")]
@@ -6577,6 +6578,7 @@ mod cancel_tests {
             color_policy: pdf_render_api::RenderColorPolicy::Original,
             diagnostics: Default::default(),
             image_cache: None,
+            decode_floor: None,
             #[cfg(feature = "profiling")]
             profile: Default::default(),
             #[cfg(feature = "profiling")]

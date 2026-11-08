@@ -67,9 +67,11 @@ pub struct DecodeParameters {
     /// `/DecodeParms` for a CCITT image (`/K`, `/Columns`, `/BlackIs1`, …).
     pub ccitt: Option<ccitt::CcittParams>,
     /// Destination footprint of this draw in device pixels, when known. A hint,
-    /// not a limit: a codec that supports resolution scaling (JPX) may decode a
-    /// minified draw at a reduced resolution instead of full size. Codecs that
-    /// do not scale ignore it. `None` means decode at full resolution.
+    /// not a limit: a codec that supports resolution scaling (JPX, DCT) may
+    /// decode a minified draw at a reduced resolution instead of full size, and
+    /// reports which one through [`ImageCodec::reduction_level`]. Codecs that do
+    /// not scale (JBIG2, CCITT) ignore it. `None` means decode at full
+    /// resolution.
     pub target_size: Option<(u32, u32)>,
     // Later: remaining filter-specific parms (K, Columns, BlackIs1, ...).
 }
