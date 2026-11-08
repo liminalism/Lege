@@ -245,6 +245,10 @@ pub(crate) struct Interpreter<'a> {
     /// resource name (mirrors `tint_cache`). Their parameters are read once;
     /// conversion itself is pure math in `pdf-color`.
     cie_cache: HashMap<NameId, Option<CieSpace>>,
+    /// `sc`/`scn` in a resource-named space: whether the space is `/Indexed`,
+    /// and its palette-carrying form if so (see
+    /// [`Self::resolve_named_indexed`]), keyed by resource name.
+    indexed_cache: HashMap<NameId, Option<pdf_page_ir::ImageColorSpace>>,
     /// Marked-content nesting (`BMC`/`BDC`…`EMC`): `true` for levels opened
     /// by a `/OC` `BDC` whose optional-content group is OFF (ISO 32000-1
     /// §8.11.3.2; cpdf_occontext.cpp default-visibility semantics).
@@ -378,6 +382,7 @@ struct ResourceCaches {
     uncolored_tiling: HashMap<(NameId, [u32; 4]), TilingId>,
     tint: HashMap<NameId, Option<Arc<TintSpace>>>,
     cie: HashMap<NameId, Option<CieSpace>>,
+    indexed: HashMap<NameId, Option<pdf_page_ir::ImageColorSpace>>,
 }
 
 /// Text matrices and clipping accumulation belong to BT..ET, not q..Q.
@@ -554,6 +559,7 @@ impl<'a> Interpreter<'a> {
             tint_cache: HashMap::new(),
             type3_cache: HashMap::new(),
             cie_cache: HashMap::new(),
+            indexed_cache: HashMap::new(),
             mc_stack: Vec::new(),
             mc_stack_floor: 0,
             next_actual_text_span: 0,
@@ -1154,9 +1160,59 @@ impl<'a> Interpreter<'a> {
     /// palette index, not colour components (§8.6.6.3); without this the index
     /// was mis-read as raw components and every fill collapsed to black
     /// (pdfbox/2561 page 3 dropped its red/green/blue bars to one black bar).
+    ///
+    /// Memoised per resource scope, and a space whose array head is not
+    /// `/Indexed` is never built: every `sc`/`scn` in a Separation, DeviceN or
+    /// ICCBased space used to build the full image colour space just to learn
+    /// it was not Indexed — a 256- or 65,536-entry tint bake, or an inflated
+    /// ICC profile, per operator. The inflations were charged to the decode
+    /// budget, so a page with enough of them silently lost its later images,
+    /// forms and soft masks.
     fn resolve_named_indexed(&mut self, id: NameId) -> Option<pdf_page_ir::ImageColorSpace> {
-        let cs = self.resolve_image_colorspace(&PdfObject::Name(id))?;
-        matches!(cs, pdf_page_ir::ImageColorSpace::Indexed { .. }).then_some(cs)
+        if let Some(hit) = self.indexed_cache.get(&id) {
+            return hit.clone();
+        }
+        let resolved = if self.named_space_has_indexed_head(id) {
+            self.resolve_image_colorspace(&PdfObject::Name(id))
+                .filter(|cs| matches!(cs, pdf_page_ir::ImageColorSpace::Indexed { .. }))
+        } else {
+            None
+        };
+        self.indexed_cache.insert(id, resolved.clone());
+        resolved
+    }
+
+    /// Whether the resource-named space `id` is an `/Indexed` (or `/I`) array,
+    /// read from the array head alone. Follows name aliases (`/CS0 /CS1`) as
+    /// [`Self::resolve_image_colorspace`] does, to the same depth. Only ever
+    /// answers `false` where that resolver would not return an Indexed space,
+    /// so it can gate the build without changing any result.
+    fn named_space_has_indexed_head(&mut self, id: NameId) -> bool {
+        let mut name = id;
+        for _ in 0..=self.limits.max_colorspace_depth {
+            let Some(entry) = self
+                .resource_subdict(self.names.known.color_space)
+                .and_then(|cs| cs.as_dict()?.get(name).cloned())
+            else {
+                return false;
+            };
+            let Some(resolved) = self.resolve_obj(&entry) else {
+                return false;
+            };
+            match &*resolved {
+                PdfObject::Array(items) => {
+                    return items
+                        .first()
+                        .and_then(PdfObject::as_name)
+                        .is_some_and(|head| {
+                            matches!(self.names.resolve(head).as_ref(), b"Indexed" | b"I")
+                        });
+                }
+                PdfObject::Name(next) => name = *next,
+                _ => return false,
+            }
+        }
+        false
     }
 
     fn build_tint_space(&mut self, id: NameId) -> Option<Arc<TintSpace>> {
@@ -5104,6 +5160,7 @@ impl<'a> Interpreter<'a> {
             uncolored_tiling: std::mem::take(&mut self.uncolored_tiling_cache),
             tint: std::mem::take(&mut self.tint_cache),
             cie: std::mem::take(&mut self.cie_cache),
+            indexed: std::mem::take(&mut self.indexed_cache),
         }
     }
 
@@ -5114,6 +5171,7 @@ impl<'a> Interpreter<'a> {
         self.uncolored_tiling_cache = saved.uncolored_tiling;
         self.tint_cache = saved.tint;
         self.cie_cache = saved.cie;
+        self.indexed_cache = saved.indexed;
     }
 
     /// Resolve a `/Pattern` resource by name into a resolved [`SemColor`]
