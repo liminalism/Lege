@@ -485,3 +485,92 @@ fn unmasked_group_composite_is_unchanged() {
         px(&host, 10, 10)
     );
 }
+
+fn triangle(a: (f64, f64), b: (f64, f64), c: (f64, f64)) -> PathData {
+    PathData {
+        verbs: Arc::from([
+            PathVerb::MoveTo,
+            PathVerb::LineTo,
+            PathVerb::LineTo,
+            PathVerb::Close,
+        ]),
+        points: Arc::from([
+            Point { x: a.0, y: a.1 },
+            Point { x: b.0, y: b.1 },
+            Point { x: c.0, y: c.1 },
+        ]),
+    }
+}
+
+/// B14: a group whose clipped content crosses the offscreen's right edge
+/// anti-aliases its last column exactly as a wider offscreen does. The
+/// group's offscreen ends where its clipped content ends (x = 40 here), and
+/// the coverage raster used to clamp edges there: a sloped edge continuing
+/// past x = 40 became a vertical drop at the boundary, changing the
+/// accumulated coverage of column 39. The reference widens the same group
+/// with a 1-px mark at (60, 62), outside the clip, so x = 40 is interior.
+#[test]
+fn group_content_crossing_the_offscreen_right_edge_keeps_its_coverage() {
+    for (name, shape) in [
+        ("shallow", triangle((2.0, 10.0), (62.0, 20.5), (2.0, 44.0))),
+        ("diagonal", triangle((2.0, 2.3), (62.0, 62.3), (2.0, 62.0))),
+    ] {
+        let paths = vec![
+            rect(0.0, 0.0, 40.0, 64.0),
+            shape,
+            rect(60.0, 62.0, 61.0, 63.0),
+        ];
+        let paints = vec![Paint::Solid(Color::from_rgb(0.0, 0.0, 0.0))];
+        let ops = |widen: bool| {
+            let mut ops = vec![
+                DisplayOp::BeginTransparencyGroup {
+                    group: TransparencyGroupId(0),
+                },
+                DisplayOp::PushClip {
+                    path: PathId(0),
+                    rule: FillRule::NonZero,
+                },
+                fill(1, 0),
+                DisplayOp::PopClip,
+            ];
+            if widen {
+                ops.push(fill(2, 0));
+            }
+            ops.push(DisplayOp::EndTransparencyGroup);
+            ops
+        };
+        let g = TransparencyGroup {
+            bounds: Rect {
+                x0: 0.0,
+                y0: 0.0,
+                x1: 64.0,
+                y1: 64.0,
+            },
+            ..group(1.0, BlendMode::Normal)
+        };
+        let tight = render(
+            paths.clone(),
+            paints.clone(),
+            ops(false),
+            vec![g.clone()],
+            64,
+        );
+        let wide = render(paths, paints, ops(true), vec![g], 64);
+        let mut edge_pixels = 0;
+        for y in 0..64 {
+            for x in 0..64 {
+                if (x, y) == (60, 62) {
+                    continue;
+                }
+                assert_eq!(px(&tight, x, y), px(&wide, x, y), "{name}: pixel ({x},{y})");
+                if x == 39 && !matches!(px(&tight, x, y)[0], 0 | 255) {
+                    edge_pixels += 1;
+                }
+            }
+        }
+        assert!(
+            edge_pixels > 0,
+            "{name}: the content's edge crosses column 39"
+        );
+    }
+}

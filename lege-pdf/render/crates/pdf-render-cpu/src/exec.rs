@@ -4473,8 +4473,12 @@ fn paint_command(
             let shading = cmd.shading.as_deref();
             let stencil = cmd.stencil.as_deref();
             // The coverage buffer is sized to the device plane, not the
-            // (possibly offset) surface; pass full device dims.
-            let width = surface.origin_x + surface.width;
+            // (possibly offset) surface; pass full device dims. The width is
+            // the plane's even for a group or soft-mask offscreen: the raster
+            // clamps edges at it, and clamping at the offscreen's right edge
+            // re-shaped edges that continue past it (B14). Painting is still
+            // restricted to the command bounds, which lie inside the surface.
+            let width = (page.size.width as usize).max(surface.origin_x + surface.width);
             let height = surface.origin_y + surface.height;
             // A solid Normal fill with no per-pixel modulation paints the
             // raster's constant runs directly; anything else wants the plain
