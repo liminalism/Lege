@@ -50,12 +50,26 @@ pub struct DecodeMetadata {
 }
 
 impl DecodeMetadata {
+    /// Number of highest wavelet resolutions a decode at `resolution` omits:
+    /// `0` for [`DecodeResolution::Full`], the requested count for
+    /// [`DecodeResolution::ReduceLevels`], and the level
+    /// [`DecodeResolution::AtLeast`] settles on for its footprint.
+    ///
+    /// Every decode path selects its reduction with this same rule, and the
+    /// resolution request affects a decode only through it. Two decodes of one
+    /// codestream that agree on it, and on every other request field,
+    /// therefore produce the same samples, so a cache of reduced decodes can be
+    /// keyed by this level rather than by the footprint that was asked for.
+    pub fn reduce_levels(&self, resolution: DecodeResolution) -> Result<u8> {
+        select_reduce_levels(&self.codestream, resolution)
+    }
+
     /// Dimensions produced by a full-image decode at `resolution`.
     ///
     /// This lets callers allocate a final destination before calling
     /// [`Jp2Decoder::decode_into`], including for reduced-resolution requests.
     pub fn decoded_dimensions(&self, resolution: DecodeResolution) -> Result<(u32, u32)> {
-        let reduce_levels = select_reduce_levels(&self.codestream, resolution)?;
+        let reduce_levels = self.reduce_levels(resolution)?;
         let siz = &self.codestream.siz;
         let (x0, x1) = reduced_axis_bounds(
             siz.x_origin,
@@ -3078,6 +3092,67 @@ mod tests {
             panic!("expected packed AtLeast raster");
         };
         assert_eq!((at_least.width, at_least.height), (129, 65));
+    }
+
+    /// `DecodeMetadata::reduce_levels` is the reduction a decode actually
+    /// uses: footprints that select one level decode to the same raster, at
+    /// that level's size, so it is a sound cache identity for reduced decodes.
+    #[test]
+    fn reduce_levels_names_the_resolution_a_decode_uses() {
+        let (width, height) = (257, 129);
+        let image =
+            Image::from_gray_bytes(width, height, &gray_fixture(width, height)).expect("source");
+        let encoded = crate::encode(
+            &image,
+            &crate::EncodeOptions {
+                quality: 75,
+                format: crate::OutputFormat::Jp2,
+                tile_policy: crate::TilePolicy::Single,
+                ..Default::default()
+            },
+        )
+        .expect("encode lossy jp2");
+        let meta = inspect_jp2(&encoded).expect("inspect");
+        assert!(meta.codestream.cod.decomposition_levels >= 3);
+
+        let at_least = |width: u32, height: u32| DecodeResolution::AtLeast {
+            width,
+            height,
+            quality_margin: 1.0,
+        };
+        let level = |resolution| meta.reduce_levels(resolution).expect("reduce levels");
+        assert_eq!(level(DecodeResolution::Full), 0);
+        assert_eq!(level(DecodeResolution::ReduceLevels(2)), 2);
+        // Level 1 is 129x65 and level 2 is 65x33: a footprint keeps the
+        // smallest level that still covers it.
+        assert_eq!(level(at_least(257, 129)), 0);
+        assert_eq!(level(at_least(129, 65)), 1);
+        assert_eq!(level(at_least(66, 34)), 1);
+        assert_eq!(level(at_least(65, 33)), 2);
+        assert!(meta.reduce_levels(at_least(0, 33)).is_err());
+
+        let decode = |resolution| {
+            let request = DecodeRequest {
+                resolution,
+                output: DecodeOutputFormat::Gray8,
+                ..Default::default()
+            };
+            let DecodeResult::Raster(raster) =
+                decode_jp2_request(&encoded, &request).expect("decode")
+            else {
+                panic!("expected packed raster");
+            };
+            raster
+        };
+        let one_level = decode(DecodeResolution::ReduceLevels(1));
+        assert_eq!(decode(at_least(129, 65)), one_level);
+        assert_eq!(decode(at_least(70, 40)), one_level);
+        assert_eq!(
+            (one_level.width, one_level.height),
+            meta.decoded_dimensions(at_least(70, 40))
+                .expect("dimensions")
+        );
+        assert_ne!(decode(at_least(65, 33)), one_level);
     }
 
     #[test]

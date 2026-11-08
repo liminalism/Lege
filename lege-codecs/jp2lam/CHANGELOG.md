@@ -5,7 +5,7 @@
 Changes since 0.3.0 (published 2026-11-03). The decoder is bit-identical to
 0.3.0 on every stream in the renderer's corpus (20 streams, two reduction
 levels each) and on the crate's own test suite; the public API gains one
-function.
+function and one `DecodeMetadata` method.
 
 ### Decoding performance (serial)
 
@@ -28,6 +28,11 @@ function.
 ### API
 
 - `decode_with_stats` returns per-stage timings beside the decoded image.
+- `DecodeMetadata::reduce_levels` reports how many wavelet levels a decode
+  at a given `DecodeResolution` drops, using the rule every decode path
+  applies. Decodes that agree on it are identical, so a cache of reduced
+  decodes (the PDF renderer's) can key on the level rather than on the
+  requested footprint.
 
 ### Encoder fix
 
