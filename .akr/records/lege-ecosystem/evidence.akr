@@ -1039,6 +1039,31 @@ record lege-ecosystem.evidence.gui-file-tiles-beside-process-button-20261108/1 :
     author "dk"
 }
 
+record lege-ecosystem.evidence.gui-file-tiles-grouped-by-kind-render-20261108/1 : evidence {
+    title "shelf_review_snapshot (LEGE_SHELF_SNAPSHOT_DIR, --ignored) with three PDFs, two ZIPs and a folder in and two PDFs out. At 1040x760 the tiles read '3 PDFs' with badge 3, '2 ZIP files' with badge 2, then 'Scans 1923', and '2 PDFs' with badge 2 at the right, all at full icon size. At 720x660 all three kinds fit in narrower tiles with smaller icons ('2 ZIP…' is truncated) and no +N. With one file, named two-line tiles appear and no badge."
+    state verified
+    result pass
+    method observation
+    observed_at git:34d4291f7f0418bc866c9b4478e07c7058b731b8
+    summary """
+        shelf_review_snapshot (LEGE_SHELF_SNAPSHOT_DIR, --ignored) with three PDFs, two ZIPs and a folder in and two PDFs out. At 1040x760 the tiles read '3 PDFs' with badge 3, '2 ZIP files' with badge 2, then 'Scans 1923', and '2 PDFs' with badge 2 at the right, all at full icon size. At 720x660 all three kinds fit in narrower tiles with smaller icons ('2 ZIP…' is truncated) and no +N. With one file, named two-line tiles appear and no badge.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.gui-file-tiles-grouped-by-kind-tests-20261108/1 : evidence {
+    title "GUI crate: 75 passed, 4 ignored, 0 failed (uncommitted working tree on 34d4291f). New tests: files_group_by_kind_pdfs_then_zips_then_folders, a_group_is_captioned_by_its_size, pdfs_zips_and_folders_all_fit_beside_the_button_at_every_window_size (1x/1.5x/2x at 720x660, 1040x760 and 1600x1000, no +N), the_shell_data_object_lists_every_file_for_a_drop (CF_HDROP lists both files from two folders), a_drop_of_several_files_queues_every_one_of_them (3-file drop plus a drop during the check: all 4 queued in order). debug-fast build of lege and lege-gui succeeded."
+    state verified
+    result pass
+    method command
+    observed_at git:34d4291f7f0418bc866c9b4478e07c7058b731b8
+    command "cargo test -p lege-gui-liminalui"
+    summary """
+        GUI crate: 75 passed, 4 ignored, 0 failed (uncommitted working tree on 34d4291f). New tests: files_group_by_kind_pdfs_then_zips_then_folders, a_group_is_captioned_by_its_size, pdfs_zips_and_folders_all_fit_beside_the_button_at_every_window_size (1x/1.5x/2x at 720x660, 1040x760 and 1600x1000, no +N), the_shell_data_object_lists_every_file_for_a_drop (CF_HDROP lists both files from two folders), a_drop_of_several_files_queues_every_one_of_them (3-file drop plus a drop during the check: all 4 queued in order). debug-fast build of lege and lege-gui succeeded.
+        """
+    author "dk"
+}
+
 record lege-ecosystem.evidence.gui-smooth-edges-and-file-shelf-20261108/1 : evidence {
     title "Windows 11, RTX 4060 Laptop at 100% scale, uncommitted tree. GUI crate: 70 passed, 4 ignored (review/diagnostic), 0 failed; clippy flags nothing in the new code. New tests: shelf layout at 1x/1.5x/2x and widths 704-1600 with 0-40 files (no overlap, halves apart, every file shown or counted in a +N tile), bands keep the shelf a separate row 10px under status, two-line names fit and keep .pdf, the shell returns 48/96/144px .pdf icons and a 64px folder icon, the shell data object answers QueryGetData for CF_HDROP, straight-alpha icons are not divided again. Snapshots: smooth corners and darker stems at 1x and 1.5x; shelf shows the Edge PDF icon, the folder icon and a blank-document icon for .djvu with wrapped names. The drag gesture itself was not automated (it would move the user's mouse and drop a real file)."
     state verified

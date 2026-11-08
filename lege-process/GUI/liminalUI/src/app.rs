@@ -194,6 +194,9 @@ pub struct Dashboard {
     receiver: Receiver<Message>,
     waker: Waker,
     shelf: crate::file_tiles::Shelf,
+    /// Files dropped on the window and not yet checked: one drop of several
+    /// files arrives as several calls, which must become one input batch.
+    dropped: Vec<PathBuf>,
 }
 
 impl LegeApp {
@@ -342,9 +345,9 @@ impl PixelApp for LegeApp {
         self.dashboard.poll();
         // A tile drag starts here, after the frame that saw the pointer move:
         // the shell's drag loop is modal and must not run inside a paint.
-        if let Some(path) = self.dashboard.shelf.pending_drag.take() {
-            crate::shell_files::drag_out(self.hwnd, &path);
-            self.dashboard.shelf.recent_drag = Some((path, Instant::now()));
+        if let Some(paths) = self.dashboard.shelf.pending_drag.take() {
+            crate::shell_files::drag_out(self.hwnd, &paths);
+            self.dashboard.shelf.recent_drag = Some((paths, Instant::now()));
             // The release happened inside the shell's loop; the window never
             // saw it, so nothing here may think the button is still down.
             self.input.cancel_pointer();
@@ -402,9 +405,9 @@ impl PixelApp for LegeApp {
         if self.dashboard.shelf.is_own_drop(&path) {
             return;
         }
-        if !self.dashboard.running() && !self.dashboard.input_busy() {
-            self.dashboard.probe_paths(vec![path]);
-        }
+        // The shell hands over a multi-file drop one file per call, all
+        // before the next frame. Collect them; `poll` checks them as one batch.
+        self.dashboard.dropped.push(path);
     }
     fn on_focus_changed(&mut self, focused: bool) {
         if !focused {
@@ -508,6 +511,7 @@ impl Dashboard {
             handles: Vec::new(),
             notices: VecDeque::new(),
             shelf: crate::file_tiles::Shelf::default(),
+            dropped: Vec::new(),
             modal: None,
             modal_scroll: ScrollState::new(),
             log: crate::logging::load_log_entries().unwrap_or_default(),
@@ -658,7 +662,23 @@ impl Dashboard {
                 }
             }
         }
+        self.check_dropped();
         self.notices.retain(|notice| notice.until > Instant::now());
+    }
+    /// Check the files dropped since the last frame as one batch. A drop
+    /// while a run is going is ignored, as the Add buttons are; one while an
+    /// earlier batch is still being checked waits for it, rather than being
+    /// lost.
+    fn check_dropped(&mut self) {
+        if self.dropped.is_empty() {
+            return;
+        }
+        if self.running() {
+            self.dropped.clear();
+        } else if !self.input_busy() {
+            let paths = std::mem::take(&mut self.dropped);
+            self.probe_paths(paths);
+        }
     }
     fn worker_event(&mut self, event: WorkerProgressUpdate) {
         if !self.running() {
@@ -1643,9 +1663,6 @@ impl Dashboard {
     fn draw_tiles(&mut self, ui: &mut Ui<'_>, actions: &Actions) {
         let inputs = self.shelf_inputs();
         let outputs = self.shelf_outputs();
-        let size = ui.px(crate::file_tiles::ICON) as u32;
-        let shown: Vec<PathBuf> = inputs.iter().chain(&outputs).cloned().collect();
-        self.shelf.retain_icons(&shown, size);
         if let Some(crate::file_tiles::ShelfAction::Open(path)) =
             self.shelf
                 .draw(ui, actions.inputs, actions.outputs, &inputs, &outputs)
@@ -2427,35 +2444,41 @@ mod tests {
         let input = dir
             .join("The Buddha and the Sahibs - The Men Who Discovered India's Lost Religion.pdf");
         let second = dir.join("Structures.pdf");
+        let third = dir.join("Confederacy.pdf");
+        let zip = dir.join("Plates.zip");
+        let zip2 = dir.join("Maps.zip");
         let output = dir.join("The Buddha and the Sahibs_processed_2026-11-08.pdf");
-        let djvu = dir.join("Structures_processed_2026-11-08.djvu");
-        for file in [&input, &second, &output, &djvu] {
-            std::fs::write(
-                file,
-                b"%PDF-1.4
-%%EOF
-",
-            )
-            .unwrap();
+        let output2 = dir.join("Structures_processed_2026-11-08.pdf");
+        for file in [&input, &second, &third, &output, &output2] {
+            std::fs::write(file, b"%PDF-1.4\n%%EOF\n").unwrap();
         }
-        for (scale, name, (w, h)) in [
-            (1.0, "shelf-1x.png", (1040, 760)),
-            (1.5, "shelf-1.5x.png", (1560, 1140)),
+        for file in [&zip, &zip2] {
+            std::fs::write(file, b"PK\x05\x06").unwrap();
+        }
+        // Mixed: three PDFs, two ZIPs and a folder in, two PDFs out.
+        let mixed = [
+            (&input, Some(&output)),
+            (&zip, None),
+            (&second, Some(&output2)),
+            (&scans, None),
+            (&third, None),
+            (&zip2, None),
+        ];
+        // One file in, its output out: named tiles, no badge.
+        let single = [(&input, Some(&output))];
+        for (scale, name, (w, h), rows) in [
+            (1.0, "shelf-1x.png", (1040, 760), &mixed[..]),
+            (1.5, "shelf-1.5x.png", (1560, 1140), &mixed[..]),
+            (1.0, "shelf-minimum-1x.png", (720, 660), &mixed[..]),
+            (1.0, "shelf-single-1x.png", (1040, 760), &single[..]),
         ] {
             let mut app = LegeApp::new();
             app.snapshot_mode = true;
             let d = &mut app.dashboard;
-            for (id, (path, out)) in [
-                (&input, Some(&output)),
-                (&second, Some(&djvu)),
-                (&scans, None),
-            ]
-            .into_iter()
-            .enumerate()
-            {
+            for (id, (path, out)) in rows.iter().enumerate() {
                 d.rows.push(QueueRow {
                     task_id: id as u64,
-                    path: path.clone(),
+                    path: (*path).clone(),
                     output: out.cloned(),
                     state: if out.is_some() {
                         DocumentRunState::Completed
@@ -2969,6 +2992,43 @@ mod tests {
         let style = crate::theme::theme(appearance::active_palette()).body;
         let field = LeftCard::new(Rect::new(0, 0, 340, 236), Scale::ONE).resolution;
         assert!(text.measure("1200x800", style) <= field.w - 8);
+    }
+    #[test]
+    fn a_drop_of_several_files_queues_every_one_of_them() {
+        // Image folders: checking them needs no `lege` worker.
+        let dir = tempfile::tempdir().unwrap();
+        let folders: Vec<PathBuf> = (0..4)
+            .map(|i| {
+                let folder = dir.path().join(format!("scans {i}"));
+                std::fs::create_dir(&folder).unwrap();
+                std::fs::write(folder.join("page.png"), b"").unwrap();
+                folder
+            })
+            .collect();
+        let mut app = LegeApp::new();
+        let wait_for = |app: &mut LegeApp, count: usize| {
+            let deadline = Instant::now() + Duration::from_secs(20);
+            while app.dashboard.queue.len() < count || app.dashboard.input_busy() {
+                assert!(
+                    Instant::now() < deadline,
+                    "{} queued",
+                    app.dashboard.queue.len()
+                );
+                app.dashboard.poll();
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        };
+        // One drop of three: the shell calls once per file, before a frame.
+        for folder in &folders[..3] {
+            app.on_file_drop(folder.clone());
+        }
+        app.dashboard.poll();
+        // A further drop while those are still being checked waits for them.
+        app.on_file_drop(folders[3].clone());
+        wait_for(&mut app, 4);
+        let queued: Vec<_> = app.dashboard.queue.iter().map(|i| &i.file_path).collect();
+        assert_eq!(queued, folders.iter().collect::<Vec<_>>());
+        assert!(app.dashboard.dropped.is_empty());
     }
     fn real_worker(cancel: bool, batch: bool) {
         let input =

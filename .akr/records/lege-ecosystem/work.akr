@@ -1856,6 +1856,41 @@ record lege-ecosystem.work.gui-file-tiles-beside-process-button/1 : work {
     author "dk"
 }
 
+record lege-ecosystem.work.gui-file-tiles-grouped-by-kind/1 : work {
+    title "GUI: one file tile per kind (PDF, ZIP, folder) with a count badge; multi-file drops queue every file"
+    state completed
+    scope [ path "lege-process/GUI/liminalUI/src/**", path "lege-process/language_service/**" ]
+    intent """
+        Group the input and output file tiles by kind, ordered PDF, ZIP, folder and then other extensions. Each tile shows the first file's shell icon, a count badge when it holds more than one file, and a caption of '12 PDFs' (or the file name for a single file). Tiles narrow to 48 logical px before anything folds into '+N', so all three input kinds fit beside the Process button at the minimum window size. Dragging a grouped tile drags all of its files through one shell data object; double-clicking a grouped tile opens the folder of its first file. Fix the drop handler: the shell delivers a multi-file drop as one on_file_drop call per file, and every call after the first was discarded because the first had already made input busy. Drops are now collected and checked as one batch, and a drop that arrives while an earlier batch is still being checked waits for it instead of being lost.
+        """
+    note """
+        Folders can be queued together with PDFs and ZIPs; the backend processes each queue item independently.
+        """
+    acceptance {
+        check gui-tests {
+            statement """
+                The GUI crate tests pass, including grouping order, captions, three kinds fitting at every window size, the multi-file shell data object, and a multi-file drop queuing every file.
+                """
+            method command
+            command "cargo test -p lege-gui-liminalui"
+            verified_by [
+                @lege-ecosystem.evidence.gui-file-tiles-grouped-by-kind-tests-20261108/1
+            ]
+        }
+        check review-render {
+            statement """
+                Review renders at 1040x760 (1x and 1.5x), 720x660, and the single-file case show grouped tiles with badges, no '+N' for three kinds, and named tiles without a badge for one file.
+                """
+            method observation
+            verified_by [
+                @lege-ecosystem.evidence.gui-file-tiles-grouped-by-kind-render-20261108/1
+            ]
+        }
+    }
+    after [ @lege-ecosystem.work.gui-file-tiles-beside-process-button ]
+    author "dk"
+}
+
 record lege-ecosystem.work.gui-smooth-edges-and-file-shelf/1 : work {
     title "GUI: smooth edges, crisper text, and a file shelf with draggable shell-icon tiles"
     state completed

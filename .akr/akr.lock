@@ -5,7 +5,7 @@ build {
     tool "akr 0.6.2"
     grammar "0.1"
     vocabulary "0.2"
-    source_graph "sha256:45159df1d94d972af5b57cc484c21333d25b5aaa3feccc79f1800d5293f7a018"
+    source_graph "sha256:4a72a95ea88962197b4dd83debb37c81d42ebc684eef76f38cb15fe30960b12e"
 }
 
 source ".akr/project.akr" {
@@ -64,8 +64,8 @@ source ".akr/records/lege-ecosystem/decisions.akr" {
 }
 
 source ".akr/records/lege-ecosystem/evidence.akr" {
-    hash "sha256:96127e16e8333823f92ee8692d84899ddcbb22925840779854abc07afde4d114"
-    records 288
+    hash "sha256:4445a2f7860e9f2d271ea5dcac70eeb7defbbb27109727ba255fb12b43533765"
+    records 290
 }
 
 source ".akr/records/lege-ecosystem/milestones.akr" {
@@ -99,8 +99,8 @@ source ".akr/records/lege-ecosystem/requirements.akr" {
 }
 
 source ".akr/records/lege-ecosystem/work.akr" {
-    hash "sha256:5183985004cc05462e936ac8518b6910a282db69784f1345a5d4ae29f5b1ea0d"
-    records 155
+    hash "sha256:b0846b25472e90a2d36ef9f0115a9d81ab8ab833e3565579ecd6a2a0876f4f19"
+    records 156
 }
 
 resolution @lege-ecosystem.assessment.glyph-outlines-rasterized-into-a-jbig2-layer/1 {
@@ -293,6 +293,12 @@ resolution @lege-ecosystem.work.glyph-font-text-output/1 {
     slot implements
     to @lege-ecosystem.decision.jbig2-is-the-default-pdf-text-format-again/1
     hash "sha256:e57a8c2b7f4db5f8ef23e5d6d06371d3c34dfa86b6687175ed136e924bba607c"
+}
+
+resolution @lege-ecosystem.work.gui-file-tiles-grouped-by-kind/1 {
+    slot after
+    to @lege-ecosystem.work.gui-file-tiles-beside-process-button/1
+    hash "sha256:114f3637f5d54eb29d5b8df93b4ea416a5264e1957533db123b871aef06d155c"
 }
 
 resolution @lege-ecosystem.work.jbig2-06-bounded-headroom-pass/2 {
@@ -1528,6 +1534,16 @@ seal @lege-ecosystem.evidence.glyphfont-stage4-verification/1 {
 seal @lege-ecosystem.evidence.gui-file-tiles-beside-process-button-20261108/1 {
     state verified
     hash "sha256:5cbfcb70525e9b4663360a7f4a22b0acb12026d94cb48cc8c75acb096d8231b0"
+}
+
+seal @lege-ecosystem.evidence.gui-file-tiles-grouped-by-kind-render-20261108/1 {
+    state verified
+    hash "sha256:f93cc6847a36e041684852e57843f7623316f673a9852fb26f89ac0530191952"
+}
+
+seal @lege-ecosystem.evidence.gui-file-tiles-grouped-by-kind-tests-20261108/1 {
+    state verified
+    hash "sha256:86b3cdcd1250beb069807dd8b3f8fc64cea17c9bf34ac9c9af6e8f3c4199ede0"
 }
 
 seal @lege-ecosystem.evidence.gui-smooth-edges-and-file-shelf-20261108/1 {
@@ -4668,6 +4684,11 @@ seal @lege-ecosystem.work.fuse-tier-1-output-and-dequantization/1 {
 seal @lege-ecosystem.work.gui-file-tiles-beside-process-button/1 {
     state completed
     hash "sha256:114f3637f5d54eb29d5b8df93b4ea416a5264e1957533db123b871aef06d155c"
+}
+
+seal @lege-ecosystem.work.gui-file-tiles-grouped-by-kind/1 {
+    state completed
+    hash "sha256:bb2811eab9d1306028f0e6c2abe00483064f5f33ff4e6c30068a6e12e0aa0e99"
 }
 
 seal @lege-ecosystem.work.gui-smooth-edges-and-file-shelf/1 {

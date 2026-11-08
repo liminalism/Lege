@@ -4,15 +4,15 @@
 //! reader's icon for a `.pdf`, the folder icon for a folder — rendered by the
 //! shell at exactly the size asked for, so a tile's icon is drawn one shell
 //! pixel per screen pixel at any display scale. Dragging hands the shell's own
-//! data object for the file to `SHDoDragDrop`, which supplies the drag image
-//! and speaks every format a drop target can ask for (file list, shell item,
-//! file contents), so the file can be dropped on Explorer, the desktop, a mail
-//! or chat window, or any other application.
+//! data object for the files to `SHDoDragDrop`, which supplies the drag image
+//! and speaks every format a drop target can ask for (file list, shell items,
+//! file contents), so the files can be dropped on Explorer, the desktop, a
+//! mail or chat window, or any other application.
 //!
 //! Elsewhere there is no icon (the tile draws a generic page or folder) and no
 //! drag-out.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use liminalkit_raster::Bitmap;
 
@@ -42,17 +42,17 @@ pub enum DragOutcome {
     Unavailable,
 }
 
-/// Drag `path` out of the window `hwnd`, offering a copy. Blocks in the
-/// shell's modal drag loop until the button is released; window messages keep
-/// being pumped meanwhile, so the window stays responsive.
-pub fn drag_out(hwnd: isize, path: &Path) -> DragOutcome {
+/// Drag `paths` out of the window `hwnd` together, offering a copy. Blocks
+/// in the shell's modal drag loop until the button is released; window
+/// messages keep being pumped meanwhile, so the window stays responsive.
+pub fn drag_out(hwnd: isize, paths: &[PathBuf]) -> DragOutcome {
     #[cfg(windows)]
     {
-        windows_impl::drag_out(hwnd, path)
+        windows_impl::drag_out(hwnd, paths)
     }
     #[cfg(not(windows))]
     {
-        let _ = (hwnd, path);
+        let _ = (hwnd, paths);
         DragOutcome::Unavailable
     }
 }
@@ -60,7 +60,7 @@ pub fn drag_out(hwnd: isize, path: &Path) -> DragOutcome {
 #[cfg(windows)]
 mod windows_impl {
     use std::os::windows::ffi::OsStrExt;
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
 
     use liminalkit_raster::Bitmap;
     use windows::Win32::Foundation::{HWND, SIZE};
@@ -71,7 +71,8 @@ mod windows_impl {
     use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx, IDataObject};
     use windows::Win32::System::Ole::DROPEFFECT_COPY;
     use windows::Win32::UI::Shell::{
-        BHID_DataObject, IShellItem, IShellItemImageFactory, SHCreateItemFromParsingName,
+        BHID_DataObject, ILCreateFromPathW, ILFree, IShellItem, IShellItemArray,
+        IShellItemImageFactory, SHCreateItemFromParsingName, SHCreateShellItemArrayFromIDLists,
         SHDoDragDrop, SIIGBF_BIGGERSIZEOK, SIIGBF_ICONONLY,
     };
     use windows::core::PCWSTR;
@@ -227,22 +228,46 @@ mod windows_impl {
         }
     }
 
-    pub(super) fn drag_out(hwnd: isize, path: &Path) -> DragOutcome {
-        let Ok(item) = shell_item(path) else {
-            return DragOutcome::Unavailable;
-        };
-        // The shell's own data object for the file: CF_HDROP, the shell ID
-        // list and the file's contents, whatever the target asks for.
-        // SAFETY: plain COM calls on live interfaces; a null drop source
-        // makes the shell supply its own, and the drag image with it.
-        let data: windows::core::Result<IDataObject> =
-            unsafe { item.BindToHandler(None, &BHID_DataObject) };
-        let Ok(data) = data else {
+    /// The shell's data object for `paths`, all in one: CF_HDROP listing
+    /// every file, the shell ID lists and the files' contents, whatever a
+    /// drop target asks for. The files may sit in different folders.
+    fn data_object(paths: &[PathBuf]) -> Option<IDataObject> {
+        ensure_com();
+        let mut ids = Vec::with_capacity(paths.len());
+        for path in paths {
+            let name = wide(path);
+            // SAFETY: `name` is NUL-terminated; the ID list is freed below.
+            let id = unsafe { ILCreateFromPathW(PCWSTR(name.as_ptr())) };
+            if id.is_null() {
+                continue;
+            }
+            ids.push(id.cast_const());
+        }
+        let data = (!ids.is_empty())
+            .then(|| {
+                // SAFETY: every entry is a live absolute ID list; the array
+                // copies them, so they are ours to free afterwards.
+                let items: IShellItemArray =
+                    unsafe { SHCreateShellItemArrayFromIDLists(&ids) }.ok()?;
+                // SAFETY: plain COM call on a live interface.
+                unsafe { items.BindToHandler(None, &BHID_DataObject) }.ok()
+            })
+            .flatten();
+        for id in ids {
+            // SAFETY: created by ILCreateFromPathW above, freed once.
+            unsafe { ILFree(Some(id)) };
+        }
+        data
+    }
+
+    pub(super) fn drag_out(hwnd: isize, paths: &[PathBuf]) -> DragOutcome {
+        let Some(data) = data_object(paths) else {
             return DragOutcome::Unavailable;
         };
         let window = HWND(hwnd as *mut core::ffi::c_void);
-        // Copy only: a drop on Explorer must never move the file away from
-        // where the queue and the output list say it is.
+        // Copy only: a drop on Explorer must never move a file away from
+        // where the queue and the output list say it is. A null drop source
+        // makes the shell supply its own, and the drag image with it.
         match unsafe { SHDoDragDrop(Some(window), &data, None, DROPEFFECT_COPY) } {
             Ok(effect) if effect.0 != 0 => DragOutcome::Dropped,
             Ok(_) => DragOutcome::Cancelled,
@@ -282,13 +307,17 @@ mod windows_impl {
         }
 
         #[test]
-        fn the_shell_data_object_offers_the_file_for_a_drop() {
+        fn the_shell_data_object_lists_every_file_for_a_drop() {
             use windows::Win32::System::Com::{DVASPECT_CONTENT, FORMATETC, TYMED_HGLOBAL};
-            use windows::Win32::System::Ole::CF_HDROP;
+            use windows::Win32::System::Ole::{CF_HDROP, ReleaseStgMedium};
+            use windows::Win32::UI::Shell::{DragQueryFileW, HDROP};
             let pdf = temp("drag test.pdf");
             std::fs::write(&pdf, b"%PDF-1.4\n%%EOF\n").unwrap();
-            let item = shell_item(&pdf).unwrap();
-            let data: IDataObject = unsafe { item.BindToHandler(None, &BHID_DataObject) }.unwrap();
+            // A second file in another folder: a group's files need not share one.
+            let other_dir = pdf.parent().unwrap().join("elsewhere");
+            std::fs::create_dir_all(&other_dir).unwrap();
+            let zip = other_dir.join("pages.zip");
+            std::fs::write(&zip, b"PK\x05\x06").unwrap();
             let format = FORMATETC {
                 cfFormat: CF_HDROP.0,
                 ptd: std::ptr::null_mut(),
@@ -296,8 +325,25 @@ mod windows_impl {
                 lindex: -1,
                 tymed: TYMED_HGLOBAL.0 as u32,
             };
-            // S_OK: a drop target asking for a file list gets one.
-            assert!(unsafe { data.QueryGetData(&format) }.is_ok());
+            for paths in [vec![pdf.clone()], vec![pdf.clone(), zip.clone()]] {
+                let data = data_object(&paths).expect("a data object");
+                // S_OK: a drop target asking for a file list gets one.
+                assert!(unsafe { data.QueryGetData(&format) }.is_ok());
+                let mut medium = unsafe { data.GetData(&format) }.unwrap();
+                let drop = HDROP(unsafe { medium.u.hGlobal.0 });
+                let count = unsafe { DragQueryFileW(drop, u32::MAX, None) };
+                let mut listed = Vec::new();
+                for i in 0..count {
+                    let mut buf = [0u16; 1024];
+                    let n = unsafe { DragQueryFileW(drop, i, Some(&mut buf)) } as usize;
+                    listed.push(PathBuf::from(String::from_utf16_lossy(&buf[..n])));
+                }
+                unsafe { ReleaseStgMedium(&mut medium) };
+                let canonical = |p: &Path| std::fs::canonicalize(p).unwrap();
+                let listed: Vec<_> = listed.iter().map(|p| canonical(p)).collect();
+                let wanted: Vec<_> = paths.iter().map(|p| canonical(p)).collect();
+                assert_eq!(listed, wanted);
+            }
         }
 
         #[test]

@@ -1,15 +1,20 @@
-//! File tiles beside the process button: every input as a tile at the
-//! bottom-left, every finished output as a tile at the bottom-right.
+//! File tiles beside the process button: the inputs at the bottom-left, the
+//! finished outputs at the bottom-right, one tile per kind of file.
 //!
-//! A tile is the file's own shell icon (the icon Explorer shows for a `.pdf`,
-//! a `.djvu` or a folder), rendered at the tile's physical pixel size, with the
-//! file name under it in at most two lines. Press a tile and move the pointer
-//! to drag the file out of the window — to Explorer, the desktop or any
-//! application that takes files; double-click to open it. The tiles have the
-//! status card's bottom row to themselves (`layout::Actions::inputs` and
-//! `outputs`), so a tile never covers text.
+//! Files are grouped by kind: PDFs, then ZIP archives, then image folders
+//! (then any other kind, such as a run's DjVu or EPUB outputs). A group's tile
+//! is the shell icon of its first file (the icon Explorer shows for a `.pdf`,
+//! a `.zip` or a folder), rendered at the tile's physical pixel size, with a
+//! count badge on the icon once the group holds more than one file. Under the
+//! icon is the file's name in at most two lines, or the group's size ("12
+//! PDFs"). Press a tile and move the pointer to drag its files out of the
+//! window, all together — to Explorer, the desktop or any application that
+//! takes files; double-click to open a single file, or the folder holding a
+//! group's first file. The tiles have the status card's bottom row to
+//! themselves (`layout::Actions::inputs` and `outputs`), so a tile never covers
+//! text.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -18,12 +23,18 @@ use liminalkit_shell::Scale;
 use liminalkit_text::{Align, TextStyle};
 use liminalkit_ui::Ui;
 
-/// Logical size of a tile's icon.
+use crate::gui_text::tr;
+
+/// Logical size of a tile's icon, when the tile is wide enough for it.
 pub const ICON: i32 = 56;
 /// Logical width of a tile.
 pub const TILE_W: i32 = 132;
 /// Logical height of a tile: icon, then two lines of name.
 pub const TILE_H: i32 = 104;
+/// Narrowest logical tile width: below it, the last tile becomes a "+N".
+/// Narrow enough that PDFs, ZIPs and folders all fit beside the process
+/// button at the window's minimum width, with a smaller icon.
+const MIN_TILE_W: i32 = 48;
 /// Logical gap between tiles.
 const TILE_GAP: i32 = 6;
 /// Pointer travel, in logical pixels, that turns a press on a tile into a drag.
@@ -31,28 +42,104 @@ const DRAG_THRESHOLD: i32 = 4;
 /// Two presses on one tile within this make a double-click.
 const DOUBLE_CLICK: Duration = Duration::from_millis(450);
 
+/// What files are grouped by, in the order their tiles appear.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Kind {
+    Pdf,
+    Zip,
+    Folder,
+    /// Any other file, by lower-case extension: a run's `.djvu` or `.epub`.
+    Other(String),
+}
+
+impl Kind {
+    pub fn of(path: &Path) -> Self {
+        let extension = path
+            .extension()
+            .map(|e| e.to_string_lossy().to_lowercase())
+            .unwrap_or_default();
+        // The extension first: it settles every queued file without asking
+        // the file system, which this does for each file every frame.
+        match extension.as_str() {
+            "pdf" => Self::Pdf,
+            "zip" => Self::Zip,
+            _ if path.is_dir() => Self::Folder,
+            _ => Self::Other(extension),
+        }
+    }
+}
+
+/// The files of one kind, in the order they were added.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Group {
+    pub kind: Kind,
+    pub paths: Vec<PathBuf>,
+}
+
+/// `paths` grouped by kind, groups in [`Kind`] order.
+pub fn group(paths: &[PathBuf]) -> Vec<Group> {
+    let mut groups: Vec<Group> = Vec::new();
+    for path in paths {
+        let kind = Kind::of(path);
+        match groups.iter_mut().find(|g| g.kind == kind) {
+            Some(group) => group.paths.push(path.clone()),
+            None => groups.push(Group {
+                kind,
+                paths: vec![path.clone()],
+            }),
+        }
+    }
+    groups.sort_by(|a, b| a.kind.cmp(&b.kind));
+    groups
+}
+
+/// The caption of a tile holding more than one file: "12 PDFs".
+pub fn group_label(kind: &Kind, count: usize) -> String {
+    let (template, extension) = match kind {
+        Kind::Pdf => (tr("tile_pdfs"), String::new()),
+        Kind::Zip => (tr("tile_zips"), String::new()),
+        Kind::Folder => (tr("tile_folders"), String::new()),
+        Kind::Other(extension) => (tr("tile_files"), extension.to_uppercase()),
+    };
+    template
+        .replace("{n}", &count.to_string())
+        .replace("{ext}", &extension)
+}
+
 /// Where the tiles of one frame go.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ShelfLayout {
     /// The input area (left of the process button) and the output area (right).
     pub left: Rect,
     pub right: Rect,
-    /// One rectangle per shown input, from the left edge rightwards.
+    /// One rectangle per shown input tile, from the left edge rightwards.
     pub inputs: Vec<Rect>,
-    /// The "+N" tile when the inputs do not all fit, and how many it stands for.
+    /// The "+N" tile when the input tiles do not all fit, and how many tiles
+    /// it stands for (the last ones).
     pub inputs_more: Option<(Rect, usize)>,
-    /// One rectangle per shown output, from the right edge leftwards.
+    /// One rectangle per shown output tile, from the right edge leftwards.
     pub outputs: Vec<Rect>,
     pub outputs_more: Option<(Rect, usize)>,
 }
 
 /// Lay out `inputs` tiles in `left`, from its left edge, and `outputs` in
-/// `right`, from its right edge.
+/// `right`, from its right edge. Tiles narrow, down to [`MIN_TILE_W`], before
+/// any is folded into a "+N" tile.
 pub fn layout(left: Rect, right: Rect, s: Scale, inputs: usize, outputs: usize) -> ShelfLayout {
     let gap = s.px(TILE_GAP);
     let place = |area: Rect, count: usize, from_left: bool| {
-        let tile_w = s.px(TILE_W).min(area.w.max(1));
-        let capacity = (((area.w + gap) / (tile_w + gap)).max(1)) as usize;
+        if count == 0 {
+            return (Vec::new(), None);
+        }
+        let room = area.w.max(1);
+        let fit = |n: usize| (room - gap * (n as i32 - 1)) / n as i32;
+        let min_w = s.px(MIN_TILE_W).min(room);
+        let slots = if fit(count) >= min_w {
+            count
+        } else {
+            (((room + gap) / (min_w + gap)).max(1)) as usize
+        };
+        let tile_w = fit(slots).min(s.px(TILE_W)).max(1);
         let rect = |i: usize| {
             let offset = i as i32 * (tile_w + gap);
             if from_left {
@@ -61,10 +148,10 @@ pub fn layout(left: Rect, right: Rect, s: Scale, inputs: usize, outputs: usize) 
                 Rect::new(area.right() - offset - tile_w, area.y, tile_w, area.h)
             }
         };
-        if count <= capacity {
+        if count <= slots {
             ((0..count).map(rect).collect::<Vec<_>>(), None)
         } else {
-            let shown = capacity - 1;
+            let shown = slots - 1;
             (
                 (0..shown).map(rect).collect(),
                 Some((rect(shown), count - shown)),
@@ -81,6 +168,12 @@ pub fn layout(left: Rect, right: Rect, s: Scale, inputs: usize, outputs: usize) 
         outputs,
         outputs_more,
     }
+}
+
+/// The icon's square in a tile: [`ICON`], or less in a narrow tile.
+fn icon_rect(ui: &Ui<'_>, tile: Rect) -> Rect {
+    let side = ui.px(ICON).min(tile.w - ui.px(4)).max(1);
+    Rect::new(tile.x + (tile.w - side) / 2, tile.y + ui.px(6), side, side)
 }
 
 /// A file's name in at most two lines of `width` pixels: the first as wrapped
@@ -130,12 +223,12 @@ pub fn name_lines(
 /// What a click on the shelf asks of the dashboard.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ShelfAction {
-    /// Open the file with its default application.
+    /// Open the file (or folder) with its default application.
     Open(PathBuf),
 }
 
 struct Press {
-    path: PathBuf,
+    paths: Vec<PathBuf>,
     x: i32,
     y: i32,
 }
@@ -146,22 +239,24 @@ pub struct Shelf {
     /// Shell icons by path and physical size. `None` when the shell has none,
     /// so it is not asked again every frame.
     icons: HashMap<(PathBuf, u32), Option<PreparedImage>>,
+    /// The icons drawn this frame; the rest leave the cache after it.
+    drawn: HashSet<(PathBuf, u32)>,
     press: Option<Press>,
-    last_click: Option<(PathBuf, Instant)>,
+    last_click: Option<(Vec<PathBuf>, Instant)>,
     /// A drag the window should start once this frame is done: the shell's
     /// drag loop is modal, and it must not run inside a paint.
-    pub pending_drag: Option<PathBuf>,
-    /// The last file dragged out, and when: a drop of that file back onto
+    pub pending_drag: Option<Vec<PathBuf>>,
+    /// The last files dragged out, and when: a drop of one of them back onto
     /// this window is the drag ending where it began, not a new input.
-    pub recent_drag: Option<(PathBuf, Instant)>,
+    pub recent_drag: Option<(Vec<PathBuf>, Instant)>,
 }
 
 impl Shelf {
-    /// Whether a dropped `path` is the file this window just dragged out.
+    /// Whether a dropped `path` is one this window just dragged out.
     pub fn is_own_drop(&self, path: &Path) -> bool {
-        self.recent_drag
-            .as_ref()
-            .is_some_and(|(dragged, at)| dragged == path && at.elapsed() < Duration::from_secs(3))
+        self.recent_drag.as_ref().is_some_and(|(dragged, at)| {
+            dragged.iter().any(|p| p == path) && at.elapsed() < Duration::from_secs(3)
+        })
     }
 
     /// Draw the input tiles in `left` and the output tiles in `right`. An
@@ -174,27 +269,38 @@ impl Shelf {
         inputs: &[PathBuf],
         outputs: &[PathBuf],
     ) -> Option<ShelfAction> {
+        let inputs = group(inputs);
+        let outputs = group(outputs);
         let plan = layout(left, right, ui.scale, inputs.len(), outputs.len());
+        self.drawn.clear();
         let mut action = None;
-        for (rect, path) in plan
+        for (rect, group) in plan
             .inputs
             .iter()
-            .zip(inputs)
-            .chain(plan.outputs.iter().zip(outputs))
+            .zip(&inputs)
+            .chain(plan.outputs.iter().zip(&outputs))
         {
-            if let Some(next) = self.tile(ui, *rect, path) {
+            if let Some(next) = self.tile(ui, *rect, group) {
                 action = Some(next);
             }
         }
-        for (rect, more) in [plan.inputs_more, plan.outputs_more].into_iter().flatten() {
-            more_tile(ui, rect, more);
+        for (more, groups) in [(plan.inputs_more, &inputs), (plan.outputs_more, &outputs)] {
+            if let Some((rect, hidden)) = more {
+                let files = groups[groups.len() - hidden..]
+                    .iter()
+                    .map(|g| g.paths.len())
+                    .sum();
+                more_tile(ui, rect, files);
+            }
         }
         self.follow_press(ui);
+        let drawn = &self.drawn;
+        self.icons.retain(|key, _| drawn.contains(key));
         action
     }
 
-    fn tile(&mut self, ui: &mut Ui<'_>, rect: Rect, path: &Path) -> Option<ShelfAction> {
-        let pressed = self.press.as_ref().is_some_and(|p| p.path == path);
+    fn tile(&mut self, ui: &mut Ui<'_>, rect: Rect, group: &Group) -> Option<ShelfAction> {
+        let pressed = self.press.as_ref().is_some_and(|p| p.paths == group.paths);
         let radius = ui.px(ui.theme.corner_radius);
         if pressed {
             let fill = ui.theme.selection;
@@ -203,17 +309,26 @@ impl Shelf {
             let fill = ui.theme.hover;
             ui.fill_rounded(rect, radius, fill);
         }
-        let side = ui.px(ICON);
-        let icon_rect = Rect::new(rect.x + (rect.w - side) / 2, rect.y + ui.px(6), side, side);
-        self.icon(ui, icon_rect, path);
-        let name = path
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_else(|| path.to_string_lossy().into_owned());
+        let first = &group.paths[0];
+        let icon_rect = icon_rect(ui, rect);
+        self.icon(ui, icon_rect, first);
+        let count = group.paths.len();
+        if count > 1 {
+            count_badge(ui, rect, icon_rect, count);
+        }
         let style = caption_style(ui);
         let line_h = ui.text.line_height(style).max(1);
         let text_w = rect.w - ui.px(8);
-        let lines = name_lines(ui.text, style, text_w, &name);
+        let lines = if count > 1 {
+            let label = group_label(&group.kind, count);
+            vec![ui.text.truncate(&label, text_w, style)]
+        } else {
+            let name = first
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| first.to_string_lossy().into_owned());
+            name_lines(ui.text, style, text_w, &name)
+        };
         let mut y = icon_rect.bottom() + ui.px(4);
         let colour = ui.theme.text;
         for line in &lines {
@@ -226,15 +341,21 @@ impl Shelf {
             let double = self
                 .last_click
                 .as_ref()
-                .is_some_and(|(last, at)| last == path && at.elapsed() < DOUBLE_CLICK);
+                .is_some_and(|(last, at)| *last == group.paths && at.elapsed() < DOUBLE_CLICK);
             if double {
                 self.last_click = None;
                 self.press = None;
-                return Some(ShelfAction::Open(path.to_owned()));
+                // One file opens; a group opens the folder its first file is in.
+                let target = if count == 1 {
+                    first.clone()
+                } else {
+                    first.parent().map_or_else(|| first.clone(), Path::to_owned)
+                };
+                return Some(ShelfAction::Open(target));
             }
-            self.last_click = Some((path.to_owned(), Instant::now()));
+            self.last_click = Some((group.paths.clone(), Instant::now()));
             self.press = Some(Press {
-                path: path.to_owned(),
+                paths: group.paths.clone(),
                 x,
                 y,
             });
@@ -256,7 +377,7 @@ impl Shelf {
         if let Some((x, y)) = ui.input.cursor()
             && ((x - press.x).abs() > threshold || (y - press.y).abs() > threshold)
         {
-            self.pending_drag = self.press.take().map(|p| p.path);
+            self.pending_drag = self.press.take().map(|p| p.paths);
             self.last_click = None;
         }
     }
@@ -264,6 +385,7 @@ impl Shelf {
     fn icon(&mut self, ui: &mut Ui<'_>, area: Rect, path: &Path) {
         let size = area.w.max(1) as u32;
         let key = (path.to_owned(), size);
+        self.drawn.insert(key.clone());
         let image = self.icons.entry(key).or_insert_with(|| {
             crate::shell_files::file_icon(path, size)
                 .map(|bitmap| PreparedImage::from_bitmap(&bitmap, size, size, Fit::Contain, 0.0))
@@ -273,13 +395,31 @@ impl Shelf {
             None => generic_icon(ui, area, path.is_dir()),
         }
     }
+}
 
-    /// Drop cached icons for files no longer on the shelf (and every size but
-    /// the current one), so the cache stays the size of the shelf.
-    pub fn retain_icons(&mut self, shown: &[PathBuf], size: u32) {
-        self.icons
-            .retain(|(path, s), _| *s == size && shown.iter().any(|p| p == path));
-    }
+/// How many files a tile holds, as a pill on its icon's top-right corner:
+/// text-coloured with the card's colour for the digits, so it reads on any
+/// icon in either theme, and ringed in the card's colour to stand off it.
+fn count_badge(ui: &mut Ui<'_>, tile: Rect, icon: Rect, count: usize) {
+    let mut style = ui.theme.body;
+    style.size = crate::theme::crisp_down(style.size * 0.85);
+    let text = count.to_string();
+    let h = ui.px(18);
+    let w = (ui.text.measure(&text, style) + ui.px(10)).max(h);
+    let x = (icon.right() + ui.px(6) - w)
+        .min(tile.right() - w)
+        .max(tile.x);
+    let y = (icon.y - ui.px(3)).max(tile.y);
+    let badge = Rect::new(x, y, w, h);
+    let ring = ui.px(2).max(1);
+    let (card, ink) = (ui.theme.panel, ui.theme.text);
+    ui.fill_rounded(
+        Rect::new(x - ring, y - ring, w + 2 * ring, h + 2 * ring),
+        h / 2 + ring,
+        card,
+    );
+    ui.fill_rounded(badge, h / 2, ink);
+    ui.label_styled(badge, &text, style, card, Align::Centre);
 }
 
 fn caption_style(ui: &Ui<'_>) -> TextStyle {
@@ -292,8 +432,7 @@ fn more_tile(ui: &mut Ui<'_>, rect: Rect, count: usize) {
     let radius = ui.px(ui.theme.corner_radius);
     let (fill, edge) = (ui.theme.panel_alt, ui.theme.panel_edge);
     let border = ui.px(ui.theme.border_width);
-    let side = ui.px(ICON);
-    let badge = Rect::new(rect.x + (rect.w - side) / 2, rect.y + ui.px(6), side, side);
+    let badge = icon_rect(ui, rect);
     ui.rounded(badge, radius, border, fill, edge);
     let mut style = ui.theme.heading;
     style.size = crate::theme::crisp(style.size * 1.2);
@@ -419,6 +558,67 @@ mod tests {
                             "outputs start at the right edge"
                         );
                     }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn files_group_by_kind_pdfs_then_zips_then_folders() {
+        let dir = tempfile::tempdir().unwrap();
+        let folder = dir.path().join("scans");
+        std::fs::create_dir(&folder).unwrap();
+        let p = |name: &str| dir.path().join(name);
+        let added = vec![
+            folder.clone(),
+            p("b.zip"),
+            p("one.pdf"),
+            p("out.djvu"),
+            p("C.ZIP"),
+            p("two.PDF"),
+        ];
+        let groups = group(&added);
+        let kinds: Vec<_> = groups.iter().map(|g| g.kind.clone()).collect();
+        assert_eq!(
+            kinds,
+            [
+                Kind::Pdf,
+                Kind::Zip,
+                Kind::Folder,
+                Kind::Other("djvu".into())
+            ]
+        );
+        // Within a group, the order the files were added in.
+        assert_eq!(groups[0].paths, [p("one.pdf"), p("two.PDF")]);
+        assert_eq!(groups[1].paths, [p("b.zip"), p("C.ZIP")]);
+        assert_eq!(groups[2].paths, [folder]);
+        assert!(group(&[]).is_empty());
+    }
+
+    #[test]
+    fn a_group_is_captioned_by_its_size() {
+        assert_eq!(group_label(&Kind::Pdf, 12), "12 PDFs");
+        assert_eq!(group_label(&Kind::Zip, 3), "3 ZIP files");
+        assert_eq!(group_label(&Kind::Folder, 2), "2 folders");
+        assert_eq!(group_label(&Kind::Other("djvu".into()), 4), "4 DJVU files");
+    }
+
+    #[test]
+    fn pdfs_zips_and_folders_all_fit_beside_the_button_at_every_window_size() {
+        for factor in [1.0, 1.5, 2.0] {
+            let s = Scale(factor);
+            for (w, h) in [(720, 660), (1040, 760), (1600, 1000)] {
+                let bands = crate::layout::Bands::new(s.px(w), s.px(h), s);
+                let a = crate::layout::Actions::new(bands.status.inset(s.px(8)), s);
+                let plan = layout(a.inputs, a.outputs, s, 3, 1);
+                assert_eq!(plan.inputs.len(), 3, "{w}x{h}@{factor}: no +N");
+                assert!(plan.inputs_more.is_none());
+                for r in &plan.inputs {
+                    assert!(r.w >= s.px(MIN_TILE_W) && r.w <= s.px(TILE_W));
+                }
+                if w >= 1040 {
+                    // At the default size and up, three full-size icons.
+                    assert!(plan.inputs[0].w >= s.px(ICON) + s.px(4), "{w}@{factor}");
                 }
             }
         }
