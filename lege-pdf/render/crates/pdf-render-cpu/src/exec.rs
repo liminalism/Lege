@@ -864,39 +864,9 @@ fn paint_image(
     } else {
         None
     };
-    // The opaque unmasked fast paths below (nearest, bilinear, low-bit LUT,
-    // RGB8 and CMYK area, bilevel box) paint the interior rectangle only,
-    // where `edge_coverage` is `None`; the generic body then paints the
-    // anti-aliased border ring around it, as it does for every masked path,
-    // so an image gets the same edge whether or not it carries a mask or a
-    // clip. That needs the off-diagonal inverse terms to be exactly zero (the
-    // per-axis interior test then reproduces `edge_coverage` bit for bit);
-    // a placement only within 1e-12 of axis-aligned keeps painting its whole
-    // rectangle by pixel centre. `Some(None)`: no pixel is interior, the
-    // generic body paints the whole draw.
-    let ring_hole = (img.inv.b == 0.0 && img.inv.c == 0.0 && img.inv.a != 0.0 && img.inv.d != 0.0)
-        .then(|| {
-            interior_span(img.inv.a, img.inv.e, x0, x1)
-                .zip(interior_span(img.inv.d, img.inv.f, y0, y1))
-                .map(|((hx0, hx1), (hy0, hy1))| [hx0, hx1, hy0, hy1])
-        });
-    // The rectangle those fast paths paint, and whether it is empty.
-    let [fx0, fx1, fy0, fy1] = match ring_hole {
-        None => [x0, x1, y0, y1],
-        Some(Some(hole)) => hole,
-        Some(None) => [x0, x0, y0, y0],
-    };
-    let fast_empty = fx0 >= fx1 || fy0 >= fy1;
-    // Set when an opaque fast path painted the interior, so the ring remains.
-    let mut ring_pending = false;
 
     if fast_rgb8 {
-        let result = if fast_empty {
-            (0, 0)
-        } else {
-            paint_axis_aligned_rgb8_nearest_opaque(img, surface, fx0, fy0, fx1, fy1)
-        };
-        ring_pending = true;
+        let result = paint_axis_aligned_rgb8_nearest_opaque(img, surface, x0, y0, x1, y1);
         covered = result.0;
         #[cfg(feature = "profiling")]
         {
@@ -904,12 +874,7 @@ fn paint_image(
             sample_taps = result.1;
         }
     } else if fast_rgb8_bilinear {
-        let result = if fast_empty {
-            (0, 0)
-        } else {
-            paint_axis_aligned_rgb8_bilinear_opaque(img, surface, fx0, fy0, fx1, fy1)
-        };
-        ring_pending = true;
+        let result = paint_axis_aligned_rgb8_bilinear_opaque(img, surface, x0, y0, x1, y1);
         covered = result.0;
         #[cfg(feature = "profiling")]
         {
@@ -917,12 +882,7 @@ fn paint_image(
             sample_taps = result.1;
         }
     } else if let Some(lut) = lut_nearest {
-        let result = if fast_empty {
-            (0, 0)
-        } else {
-            paint_axis_aligned_lut_nearest_opaque(img, lut, surface, fx0, fy0, fx1, fy1)
-        };
-        ring_pending = true;
+        let result = paint_axis_aligned_lut_nearest_opaque(img, lut, surface, x0, y0, x1, y1);
         covered = result.0;
         #[cfg(feature = "profiling")]
         {
@@ -930,12 +890,7 @@ fn paint_image(
             sample_taps = result.1;
         }
     } else if fast_rgb8_area {
-        let result = if fast_empty {
-            (0, 0)
-        } else {
-            paint_axis_aligned_rgb8_area_min_opaque(img, surface, fx0, fy0, fx1, fy1)
-        };
-        ring_pending = true;
+        let result = paint_axis_aligned_rgb8_area_min_opaque(img, surface, x0, y0, x1, y1);
         covered = result.0;
         #[cfg(feature = "profiling")]
         {
@@ -951,18 +906,9 @@ fn paint_image(
             sample_taps = result.1;
         }
     } else if let Some(result) = fast_cmyk_area
-        .then(|| {
-            // With nothing interior there is nothing to convert; the generic
-            // body paints the draw, as it would after a failed conversion.
-            if fast_empty {
-                Some((0, 0))
-            } else {
-                paint_axis_aligned_cmyk_area_min_opaque(img, surface, fx0, fy0, fx1, fy1)
-            }
-        })
+        .then(|| paint_axis_aligned_cmyk_area_min_opaque(img, surface, x0, y0, x1, y1))
         .flatten()
     {
-        ring_pending = true;
         covered = result.0;
         #[cfg(feature = "profiling")]
         {
@@ -971,12 +917,7 @@ fn paint_image(
             sample_taps = result.1;
         }
     } else if let Some(lut) = fast_binary.then(|| img.binary_box_lut()).flatten() {
-        let result = if fast_empty {
-            (0, 0, 0)
-        } else {
-            paint_axis_aligned_binary_box(img, lut, surface, cmask, fx0, fy0, fx1, fy1)
-        };
-        ring_pending = true;
+        let result = paint_axis_aligned_binary_box(img, lut, surface, cmask, x0, y0, x1, y1);
         covered = result.0;
         #[cfg(feature = "profiling")]
         {
@@ -1003,17 +944,6 @@ fn paint_image(
         }
         #[cfg(not(feature = "profiling"))]
         let _ = (totals.1, totals.2);
-    }
-    if ring_pending && let Some(hole) = ring_hole {
-        let band = paint_image_generic(img, surface, cmask, soft, blend, x0, y0, x1, y1, hole);
-        covered += band.0;
-        #[cfg(feature = "profiling")]
-        {
-            sample_attempts += band.1;
-            sample_taps += band.2;
-        }
-        #[cfg(not(feature = "profiling"))]
-        let _ = (band.1, band.2);
     }
     stats.covered_pixels += covered;
     stats.ops_painted += 1;
@@ -7224,6 +7154,35 @@ mod rgb8_area_min_tests {
         assert_surfaces_equal(&mut got, &mut want, "truncated");
     }
 
+    /// Compare only the pixels the generic body paints at full weight
+    /// (`edge_coverage` is `None`). A magnified bilinear draw is allowed ±1
+    /// per channel there: the generic bilinear tap weights can sum to 254/255
+    /// on an opaque image, where the fast path keeps it opaque.
+    fn assert_interior_equal(
+        img: &PreparedImage,
+        got: &mut Surface,
+        want: &mut Surface,
+        what: &str,
+    ) {
+        let bilinear_magnified = img.interpolation == InterpolationMode::Bilinear
+            && img.footprint[0] <= 1.0
+            && img.footprint[1] <= 1.0;
+        for y in 0..got.height {
+            let (g, r) = (got.row_mut(y).to_vec(), want.row_mut(y).to_vec());
+            for x in 0..got.width {
+                if img.edge_coverage(x as f64 + 0.5, y as f64 + 0.5).is_some() {
+                    continue;
+                }
+                let (gp, rp) = (&g[x * 4..x * 4 + 4], &r[x * 4..x * 4 + 4]);
+                let close = gp.iter().zip(rp).all(|(a, b)| a.abs_diff(*b) <= 1);
+                assert!(
+                    gp == rp || (bilinear_magnified && close),
+                    "{what}: interior pixel ({x}, {y}) is {gp:?}, generic body {rp:?}"
+                );
+            }
+        }
+    }
+
     /// `img` re-placed at device `(ox, oy)` with device size `w x h`, all
     /// fractional, so the draw has a partially covered border ring.
     fn place(mut img: PreparedImage, ox: f64, oy: f64, w: f64, h: f64) -> PreparedImage {
@@ -7290,15 +7249,15 @@ mod rgb8_area_min_tests {
     /// minified, near 1:1 and magnified; nearest and bilinear. Also covers
     /// `/ImageMask` stencils in both `/Decode` polarities.
     ///
-    /// Every path matches byte for byte, ring included. The opaque
+    /// Every masked path matches byte for byte, ring included. The opaque
     /// *unmasked* fast paths (`fast_rgb8`, `fast_rgb8_bilinear`,
     /// `fast_rgb8_area`, the CMYK area path, and Gray8/Indexed through their
-    /// RGB8 promotions) used to paint the ring by pixel centre, at full weight
-    /// or not at all; they now paint only the interior and leave the ring to
-    /// the generic body's A10 fractional edge coverage, like the masked paths
-    /// (option A of the 2026-11-08 scoping note's open decision). The
-    /// magnified bilinear interior matches exactly too, since the generic
-    /// bilinear sampler keeps an opaque image's alpha at 255.
+    /// RGB8 promotions) do not: they paint the ring by pixel centre, at full
+    /// weight or not at all, where the generic body paints its A10 fractional
+    /// edge coverage. That divergence predates this test and is a rendering
+    /// decision, not a fix to slip in (it changes every opaque image that
+    /// lands on fractional device coordinates); see the 2026-11-08 scoping
+    /// note. Until it is decided, those paths are held to the interior.
     #[test]
     fn fractional_placements_match_the_generic_body_including_the_border_ring() {
         let mut rng = Rng(0xb0d5_7a11_0f0f_1234);
@@ -7381,7 +7340,11 @@ mod rgb8_area_min_tests {
                             "{space_name} {mask_kind} {interpolation:?} src {sw}x{sh} at \
                              ({ox}, {oy}) size {w}x{h}"
                         );
-                        assert_surfaces_equal(&mut got, &mut want, &what);
+                        if mask_kind != "none" {
+                            assert_surfaces_equal(&mut got, &mut want, &what);
+                        } else {
+                            assert_interior_equal(&img, &mut got, &mut want, &what);
+                        }
                         checked += 1;
                     }
                 }
@@ -7424,7 +7387,7 @@ mod rgb8_area_min_tests {
                 let what = format!(
                     "gray1 {interpolation:?} src {sw}x{sh} at ({ox}, {oy}) size {w}x{h}"
                 );
-                assert_surfaces_equal(&mut got, &mut want, &what);
+                assert_interior_equal(&img, &mut got, &mut want, &what);
                 checked += 1;
             }
         }
