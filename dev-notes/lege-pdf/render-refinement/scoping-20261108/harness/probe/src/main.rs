@@ -158,7 +158,12 @@ fn request_for_page(page: Arc<CompiledPage>, scale: f64) -> RenderRequest {
         transform: PageTransform { matrix },
         crop: None,
         output_size: DeviceSize { width, height },
-        output_format: OutputFormat::Rgba8PremultipliedSrgb,
+        // PROBE_GRAY8=1 renders Gray8 (the lege base render on gray pages).
+        output_format: if std::env::var_os("PROBE_GRAY8").is_some() {
+            OutputFormat::Gray8
+        } else {
+            OutputFormat::Rgba8PremultipliedSrgb
+        },
         background: Background::White,
         annotations: AnnotationMode::StaticAppearances,
         color_policy: pdf_render_api::RenderColorPolicy::Original,
