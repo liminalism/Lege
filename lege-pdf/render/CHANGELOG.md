@@ -42,7 +42,12 @@ print and agent surfaces built on it.
   cache on or off. `lege_pdf_read::RasterProduct::with_decode_reference`
   carries it; Lege's page plan names the base output raster for every
   product of a page, so the analysis render no longer decodes a smaller
-  copy of each scan before the base render.
+  copy of each scan before the base render. On a synthetic six-page book
+  of 2550x3300 JPEG scans (debug-fast build) the analysis-plus-base
+  sequence takes 398 ms against 569 ms with per-size decoding (medians of
+  five). Base, region and OCR rasters are unchanged; the 800-px analysis
+  raster changes, and is closer to one area-averaged from a full-resolution
+  decode (mean channel distance 1.7 against 6.2).
 
 ### Performance, 2026-11-04, round 4 (follow-ups to round 3)
 
