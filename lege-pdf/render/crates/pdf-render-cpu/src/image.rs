@@ -601,6 +601,51 @@ impl PreparedImage {
         Some((zero, one))
     }
 
+    /// Whether an `/ImageMask` stencil's `/Decode` is `[1 0]`, which makes a
+    /// sample of 1 paint instead of mask.
+    fn stencil_decode_inverted(&self) -> bool {
+        self.decode
+            .as_ref()
+            .map(|d| d.first().map(|p| p[0] > p[1]).unwrap_or(false))
+            .unwrap_or(false)
+    }
+
+    /// The two-entry (zero-bit, one-bit) table of a one-bit `/ImageMask`
+    /// stencil, for the executor's bilevel fast paths: the painting bit is
+    /// `[stencil_rgb, 255]` and the masking bit `[stencil_rgb, 0]`, so the
+    /// bilevel box filter's two-entry mix reproduces the generic stencil
+    /// average exactly (`(rgb·W + W/2) / W == rgb` keeps the paint colour, and
+    /// the alpha is the same rounded weighted coverage `area_average` takes),
+    /// and a masked texel paints nothing.
+    ///
+    /// `None` (keep the generic sampler) unless this is a 1 bpc stencil with
+    /// no resource mask and sample data covering every packed row. `pixel()`
+    /// reads missing bytes as zero, which the fast paths do not reproduce
+    /// (they index the rows directly), so a truncated JBIG2 or CCITT stream
+    /// stays generic.
+    pub(crate) fn stencil_bilevel_lut(&self) -> Option<([u8; 4], [u8; 4])> {
+        if !self.is_stencil
+            || self.bpc != 1
+            || self.width == 0
+            || self.height == 0
+            || self.smask.is_some()
+            || self.mask.is_some()
+        {
+            return None;
+        }
+        let needed = (self.row_bits() / 8).checked_mul(self.height as usize)?;
+        if self.samples.len() < needed {
+            return None;
+        }
+        let [r, g, b] = self.stencil_rgb;
+        let (paint, masked) = ([r, g, b, 255], [r, g, b, 0]);
+        Some(if self.stencil_decode_inverted() {
+            (masked, paint)
+        } else {
+            (paint, masked)
+        })
+    }
+
     /// Packed row stride in bits (rows are byte-aligned), for the executor's
     /// summed-area box-filter path.
     pub(crate) fn packed_row_bits(&self) -> usize {
@@ -995,14 +1040,24 @@ impl PreparedImage {
     /// weights) once per destination column/row. This method therefore
     /// performs only packed-bit population counts, the fractional edge-tap
     /// corrections, and the two-entry color-table mix in the pixel loop.
+    #[cfg(test)]
     pub(crate) fn binary_box_average(
         &self,
         cols: &AxisTaps,
         rows: &AxisTaps,
     ) -> Option<([u8; 4], u64)> {
-        let lut = self.sample_lut.as_ref()?;
-        let zero = lut.first().copied().unwrap_or([0, 0, 0, 255]);
-        let one = lut.get(1).copied().unwrap_or(zero);
+        self.binary_box_average_with(self.binary_box_lut()?, cols, rows)
+    }
+
+    /// [`Self::binary_box_average`] through an explicit two-entry table, so a
+    /// stencil (which has no `sample_lut`) can use it with
+    /// [`Self::stencil_bilevel_lut`].
+    pub(crate) fn binary_box_average_with(
+        &self,
+        (zero, one): ([u8; 4], [u8; 4]),
+        cols: &AxisTaps,
+        rows: &AxisTaps,
+    ) -> Option<([u8; 4], u64)> {
         let weight = cols.total.checked_mul(rows.total)?;
         if weight == 0 {
             return None;
@@ -1495,12 +1550,7 @@ impl PreparedImage {
         if self.is_stencil {
             // 1 = masked (default), 0 = paint; /Decode [1 0] inverts.
             let mut v = read(0);
-            if self
-                .decode
-                .as_ref()
-                .map(|d| d.first().map(|p| p[0] > p[1]).unwrap_or(false))
-                .unwrap_or(false)
-            {
+            if self.stencil_decode_inverted() {
                 v = 1 - v;
             }
             if v == 0 {
