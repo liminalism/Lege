@@ -27,6 +27,10 @@ use crate::{DocumentError, DocumentLimits, ObjStmCached, ParseContext};
 /// an object (usually a stream body) extends past it.
 const INITIAL_WINDOW: u64 = 64 * 1024;
 
+/// Bytes read past a stream's declared end when the window is grown to it,
+/// so the `endstream` keyword (and the whitespace before it) is in view.
+const DECLARED_END_SLACK: u64 = 1024;
+
 /// Borrowed view of everything needed to resolve objects. Constructed
 /// per-call from a snapshot (or from parts during `open`, before the
 /// snapshot exists).
@@ -48,6 +52,24 @@ enum Attempt {
     /// The window was too small — grow and retry.
     Grow,
     Fail(DocumentError),
+}
+
+/// The absolute end offset a parsed stream's `/Length` declared, when the
+/// parser had to repair that length (so the declared end was not confirmed).
+fn repaired_stream_declared_end(parsed: &pdf_object::parser::ParsedIndirect) -> Option<u64> {
+    let declared = parsed.repairs.iter().find_map(|r| match r {
+        IndirectRepair::StreamLengthRepaired {
+            declared: Some(d), ..
+        } => u64::try_from(*d).ok(),
+        _ => None,
+    })?;
+    let PdfObject::Stream(stream) = &parsed.object else {
+        return None;
+    };
+    let StreamData::InSource { offset, .. } = stream.data else {
+        return None;
+    };
+    Some(offset.saturating_add(declared))
 }
 
 impl Resolver<'_> {
@@ -235,6 +257,7 @@ impl Resolver<'_> {
         }
 
         let mut window_len = INITIAL_WINDOW;
+        let mut grown_to_declared_end = false;
         loop {
             let end = source_len.min(abs.saturating_add(window_len));
             let at_eof = end == source_len;
@@ -243,6 +266,26 @@ impl Resolver<'_> {
                 .read_range(abs..end)
                 .map_err(pdf_structure::StructureError::from)?;
             match self.attempt_parse(&window, abs, id, ctx) {
+                // The parser cannot tell a window from the whole file: a
+                // stream whose declared end lies past the window fails its
+                // `/Length` check there and is "repaired" at the first
+                // `endstream`/`endobj` in view, which truncates a correct
+                // stream that merely contains such a keyword (N1). Before
+                // accepting a repaired length, grow once to the declared end
+                // (capped at EOF) and parse again: a correct length then takes
+                // the happy path, a wrong one repairs exactly as before.
+                Attempt::Parsed(parsed, _)
+                    if !at_eof
+                        && !grown_to_declared_end
+                        && let Some(declared_end) = repaired_stream_declared_end(&parsed)
+                        && declared_end.saturating_add(DECLARED_END_SLACK) > end =>
+                {
+                    grown_to_declared_end = true;
+                    let need = source_len
+                        .min(declared_end.saturating_add(DECLARED_END_SLACK))
+                        .saturating_sub(abs);
+                    window_len = window_len.max(need);
+                }
                 Attempt::Parsed(parsed, found_at) => {
                     if found_at != entry_offset {
                         ctx.recovery.push(RecoveryEvent::ObjectOffsetRepaired {
