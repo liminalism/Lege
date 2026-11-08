@@ -117,8 +117,6 @@
       "completed_with_estimate": "Abgeschlossen: {}\n{}\nKompressionsprozentsatz aus ausgewähltem Seitenbereich extrapoliert."
     },
     "liminalui": {
-      "shelf_inputs_empty": "Hinzugefügte Dateien erscheinen hier",
-      "shelf_outputs_empty": "Fertige Dateien erscheinen hier; ziehen Sie sie an einen beliebigen Ort",
       "options": "Optionen",
       "pages_device": "Seiten und Gerät",
       "output": "Ausgabe",

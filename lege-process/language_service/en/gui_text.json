@@ -117,8 +117,6 @@
       "completed_with_estimate": "Completed: {}\n{}\n :Compression is extrapolated."
     },
     "liminalui": {
-      "shelf_inputs_empty": "Added files appear here",
-      "shelf_outputs_empty": "Finished files appear here; drag them anywhere",
       "options": "Options",
       "pages_device": "Pages and device",
       "output": "Output",

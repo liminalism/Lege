@@ -1550,7 +1550,7 @@ impl Dashboard {
             small(ui, row(status, 2, ui.px(20)), &eta);
             {
                 ui.meter(
-                    Rect::new(status.x, actions.primary.y - ui.px(24), status.w, ui.px(18)),
+                    actions.meter,
                     self.batch_progress(),
                     tr("progress"),
                     ui.theme.selection,
@@ -1597,15 +1597,11 @@ impl Dashboard {
             // or the empty-queue message.
             ui.label(header, &summary, ui.theme.text_dim, Align::Left);
             if let Some(output) = &self.options.output_path {
-                // Left of the process button, on its row.
+                // On the meter's row, which is free while nothing runs; the
+                // button's row belongs to the file tiles.
                 small(
                     ui,
-                    Rect::new(
-                        status.x,
-                        actions.primary.y,
-                        actions.primary.x - status.x - ui.px(8),
-                        actions.primary.h,
-                    ),
+                    actions.meter,
                     &format!(
                         "{} {}",
                         t.buttons.output_directory,
@@ -1618,15 +1614,12 @@ impl Dashboard {
         if ui.button(debug, &t.queue.debug_button) {
             self.modal = Some(Modal::Debug);
         }
-        // At most two timed, click-to-dismiss cards, anchored bottom-right,
-        // and above the process button when a narrow window puts it beneath.
+        self.draw_tiles(ui, &actions);
+        // At most two timed, click-to-dismiss cards, anchored at the right,
+        // above the row of file tiles and the process button.
         let mut remove = None;
         let notice_x = ui.painter.width() - ui.px(340);
-        let mut bottom = if notice_x < actions.primary.right() {
-            actions.primary.y - ui.px(6)
-        } else {
-            bands.status.bottom() - ui.px(4)
-        };
+        let mut bottom = actions.inputs.y.min(actions.primary.y) - ui.px(6);
         for (index, notice) in self.notices.iter().enumerate().rev() {
             let area = Rect::new(notice_x, bottom - ui.px(68), ui.px(328), ui.px(68));
             ui.surface(
@@ -1643,19 +1636,19 @@ impl Dashboard {
         if let Some(index) = remove {
             self.notices.remove(index);
         }
-        self.draw_shelf(ui, bands.shelf);
     }
-    /// The file shelf: drawn after the frozen-input section, so finished
-    /// outputs can be dragged out while the rest of a batch is still running.
-    fn draw_shelf(&mut self, ui: &mut Ui<'_>, area: Rect) {
-        let inside = card(ui, area);
+    /// The file tiles beside the process button: drawn after the
+    /// frozen-input section, so finished outputs can be dragged out while
+    /// the rest of a batch is still running.
+    fn draw_tiles(&mut self, ui: &mut Ui<'_>, actions: &Actions) {
         let inputs = self.shelf_inputs();
         let outputs = self.shelf_outputs();
         let size = ui.px(crate::file_tiles::ICON) as u32;
         let shown: Vec<PathBuf> = inputs.iter().chain(&outputs).cloned().collect();
         self.shelf.retain_icons(&shown, size);
         if let Some(crate::file_tiles::ShelfAction::Open(path)) =
-            self.shelf.draw(ui, inside, &inputs, &outputs)
+            self.shelf
+                .draw(ui, actions.inputs, actions.outputs, &inputs, &outputs)
             && let Err(error) = backend::open_with_system(&path.to_string_lossy())
         {
             self.notice(error.to_string(), 6);
@@ -2446,8 +2439,8 @@ mod tests {
             .unwrap();
         }
         for (scale, name, (w, h)) in [
-            (1.0, "shelf-1x.png", (1040, 830)),
-            (1.5, "shelf-1.5x.png", (1560, 1245)),
+            (1.0, "shelf-1x.png", (1040, 760)),
+            (1.5, "shelf-1.5x.png", (1560, 1140)),
         ] {
             let mut app = LegeApp::new();
             app.snapshot_mode = true;

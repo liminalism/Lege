@@ -7,13 +7,7 @@ pub struct Bands {
     pub left: Rect,
     pub right: Rect,
     pub status: Rect,
-    /// The file shelf along the bottom: inputs left, outputs right.
-    pub shelf: Rect,
 }
-
-/// Logical height of the file shelf card: a tile (icon and two lines of name)
-/// inside the card's padding.
-pub const SHELF_H: i32 = 120;
 
 impl Bands {
     pub fn new(width: i32, height: i32, s: Scale) -> Self {
@@ -30,23 +24,14 @@ impl Bands {
         let col = (w - gap) / 2;
         let left = Rect::new(p, y, col, settings_h);
         let right = Rect::new(p + col + gap, y, w - col - gap, settings_h);
-        // The process button sits inside the status card's bottom edge. The
-        // file shelf takes a fixed band under it; status keeps the surplus.
+        // The process button sits inside the status card's bottom edge.
         let status_y = left.bottom() + row_gap;
-        let shelf_h = s.px(SHELF_H);
-        let status = Rect::new(
-            p,
-            status_y,
-            w,
-            (height - status_y - p - shelf_h - row_gap).max(1),
-        );
-        let shelf = Rect::new(p, status.bottom() + row_gap, w, shelf_h);
+        let status = Rect::new(p, status_y, w, (height - status_y - p).max(1));
         Self {
             files,
             left,
             right,
             status,
-            shelf,
         }
     }
 }
@@ -150,18 +135,44 @@ pub struct Actions {
     pub primary: Rect,
     pub utilities: Vec<Rect>,
     pub queue: Rect,
+    /// Left of the process button: the input files' tiles.
+    pub inputs: Rect,
+    /// Right of the process button: the output files' tiles.
+    pub outputs: Rect,
+    /// The row above the tiles: the progress meter while running, the output
+    /// directory otherwise.
+    pub meter: Rect,
 }
 impl Actions {
     /// `status` is the status section's content area.
     pub fn new(status: Rect, s: Scale) -> Self {
         let primary_w = s.px(320).min(status.w);
         let primary_h = s.px(44);
+        // The bottom row is as tall as a file tile: inputs at its left, the
+        // process button centred in it, outputs at its right.
+        let tiles_h = s.px(crate::file_tiles::TILE_H).max(primary_h);
+        let tiles_y = status.bottom() - tiles_h;
         let primary = Rect::new(
             status.x + (status.w - primary_w) / 2,
-            status.bottom() - primary_h,
+            tiles_y + (tiles_h - primary_h) / 2,
             primary_w,
             primary_h,
         );
+        let side_gap = s.px(12);
+        let inputs = Rect::new(
+            status.x,
+            tiles_y,
+            (primary.x - side_gap - status.x).max(0),
+            tiles_h,
+        );
+        let outputs_x = primary.right() + side_gap;
+        let outputs = Rect::new(
+            outputs_x,
+            tiles_y,
+            (status.right() - outputs_x).max(0),
+            tiles_h,
+        );
+        let meter = Rect::new(status.x, tiles_y - s.px(24), status.w, s.px(18));
         let group_w = s.px(228).min(status.w);
         let utilities = cells(
             Rect::new(status.right() - group_w, status.y, group_w, s.px(24)),
@@ -169,18 +180,21 @@ impl Actions {
             s.px(6),
         );
         // Above the queue: up to three running-status lines. Below it: the
-        // progress meter, then the button row.
+        // meter row, then the tiles and the button.
         let queue_y = status.y + s.px(78);
         let queue = Rect::new(
             status.x,
             queue_y,
             status.w,
-            (primary.y - s.px(30) - queue_y).max(1),
+            (meter.y - s.px(6) - queue_y).max(1),
         );
         Self {
             primary,
             utilities,
             queue,
+            inputs,
+            outputs,
+            meter,
         }
     }
 }
@@ -200,12 +214,6 @@ mod tests {
                 assert_eq!(b.left.bottom(), b.right.bottom());
                 assert!(b.status.h >= s.px(40));
                 assert!(b.status.bottom() <= s.px(h));
-                // The shelf is a band of its own under status: no text area
-                // above it reaches into it.
-                assert_eq!(b.shelf.y - b.status.bottom(), s.px(10));
-                assert_eq!(b.shelf.h, s.px(SHELF_H));
-                assert!(b.shelf.bottom() <= s.px(h));
-                assert_eq!((b.shelf.x, b.shelf.w), (b.status.x, b.status.w));
             }
         }
     }
@@ -227,6 +235,48 @@ mod tests {
             assert!(actions.queue.bottom() <= actions.primary.y);
             assert!(actions.primary.bottom() <= bands.status.bottom());
             assert!(options.geometry.bottom() <= bands.right.bottom());
+        }
+    }
+    fn overlaps(a: Rect, b: Rect) -> bool {
+        a.x < b.right() && b.x < a.right() && a.y < b.bottom() && b.y < a.bottom()
+    }
+    #[test]
+    fn the_file_tiles_flank_the_process_button_clear_of_every_text_row() {
+        for factor in [1.0, 1.5, 2.0] {
+            let s = Scale(factor);
+            for (w, h) in [(720, 660), (1040, 760), (1600, 1000)] {
+                let bands = Bands::new(s.px(w), s.px(h), s);
+                let status = bands.status.inset(s.px(8));
+                let a = Actions::new(status, s);
+                // Inputs left of the button, outputs right of it, on its row.
+                assert!(a.inputs.right() < a.primary.x && a.primary.right() < a.outputs.x);
+                assert_eq!(a.inputs.x, status.x);
+                assert_eq!(a.outputs.right(), status.right());
+                assert_eq!(a.inputs.bottom(), status.bottom());
+                assert_eq!(a.outputs.bottom(), status.bottom());
+                assert!(a.primary.y >= a.inputs.y && a.primary.bottom() <= a.inputs.bottom());
+                // Room for at least one tile on each side.
+                assert!(
+                    a.inputs.w >= s.px(crate::file_tiles::TILE_W),
+                    "{w}x{h}@{factor}"
+                );
+                assert!(
+                    a.outputs.w >= s.px(crate::file_tiles::TILE_W),
+                    "{w}x{h}@{factor}"
+                );
+                // No text row reaches the tiles.
+                for text in [a.queue, a.meter, a.utilities[0], a.utilities[2]] {
+                    assert!(
+                        !overlaps(text, a.inputs) && !overlaps(text, a.outputs),
+                        "{text:?}"
+                    );
+                }
+                assert!(a.queue.bottom() <= a.meter.y && a.meter.bottom() <= a.inputs.y);
+                // The queue keeps at least the four rows it had at the old minimum.
+                if (w, h) == (720, 660) {
+                    assert!(a.queue.h >= s.px(20) * 4, "queue {} at minimum", a.queue.h);
+                }
+            }
         }
     }
 }

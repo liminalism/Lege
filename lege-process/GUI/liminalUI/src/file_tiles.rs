@@ -1,12 +1,13 @@
-//! The file shelf along the bottom of the window: every input as a tile at the
+//! File tiles beside the process button: every input as a tile at the
 //! bottom-left, every finished output as a tile at the bottom-right.
 //!
 //! A tile is the file's own shell icon (the icon Explorer shows for a `.pdf`,
 //! a `.djvu` or a folder), rendered at the tile's physical pixel size, with the
 //! file name under it in at most two lines. Press a tile and move the pointer
 //! to drag the file out of the window — to Explorer, the desktop or any
-//! application that takes files; double-click to open it. The shelf is a band
-//! of its own (`layout::Bands::shelf`), so a tile never covers text.
+//! application that takes files; double-click to open it. The tiles have the
+//! status card's bottom row to themselves (`layout::Actions::inputs` and
+//! `outputs`), so a tile never covers text.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -17,16 +18,14 @@ use liminalkit_shell::Scale;
 use liminalkit_text::{Align, TextStyle};
 use liminalkit_ui::Ui;
 
-use crate::gui_text::tr;
-
 /// Logical size of a tile's icon.
 pub const ICON: i32 = 56;
 /// Logical width of a tile.
 pub const TILE_W: i32 = 132;
+/// Logical height of a tile: icon, then two lines of name.
+pub const TILE_H: i32 = 104;
 /// Logical gap between tiles.
 const TILE_GAP: i32 = 6;
-/// Logical gap between the input and output halves.
-const MIDDLE_GAP: i32 = 16;
 /// Pointer travel, in logical pixels, that turns a press on a tile into a drag.
 const DRAG_THRESHOLD: i32 = 4;
 /// Two presses on one tile within this make a double-click.
@@ -35,7 +34,7 @@ const DOUBLE_CLICK: Duration = Duration::from_millis(450);
 /// Where the tiles of one frame go.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ShelfLayout {
-    /// The input half (left) and the output half (right).
+    /// The input area (left of the process button) and the output area (right).
     pub left: Rect,
     pub right: Rect,
     /// One rectangle per shown input, from the left edge rightwards.
@@ -47,25 +46,23 @@ pub struct ShelfLayout {
     pub outputs_more: Option<(Rect, usize)>,
 }
 
-/// Lay out `inputs` tiles in the left half of `area` and `outputs` in the right.
-pub fn layout(area: Rect, s: Scale, inputs: usize, outputs: usize) -> ShelfLayout {
-    let middle = s.px(MIDDLE_GAP);
-    let half = ((area.w - middle) / 2).max(0);
-    let left = Rect::new(area.x, area.y, half, area.h);
-    let right = Rect::new(area.right() - half, area.y, half, area.h);
-    let (tile_w, gap) = (s.px(TILE_W).min(half.max(1)), s.px(TILE_GAP));
-    let capacity = (((half + gap) / (tile_w + gap)).max(1)) as usize;
-    let place = |count: usize, from_left: bool| -> (Vec<Rect>, Option<(Rect, usize)>) {
+/// Lay out `inputs` tiles in `left`, from its left edge, and `outputs` in
+/// `right`, from its right edge.
+pub fn layout(left: Rect, right: Rect, s: Scale, inputs: usize, outputs: usize) -> ShelfLayout {
+    let gap = s.px(TILE_GAP);
+    let place = |area: Rect, count: usize, from_left: bool| {
+        let tile_w = s.px(TILE_W).min(area.w.max(1));
+        let capacity = (((area.w + gap) / (tile_w + gap)).max(1)) as usize;
         let rect = |i: usize| {
             let offset = i as i32 * (tile_w + gap);
             if from_left {
-                Rect::new(left.x + offset, area.y, tile_w, area.h)
+                Rect::new(area.x + offset, area.y, tile_w, area.h)
             } else {
-                Rect::new(right.right() - offset - tile_w, area.y, tile_w, area.h)
+                Rect::new(area.right() - offset - tile_w, area.y, tile_w, area.h)
             }
         };
         if count <= capacity {
-            ((0..count).map(rect).collect(), None)
+            ((0..count).map(rect).collect::<Vec<_>>(), None)
         } else {
             let shown = capacity - 1;
             (
@@ -74,8 +71,8 @@ pub fn layout(area: Rect, s: Scale, inputs: usize, outputs: usize) -> ShelfLayou
             )
         }
     };
-    let (inputs, inputs_more) = place(inputs, true);
-    let (outputs, outputs_more) = place(outputs, false);
+    let (inputs, inputs_more) = place(left, inputs, true);
+    let (outputs, outputs_more) = place(right, outputs, false);
     ShelfLayout {
         left,
         right,
@@ -167,37 +164,18 @@ impl Shelf {
             .is_some_and(|(dragged, at)| dragged == path && at.elapsed() < Duration::from_secs(3))
     }
 
-    /// Draw the shelf in `area` (the inside of its card).
+    /// Draw the input tiles in `left` and the output tiles in `right`. An
+    /// empty side draws nothing at all.
     pub fn draw(
         &mut self,
         ui: &mut Ui<'_>,
-        area: Rect,
+        left: Rect,
+        right: Rect,
         inputs: &[PathBuf],
         outputs: &[PathBuf],
     ) -> Option<ShelfAction> {
-        let plan = layout(area, ui.scale, inputs.len(), outputs.len());
+        let plan = layout(left, right, ui.scale, inputs.len(), outputs.len());
         let mut action = None;
-        let caption = caption_style(ui);
-        if inputs.is_empty() {
-            let dim = ui.theme.text_dim;
-            ui.label_styled(
-                plan.left,
-                tr("shelf_inputs_empty"),
-                caption,
-                dim,
-                Align::Centre,
-            );
-        }
-        if outputs.is_empty() {
-            let dim = ui.theme.text_dim;
-            ui.label_styled(
-                plan.right,
-                tr("shelf_outputs_empty"),
-                caption,
-                dim,
-                Align::Centre,
-            );
-        }
         for (rect, path) in plan
             .inputs
             .iter()
@@ -397,10 +375,12 @@ mod tests {
         for factor in [1.0, 1.5, 2.0] {
             let s = Scale(factor);
             for width in [704, 1024, 1600] {
-                let area = Rect::new(s.px(16), s.px(600), s.px(width), s.px(104));
+                let side = s.px((width - 344) / 2);
+                let left = Rect::new(s.px(16), s.px(600), side, s.px(TILE_H));
+                let right = Rect::new(left.right() + s.px(344), s.px(600), side, s.px(TILE_H));
                 for (inputs, outputs) in [(0, 0), (1, 1), (3, 2), (40, 40)] {
-                    let plan = layout(area, s, inputs, outputs);
-                    assert!(plan.left.right() < plan.right.x, "halves are apart");
+                    let plan = layout(left, right, s, inputs, outputs);
+                    assert!(plan.left.right() < plan.right.x, "the sides are apart");
                     let shown_in: Vec<Rect> = plan
                         .inputs
                         .iter()

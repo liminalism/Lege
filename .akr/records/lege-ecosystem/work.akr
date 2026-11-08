@@ -1823,6 +1823,39 @@ record lege-ecosystem.work.glyph-font-text-output/1 : work {
     implements [ @lege-ecosystem.decision.jbig2-is-the-default-pdf-text-format-again ]
 }
 
+record lege-ecosystem.work.gui-file-tiles-beside-process-button/1 : work {
+    title "GUI: file tiles beside the process button, no separate shelf"
+    state completed
+    scope [
+        path "lege-process/GUI/liminalUI/src/app.rs",
+        path "lege-process/GUI/liminalUI/src/file_tiles.rs",
+        path "lege-process/GUI/liminalUI/src/layout.rs",
+        path "lege-process/GUI/liminalUI/src/lib.rs",
+        path "lege-process/language_service/de/gui_text.json",
+        path "lege-process/language_service/en/gui_text.json"
+    ]
+    intent """
+        Owner's revision of the file tiles: no separate shelf band and no explanatory captions. Input tiles
+        sit at the bottom-left and output tiles at the bottom-right of the status card, with the process
+        button centred between them; the bottom row is as tall as a tile. The output-directory label moves
+        to the meter row above, notices sit above the row, and the window grows only by the taller row
+        (default 1040x760, minimum 720x660), so the queue keeps the rows it had.
+        """
+    acceptance {
+        check tests {
+            statement """
+                The GUI crate's tests pass, including tiles flanking the process button at 1x/1.5x/2x and three window sizes, clear of the queue, meter and utility rows, with room for a tile on each side and at least four queue rows at the minimum window.
+                """
+            method command
+            command "cargo test -p lege-gui-liminalui"
+            verified_by [
+                @lege-ecosystem.evidence.gui-file-tiles-beside-process-button-20261108/1
+            ]
+        }
+    }
+    author "dk"
+}
+
 record lege-ecosystem.work.gui-smooth-edges-and-file-shelf/1 : work {
     title "GUI: smooth edges, crisper text, and a file shelf with draggable shell-icon tiles"
     state completed

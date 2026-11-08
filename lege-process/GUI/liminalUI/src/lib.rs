@@ -81,7 +81,7 @@ pub fn run() -> anyhow::Result<()> {
     // The preview must not replace the shipping GUI's lege.desktop launcher.
     // Reuse desktop registration when the default frontend switches.
     let mut config =
-        liminalkit_windowing::WindowConfig::new("Lege", 1040.0, 830.0).min_size(720.0, 730.0);
+        liminalkit_windowing::WindowConfig::new("Lege", 1040.0, 760.0).min_size(720.0, 660.0);
     config.app_id = Some("org.lege.Lege".into());
     liminalkit_windowing::run_app(app, config).map_err(|e| anyhow::anyhow!("{e}"))
 }

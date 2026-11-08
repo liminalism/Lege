@@ -5,7 +5,7 @@ build {
     tool "akr 0.6.2"
     grammar "0.1"
     vocabulary "0.2"
-    source_graph "sha256:733de007e3f3005810428c1fc8f11998bfe63d86b02dbe51ab0473b3e2f164ab"
+    source_graph "sha256:45159df1d94d972af5b57cc484c21333d25b5aaa3feccc79f1800d5293f7a018"
 }
 
 source ".akr/project.akr" {
@@ -64,8 +64,8 @@ source ".akr/records/lege-ecosystem/decisions.akr" {
 }
 
 source ".akr/records/lege-ecosystem/evidence.akr" {
-    hash "sha256:03ecdea9386c60b0201c2d6168fbd131e377461a97f17e50e3823c6725b73011"
-    records 287
+    hash "sha256:96127e16e8333823f92ee8692d84899ddcbb22925840779854abc07afde4d114"
+    records 288
 }
 
 source ".akr/records/lege-ecosystem/milestones.akr" {
@@ -99,8 +99,8 @@ source ".akr/records/lege-ecosystem/requirements.akr" {
 }
 
 source ".akr/records/lege-ecosystem/work.akr" {
-    hash "sha256:528401f54a24c1b9895ea20b42f6a072b1c60ce1b26d45a6827de86b4ea8619e"
-    records 154
+    hash "sha256:5183985004cc05462e936ac8518b6910a282db69784f1345a5d4ae29f5b1ea0d"
+    records 155
 }
 
 resolution @lege-ecosystem.assessment.glyph-outlines-rasterized-into-a-jbig2-layer/1 {
@@ -1523,6 +1523,11 @@ seal @lege-ecosystem.evidence.glyphfont-stage3-verification/1 {
 seal @lege-ecosystem.evidence.glyphfont-stage4-verification/1 {
     state verified
     hash "sha256:d0712a7aca4c8c5070cebde637d6624158c3377c116c6f92712dca92e95d1f11"
+}
+
+seal @lege-ecosystem.evidence.gui-file-tiles-beside-process-button-20261108/1 {
+    state verified
+    hash "sha256:5cbfcb70525e9b4663360a7f4a22b0acb12026d94cb48cc8c75acb096d8231b0"
 }
 
 seal @lege-ecosystem.evidence.gui-smooth-edges-and-file-shelf-20261108/1 {
@@ -4658,6 +4663,11 @@ seal @lege-ecosystem.work.fuse-operations-where-useful/1 {
 seal @lege-ecosystem.work.fuse-tier-1-output-and-dequantization/1 {
     state abandoned
     hash "sha256:6c6ecf277d7311ee34d46840b7c60c5da182c27747f61a1eea3a3d8542fdefb9"
+}
+
+seal @lege-ecosystem.work.gui-file-tiles-beside-process-button/1 {
+    state completed
+    hash "sha256:114f3637f5d54eb29d5b8df93b4ea416a5264e1957533db123b871aef06d155c"
 }
 
 seal @lege-ecosystem.work.gui-smooth-edges-and-file-shelf/1 {
