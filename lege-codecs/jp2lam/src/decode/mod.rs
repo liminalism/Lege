@@ -305,17 +305,22 @@ pub enum DecodeResult {
 
 struct DecodeScratch {
     tier1: t1::Tier1Scratch,
-    /// Maximum Tier-1 workers for the active request. This is explicit rather
-    /// than inferred from Rayon's pool size because all budgeted requests share
-    /// one process-wide executor.
-    tier1_workers: usize,
+    /// Worker budget of the active request: the most Tier-1 tasks it
+    /// contributes to the shared executor, and whether the post-Tier-1 stages
+    /// (per-plane inverse DWT, fused packing) may fan out at all. A budget of
+    /// one keeps every stage on the calling thread. This is explicit rather
+    /// than inferred from `rayon::current_num_threads()`: budgeted requests
+    /// share one process-wide executor, and a serial request may be running on
+    /// a worker of some other multi-thread pool (a renderer's), whose size says
+    /// nothing about this request's budget.
+    workers: usize,
 }
 
 impl DecodeScratch {
     fn new() -> Self {
         Self {
             tier1: t1::Tier1Scratch::new(),
-            tier1_workers: 1,
+            workers: 1,
         }
     }
 }
@@ -350,7 +355,7 @@ impl Jp2Decoder {
         validate_input_bytes(bytes.len(), &request.limits)?;
         let thread_count = decode_thread_count(request.concurrency)?;
         run_with_decode_workers(thread_count, |worker_count| {
-            self.scratch.tier1_workers = worker_count;
+            self.scratch.workers = worker_count;
             let mut stats = StatsSink::disabled();
             decode_jp2_request_with_scratch(bytes, request, &mut self.scratch, &mut stats)
         })
@@ -373,7 +378,9 @@ impl Jp2Decoder {
         let total_start = std::time::Instant::now();
         let result = {
             let mut sink = StatsSink::enabled(&mut stats);
-            self.scratch.tier1_workers = 1;
+            // Tier-1 stays serial under an enabled sink whatever the budget;
+            // the budget still decides whether later stages may fan out.
+            self.scratch.workers = decode_thread_count(request.concurrency)?;
             decode_jp2_request_with_scratch(bytes, request, &mut self.scratch, &mut sink)?
         };
         stats.total_ns = u64::try_from(total_start.elapsed().as_nanos()).unwrap_or(u64::MAX);
@@ -433,7 +440,7 @@ impl Jp2Decoder {
 
         let thread_count = decode_thread_count(into_request.concurrency)?;
         run_with_decode_workers(thread_count, |worker_count| {
-            self.scratch.tier1_workers = worker_count;
+            self.scratch.workers = worker_count;
             decode_jp2_into_with_scratch(bytes, &into_request, target, &mut self.scratch)
         })
     }
@@ -551,7 +558,7 @@ pub fn decode_jp2_request(bytes: &[u8], request: &DecodeRequest) -> Result<Decod
     let thread_count = decode_thread_count(request.concurrency)?;
     let mut scratch = DecodeScratch::new();
     run_with_decode_workers(thread_count, |worker_count| {
-        scratch.tier1_workers = worker_count;
+        scratch.workers = worker_count;
         let mut stats = StatsSink::disabled();
         decode_jp2_request_with_scratch(bytes, request, &mut scratch, &mut stats)
     })
@@ -970,6 +977,7 @@ fn decode_packed_direct_to_target(
                 height: write_height,
                 layout: parameters.layout,
             },
+            scratch.workers,
             stats,
         )?;
         stats.finish(stitch_start, |stats, elapsed| {
@@ -1478,7 +1486,7 @@ fn decode_tile_components(
         &packets,
         stats,
         &mut scratch.tier1,
-        scratch.tier1_workers,
+        scratch.workers,
     )?;
     stats.finish(tier1_start, |stats, elapsed| {
         stats.tier1_total_ns = stats.tier1_total_ns.saturating_add(elapsed);

@@ -17,6 +17,32 @@ use crate::dwt::SynthesisPrefix;
 /// Parallelize fused pack when the plane has at least this many samples.
 const FUSED_PACK_PARALLEL_SAMPLES: usize = 256 * 1024;
 
+/// Run `job` over `data` in `chunk_len`-element chunks, in chunk order when
+/// serial. `workers` is the request's worker budget (`DecodeScratch::workers`):
+/// above one the chunks fan out across the ambient Rayon pool, which
+/// `run_with_decode_workers` made the shared decode executor; at one they run
+/// on the calling thread and no Rayon job is spawned. That holds even when the
+/// caller is a worker of some other multi-thread pool, where
+/// `rayon::current_num_threads()` reports that pool's size, not the budget.
+/// Every caller's job is a pure per-chunk map, so the bytes do not depend on
+/// the budget.
+fn for_each_chunk_mut<T: Send>(
+    data: &mut [T],
+    chunk_len: usize,
+    workers: usize,
+    job: impl Fn(usize, &mut [T]) + Send + Sync,
+) {
+    if workers > 1 {
+        data.par_chunks_mut(chunk_len)
+            .enumerate()
+            .for_each(|(index, chunk)| job(index, chunk));
+    } else {
+        data.chunks_mut(chunk_len)
+            .enumerate()
+            .for_each(|(index, chunk)| job(index, chunk));
+    }
+}
+
 pub(crate) fn reconstruct_image_profiled(
     header: &CodestreamHeader,
     colorspace: ColorSpace,
@@ -556,6 +582,10 @@ impl PackedWriteTarget<'_> {
 }
 
 /// Reconstruct packed samples into an existing strided buffer rectangle.
+///
+/// `workers` is the request's worker budget; at one, nothing here spawns Rayon
+/// work (see `for_each_chunk_mut`).
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn reconstruct_packed_u8_into(
     header: &CodestreamHeader,
     colorspace: ColorSpace,
@@ -564,6 +594,7 @@ pub(crate) fn reconstruct_packed_u8_into(
     layout: PackedLayout,
     tiles: Vec<DecodedTileCoefficients>,
     target: PackedWriteTarget<'_>,
+    workers: usize,
     stats: &mut StatsSink<'_>,
 ) -> Result<()> {
     target.validate()?;
@@ -597,6 +628,7 @@ pub(crate) fn reconstruct_packed_u8_into(
             layout,
             tiles,
             target,
+            workers,
             stats,
         ),
         ColorSpace::YCbCr => {
@@ -723,6 +755,7 @@ fn reconstruct_interleaved_u8_into(
     layout: PackedLayout,
     mut tiles: Vec<DecodedTileCoefficients>,
     mut target: PackedWriteTarget<'_>,
+    workers: usize,
     stats: &mut StatsSink<'_>,
 ) -> Result<()> {
     let decoded = header.siz.components.len();
@@ -760,6 +793,7 @@ fn reconstruct_interleaved_u8_into(
             tiles,
             pixel_count,
             &mut target,
+            workers,
             stats,
         );
     }
@@ -849,6 +883,7 @@ fn can_fuse_packed(
 
 /// Inverse DWT → fused inverse MCT (if any) + level-shift + pack into the
 /// destination layout without allocating full per-component u8 planes.
+#[allow(clippy::too_many_arguments)]
 fn reconstruct_fused_packed_into(
     header: &CodestreamHeader,
     channels: usize,
@@ -857,6 +892,7 @@ fn reconstruct_fused_packed_into(
     tiles: Vec<DecodedTileCoefficients>,
     pixel_count: usize,
     target: &mut PackedWriteTarget<'_>,
+    workers: usize,
     stats: &mut StatsSink<'_>,
 ) -> Result<()> {
     debug_assert_eq!(colour_count, 3);
@@ -881,6 +917,7 @@ fn reconstruct_fused_packed_into(
                     layout,
                     channels,
                     target,
+                    workers,
                     stats,
                 );
             }
@@ -907,6 +944,7 @@ fn reconstruct_fused_packed_into(
                 pixel_count,
                 header.siz.width as usize,
                 target,
+                workers,
             )?;
             record_finalize_time(stats, start);
         }
@@ -940,6 +978,7 @@ fn reconstruct_fused_packed_into(
                 pixel_count,
                 header.siz.width as usize,
                 target,
+                workers,
             )?;
             record_finalize_time(stats, start);
         }
@@ -1199,6 +1238,7 @@ fn rct_rgb_i32(y: i32, db: i32, dr: i32) -> (u8, u8, u8) {
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn fuse_pack_f32_into(
     y: &[f32],
     cb: &[f32],
@@ -1210,6 +1250,7 @@ fn fuse_pack_f32_into(
     pixel_count: usize,
     plane_width: usize,
     target: &mut PackedWriteTarget<'_>,
+    workers: usize,
 ) -> Result<()> {
     if y.len() != pixel_count || cb.len() != pixel_count || cr.len() != pixel_count {
         return Err(invalid("fused pack plane length mismatch"));
@@ -1237,13 +1278,14 @@ fn fuse_pack_f32_into(
     };
 
     if tight {
-        // Contiguous destination: coarse parallel row jobs. With a one-thread
-        // executor this is one job on the calling thread.
+        // Contiguous destination: coarse row jobs, spread over the pool only
+        // when the request's budget allows (see `for_each_chunk_mut`).
         let rows_per_job = h.div_ceil(rayon::current_num_threads().max(1) * 2).max(1);
-        target.data[..h * stride]
-            .par_chunks_mut(rows_per_job * stride)
-            .enumerate()
-            .for_each(|(job, chunk)| {
+        for_each_chunk_mut(
+            &mut target.data[..h * stride],
+            rows_per_job * stride,
+            workers,
+            |job, chunk| {
                 let first_row = job * rows_per_job;
                 for (k, out_row) in chunk.chunks_exact_mut(stride).enumerate() {
                     let i0 = (first_row + k) * w;
@@ -1256,7 +1298,8 @@ fn fuse_pack_f32_into(
                         out_row,
                     );
                 }
-            });
+            },
+        );
     } else {
         for py in 0..h {
             let i0 = target.source_index(0, py, plane_width);
@@ -1416,6 +1459,7 @@ fn pack_row_f32(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn fuse_pack_i32_into(
     y: &[i32],
     db: &[i32],
@@ -1427,6 +1471,7 @@ fn fuse_pack_i32_into(
     pixel_count: usize,
     plane_width: usize,
     target: &mut PackedWriteTarget<'_>,
+    workers: usize,
 ) -> Result<()> {
     if y.len() != pixel_count || db.len() != pixel_count || dr.len() != pixel_count {
         return Err(invalid("fused pack plane length mismatch"));
@@ -1447,12 +1492,15 @@ fn fuse_pack_i32_into(
         && pixel_count >= FUSED_PACK_PARALLEL_SAMPLES;
 
     if tight {
+        // Coarse pixel jobs, spread over the pool only when the request's
+        // budget allows (see `for_each_chunk_mut`).
         let pixels_per_job = (pixel_count / rayon::current_num_threads().max(1) / 2).max(1024);
         let active = pixel_count * channels;
-        target.data[..active]
-            .par_chunks_mut(pixels_per_job * channels)
-            .enumerate()
-            .for_each(|(job, chunk)| {
+        for_each_chunk_mut(
+            &mut target.data[..active],
+            pixels_per_job * channels,
+            workers,
+            |job, chunk| {
                 let base = job * pixels_per_job;
                 let n = chunk.len() / channels;
                 for x in 0..n {
@@ -1477,7 +1525,8 @@ fn fuse_pack_i32_into(
                         a,
                     );
                 }
-            });
+            },
+        );
     } else {
         for py in 0..h {
             for px in 0..w {
@@ -1937,8 +1986,10 @@ fn fused_final_level_applies(
 /// straight out of the synthesis rings. The full-resolution planes are never
 /// written or read back, which removes six plane-sized memory passes.
 ///
-/// Rows are banded across the Rayon pool when the target is contiguous (each
-/// band primes its own pipelines, see `dwt::stream97`), otherwise serial.
+/// With a worker budget above one, the three coarse-level syntheses run
+/// concurrently and rows are banded across the Rayon pool when the target is
+/// contiguous (each band primes its own pipelines, see `dwt::stream97`). With
+/// a budget of one, everything runs in order on the calling thread.
 #[allow(clippy::too_many_arguments)]
 fn reconstruct_irreversible_97_fused_pack(
     header: &CodestreamHeader,
@@ -1948,6 +1999,7 @@ fn reconstruct_irreversible_97_fused_pack(
     layout: PackedLayout,
     channels: usize,
     target: &mut PackedWriteTarget<'_>,
+    workers: usize,
     stats: &mut StatsSink<'_>,
 ) -> Result<()> {
     let levels = header.cod.decomposition_levels;
@@ -1971,20 +2023,28 @@ fn reconstruct_irreversible_97_fused_pack(
         }
         prefixes
     } else {
-        colour_tiles
-            .into_par_iter()
-            .map(|tile| {
-                let (w, h) = (tile.width, tile.height);
-                Ok(crate::dwt::inverse_97_2d_even_but_last(
-                    tile.into_real()?,
-                    w,
-                    h,
-                    levels,
-                    kernel,
-                    None,
-                ))
-            })
-            .collect::<Result<Vec<_>>>()?
+        let synthesize = |tile: DecodedTileCoefficients| {
+            let (w, h) = (tile.width, tile.height);
+            Ok(crate::dwt::inverse_97_2d_even_but_last(
+                tile.into_real()?,
+                w,
+                h,
+                levels,
+                kernel,
+                None,
+            ))
+        };
+        if workers > 1 {
+            colour_tiles
+                .into_par_iter()
+                .map(synthesize)
+                .collect::<Result<Vec<_>>>()?
+        } else {
+            colour_tiles
+                .into_iter()
+                .map(synthesize)
+                .collect::<Result<Vec<_>>>()?
+        }
     };
     record_dwt_time(stats, dwt_start);
     let [py, pcb, pcr] = <[SynthesisPrefix; 3]>::try_from(prefixes)
@@ -2015,7 +2075,7 @@ fn reconstruct_irreversible_97_fused_pack(
         && target.origin_y == 0
         && stride == w * channels
         && pixel_count >= FUSED_PACK_PARALLEL_SAMPLES
-        && rayon::current_num_threads() > 1;
+        && workers > 1;
     if tight {
         let rows_per_band = h.div_ceil(rayon::current_num_threads() * 2).max(16);
         target.data[..h * stride]
@@ -2302,6 +2362,7 @@ mod tests {
                 height: 1,
                 layout: PackedLayout::Sequential,
             },
+            1,
         )
         .expect("fuse");
         assert_eq!(fused, staged);
@@ -2348,6 +2409,7 @@ mod tests {
                 height: 1,
                 layout: PackedLayout::Sequential,
             },
+            1,
         )
         .expect("fuse");
         assert_eq!(fused, staged);
