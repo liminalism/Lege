@@ -1137,12 +1137,22 @@ impl PreparedImage {
         self.shade_uv(ux, uy).0
     }
 
-    /// Fractional coverage (0..=255) of the device pixel whose center is
-    /// `(dx, dy)` against the image's device-space quad (A10).
+    /// Coverage (0..=255) of the device pixel whose center is `(dx, dy)` by
+    /// the image's device-space quad.
     ///
     /// `None` means the pixel square is provably interior — the caller paints
     /// at full weight, byte-identical to the pre-A10 behavior. `Some(0)`
-    /// means fully outside. Handles rotated/sheared placements exactly: the
+    /// means not painted.
+    ///
+    /// An axis-aligned placement (`inv.b == inv.c == 0` exactly, mirrors
+    /// included) takes the pixel-centre rule at its outer edge, as PDFium
+    /// does and as the axis-aligned opaque fast paths do: a border pixel is
+    /// covered fully (`Some(255)`) when its centre maps into `[0, 1)²` — the
+    /// same half-open test `shade()` and those fast paths apply — and not at
+    /// all otherwise. Masks still apply per sampled pixel; only the
+    /// geometric edge is all-or-nothing.
+    ///
+    /// Rotated and sheared placements keep A10's fractional coverage: the
     /// pixel square maps under `inv` to a parallelogram in unit-image space,
     /// which is clipped against `[0,1]²` (Sutherland–Hodgman); the coverage
     /// is the clipped area over the parallelogram's area.
@@ -1157,6 +1167,11 @@ impl PreparedImage {
         let full = (self.inv.a * self.inv.d - self.inv.b * self.inv.c).abs();
         if full <= 1e-18 {
             return Some(0);
+        }
+        if self.inv.b == 0.0 && self.inv.c == 0.0 {
+            // Axis-aligned: whole pixels by centre (see the doc comment).
+            let inside = (0.0..1.0).contains(&p.x) && (0.0..1.0).contains(&p.y);
+            return Some(if inside { 255 } else { 0 });
         }
         // The pixel square's corners in uv space.
         let mut poly: [[f64; 2]; 8] = [[0.0; 2]; 8];
