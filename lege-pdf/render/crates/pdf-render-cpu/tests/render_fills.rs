@@ -235,3 +235,123 @@ fn output_is_deterministic() {
         .unwrap();
     assert_eq!(a.pixels, b.pixels);
 }
+
+/// A 612x792 page: a full-page grey rectangle, a 24-unit black stroke
+/// across it, and a red triangle with a corrupt 1e9 coordinate.
+fn page_spanning_page() -> CompiledPage {
+    use pdf_page_ir::{LineCap, LineJoin, PaintId, PathId, StrokeStyle, StrokeStyleId};
+    let path = |pts: &[(f64, f64)], close: bool| {
+        let mut verbs = vec![PathVerb::MoveTo];
+        verbs.extend(std::iter::repeat_n(PathVerb::LineTo, pts.len() - 1));
+        if close {
+            verbs.push(PathVerb::Close);
+        }
+        PathData {
+            verbs: verbs.into(),
+            points: pts.iter().map(|&(x, y)| Point { x, y }).collect(),
+        }
+    };
+    let mut page = rect_page(
+        612.0,
+        0.3,
+        0.3,
+        611.7,
+        791.7,
+        Color::from_rgb(0.6, 0.6, 0.6),
+        1.0,
+        FillRule::NonZero,
+    );
+    page.bounds.crop.y1 = 792.0;
+    page.paths = Arc::from([
+        path(
+            &[(0.3, 0.3), (611.7, 0.3), (611.7, 791.7), (0.3, 791.7)],
+            true,
+        ),
+        path(&[(0.0, 18.0), (640.0, 846.0)], false),
+        path(&[(100.0, 100.0), (1.0e9, 120.0), (100.0, 140.0)], true),
+    ]);
+    page.paints = Arc::from([
+        Paint::Solid(Color::from_rgb(0.6, 0.6, 0.6)),
+        Paint::Solid(Color::from_rgb(0.0, 0.0, 0.0)),
+        Paint::Solid(Color::from_rgb(1.0, 0.0, 0.0)),
+    ]);
+    page.stroke_styles = Arc::from([StrokeStyle {
+        width: 24.0,
+        cap: LineCap::Butt,
+        join: LineJoin::Miter,
+        miter_limit: 10.0,
+        dash_pattern: Vec::new().into(),
+        dash_phase: 0.0,
+    }]);
+    page.operations = Arc::from([
+        DisplayOp::FillPath {
+            path: PathId(0),
+            paint: PaintId(0),
+            rule: FillRule::NonZero,
+            alpha: 1.0,
+            blend: pdf_page_ir::BlendMode::Normal,
+        },
+        DisplayOp::StrokePath {
+            path: PathId(1),
+            paint: PaintId(1),
+            style: StrokeStyleId(0),
+            alpha: 1.0,
+            blend: pdf_page_ir::BlendMode::Normal,
+        },
+        DisplayOp::FillPath {
+            path: PathId(2),
+            paint: PaintId(2),
+            rule: FillRule::NonZero,
+            alpha: 1.0,
+            blend: pdf_page_ir::BlendMode::Normal,
+        },
+    ]);
+    page
+}
+
+/// B11: an 8x8 window far from the origin (a region crop: the request
+/// translates the page and shrinks the output) paints the page-spanning
+/// rectangle and stroke exactly as the full render does. The corrupt-geometry
+/// limit used to be 64 x the *request* size (512 px here), so both
+/// primitives, whose corners lie ~3000 px from the window, were dropped and
+/// the window stayed white. Corrupt geometry is still dropped.
+#[test]
+fn small_crop_window_keeps_page_spanning_paths() {
+    let (scale, wx, wy, n) = (4.0, 2400usize, 3100usize, 8usize);
+    let mut full = request(page_spanning_page(), 0, Background::White);
+    full.transform.matrix = Matrix::scale(scale, scale);
+    full.output_size = DeviceSize {
+        width: 2448,
+        height: 3168,
+    };
+    let mut window = request(page_spanning_page(), n as u32, Background::White);
+    window.transform.matrix =
+        Matrix::scale(scale, scale).then(Matrix::translate(-(wx as f64), -(wy as f64)));
+    let backend = CpuBackend::default();
+    let (full, _) = backend.render_to_host(&full).unwrap();
+    let (window, _) = backend.render_to_host(&window).unwrap();
+    let mut grey_or_black = 0;
+    for y in 0..n {
+        for x in 0..n {
+            let (w, f) = (px(&window, x, y), px(&full, wx + x, wy + y));
+            assert_eq!(
+                w,
+                f,
+                "window pixel ({x},{y}) vs full ({},{})",
+                wx + x,
+                wy + y
+            );
+            assert_ne!(w, [255, 0, 0, 255], "corrupt geometry painted");
+            if w != [255, 255, 255, 255] {
+                grey_or_black += 1;
+            }
+        }
+    }
+    assert_eq!(grey_or_black, n * n, "the window is covered by the page");
+    // The stroke crosses the window: it is not all page grey.
+    let stroke = (0..n)
+        .flat_map(|y| (0..n).map(move |x| (x, y)))
+        .filter(|&(x, y)| px(&window, x, y)[0] < 150)
+        .count();
+    assert!(stroke > 0, "the stroke reaches the window");
+}

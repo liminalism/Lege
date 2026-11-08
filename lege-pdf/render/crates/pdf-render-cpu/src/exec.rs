@@ -6394,6 +6394,7 @@ mod rgb8_area_min_tests {
             diagnostics: Default::default(),
             image_cache: None,
             decode_floor: None,
+            sanity_extent: 64.0,
             #[cfg(feature = "profiling")]
             profile: Default::default(),
             #[cfg(feature = "profiling")]
@@ -6579,6 +6580,7 @@ mod cancel_tests {
             diagnostics: Default::default(),
             image_cache: None,
             decode_floor: None,
+            sanity_extent: 64.0,
             #[cfg(feature = "profiling")]
             profile: Default::default(),
             #[cfg(feature = "profiling")]

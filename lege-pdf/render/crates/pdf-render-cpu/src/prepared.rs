@@ -1327,6 +1327,13 @@ pub struct CpuPreparedPage {
     /// inherit it (their device space differs from the page's by a
     /// translation only). `None` = each image decodes for its own footprint.
     pub(crate) decode_floor: Option<Matrix>,
+    /// Reference extent for the corrupt-geometry limit
+    /// ([`device_bounds_sane`]), in device pixels: the largest absolute
+    /// coordinate of the page's crop box in this render's device space, and
+    /// at least the output size. A region crop (a translated page in a small
+    /// output) keeps the page's own scale, so page-spanning paths far from
+    /// the window's origin are not mistaken for corrupt geometry (B11).
+    pub(crate) sanity_extent: f32,
     /// Fine-grained timing and codec counters. Interior mutability is used
     /// because image decode helpers deliberately receive `&CpuPreparedPage`.
     #[cfg(feature = "profiling")]
@@ -1546,6 +1553,7 @@ pub fn decode_page(
         diagnostics: RenderDiagnostics::default(),
         image_cache: None,
         decode_floor: None,
+        sanity_extent: 1.0,
         profile: std::cell::RefCell::new(pdf_profiling::ProfileReport::new()),
         decode_cache: None,
     };
@@ -1682,6 +1690,7 @@ fn lower_impl(
         diagnostics: RenderDiagnostics::default(),
         image_cache: shared_images.cloned(),
         decode_floor,
+        sanity_extent: sanity_extent(page.bounds.crop, base, size),
         #[cfg(feature = "profiling")]
         profile: std::cell::RefCell::new(pdf_profiling::ProfileReport::new()),
         #[cfg(feature = "profiling")]
@@ -3432,7 +3441,9 @@ fn lower_fill(
     }
 
     // Drop fills whose device geometry is corrupt (see `device_bounds_sane`).
-    let Some((bx0, by0, bx1, by1)) = device_bounds_sane(&out.points[pt_start..], out.size) else {
+    let Some((bx0, by0, bx1, by1)) =
+        device_bounds_sane(&out.points[pt_start..], out.size, out.sanity_extent)
+    else {
         out.points.truncate(pt_start);
         out.subpaths.truncate(range_start as usize);
         return None;
@@ -3825,9 +3836,14 @@ fn append_stroke_outline(
     // 11016766`, a mangled CTM, etc.). Fall back to a hairline — PDFium's
     // observable behavior on the same corrupt files — rather than flood the page
     // with a mega-wide pen. Non-finite products are treated as garbage too.
+    // "The whole output" is the page's device extent (`sanity_extent`), which
+    // is the output size for a full-page render: a small region crop keeps
+    // the pen width the full render uses there (B11).
     let pen_axis = x_unit(m2).max(y_unit(m2)) as f32;
     let device_extent = raw_dw * pen_axis;
-    let max_output = out.size.width.max(out.size.height).max(1) as f32;
+    let max_output = out
+        .sanity_extent
+        .max(out.size.width.max(out.size.height).max(1) as f32);
     let dw = if device_extent.is_finite() && device_extent <= max_output {
         raw_dw
     } else {
@@ -3894,7 +3910,9 @@ fn append_stroke_outline(
     // Drop strokes whose device outline is corrupt (see `device_bounds_sane`).
     // The width clamp above already tames a garbage *width*; this also guards a
     // garbage *path* (coordinates far off the viewport).
-    let Some((bx0, by0, bx1, by1)) = device_bounds_sane(&out.points[pt_start..], out.size) else {
+    let Some((bx0, by0, bx1, by1)) =
+        device_bounds_sane(&out.points[pt_start..], out.size, out.sanity_extent)
+    else {
         out.points.truncate(pt_start);
         out.subpaths.truncate(range_start as usize);
         return None;
@@ -5480,6 +5498,21 @@ fn jpx_headroom() -> f32 {
     })
 }
 
+/// The corrupt-geometry reference extent of a render: the largest absolute
+/// device coordinate of the page's crop box under `base`, and at least the
+/// output size. For a full-page render that is the output size (unchanged
+/// from the size-only limit); for a region crop it is the page's extent in the
+/// window's device space. Non-finite corners are ignored.
+fn sanity_extent(crop: pdf_page_ir::Rect, base: Matrix, size: DeviceSize) -> f32 {
+    let r = base.transform_rect(crop);
+    let page = [r.x0, r.y0, r.x1, r.y1]
+        .into_iter()
+        .filter(|v| v.is_finite())
+        .fold(0.0f64, |m, v| m.max(v.abs()));
+    let out = f64::from(size.width.max(size.height).max(1));
+    page.max(out).min(f64::from(f32::MAX)) as f32
+}
+
 /// Device-space integer bounds of `points`, culled to the output size.
 /// `device_bounds`, but rejects corrupt geometry. Bad-deflate content, mangled
 /// CTMs, and adversarial files decode to coordinates orders of magnitude beyond
@@ -5491,9 +5524,18 @@ fn jpx_headroom() -> f32 {
 /// real content, but a garbage 1e9 coordinate always trips it). The min/max is
 /// computed in the same pass, so there is no extra traversal versus
 /// `device_bounds`.
-fn device_bounds_sane(points: &[[f32; 2]], size: DeviceSize) -> Option<(i32, i32, i32, i32)> {
+///
+/// The limit is relative to `extent` (the page's own device extent, see
+/// [`CpuPreparedPage::sanity_extent`]), never less than the output size: a
+/// small region crop far from the page origin still paints the page-spanning
+/// backgrounds and strokes the full render paints there (B11).
+fn device_bounds_sane(
+    points: &[[f32; 2]],
+    size: DeviceSize,
+    extent: f32,
+) -> Option<(i32, i32, i32, i32)> {
     const SANE_FACTOR: f32 = 64.0;
-    let limit = SANE_FACTOR * (size.width.max(size.height).max(1) as f32);
+    let limit = SANE_FACTOR * extent.max(size.width.max(size.height).max(1) as f32);
     let (mut x0, mut y0, mut x1, mut y1) = (
         f32::INFINITY,
         f32::INFINITY,
@@ -6357,20 +6399,54 @@ mod font_cache_tests {
         };
         // Normal geometry within the viewport: accepted, clamped to the page.
         assert_eq!(
-            device_bounds_sane(&[[10.0, 10.0], [50.0, 40.0]], size),
+            device_bounds_sane(&[[10.0, 10.0], [50.0, 40.0]], size, 100.0),
             Some((10, 10, 50, 40))
         );
         // Off-page but within the sane envelope: accepted (a partly-visible
         // shape clamps to the page edge).
-        assert!(device_bounds_sane(&[[-20.0, -20.0], [30.0, 30.0]], size).is_some());
+        assert!(device_bounds_sane(&[[-20.0, -20.0], [30.0, 30.0]], size, 100.0).is_some());
         // A coordinate far past 64× the viewport is corrupt: rejected.
-        assert_eq!(device_bounds_sane(&[[0.0, 0.0], [1.0e9, 5.0]], size), None);
-        // Non-finite coordinates are rejected.
         assert_eq!(
-            device_bounds_sane(&[[0.0, 0.0], [f32::NAN, 5.0]], size),
+            device_bounds_sane(&[[0.0, 0.0], [1.0e9, 5.0]], size, 100.0),
             None
         );
-        assert_eq!(device_bounds_sane(&[[f32::INFINITY, 0.0]], size), None);
+        // Non-finite coordinates are rejected.
+        assert_eq!(
+            device_bounds_sane(&[[0.0, 0.0], [f32::NAN, 5.0]], size, 100.0),
+            None
+        );
+        assert_eq!(
+            device_bounds_sane(&[[f32::INFINITY, 0.0]], size, 100.0),
+            None
+        );
+        // B11: the limit follows the page extent, not the output size. A
+        // page-spanning corner 3100 px from a small window's origin is kept
+        // when the page spans 3168 px, rejected against the window alone,
+        // and a garbage coordinate is rejected either way.
+        let window = DeviceSize {
+            width: 8,
+            height: 8,
+        };
+        let corner = [[-2400.0, -3100.0], [48.0, 68.0]];
+        assert!(device_bounds_sane(&corner, window, 3168.0).is_some());
+        assert_eq!(device_bounds_sane(&corner, window, 8.0), None);
+        assert_eq!(
+            device_bounds_sane(&[[0.0, 0.0], [1.0e9, 5.0]], window, 3168.0),
+            None
+        );
+        let crop = pdf_page_ir::Rect {
+            x0: 0.0,
+            y0: 0.0,
+            x1: 612.0,
+            y1: 792.0,
+        };
+        let full = DeviceSize {
+            width: 2448,
+            height: 3168,
+        };
+        assert_eq!(sanity_extent(crop, Matrix::scale(4.0, 4.0), full), 3168.0);
+        let shifted = Matrix::scale(4.0, 4.0).then(Matrix::translate(-2400.0, -3100.0));
+        assert_eq!(sanity_extent(crop, shifted, window), 3100.0);
     }
 
     #[test]
@@ -6621,6 +6697,7 @@ mod glyph_cache_tests {
             diagnostics: RenderDiagnostics::default(),
             image_cache: None,
             decode_floor: None,
+            sanity_extent: w.max(h) as f32,
             #[cfg(feature = "profiling")]
             profile: std::cell::RefCell::new(pdf_profiling::ProfileReport::new()),
             #[cfg(feature = "profiling")]
