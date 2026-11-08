@@ -27,6 +27,22 @@ print and agent surfaces built on it.
   page rendered once is unchanged unless it draws one JPEG at two sizes
   that select different scales (it used the first draw's decode for both);
   a page rendered at two such sizes now decodes the JPEG once per scale.
+- Image cache: the declared colour space is part of a decode's identity.
+  The JPX codec reads its family (an `/Indexed` space bypasses a container
+  palette) and component count (two keep a duotone's channels), so two
+  images with byte-identical JPX streams under different `/ColorSpace`
+  entries shared one entry and the second drawn got the first one's raster.
+- Decode reference (`CpuRenderOptions::image_decode_reference`, through
+  `CpuBackend::render_with_options`): a request can name another raster of
+  the same page whose image footprints set the lowest resolution its images
+  decode at. Renders that share a reference decode each JPEG or JPX image
+  once and render from the same source pixels; a draw larger than the
+  reference keeps its own resolution, tiling cells inherit the reference,
+  and the decoded resolution follows from the request alone, with the
+  cache on or off. `lege_pdf_read::RasterProduct::with_decode_reference`
+  carries it; Lege's page plan names the base output raster for every
+  product of a page, so the analysis render no longer decodes a smaller
+  copy of each scan before the base render.
 
 ### Performance, 2026-11-04, round 4 (follow-ups to round 3)
 

@@ -372,6 +372,7 @@ mod tests {
             color_policy: pdf_render_api::RenderColorPolicy::Original,
             diagnostics: RenderDiagnostics::default(),
             image_cache: None,
+            decode_floor: None,
         }
     }
 

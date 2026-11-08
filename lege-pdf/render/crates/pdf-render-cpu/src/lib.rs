@@ -1041,6 +1041,28 @@ fn clamp_output_to_budget(
     )
 }
 
+/// Per-request CPU rendering policy beyond the backend-neutral
+/// [`RenderRequest`]; see [`CpuBackend::render_with_options`]. The default is
+/// what [`CpuBackend::render_with`] does.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CpuRenderOptions {
+    /// Decode every image at no less than the resolution its footprint under
+    /// this transform selects: a page transform onto another raster of the
+    /// same page, such as the main output a caller also renders smaller
+    /// products alongside.
+    ///
+    /// Scaling codecs (DCT, JPX) decode a minified draw at a reduced
+    /// resolution chosen from its footprint, so products of one page at
+    /// different sizes would decode its images once per size. Products that
+    /// share a reference decode each image once, at the reference's
+    /// resolution, and draws larger than the reference keep their own. The
+    /// decoded resolution follows from the request alone, so pixels do not
+    /// depend on which product rendered first or on the decoded-image cache.
+    ///
+    /// `None`: each image decodes for its own footprint.
+    pub image_decode_reference: Option<pdf_render_api::PageTransform>,
+}
+
 /// CPU backend configuration.
 #[derive(Debug, Clone)]
 pub struct CpuBackendOptions {
@@ -1337,6 +1359,7 @@ impl CpuBackend {
                 shared_fonts,
                 glyph_cache_enabled().then_some(self.shared_glyphs.as_ref()),
                 shared_images,
+                None,
             )
         } else {
             prepared::lower_for_external_raster(
@@ -1825,6 +1848,16 @@ impl CpuBackend {
         request: &RenderRequest,
         ctx: &mut CpuWorkerContext,
     ) -> Result<(HostPage, RenderStats), RenderError> {
+        self.render_with_options(request, &CpuRenderOptions::default(), ctx)
+    }
+
+    /// [`Self::render_with`] under an explicit [`CpuRenderOptions`] policy.
+    pub fn render_with_options(
+        &self,
+        request: &RenderRequest,
+        options: &CpuRenderOptions,
+        ctx: &mut CpuWorkerContext,
+    ) -> Result<(HostPage, RenderStats), RenderError> {
         if let Some(token) = &request.limits.cancellation
             && token.is_cancelled()
         {
@@ -1869,6 +1902,9 @@ impl CpuBackend {
         #[cfg(feature = "profiling")]
         let lower_start = std::time::Instant::now();
         let decode_limits = image_decode_limits(&request.limits);
+        let decode_floor = options
+            .image_decode_reference
+            .and_then(|reference| prepared::decode_floor_map(transform_matrix, reference.matrix));
         let prepared = prepared::lower_with_font_cache(
             &request.page,
             transform_matrix,
@@ -1881,6 +1917,7 @@ impl CpuBackend {
             shared_font_cache_enabled().then_some(self.shared_fonts.as_ref()),
             glyph_cache_enabled().then_some(self.shared_glyphs.as_ref()),
             image_cache_enabled().then_some(&self.shared_images),
+            decode_floor,
         );
         #[cfg(feature = "profiling")]
         {

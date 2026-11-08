@@ -1275,6 +1275,12 @@ pub struct CpuPreparedPage {
     /// consulted by codec decodes — including inside nested tiling-pattern
     /// cells lowered during execution. `None` = decode per draw.
     pub(crate) image_cache: Option<Arc<SharedImageCache>>,
+    /// The request's image decode floor ([`crate::CpuRenderOptions`]), as the
+    /// linear map from this page's device space to the reference raster's:
+    /// every image decodes at no less than its footprint there. Tiling cells
+    /// inherit it (their device space differs from the page's by a
+    /// translation only). `None` = each image decodes for its own footprint.
+    pub(crate) decode_floor: Option<Matrix>,
     /// Fine-grained timing and codec counters. Interior mutability is used
     /// because image decode helpers deliberately receive `&CpuPreparedPage`.
     #[cfg(feature = "profiling")]
@@ -1321,6 +1327,7 @@ pub fn lower(
         None,
         None,
         None,
+        None,
         false,
         #[cfg(feature = "profiling")]
         None,
@@ -1356,6 +1363,7 @@ pub(crate) fn lower_cell(
         None,
         None,
         outer.image_cache.as_ref(),
+        outer.decode_floor,
         false,
         #[cfg(feature = "profiling")]
         outer.decode_cache.clone(),
@@ -1378,6 +1386,7 @@ pub(crate) fn lower_with_font_cache(
     shared_fonts: Option<&SharedFontProgramCache>,
     shared_glyphs: Option<&SharedGlyphCache>,
     shared_images: Option<&Arc<SharedImageCache>>,
+    decode_floor: Option<Matrix>,
 ) -> CpuPreparedPage {
     lower_impl(
         page,
@@ -1391,6 +1400,7 @@ pub(crate) fn lower_with_font_cache(
         shared_fonts,
         shared_glyphs,
         shared_images,
+        decode_floor,
         false,
         #[cfg(feature = "profiling")]
         None,
@@ -1428,6 +1438,7 @@ pub(crate) fn lower_for_external_raster(
         shared_fonts,
         None,
         shared_images,
+        None,
         true,
         #[cfg(feature = "profiling")]
         None,
@@ -1453,6 +1464,7 @@ pub fn lower_with_decode_cache(
         decode_limits,
         hinting,
         pdf_render_api::RenderColorPolicy::Original,
+        None,
         None,
         None,
         None,
@@ -1487,6 +1499,7 @@ pub fn decode_page(
         color_policy: pdf_render_api::RenderColorPolicy::Original,
         diagnostics: RenderDiagnostics::default(),
         image_cache: None,
+        decode_floor: None,
         profile: std::cell::RefCell::new(pdf_profiling::ProfileReport::new()),
         decode_cache: None,
     };
@@ -1604,6 +1617,7 @@ fn lower_impl(
     shared_fonts: Option<&SharedFontProgramCache>,
     shared_glyphs: Option<&SharedGlyphCache>,
     shared_images: Option<&Arc<SharedImageCache>>,
+    decode_floor: Option<Matrix>,
     split_glyph_draws: bool,
     #[cfg(feature = "profiling")] decode_cache: Option<DecodedImageCache>,
 ) -> CpuPreparedPage {
@@ -1621,6 +1635,7 @@ fn lower_impl(
         color_policy,
         diagnostics: RenderDiagnostics::default(),
         image_cache: shared_images.cloned(),
+        decode_floor,
         #[cfg(feature = "profiling")]
         profile: std::cell::RefCell::new(pdf_profiling::ProfileReport::new()),
         #[cfg(feature = "profiling")]
@@ -2349,10 +2364,11 @@ fn lower_image(
     // Phase 2: destination footprint in device pixels, derived from the
     // placement CTM before decode. A codec that can scale resolution decodes
     // a minified draw at a reduced one (JPX drops wavelet levels, DCT decodes
-    // at 1/2, 1/4 or 1/8 scale); JBIG2 and CCITT ignore the hint. Computed
-    // once and shared by the base image, its soft mask, and any stencil mask
-    // (they share the placement).
-    let target_size = codec_target_size(ctm);
+    // at 1/2, 1/4 or 1/8 scale); JBIG2 and CCITT ignore the hint. A request's
+    // decode floor raises it to at least the footprint on the reference
+    // raster. Computed once and shared by the base image, its soft mask, and
+    // any stencil mask (they share the placement).
+    let target_size = decode_target_size(ctm, out.decode_floor);
 
     // Direct samples, or a codec decode through the injected registry (no
     // resource cache yet — decoded per draw op, see DEFERRED.md). A
@@ -5358,6 +5374,46 @@ fn codec_target_size(ctm: Matrix) -> Option<(u32, u32)> {
     ))
 }
 
+/// The linear map from a render's device space (placed by `base`) to a
+/// reference render's device space (placed by `reference`), for a request's
+/// image decode floor. Only the size of a footprint matters, so translation
+/// is dropped. `None` when `base` cannot be inverted (a degenerate request,
+/// which paints nothing) or the map is not finite.
+pub(crate) fn decode_floor_map(base: Matrix, reference: Matrix) -> Option<Matrix> {
+    if !base.is_stably_invertible() {
+        return None;
+    }
+    let map = Matrix {
+        e: 0.0,
+        f: 0.0,
+        ..base.invert()?.then(reference)
+    };
+    map.is_finite().then_some(map)
+}
+
+/// The footprint hint for one image draw: its own device footprint
+/// ([`codec_target_size`]), raised on each axis to at least its footprint on
+/// the reference raster when the request sets a decode floor (`floor` maps
+/// device space to the reference's, see [`decode_floor_map`]).
+///
+/// The floor only ever raises the hint, so a draw larger than the reference
+/// (a region rendered at twice the page scale) keeps its own resolution, and
+/// draws on every product that shares a reference smaller than it select the
+/// reference's decode. The result depends on the request alone, never on what
+/// was rendered or cached before. `None` stays `None`: reduction is disabled
+/// or the placement is degenerate, and the full-resolution decode already
+/// covers any reference.
+fn decode_target_size(ctm: Matrix, floor: Option<Matrix>) -> Option<(u32, u32)> {
+    let own = codec_target_size(ctm)?;
+    let Some(floor) = floor else {
+        return Some(own);
+    };
+    match codec_target_size(ctm.then(floor)) {
+        Some((w, h)) => Some((own.0.max(w), own.1.max(h))),
+        None => Some(own),
+    }
+}
+
 /// Multiplier applied to the device footprint before it is handed to the codec
 /// as a reduced-resolution hint. Read once from `PDF_RENDERER_JPX_HEADROOM`;
 /// values below 1 or non-finite fall back to the default of 1.0.
@@ -6507,6 +6563,7 @@ mod glyph_cache_tests {
             color_policy: pdf_render_api::RenderColorPolicy::Original,
             diagnostics: RenderDiagnostics::default(),
             image_cache: None,
+            decode_floor: None,
             #[cfg(feature = "profiling")]
             profile: std::cell::RefCell::new(pdf_profiling::ProfileReport::new()),
             #[cfg(feature = "profiling")]
@@ -6826,9 +6883,23 @@ mod image_cache_tests {
         codecs: &pdf_image::CodecRegistry,
         cache: Option<&Arc<SharedImageCache>>,
     ) -> CpuPreparedPage {
+        lower_with_floor(page, scale, device, codecs, None, cache)
+    }
+
+    /// As [`lower_with_codecs`], with an image decode floor at `reference`
+    /// device pixels per user unit (the page scale of the reference raster).
+    fn lower_with_floor(
+        page: &CompiledPage,
+        scale: f64,
+        device: u32,
+        codecs: &pdf_image::CodecRegistry,
+        reference: Option<f64>,
+        cache: Option<&Arc<SharedImageCache>>,
+    ) -> CpuPreparedPage {
+        let base = Matrix::scale(scale, scale);
         lower_impl(
             page,
-            Matrix::scale(scale, scale),
+            base,
             DeviceSize {
                 width: device,
                 height: device,
@@ -6841,6 +6912,7 @@ mod image_cache_tests {
             None,
             None,
             cache,
+            reference.and_then(|r| decode_floor_map(base, Matrix::scale(r, r))),
             false,
             #[cfg(feature = "profiling")]
             None,
@@ -7095,6 +7167,111 @@ mod image_cache_tests {
         );
         assert_eq!(unknown.decodes.load(Ordering::Relaxed), 3);
         assert_eq!(cache.stats(), (1, 3, 3), "only the repeated size hits");
+    }
+
+    /// A decode floor raises a draw's footprint hint to the reference raster's,
+    /// on each axis, and never lowers it; translation plays no part.
+    #[test]
+    fn decode_floor_raises_the_hint_to_the_reference_footprint() {
+        let draw = Matrix::scale(16.0, 16.0);
+        assert_eq!(decode_target_size(draw, None), Some((16, 16)));
+        let to_double = decode_floor_map(
+            Matrix::scale(0.25, 0.25).then(Matrix::translate(5.0, 7.0)),
+            Matrix::scale(0.5, 0.5),
+        )
+        .expect("invertible base");
+        assert_eq!((to_double.e, to_double.f), (0.0, 0.0));
+        assert_eq!(decode_target_size(draw, Some(to_double)), Some((32, 32)));
+        let to_half = decode_floor_map(Matrix::IDENTITY, Matrix::scale(0.5, 0.5));
+        assert_eq!(
+            decode_target_size(draw, to_half),
+            Some((16, 16)),
+            "never lowered"
+        );
+        let skewed = decode_floor_map(Matrix::IDENTITY, Matrix::scale(2.0, 0.5));
+        assert_eq!(decode_target_size(draw, skewed), Some((32, 16)), "per axis");
+        assert_eq!(
+            decode_floor_map(Matrix::scale(0.0, 1.0), Matrix::IDENTITY),
+            None
+        );
+        assert_eq!(
+            decode_target_size(Matrix::scale(0.0, 16.0), Some(to_double)),
+            None,
+            "a degenerate draw keeps the full-resolution hint"
+        );
+    }
+
+    /// Products of one page that share a decode floor decode each image once:
+    /// a 16-px "analysis" render and a 32-px "base" render with the base as
+    /// reference both select the base's DCT scale, where without the floor
+    /// they would decode the JPEG at 16x16 and at 32x32.
+    #[test]
+    fn decode_floor_shares_one_decode_between_products() {
+        let page = dct_page_sized(jpeg_payload_sized(64, 11), 64);
+        let codecs = registry();
+        assert_eq!(
+            decoded_size(&lower_with_floor(&page, 0.25, 16, &codecs, None, None)),
+            (16, 16),
+            "the analysis draw alone decodes at 1/4 scale"
+        );
+
+        let cache = Arc::new(SharedImageCache::default());
+        let analysis = lower_with_floor(&page, 0.25, 16, &codecs, Some(0.5), Some(&cache));
+        let base = lower_with_floor(&page, 0.5, 32, &codecs, Some(0.5), Some(&cache));
+        assert_eq!(cache.stats(), (1, 1, 1), "one decode, then a hit");
+        assert_eq!(decoded_size(&analysis), (32, 32));
+        assert!(Arc::ptr_eq(
+            &prepared_samples(&analysis),
+            &prepared_samples(&base)
+        ));
+        // The base render is what it was without the floor.
+        let unfloored = lower_with_floor(&page, 0.5, 32, &codecs, None, None);
+        assert_eq!(render_pixels(&base), render_pixels(&unfloored));
+    }
+
+    /// The floor is a rendering policy, not a cache effect: a floored render
+    /// paints the same pixels with no cache, first in a fresh cache, and after
+    /// other renders of the page at other sizes have filled the cache.
+    #[test]
+    fn decode_floor_output_depends_on_the_request_alone() {
+        let page = dct_page_sized(jpeg_payload_sized(64, 12), 64);
+        let codecs = registry();
+        let analysis = |cache: Option<&Arc<SharedImageCache>>| {
+            render_pixels(&lower_with_floor(
+                &page,
+                0.25,
+                16,
+                &codecs,
+                Some(0.5),
+                cache,
+            ))
+        };
+        let uncached = analysis(None);
+        let fresh = Arc::new(SharedImageCache::default());
+        assert_eq!(analysis(Some(&fresh)), uncached);
+
+        let warm = Arc::new(SharedImageCache::default());
+        for (scale, device) in [(1.0, 64), (0.125, 8), (0.5, 32)] {
+            lower_with_floor(&page, scale, device, &codecs, None, Some(&warm));
+        }
+        assert_eq!(analysis(Some(&warm)), uncached);
+    }
+
+    /// A draw larger than the reference keeps its own resolution: a 2x
+    /// region render under the base's floor decodes at full size, as its own
+    /// footprint requires, in an entry of its own.
+    #[test]
+    fn decode_floor_never_lowers_a_larger_draw() {
+        let page = dct_page_sized(jpeg_payload_sized(64, 13), 64);
+        let codecs = registry();
+        let cache = Arc::new(SharedImageCache::default());
+        let base = lower_with_floor(&page, 0.5, 32, &codecs, Some(0.5), Some(&cache));
+        let region = lower_with_floor(&page, 1.0, 64, &codecs, Some(0.5), Some(&cache));
+        assert_eq!(decoded_size(&base), (32, 32));
+        assert_eq!(decoded_size(&region), (64, 64));
+        assert_eq!(cache.stats(), (0, 2, 2));
+        let unfloored = lower_with_floor(&page, 1.0, 64, &codecs, None, None);
+        assert_eq!(render_pixels(&region), render_pixels(&unfloored));
     }
 
     /// A JPX stand-in whose output depends on the declared colour space, as

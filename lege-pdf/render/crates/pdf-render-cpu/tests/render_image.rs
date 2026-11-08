@@ -1022,3 +1022,112 @@ fn rotated_image_edges_are_antialiased() {
     // The rotated square's center is solid black.
     assert_eq!(px(&host, 8, 5), [0, 0, 0, 255], "interior solid");
 }
+
+/// Records the footprint hint each decode receives and returns a flat raster
+/// of the declared size.
+#[derive(Debug, Default)]
+struct TargetRecordingDctCodec {
+    targets: std::sync::Mutex<Vec<Option<(u32, u32)>>>,
+}
+
+impl pdf_image::ImageCodec for TargetRecordingDctCodec {
+    fn filter(&self) -> pdf_image::StreamFilter {
+        pdf_image::StreamFilter::DctDecode
+    }
+    fn decode(
+        &self,
+        _data: &[u8],
+        descriptor: &pdf_image::ImageDescriptor,
+        params: &pdf_image::DecodeParameters,
+        _limits: &pdf_image::DecodeLimits,
+    ) -> Result<pdf_image::DecodedImage, pdf_image::ImageError> {
+        self.targets.lock().unwrap().push(params.target_size);
+        let (w, h) = (descriptor.width, descriptor.height);
+        Ok(pdf_image::DecodedImage {
+            width: w,
+            height: h,
+            format: pdf_image::DecodedFormat::Gray8,
+            stride: w as usize,
+            data: Arc::from(vec![128u8; (w * h) as usize]),
+        })
+    }
+}
+
+/// An 8x8-unit page whose only draw is a 64x64 DCT image filling it.
+fn dct_page(jpeg: Vec<u8>) -> CompiledPage {
+    let mut image = image_ir(64, 64, 8, ImageColorSpace::Gray, Vec::new(), false, None);
+    image.samples = None;
+    image.codec = Some(pdf_page_ir::ImageCodecKind::Dct);
+    image.codec_data = Some(jpeg.into());
+    page(image, Color::BLACK, 8.0)
+}
+
+/// `page` rendered at `device` pixels square.
+fn request_at(page: &CompiledPage, device: u32) -> RenderRequest {
+    let mut request = request(page.clone(), device);
+    request.transform.matrix = Matrix::scale(f64::from(device) / 8.0, f64::from(device) / 8.0);
+    request
+}
+
+/// `CpuRenderOptions::image_decode_reference` reaches the codec: a draw on a
+/// 16-px render with a 32-px reference is decoded for the 32-px footprint,
+/// and a 64-px render under the same reference keeps its own.
+#[test]
+fn image_decode_reference_raises_the_codec_footprint_hint() {
+    let codec = Arc::new(TargetRecordingDctCodec::default());
+    let backend = CpuBackend::new(pdf_render_cpu::CpuBackendOptions {
+        codecs: pdf_image::CodecRegistry::new([codec.clone() as Arc<dyn pdf_image::ImageCodec>]),
+        ..Default::default()
+    });
+    let page = dct_page(b"payload".to_vec());
+    let floored = pdf_render_cpu::CpuRenderOptions {
+        image_decode_reference: Some(PageTransform {
+            matrix: Matrix::scale(4.0, 4.0),
+        }),
+    };
+    let mut ctx = pdf_render_cpu::CpuWorkerContext::new();
+    for (device, options) in [
+        (16, pdf_render_cpu::CpuRenderOptions::default()),
+        (16, floored),
+        (64, floored),
+    ] {
+        backend
+            .render_with_options(&request_at(&page, device), &options, &mut ctx)
+            .unwrap();
+    }
+    assert_eq!(
+        *codec.targets.lock().unwrap(),
+        [Some((16, 16)), Some((32, 32)), Some((64, 64))]
+    );
+}
+
+/// With the real JPEG codec, a render under a decode reference paints the
+/// same pixels in a fresh backend as in one whose decoded-image cache earlier
+/// renders of the page at other sizes already filled.
+#[test]
+fn image_decode_reference_output_does_not_depend_on_render_history() {
+    let samples: Vec<u8> = (0..64 * 64)
+        .map(|i| (i as u8).wrapping_mul(31).wrapping_add(7))
+        .collect();
+    let jpeg = pdf_image::jpeg::encoder::write_jpeg(&samples, 64, 64, false, 90, false).unwrap();
+    let page = dct_page(jpeg);
+    let floored = pdf_render_cpu::CpuRenderOptions {
+        image_decode_reference: Some(PageTransform {
+            matrix: Matrix::scale(4.0, 4.0),
+        }),
+    };
+    let render = |backend: &CpuBackend, device: u32, options: &pdf_render_cpu::CpuRenderOptions| {
+        let mut ctx = pdf_render_cpu::CpuWorkerContext::new();
+        backend
+            .render_with_options(&request_at(&page, device), options, &mut ctx)
+            .unwrap()
+            .0
+            .pixels
+    };
+    let fresh = render(&CpuBackend::default(), 16, &floored);
+    let warm = CpuBackend::default();
+    for device in [64, 8, 16, 32] {
+        render(&warm, device, &pdf_render_cpu::CpuRenderOptions::default());
+    }
+    assert_eq!(render(&warm, 16, &floored), fresh);
+}
