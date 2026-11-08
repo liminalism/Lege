@@ -689,13 +689,19 @@ impl PreparedImage {
         if n == 0 || n > MAX_PROMOTE_PIXELS || self.samples.len() < n {
             return None;
         }
-        let mut rgb = Vec::with_capacity(n * 3);
-        for &g in &self.samples[..n] {
-            rgb.extend_from_slice(&[g, g, g]);
+        // Written straight into the shared allocation: building a `Vec` and
+        // converting it with `Arc::from` allocated and copied the 3n bytes
+        // twice per draw (two 6.3 MB allocations for a 300-dpi page scan).
+        let mut rgb = zeroed_arc(n * 3);
+        for (&g, dst) in self.samples[..n]
+            .iter()
+            .zip(unique_arc_mut(&mut rgb).chunks_exact_mut(3))
+        {
+            dst.copy_from_slice(&[g, g, g]);
         }
         Some(PreparedImage {
             color_space: ImageColorSpace::Rgb,
-            samples: Arc::from(rgb),
+            samples: rgb,
             ..self.clone()
         })
     }
