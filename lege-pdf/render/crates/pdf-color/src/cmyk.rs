@@ -1764,6 +1764,15 @@ pub fn adobe_cmyk_to_srgb_u8(c: u8, m: u8, y: u8, k: u8) -> [u8; 3] {
     ]
 }
 
+/// The byte a unit-range component quantises to on entry to the table lookup
+/// (clamp, scale, round half down by a hair). `b as f32 / 255.0` maps back to
+/// `b` for every byte (`byte_components_round_trip_exactly`).
+#[inline]
+pub fn cmyk_component_to_u8(v: f32) -> u8 {
+    const ROUNDING_OFFSET: f32 = 0.499_999_97;
+    (v.clamp(0.0, 1.0) * 255.0 + ROUNDING_OFFSET) as u8
+}
+
 /// Convert normalized CMYK to sRGB — PDFium's `AdobeCMYK_to_sRGB`.
 ///
 /// The rounding offset is PDFium's: the float immediately below 0.5, chosen
@@ -1771,8 +1780,7 @@ pub fn adobe_cmyk_to_srgb_u8(c: u8, m: u8, y: u8, k: u8) -> [u8; 3] {
 /// `0.5` disagrees on one value (0.0019607842). Kept so our quantization
 /// matches theirs.
 pub fn adobe_cmyk_to_srgb(c: f32, m: f32, y: f32, k: f32) -> [f32; 3] {
-    const ROUNDING_OFFSET: f32 = 0.499_999_97;
-    let q = |v: f32| (v.clamp(0.0, 1.0) * 255.0 + ROUNDING_OFFSET) as u8;
+    let q = cmyk_component_to_u8;
     let rgb = adobe_cmyk_to_srgb_u8(q(c), q(m), q(y), q(k));
     [
         rgb[0] as f32 / 255.0,
@@ -1790,6 +1798,43 @@ mod tests {
     /// end-to-end by `tools/pdfium-diff` against the real library: a 225-swatch
     /// CMYK grid renders **identically**, mean max-channel difference 0.000.
     /// These tests guard the port's structure and intent.
+    /// `adobe_cmyk_to_srgb_u8` can be called directly on 8-bit samples: the
+    /// byte -> f32 -> byte entry round trip is the identity on all 256 values,
+    /// and so is the output byte -> f32 -> byte round trip that `to_u8` makes.
+    #[test]
+    fn byte_components_round_trip_exactly() {
+        for b in 0..=255u8 {
+            assert_eq!(cmyk_component_to_u8(b as f32 / 255.0), b, "entry {b}");
+            let out = b as f32 / 255.0;
+            assert_eq!((out * 255.0 + 0.5).clamp(0.0, 255.0) as u8, b, "exit {b}");
+        }
+    }
+
+    /// The float entry point equals the direct byte call over a pair-wise
+    /// exhaustive and a pseudo-random 2^22 sample of the 2^32 inputs.
+    #[test]
+    fn float_entry_matches_direct_byte_call() {
+        let via_float = |c: u8, m: u8, y: u8, k: u8| {
+            let f = adobe_cmyk_to_srgb(c as f32 / 255.0, m as f32 / 255.0, y as f32 / 255.0, k as f32 / 255.0);
+            [0, 1, 2].map(|i| (f[i] * 255.0 + 0.5).clamp(0.0, 255.0) as u8)
+        };
+        for a in 0..=255u8 {
+            for b in 0..=255u8 {
+                for (c, m, y, k) in [(a, b, 0, 0), (a, 0, b, 0), (a, 0, 0, b), (0, a, b, 0), (0, a, 0, b), (0, 0, a, b), (a, b, a, b), (a, b, 255 - a, 255 - b)] {
+                    assert_eq!(via_float(c, m, y, k), adobe_cmyk_to_srgb_u8(c, m, y, k), "{c} {m} {y} {k}");
+                }
+            }
+        }
+        let mut x = 0x9E37_79B9_7F4A_7C15u64;
+        for _ in 0..(1u32 << 22) {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            let [c, m, y, k, ..] = x.to_le_bytes();
+            assert_eq!(via_float(c, m, y, k), adobe_cmyk_to_srgb_u8(c, m, y, k), "{c} {m} {y} {k}");
+        }
+    }
+
     #[test]
     fn the_table_is_complete_and_verbatim() {
         // 9 samples per channel, four channels. If the re-templater ever

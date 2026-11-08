@@ -816,12 +816,18 @@ impl PreparedImage {
         Some(out)
     }
 
-    /// Convert an opaque 8-bit CMYK source (no `/Decode`) to a packed RGB8
-    /// buffer, one pixel through the *exact* same `cmyk_to_rgb` + `to_u8` path
-    /// `pixel()` uses. Box-averaging this buffer is byte-identical to the
-    /// generic path's convert-each-tap-then-average, because each source pixel
-    /// yields the identical RGB triple either way — only the conversion is
-    /// hoisted out of the per-destination-pixel loop into one tight pass.
+    /// Convert an opaque 8-bit CMYK source to a packed RGB8 buffer, one pixel
+    /// through exactly the value `pixel()` yields. Box-averaging this buffer is
+    /// byte-identical to the generic path's convert-each-tap-then-average,
+    /// because each source pixel yields the identical RGB triple either way.
+    ///
+    /// `pixel()` normalises each byte to `[0, 1]` (through `/Decode` if
+    /// present), calls `cmyk_to_rgb`, then rounds back to bytes. The entry and
+    /// exit float round trips are the identity on bytes
+    /// (`pdf_color::cmyk::tests::byte_components_round_trip_exactly`), so the
+    /// byte table is called directly; a `/Decode` array only remaps each
+    /// channel byte, which a 256-entry table per channel precomputes with the
+    /// same expression `pixel()` evaluates.
     ///
     /// `None` if the image is not that shape or exceeds the size cap (then the
     /// generic path runs, unchanged).
@@ -831,11 +837,22 @@ impl PreparedImage {
         const MAX_CONVERT_PIXELS: usize = 64 * 1024 * 1024;
         if self.is_stencil
             || self.bpc != 8
-            || self.decode.is_some()
             || !matches!(self.color_space, ImageColorSpace::Cmyk)
         {
             return None;
         }
+        let luts = match self.decode.as_deref() {
+            None => None,
+            Some(d) if d.len() >= 4 => Some(std::array::from_fn::<[u8; 256], 4, _>(|c| {
+                let [lo, hi] = d[c];
+                std::array::from_fn(|b| {
+                    pdf_color::cmyk::cmyk_component_to_u8(lo + (b as f32 / 255.0) * (hi - lo))
+                })
+            })),
+            // A short `/Decode` leaves later channels at the default in
+            // `pixel()`; that shape stays on the generic path.
+            Some(_) => return None,
+        };
         let n = (self.width as usize).checked_mul(self.height as usize)?;
         if n == 0 || n > MAX_CONVERT_PIXELS || self.samples.len() < n * 4 {
             return None;
@@ -845,15 +862,16 @@ impl PreparedImage {
             .chunks_exact(4)
             .zip(out.chunks_exact_mut(3))
         {
-            let converted = pdf_color::cmyk_to_rgb(
-                (cmyk[0] as f32 / 255.0).clamp(0.0, 1.0),
-                (cmyk[1] as f32 / 255.0).clamp(0.0, 1.0),
-                (cmyk[2] as f32 / 255.0).clamp(0.0, 1.0),
-                (cmyk[3] as f32 / 255.0).clamp(0.0, 1.0),
-            );
-            rgb[0] = to_u8(converted[0]);
-            rgb[1] = to_u8(converted[1]);
-            rgb[2] = to_u8(converted[2]);
+            let [c, m, y, k] = match &luts {
+                None => [cmyk[0], cmyk[1], cmyk[2], cmyk[3]],
+                Some(l) => [
+                    l[0][cmyk[0] as usize],
+                    l[1][cmyk[1] as usize],
+                    l[2][cmyk[2] as usize],
+                    l[3][cmyk[3] as usize],
+                ],
+            };
+            rgb.copy_from_slice(&pdf_color::cmyk::adobe_cmyk_to_srgb_u8(c, m, y, k));
         }
         Some(out)
     }
@@ -2362,6 +2380,50 @@ mod tests {
             codec_data: None,
             codec_parms: None,
         }))
+    }
+
+    /// `cmyk_source_as_rgb8` (direct byte table, per-channel `/Decode` tables)
+    /// yields, for every texel, exactly the RGB `pixel()` computes through
+    /// the f32 path. The texels cover all 256 values on every channel.
+    #[test]
+    fn cmyk_rgb8_conversion_matches_pixel_with_and_without_decode() {
+        let (w, h) = (64u32, 64u32);
+        let mut samples = Vec::new();
+        let mut x = 0x2545_F491_4F6C_DD1Du64;
+        for i in 0..(w * h) {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            let r = x.to_le_bytes();
+            // Texel i walks every byte value on one channel at a time and is
+            // pseudo-random on the others.
+            let v = (i % 256) as u8;
+            let px = match i / 256 % 4 {
+                0 => [v, r[1], r[2], r[3]],
+                1 => [r[0], v, r[2], r[3]],
+                2 => [r[0], r[1], v, r[3]],
+                _ => [r[0], r[1], r[2], v],
+            };
+            samples.extend_from_slice(&px);
+        }
+        let decodes: [Option<Vec<[f32; 2]>>; 4] = [
+            None,
+            Some(vec![[1.0, 0.0]; 4]),
+            Some(vec![[0.1, 0.9], [0.0, 2.0], [-1.0, 1.0], [0.5, 0.5]]),
+            Some(vec![[0.0, 1.0]; 4]),
+        ];
+        for decode in decodes {
+            let mut image = img(w, h, ImageColorSpace::Cmyk, samples.clone(), None);
+            image.decode = decode.map(Arc::from);
+            let rgb = image.cmyk_source_as_rgb8().expect("convertible");
+            for row in 0..h {
+                for col in 0..w {
+                    let want = image.pixel(col, row).unwrap();
+                    let o = (row * w + col) as usize * 3;
+                    assert_eq!(&rgb[o..o + 3], &want[..3], "({col},{row}) decode {:?}", image.decode);
+                }
+            }
+        }
     }
 
     // 2x1 RGB: left texel red, right texel blue.
