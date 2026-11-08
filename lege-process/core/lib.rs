@@ -22,17 +22,36 @@ compile_error!(
 #[path = "../android/mod.rs"]
 pub mod android;
 
-/// PP-DocLayout-M layout model (fp16), embedded in the binary as a payload so
-/// layout detection works with no external asset. A `doclayout.onnx` found next
-/// to the executable (or via `LEGE_LAYOUT_MODEL`) overrides this. The runtime
-/// upconverts the fp16 weights to f32 at load, so inference speed is unchanged.
-#[cfg(feature = "layout-detection")]
+/// Book layout model, embedded so layout detection works with no external
+/// asset: RF-DETR-S (DINOv2-S backbone + deformable DETR decoder, Apache-2.0)
+/// fine-tuned on Lege's own book corpus (2026-11-08; see
+/// `models/layout-rfdetr-s.md`), exported to the PP-DocLayout contract
+/// (`pp_image` [1,3,640,640] in; xyxy boxes and PP-23 class scores out) with
+/// fp16 weights that the runtime widens to f32 at load. A `layout.onnx` (or
+/// legacy `doclayout.onnx`) runtime asset overrides it. The previous model,
+/// PP-DocLayout-M, is no longer compiled in unless the `doclayout-m` feature
+/// asks for it.
+#[cfg(all(feature = "layout-detection", not(feature = "doclayout-m")))]
+pub static EMBEDDED_LAYOUT_MODEL: &[u8] = include_bytes!("../models/layout-rfdetr-s.onnx");
+
+/// PP-DocLayout-M (fp16), the layout model before 2026-11-08; opt-in via the
+/// `doclayout-m` feature.
+#[cfg(all(feature = "layout-detection", feature = "doclayout-m"))]
 pub static EMBEDDED_LAYOUT_MODEL: &[u8] = include_bytes!("../models/doclayout.onnx");
 
 /// Heavy-binarization Sauvola model embedded in every full Lege executable.
 /// A `sauvola.prepared.onnx` or `sauvola.onnx` runtime asset still overrides
 /// this payload for development and model rollouts.
 pub static EMBEDDED_SAUVOLA_MODEL: &[u8] = include_bytes!("../models/sauvola.onnx");
+
+/// Tileable heavy binarizer (TileNet v1, 409k parameters), distilled from the
+/// Sauvola model above plus DIBCO 2009-2016 on Colab (2026-11-07). Same I/O
+/// contract as `sauvola.onnx` (`img01_inp` NHWC grey/255 in, >0.5 = paper out),
+/// but fully convolutional with no global statistics, so it runs on the wgpu
+/// executor. Spatial dims must be a multiple of 8. A `binarizer-tilenet.onnx`
+/// runtime asset overrides it; `LEGE_HEAVY_BINARIZER=sauvolanet` restores the
+/// Sauvola model.
+pub static EMBEDDED_TILENET_BINARIZER: &[u8] = include_bytes!("../models/binarizer-tilenet.onnx");
 
 pub mod accumulator;
 pub mod app_dirs;

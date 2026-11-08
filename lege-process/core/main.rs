@@ -368,7 +368,7 @@ fn fmt4(
 }
 
 fn hardware_acceleration_status() -> (bool, String) {
-    (true, "WGPU (Vulkan/Metal/DX12)".to_string())
+    (true, "WGPU (Vulkan/Metal)".to_string())
 }
 
 /// All optional processing flags for non-interactive CLI mode.

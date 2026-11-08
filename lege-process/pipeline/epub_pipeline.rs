@@ -155,7 +155,7 @@ pub async fn create_and_run_epub_pipeline(
                 let msg = format!(
                     "GPU initialization failed ({}). Layout detection disabled; \
                      processing will continue without it. \
-                     Check that your GPU driver supports DX12 (Windows) or Vulkan (Linux/macOS).",
+                     Check that your GPU driver supports Vulkan (Windows/Linux) or Metal (macOS).",
                     e
                 );
                 warn_log!("[EPUB] {msg}");

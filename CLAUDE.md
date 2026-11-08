@@ -194,23 +194,31 @@ vars → `/usr/share/lege/models` (Linux). Models required:
 
 ## Platform notes
 
-- **OCR backend**: the embedded PP-OCR (`paddle-ocr`, GPU, pure-Rust, via
-  `lege-ocr`) is the default and needs no external binary or tessdata. The
+- **OCR backend**: on **Windows**, OCR (fast and best modes) is the system
+  WinRT OCR (`Windows.Media.Ocr`) through `lege_ocr::WinOcrEngine`
+  (`lege-ocr/src/engine.rs`; `default_engine()` returns it on Windows). Do not
+  switch Windows to PP-OCR. Elsewhere the embedded PP-OCR (`paddle-ocr`, GPU,
+  pure-Rust, via `lege-ocr`) is the default and needs no external binary or tessdata. The
   build script derives `cfg(lege_paddle_ocr)` for it on Linux/macOS (and
   Android with the `android` feature). `tesseract-ocr` remains an opt-in
   legacy backend on Linux/macOS only.
-- **Windows**: Direct3D12 wgpu backend, Windows API for system dirs. `lege-gpu`
-  enables wgpu's `static-dxc`, linking Microsoft's DXC shader compiler (FXC
-  took 20-30 s per job to compile the layout model). Building needs Visual
-  Studio's "C++ ATL for latest build tools" component (`atls.lib`). The old
-  WinRT OCR backend (`lege-process/ocr/winocr.rs`) has been **removed**; what
-  remains is the `windows_ocr` availability stub in `lege-process/ocr/mod.rs`.
+- **Windows**: Vulkan wgpu backend (Direct3D 12 was dropped on 2026-11-08:
+  Vulkan matched or beat it on every Lege workload measured, and only Vulkan
+  reaches tensor cores; see `lege-gpu/src/wgpu_setup.rs`), Windows API for
+  system dirs. No DXC/ATL build requirement any more. WinRT OCR moved from
+  `lege-process/ocr/winocr.rs` into `lege-ocr` in June 2026 (it was not
+  removed); `lege-process/ocr/mod.rs` keeps only a `windows_ocr` availability
+  stub because there is no Tesseract on Windows.
   Consequently `lege`'s `windows` crate features are only what it actually
   calls — `Win32_Foundation`, `Win32_System_Console` (console control in
   `core/main.rs` / `core/progress.rs`) and `Win32_System_SystemInformation`
   (`GlobalMemoryStatusEx` in `pipeline/helper_functions.rs`). Do not re-add
   `Media_Ocr`/`Graphics_Imaging`/Direct3D feature flags: wgpu requests its own.
 - **Linux/macOS**: Vulkan/Metal wgpu backend.
+- **Tensor cores**: on Vulkan adapters with cooperative matrices (NVIDIA RTX),
+  lege-gpu runs MatMul/Gemm on tensor cores (f16 operands, f32 accumulation);
+  `LEGE_GEMM_COOP=0` disables it, `LEGE_GEMM_KERNEL=tiled` selects the legacy
+  f32 kernel.
 - `lege-process/core/windows_dirs.rs` / `app_dirs.rs` — platform-specific config/data directory resolution.
 
 ## Desktop GUI

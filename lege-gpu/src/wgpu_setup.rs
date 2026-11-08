@@ -1,13 +1,16 @@
 //! Shared wgpu backend/instance policy for every lege-gpu compute path
 //! (vision/YOLO, resize, binarization).
 //!
-//! Production policy: on Windows we **insist on DX12**. It is measurably faster
-//! than Vulkan in our testing and is the validated production path; allowing
-//! wgpu to fall onto Vulkan silently (which an all-backends instance permits)
-//! is not acceptable. macOS uses Metal, Linux uses all available backends.
+//! Production policy: **Vulkan** on Windows, Linux and Android; Metal on macOS.
+//! Direct3D 12 was dropped on 2026-11-08: on the owner's RTX 4060 Laptop Vulkan
+//! matched or beat it on every Lege workload (RF-DETR-S layout 42 vs 48 ms per
+//! page, a 200-page Structures job 42 vs 48-54 s, a 200-page heavy scan job
+//! equal), and Vulkan is the only backend through which wgpu reaches tensor
+//! cores (see `vision::runtime::device::GpuContext::supports_coop_gemm`).
 //!
-//! The choice is overridable via the `WGPU_BACKEND` environment variable
-//! (comma-separated: `dx12`, `vulkan`, `metal`, `gl`, `webgpu`, or `all`).
+//! `WGPU_BACKEND` may still name `vulkan`, `metal` or `all` (comma-separated)
+//! for diagnostics; anything else, including the retired `dx12`, is ignored
+//! with a warning and the platform default is used.
 //!
 //! Adapter selection is explicit rather than relying on wgpu's
 //! `PowerPreference::HighPerformance` hint. Some Linux hybrid-graphics drivers
@@ -28,11 +31,16 @@ pub fn requested_backends() -> wgpu::Backends {
         match part.as_str() {
             "vulkan" | "vk" => backends |= wgpu::Backends::VULKAN,
             "metal" | "mtl" => backends |= wgpu::Backends::METAL,
-            "dx12" | "d3d12" => backends |= wgpu::Backends::DX12,
-            "gl" | "opengl" | "gles" => backends |= wgpu::Backends::GL,
-            "browser_webgpu" | "webgpu" => backends |= wgpu::Backends::BROWSER_WEBGPU,
             "all" => backends |= wgpu::Backends::all(),
-            _ => {}
+            "" => {}
+            other => {
+                static WARNED: std::sync::Once = std::sync::Once::new();
+                WARNED.call_once(|| {
+                    eprintln!(
+                        "wgpu: WGPU_BACKEND `{other}` is not supported (Lege runs on Vulkan, or Metal on macOS); ignoring it"
+                    )
+                });
+            }
         }
     }
     if backends.is_empty() {
@@ -44,11 +52,7 @@ pub fn requested_backends() -> wgpu::Backends {
 
 #[cfg(target_os = "windows")]
 fn default_backends() -> wgpu::Backends {
-    // DX12 is the validated production path on Windows. GL is included as a
-    // last-resort fallback for older Intel iGPUs (pre-6th-gen) that lack DX12
-    // support. wgpu's adapter ordering still places DX12 adapters first, so this
-    // doesn't change behaviour on any system that already works.
-    wgpu::Backends::DX12 | wgpu::Backends::GL
+    wgpu::Backends::VULKAN
 }
 
 #[cfg(target_os = "macos")]
@@ -71,12 +75,12 @@ fn default_backends() -> wgpu::Backends {
     all(target_os = "android", feature = "android")
 )))]
 fn default_backends() -> wgpu::Backends {
-    wgpu::Backends::all()
+    wgpu::Backends::VULKAN
 }
 
 /// Create a wgpu instance constrained to [`requested_backends`], so that
 /// `request_adapter` cannot silently select a backend we did not ask for
-/// (e.g. Vulkan on Windows when DX12 is the production target).
+/// (wgpu's own default would also try GL and the browser backends).
 pub fn create_instance() -> wgpu::Instance {
     let mut desc = wgpu::InstanceDescriptor::new_without_display_handle();
     desc.backends = requested_backends();

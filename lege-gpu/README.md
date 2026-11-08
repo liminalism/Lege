@@ -13,7 +13,7 @@ The crate loads ONNX models, folds constants, and lowers the graph to WGSL compu
 | `presentation` | Optional winit presentation (`presentation` feature) |
 | `android` | Android backend policy (`android` feature, Android targets only) |
 
-wgpu backends: Vulkan on Linux, DX12 on Windows, Metal on macOS, Vulkan on Android. WGSL shaders are embedded with `include_str!`.
+wgpu backends: Vulkan on Windows, Linux and Android; Metal on macOS (DX12 was dropped on 2026-11-08). On GPUs with cooperative matrices (NVIDIA RTX) the GEMMs run on tensor cores; `LEGE_GEMM_COOP=0` turns that off. WGSL shaders are embedded with `include_str!`.
 
 ```sh
 cargo gpu

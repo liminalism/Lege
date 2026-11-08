@@ -2477,7 +2477,7 @@ checksum = "7a79a3332a6609480d7d0c9eab957bca6b455b91bb84e66d19f5ff66294b85b8"
 
 [[package]]
 name = "lege"
-version = "1.5.2"
+version = "1.5.21"
 dependencies = [
  "android_logger",
  "anyhow",
@@ -2790,12 +2790,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "lhash"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "744a4c881f502e98c2241d2e5f50040ac73b30194d64452bb6260393b53f0dc9"
-
-[[package]]
 name = "libc"
 version = "0.2.186"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2975,15 +2969,6 @@ name = "lzxd"
 version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c17f346186eccb574ba5581acefc514f0c70a642db4f96e245034a0a158a7168"
-
-[[package]]
-name = "mach-dxcompiler-rs"
-version = "0.1.7+2026.10.26-141dd7f.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ae7b01febf4806c6a95a217784adcd0f0d19413eef5afb1fbea60656ea28c081"
-dependencies = [
- "lhash",
-]
 
 [[package]]
 name = "matrixmultiply"
@@ -6338,7 +6323,6 @@ dependencies = [
  "libc",
  "libloading",
  "log",
- "mach-dxcompiler-rs",
  "naga",
  "naga-types",
  "ndk-sys",

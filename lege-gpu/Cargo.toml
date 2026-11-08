@@ -20,15 +20,13 @@ rayon = { workspace = true }
 pollster = "1.0.1"
 winit = { workspace = true, optional = true }
 
-# `static-dxc` links Microsoft's DXC shader compiler into the binary; wgpu's
-# default DX12 compiler choice prefers it. Without it, Direct3D 12 falls back
-# to FXC, which took 20-30 s to compile the layout model's shaders on every
-# job (DXC: under 1 s). wgpu only pulls the dependency in on 64-bit Windows
-# MSVC targets, so the feature is inert on Linux. Its build script downloads
-# a prebuilt static library (crate `mach-dxcompiler-rs`), and linking it needs
-# the Visual Studio component "C++ ATL for latest build tools" (`atls.lib`).
+# Vulkan only on Windows and Linux (decision 2026-11-08): it was as fast as or
+# faster than Direct3D 12 on every Lege workload measured, and it is the only
+# backend through which wgpu reaches tensor cores (cooperative matrices). DX12,
+# and with it the static DXC shader compiler and its ATL build requirement, is
+# gone.
 [target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
-wgpu = { version = "30.0.0", default-features = false, features = ["std", "wgsl", "vulkan", "dx12", "static-dxc"] }
+wgpu = { version = "30.0.0", default-features = false, features = ["std", "wgsl", "vulkan"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 wgpu = { version = "30.0.0", default-features = false, features = ["std", "wgsl", "metal"] }

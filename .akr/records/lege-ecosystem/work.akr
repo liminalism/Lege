@@ -3112,6 +3112,137 @@ record lege-ecosystem.work.layout-vertical-bands-ocr-horizontal/1 : work {
     }
 }
 
+record lege-ecosystem.work.lege-gpu-tensor-core-gemm/1 : work {
+    title "lege-gpu: tensor-core GEMM on Vulkan, GEMM generator and tuning harness"
+    state completed
+    scope [
+        path "lege-gpu/src/bin/bench_gemm.rs",
+        path "lege-gpu/src/bin/bench_matmul_f16.rs",
+        path "lege-gpu/src/bin/bench_onnx_gpu.rs",
+        path "lege-gpu/src/vision/onnx/fuse_rewrite.rs",
+        path "lege-gpu/src/vision/ops/**",
+        path "lege-gpu/src/vision/runtime/compiled.rs",
+        path "lege-gpu/src/vision/runtime/device.rs",
+        path "lege-gpu/src/vision/session.rs"
+    ]
+    intent """
+        Speed up lege-gpu's GEMMs (MatMul, Gemm, FusedMatMul) for transformer layout models. Add a WGSL
+        generator for register-tiled f32 kernels and for tensor-core kernels through wgpu's experimental
+        cooperative-matrix feature (Vulkan; f16 operands rounded while staging into shared memory, f32
+        accumulation, 16x16x16 tiles, 32-lane subgroups). The device requests the feature only when the
+        adapter reports that configuration (LEGE_GEMM_COOP=0 turns it off), and the pipeline build swaps the
+        tiled kernels for the tensor-core one with identical bindings, params and dispatch grid. Includes the
+        tuning harness bench_gemm, a many-input evaluation mode for bench_onnx_gpu (LEGE_BENCH_EACH), and
+        GEMM tests on f16-exact data so they hold on both paths.
+        """
+    acceptance {
+        check rfdetr-accuracy {
+            statement """
+                RF-DETR-S evaluated through lege-gpu on the tensor-core path stays within noise of onnxruntime f32 on the regression and dev_auto sets.
+                """
+            method observation
+            verified_by [ @lege-ecosystem.evidence.lege-gpu-tensor-core-gemm-20261108/1 ]
+        }
+        check speed {
+            statement """
+                RF-DETR-S at 640 is faster on the tensor-core path than on the f32 kernels (same machine, interleaved runs).
+                """
+            method observation
+            verified_by [ @lege-ecosystem.evidence.lege-gpu-tensor-core-gemm-20261108/1 ]
+        }
+        check tests {
+            statement """
+                lege-gpu library tests pass on the default backend and with WGPU_BACKEND=vulkan (tensor-core GEMM active).
+                """
+            method command
+            command "cargo test -p lege-gpu --features layout-detection --lib && WGPU_BACKEND=vulkan cargo test -p lege-gpu --features layout-detection --lib"
+            verified_by [ @lege-ecosystem.evidence.lege-gpu-tensor-core-gemm-20261108/1 ]
+        }
+    }
+    author "dk"
+}
+
+record lege-ecosystem.work.lege-gpu-transformer-fusion/1 : work {
+    title "lege-gpu: fuse transformer op chains, batched graphs on fast convs, FP16 measurement"
+    state completed
+    scope [
+        path "lege-gpu/src/bin/bench_matmul_f16.rs",
+        path "lege-gpu/src/vision/onnx/**",
+        path "lege-gpu/src/vision/ops/**",
+        path "lege-gpu/src/vision/reference.rs"
+    ]
+    intent """
+        Make transformer layout models cheaper on lege-gpu without retraining: fuse the op chains PyTorch
+        exports (LayerNorm's nine ops into one kernel; scalar input scales, per-column layer scale and bias,
+        fused-QKV split biases, erf-GELU, ReLU and residual adds into a FusedMatMul epilogue on the tiled
+        GEMM), keyed off LEGE_DISABLE_FUSION for A/B; run batched graphs on the fast conv paths (batched
+        Conv split into batch-1 convs, Winograd skips batch > 1 instead of failing); and measure whether
+        FP16 kernels would help (bench_matmul_f16).
+        """
+    acceptance {
+        check other-models-unchanged {
+            statement """
+                Fusion on and off give identical outputs for doclayout, ppocr-det, sauvola and binarizer-tilenet, and ppocr-rec within 1e-6.
+                """
+            method observation
+            verified_by [ @lege-ecosystem.evidence.lege-gpu-transformer-fusion-20261108/1 ]
+        }
+        check rfdetr-parity {
+            statement """
+                Fused RF-DETR-S matches onnxruntime on real pages at batch 1 and batch 4, and is faster than unfused.
+                """
+            method observation
+            verified_by [ @lege-ecosystem.evidence.lege-gpu-transformer-fusion-20261108/1 ]
+        }
+        check tests {
+            statement """
+                lege-gpu library tests pass with layout-detection, including the ViT-block fusion, LayerNorm, unbatch and epilogue tests.
+                """
+            method command
+            command "cargo test -p lege-gpu --features layout-detection --lib"
+            verified_by [ @lege-ecosystem.evidence.lege-gpu-transformer-fusion-20261108/1 ]
+        }
+    }
+    author "dk"
+}
+
+record lege-ecosystem.work.lege-gpu-transformer-ops/1 : work {
+    title "lege-gpu: tiled GEMM, wide softmax and the ops DETR-family layout models need"
+    state completed
+    scope [
+        path "lege-gpu/src/bin/bench_onnx_gpu.rs",
+        path "lege-gpu/src/vision/onnx/**",
+        path "lege-gpu/src/vision/ops/**",
+        path "lege-gpu/src/vision/reference.rs",
+        path "lege-gpu/src/vision/session.rs"
+    ]
+    intent """
+        Make lege-gpu able to run transformer (ViT / DETR-family) layout detectors: tiled GEMM for MatMul and
+        Gemm, workgroup-per-row Softmax, and the missing ops Exp, Sin, Cos, ReduceMax, Tile, Expand, Where,
+        runtime Gather, GatherElements and TopK (plus BOOL initializers), each with a CPU reference and a
+        GPU-versus-reference test; and a latency/IO probe (bench_onnx_gpu, OnnxSession::bench_gpu and
+        profile_report_gpu) for screening candidate models.
+        """
+    acceptance {
+        check rfdetr-parity {
+            statement """
+                Pretrained RF-DETR-S runs end to end on lege-gpu and matches onnxruntime on a real page.
+                """
+            method observation
+            verified_by [ @lege-ecosystem.evidence.lege-gpu-transformer-ops-20261107/1 ]
+        }
+        check tests {
+            statement """
+                lege-gpu library tests pass with and without layout-detection, including GPU-versus-reference tests for every new kernel.
+                """
+            method command
+            command "cargo test --release -p lege-gpu --lib && cargo test --release -p lege-gpu --features layout-detection --lib"
+            verified_by [ @lege-ecosystem.evidence.lege-gpu-transformer-ops-20261107/1 ]
+        }
+    }
+    author "dk"
+}
+
 record lege-ecosystem.work.lege-pdf-agent-over-poppler/1 : work {
     title "Make lege-pdf the PDF tool an agent reaches for before Poppler"
     state completed
@@ -5640,6 +5771,48 @@ record lege-ecosystem.work.tier-2-behavior/1 : work {
             A reduced-resolution decoder still needs to parse packet headers sufficiently to locate packet bodies and preserve tag-tree state, but it need not retain or Tier-1-decode high-resolution code-block data.
             """
     }
+}
+
+record lege-ecosystem.work.tileable-heavy-binarizer/1 : work {
+    title "Tileable student model replaces the CPU Sauvola heavy binarizer on wgpu"
+    state completed
+    scope [
+        path "lege-gpu/src/bin/verify_sauvola_gpu.rs",
+        path "lege-gpu/src/vision/api.rs",
+        path "lege-gpu/src/vision/ops/**",
+        path "lege-process/color/binarization.rs",
+        path "lege-process/core/lib.rs",
+        path "lege-process/models/binarizer-tilenet.onnx"
+    ]
+    intent """
+        Replace the heavy Sauvola binarizer's default execution with a tileable student
+        model (TileNet v1, 409k parameters, distilled on Colab from sauvola.onnx plus
+        DIBCO 2009-2016; training record in D:/projects/google-colab-work/binarizer/NOTES.md)
+        that runs on the wgpu executor. Same I/O contract as sauvola.onnx. The CPU Sauvola
+        model stays as the fallback when the GPU is disabled or fails, and
+        LEGE_HEAVY_BINARIZER=sauvolanet restores it. lege-gpu gains SauvolaProcessor::
+        from_model_bytes and binarize_rgb_padded, and the nearest-Resize and Winograd
+        transform kernels move to the 2-D dispatch grid so pages above about 1000 px no
+        longer exceed the 65535 workgroup limit.
+        """
+    acceptance {
+        check e2e {
+            statement """
+                On the owner's test books the student path is at least 10x faster than the CPU Sauvola path through the Lege CLI, with page-level pixel disagreement under 5 percent.
+                """
+            method observation
+            verified_by [ @lege-ecosystem.evidence.tileable-heavy-binarizer-20261107/1 ]
+        }
+        check tests {
+            statement """
+                lege-gpu library tests and Lege binarization tests pass with the GPU enabled, including the new student tests.
+                """
+            method command
+            command "cargo test --release -p lege-gpu --lib && LEGE_RUN_GPU_TESTS=1 cargo test --release -p lege --lib binarization"
+            verified_by [ @lege-ecosystem.evidence.tileable-heavy-binarizer-20261107/1 ]
+        }
+    }
+    author "dk"
 }
 
 record lege-ecosystem.work.treat-9-7-as-the-first-arithmetic-kernel-target/1 : work {

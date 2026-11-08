@@ -105,7 +105,7 @@ fn infer_node_shapes(
     }
     match node.get_op_type() {
         "Identity" | "Sigmoid" | "Softmax" | "Relu" | "HardSwish" | "HardSigmoid" | "PRelu"
-        | "Sqrt" | "Erf" | "Pow" | "CumSum" => {
+        | "Sqrt" | "Erf" | "Pow" | "CumSum" | "Exp" | "Sin" | "Cos" => {
             let shape = input_shape(node, known_shapes, 0)?;
             for output in node.get_output() {
                 outputs.insert(output.to_owned(), shape.clone());
@@ -195,13 +195,13 @@ fn infer_node_shapes(
                 broadcast_shape(&lhs, &rhs)?,
             );
         }
-        "ReduceSum" | "ReduceMean" => {
+        "ReduceSum" | "ReduceMean" | "ReduceMax" => {
             let mut shape = input_shape(node, known_shapes, 0)?;
-            // ReduceSum (opset 13+) takes axes as input[1]; ReduceMean (opset 11)
-            // and older ReduceSum take an `axes` attribute.
-            let axes = if node.get_op_type() == "ReduceSum" && node.get_input().len() > 1 {
+            // ReduceSum (opset 13+) and opset-18 reductions take axes as input[1];
+            // ReduceMean (opset 11) and older forms take an `axes` attribute.
+            let axes = if node.get_input().len() > 1 && !node.get_input()[1].is_empty() {
                 const_i64(tensor_consts, &node.get_input()[1])
-                    .context("ReduceSum axes must be constant")?
+                    .context("reduction axes must be constant")?
                     .to_vec()
             } else {
                 attr_i64s(node, "axes").context("Reduce axes attribute is required")?
@@ -223,6 +223,63 @@ fn infer_node_shapes(
                 }
             }
             outputs.insert(node.get_output()[0].to_owned(), shape);
+        }
+        "Tile" => {
+            let inp = input_shape(node, known_shapes, 0)?;
+            let repeats = const_i64(tensor_consts, &node.get_input()[1])
+                .context("Tile repeats must be constant")?;
+            if repeats.len() != inp.len() || repeats.iter().any(|r| *r < 0) {
+                bail!("Tile repeats must match the input rank and be non-negative");
+            }
+            let shape = inp.iter().zip(repeats).map(|(d, r)| d * r).collect();
+            outputs.insert(node.get_output()[0].to_owned(), shape);
+        }
+        "Expand" => {
+            let inp = input_shape(node, known_shapes, 0)?;
+            let target = const_i64(tensor_consts, &node.get_input()[1])
+                .context("Expand shape must be constant")?;
+            outputs.insert(
+                node.get_output()[0].to_owned(),
+                broadcast_shape(&inp, target)?,
+            );
+        }
+        "Where" => {
+            let c = input_shape(node, known_shapes, 0)?;
+            let x = input_shape(node, known_shapes, 1)?;
+            let y = input_shape(node, known_shapes, 2)?;
+            outputs.insert(
+                node.get_output()[0].to_owned(),
+                broadcast_shape(&broadcast_shape(&c, &x)?, &y)?,
+            );
+        }
+        "GatherElements" => {
+            let idx = input_shape(node, known_shapes, 1)?;
+            outputs.insert(node.get_output()[0].to_owned(), idx);
+        }
+        "Gather" => {
+            let data = input_shape(node, known_shapes, 0)?;
+            let idx = input_shape(node, known_shapes, 1)?;
+            let axis = normalize_axis(attr_i64(node, "axis").unwrap_or(0), data.len())?;
+            let mut shape = data[..axis].to_vec();
+            shape.extend_from_slice(&idx);
+            shape.extend_from_slice(&data[axis + 1..]);
+            outputs.insert(node.get_output()[0].to_owned(), shape);
+        }
+        "TopK" => {
+            let mut shape = input_shape(node, known_shapes, 0)?;
+            let axis = normalize_axis(attr_i64(node, "axis").unwrap_or(-1), shape.len())?;
+            let k = const_i64(tensor_consts, &node.get_input()[1])
+                .and_then(|v| v.first().copied())
+                .context("TopK k must be a constant")?;
+            if k < 0 || k > shape[axis] {
+                bail!("TopK k={k} out of range for axis length {}", shape[axis]);
+            }
+            shape[axis] = k;
+            for output in node.get_output() {
+                if !output.is_empty() {
+                    outputs.insert(output.to_owned(), shape.clone());
+                }
+            }
         }
         "SpaceToDepth" => {
             let inp = input_shape(node, known_shapes, 0)?;

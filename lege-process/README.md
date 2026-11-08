@@ -145,7 +145,7 @@ Separate pipeline to match DjVu constraints:
 
 All AI model inference (layout detection and page rotation) runs through a **native WebGPU/wgpu compute runtime** compiled into Lege. ONNX models are parsed and lowered to WGSL compute shaders at startup; compiled kernel pipelines are cached per model resolution and reused across pages.
 
-- **Windows**: DX12 backend via wgpu
+- **Windows**: Vulkan backend via wgpu (DX12 dropped 2026-11-08)
 - **Linux**: Vulkan backend via wgpu
 - **macOS**: Metal backend via wgpu
 

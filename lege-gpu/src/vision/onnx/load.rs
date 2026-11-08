@@ -226,15 +226,7 @@ fn validate_op_set(
     op_histogram: &BTreeMap<String, usize>,
     rejection_reasons: &mut Vec<String>,
 ) {
-    let hard_reject = [
-        "QuantizeLinear",
-        "DequantizeLinear",
-        "TopK",
-        "GatherElements",
-        "Range",
-        "Expand",
-        "Tile",
-    ];
+    let hard_reject = ["QuantizeLinear", "DequantizeLinear", "Range"];
     for op in hard_reject {
         if let Some(count) = op_histogram.get(op) {
             rejection_reasons.push(format!(
@@ -249,11 +241,16 @@ fn validate_op_set(
         "Concat",
         "Constant",
         "Conv",
+        "Cos",
         "CumSum",
         "DepthToSpace",
         "Div",
         "Erf",
+        "Exp",
+        "Expand",
         "Flatten",
+        "Gather",
+        "GatherElements",
         "Gemm",
         "GridSample",
         "GlobalAveragePool",
@@ -267,12 +264,14 @@ fn validate_op_set(
         "PRelu",
         "Pad",
         "Pow",
+        "ReduceMax",
         "ReduceMean",
         "ReduceSum",
         "Relu",
         "Resize",
         "Reshape",
         "Sigmoid",
+        "Sin",
         "Slice",
         "Softmax",
         "SpaceToDepth",
@@ -280,8 +279,11 @@ fn validate_op_set(
         "Sqrt",
         "Sub",
         "Squeeze",
+        "Tile",
+        "TopK",
         "Transpose",
         "Unsqueeze",
+        "Where",
     ]);
     for op in op_histogram.keys() {
         let op = op.as_str();
@@ -297,13 +299,9 @@ fn validate_op_set(
                 "Shape",
                 "Squeeze",
                 "Unsqueeze",
-                // Hard-rejected above with a clearer message; listed so they
-                // don't also trip the generic "unsupported op" path.
-                "Expand",
-                "GatherElements",
+                // Hard-rejected above with a clearer message; listed so it
+                // doesn't also trip the generic "unsupported op" path.
                 "Range",
-                "Tile",
-                "TopK",
             ]
             .contains(&op)
         {

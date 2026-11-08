@@ -43,14 +43,15 @@ pub(crate) const WINOGRAD_INPUT_TRANSFORM_WGSL: &str = r#"
 @group(0) @binding(2) var<storage, read>       params : array<u32>;
 
 @compute @workgroup_size(256)
-fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+fn main(@builtin(global_invocation_id) gid: vec3<u32>,
+        @builtin(num_workgroups) ng: vec3<u32>) {
     let cin = params[0];
     let h   = params[1];
     let w   = params[2];
     let ntw = params[3];
     let nth = params[4];
     let p = ntw * nth;
-    let idx = gid.x;
+    let idx = gid.y * ng.x * 256u + gid.x;
     if idx >= cin * p { return; }
 
     let ci = idx / p;
@@ -122,7 +123,8 @@ pub(crate) const WINOGRAD_OUTPUT_TRANSFORM_WGSL: &str = r#"
 @group(0) @binding(3) var<storage, read>       params : array<u32>;
 
 @compute @workgroup_size(256)
-fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+fn main(@builtin(global_invocation_id) gid: vec3<u32>,
+        @builtin(num_workgroups) ng: vec3<u32>) {
     let cout = params[0];
     let h    = params[1];
     let w    = params[2];
@@ -130,7 +132,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let nth  = params[4];
     let use_bias = params[5];
     let p = ntw * nth;
-    let idx = gid.x;
+    let idx = gid.y * ng.x * 256u + gid.x;
     if idx >= cout * p { return; }
 
     let co = idx / p;

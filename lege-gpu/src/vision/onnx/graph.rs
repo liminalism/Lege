@@ -7,9 +7,12 @@ use anyhow::{Context, Result, bail};
 use crate::vision::onnx_pb::ModelProto;
 
 use super::attrs::{shape_i64_to_usize, static_value_shape, tensor_const};
+use super::fuse_rewrite::fuse_transformer_ops;
 use super::lower::lower_all_ops;
+use super::patchify_rewrite::rewrite_patchify_convs;
 use super::shape::infer_all_shapes;
 use super::types::{PlannedOp, TensorConst};
+use super::unbatch_rewrite::unbatch_convs;
 use super::winograd_rewrite::rewrite_winograd_f23;
 
 #[derive(Debug)]
@@ -143,6 +146,21 @@ impl PreparedGraph {
         }
 
         let planned_ops = lower_all_ops(&kept_nodes, &known_shapes, &tensor_consts)?;
+        let planned_ops = unbatch_convs(planned_ops, &mut known_shapes);
+        let planned_ops = rewrite_patchify_convs(planned_ops, &mut known_shapes, &mut constants)?;
+        let disable_fusion = std::env::var("LEGE_DISABLE_FUSION")
+            .map(|value| value != "0" && !value.eq_ignore_ascii_case("false"))
+            .unwrap_or(false);
+        let planned_ops = if disable_fusion {
+            planned_ops
+        } else {
+            let outputs = graph
+                .get_output()
+                .iter()
+                .map(|value| value.get_name().to_owned())
+                .collect::<Vec<_>>();
+            fuse_transformer_ops(planned_ops, &outputs, &mut known_shapes, &mut constants)?
+        };
         let disable_winograd = std::env::var("LEGE_DISABLE_WINOGRAD")
             .map(|value| value != "0" && !value.eq_ignore_ascii_case("false"))
             .unwrap_or(false);

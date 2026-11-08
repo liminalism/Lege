@@ -645,6 +645,58 @@ record lege-ecosystem.observation.ppocrv6-wgpu-blockers-resolved-20260822/2 : ob
     verified_by [ @lege-ecosystem.evidence.stale-observation-requeue-20260908/1 ]
 }
 
+record lege-ecosystem.observation.transformer-layout-models-bound-by-naive-matmul/1 : observation {
+    title "Transformer layout detectors run on lege-gpu but are ~25x too slow: MatMul/Gemm are untiled"
+    state superseded
+    statement """
+        lege-gpu runs transformer layout detectors correctly but about 25x too slowly, because MatMul and
+        Gemm use a naive one-thread-per-output kernel. Measured 2026-11-07 on an RTX 4060 Laptop with random
+        weights: PP-DocLayout-M 640x640 takes 32 ms; a DINOv2-S/14-reg backbone takes 705 ms at 644x644 and
+        1,941 ms at 1022x728; with a 3-6 layer deformable DETR decoder 744-799 ms and 2,103-2,239 ms. The
+        same 2116x384x1536 multiply takes 9.3 ms as MatMul and 0.73 ms as a 1x1 Conv through the tiled
+        GEMM (13x). All ops of the custom ViT + deformable DETR export are supported; MatMul needed its
+        dispatch moved to the 2-D grid (65535 limit). RF-DETR-S's own export is not runnable: TopK,
+        GatherElements, Tile, Expand, Where, ReduceMax, Exp, Sin, Cos. Details:
+        D:/projects/google-colab-work/layout-detection/FEASIBILITY.md
+        """
+    observed_at git:0b5cd5f56dd4bb0c715b931b85a7f971e2455df1
+    method command
+    watches [
+        "lege-gpu/src/vision/ops/matmul.rs",
+        "lege-gpu/src/vision/ops/gemm.rs",
+        "lege-gpu/src/vision/ops/compile.rs"
+    ]
+    author "dk"
+}
+
+record lege-ecosystem.observation.transformer-layout-models-bound-by-naive-matmul/2 : observation {
+    title "lege-gpu runs DETR-family layout detectors: tiled GEMM, wide softmax and the RF-DETR op set"
+    state verified
+    statement """
+        lege-gpu now runs DETR-family layout detectors at usable speed and with the full RF-DETR op set.
+        Changes (2026-11-07, uncommitted): MatMul and Gemm route to a register-blocked tiled GEMM (scalar and
+        vec4 variants; batched, broadcast and transposed operands; Gemm alpha/beta and all ONNX bias shapes);
+        wide-row Softmax uses one workgroup per row with tree reductions; new ops Exp, Sin, Cos, ReduceMax,
+        Tile, Expand, Where, runtime Gather (constant indices), GatherElements and TopK (rank selection, exact
+        ONNX tie order); BOOL initializers load as 0/1 f32. Measured on an RTX 4060 Laptop, random weights:
+        DINOv2-S/14-reg backbone 705 -> 124 ms at 644x644 and 1,941 -> 316 ms at 1022x728; ViT-S + 3-6 layer
+        deformable DETR 744-799 -> 147-157 ms at 644x644; PP-DocLayout-M unchanged at 30-32 ms. Pretrained
+        RF-DETR-S (512x512, its own export) runs end to end in about 105-130 ms and matches onnxruntime on a
+        real book page: boxes max|diff| 1.3e-4, logits 4.4e-4, identical argmax class for all 300 queries.
+        Remaining gap to the 100 ms backbone target is attention arithmetic; windowed attention in 8 of 12
+        blocks is the model-side fix. Details: D:/projects/google-colab-work/layout-detection/FEASIBILITY.md
+        """
+    observed_at git:0b5cd5f56dd4bb0c715b931b85a7f971e2455df1
+    method command
+    watches [
+        "lege-gpu/src/vision/ops/matmul.rs",
+        "lege-gpu/src/vision/ops/gemm.rs",
+        "lege-gpu/src/vision/ops/compile.rs"
+    ]
+    supersedes [ @lege-ecosystem.observation.transformer-layout-models-bound-by-naive-matmul/1 ]
+    author "dk"
+}
+
 record lege-ecosystem.observation.truetyping-dictionary-lock-serialized-every-page/1 : observation {
     title "Truetyping's shared glyph dictionary serialized every page's matching behind one mutex, and that lock was the whole critical path"
     state superseded

@@ -59,6 +59,7 @@ fn is_eligible_conv(op: &PlannedOp) -> bool {
         && op.outputs.len() == 1
         && op.input_shapes.len() >= 2
         && op.output_shapes.len() == 1
+        && op.input_shapes[0].first() == Some(&1)
 }
 
 fn rewrite_one(

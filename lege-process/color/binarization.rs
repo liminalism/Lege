@@ -26,6 +26,31 @@ thread_local! {
 /// Output convention: 255 = foreground (text), 0 = background (paper).
 pub struct HeavySauvolaProcessor {
     processor: lege_gpu::vision::SauvolaCpuProcessor,
+    /// Tileable student binarizer on the wgpu executor; `None` when disabled by
+    /// `LEGE_HEAVY_BINARIZER=sauvolanet` or when it failed to load.
+    student: Option<lege_gpu::vision::SauvolaProcessor>,
+    /// Set after the first GPU failure so later pages go straight to the CPU model.
+    student_failed: std::sync::atomic::AtomicBool,
+}
+
+/// Spatial multiple the student's input is padded to: its stride is 8, and a
+/// coarser multiple lets nearby page sizes share one compiled wgpu graph.
+const STUDENT_PAD_MULTIPLE: u32 = 64;
+
+fn load_student_binarizer() -> Option<lege_gpu::vision::SauvolaProcessor> {
+    if std::env::var("LEGE_HEAVY_BINARIZER")
+        .map(|v| v.eq_ignore_ascii_case("sauvolanet") || v.eq_ignore_ascii_case("sauvola"))
+        .unwrap_or(false)
+    {
+        return None;
+    }
+    let loaded = match crate::runtime_asset_path_if_exists("binarizer-tilenet.onnx") {
+        Some(path) => lege_gpu::vision::SauvolaProcessor::from_model_path(&path),
+        None => {
+            lege_gpu::vision::SauvolaProcessor::from_model_bytes(crate::EMBEDDED_TILENET_BINARIZER)
+        }
+    };
+    loaded.ok()
 }
 
 impl HeavySauvolaProcessor {
@@ -56,7 +81,32 @@ impl HeavySauvolaProcessor {
         }
         .map_err(|e| anyhow!("Failed to load sauvola model via lege-vision: {e}"))?;
 
-        Ok(Self { processor })
+        Ok(Self {
+            processor,
+            student: load_student_binarizer(),
+            student_failed: std::sync::atomic::AtomicBool::new(false),
+        })
+    }
+
+    /// Runs the tileable student on the GPU when it is available and allowed.
+    /// Returns `None` to fall back to the whole-page CPU Sauvola model.
+    fn student_mask(&self, img: &RgbImage, opt: &BinarizationOptions) -> Option<GrayImage> {
+        use std::sync::atomic::Ordering;
+        let student = self.student.as_ref()?;
+        if opt.disable_gpu || self.student_failed.load(Ordering::Relaxed) {
+            return None;
+        }
+        match student.binarize_rgb_padded(img, STUDENT_PAD_MULTIPLE) {
+            Ok(mask) => Some(mask),
+            Err(_e) => {
+                self.student_failed.store(true, Ordering::Relaxed);
+                #[cfg(feature = "debug-logging")]
+                crate::encoding::streamline::log_debug_message(&format!(
+                    "Tileable binarizer failed on the GPU, using the CPU Sauvola model: {_e:#}"
+                ));
+                None
+            }
+        }
     }
 
     /// Process an RGB image region through the bridge model at native
@@ -109,7 +159,10 @@ impl HeavySauvolaProcessor {
         let img = RgbImage::from_raw(region_w, region_h, rgb)
             .ok_or_else(|| anyhow!("failed to create RgbImage from region"))?;
 
-        let mut mask = self.processor.binarize_rgb(&img)?;
+        let mut mask = match self.student_mask(&img, opt) {
+            Some(mask) => mask,
+            None => self.processor.binarize_rgb(&img)?,
+        };
         let mut recycled = img.into_raw();
         recycled.clear();
         HEAVY_SAUVOLA_RGB_ARENA.with(|arena| {
@@ -1107,6 +1160,49 @@ mod tests {
     fn embedded_sauvola_model_loads_from_bytes() {
         lege_gpu::vision::SauvolaCpuProcessor::from_model_bytes(crate::EMBEDDED_SAUVOLA_MODEL)
             .expect("embedded Sauvola model should parse and pass compatibility checks");
+    }
+
+    #[test]
+    fn embedded_tilenet_binarizer_loads_from_bytes() {
+        lege_gpu::vision::SauvolaProcessor::from_model_bytes(crate::EMBEDDED_TILENET_BINARIZER)
+            .expect("embedded tileable binarizer should parse and pass compatibility checks");
+    }
+
+    /// The tileable binarizer pads to its stride internally: a page whose sides are
+    /// not multiples of 8 must come back at its own size, binary, with dark ink as
+    /// ink. GPU-gated like the other wgpu tests.
+    #[test]
+    fn tilenet_binarizer_keeps_odd_page_size_and_polarity() {
+        if std::env::var("LEGE_RUN_GPU_TESTS").ok().as_deref() != Some("1") {
+            return;
+        }
+        let student =
+            lege_gpu::vision::SauvolaProcessor::from_model_bytes(crate::EMBEDDED_TILENET_BINARIZER)
+                .expect("embedded tileable binarizer loads");
+        let (w, h) = (203u32, 141u32);
+        let img = image::RgbImage::from_fn(w, h, |x, y| {
+            let ink = (60..140).contains(&x) && (50..90).contains(&y) && (x / 6 + y / 6) % 2 == 0;
+            if ink {
+                image::Rgb([20, 20, 20])
+            } else {
+                image::Rgb([225, 215, 190])
+            }
+        });
+        let mask = student
+            .binarize_rgb_padded(&img, 64)
+            .expect("student runs on wgpu");
+        assert_eq!(mask.dimensions(), (w, h));
+        assert!(mask.iter().all(|&v| v == 0 || v == 255));
+        assert_eq!(
+            mask.get_pixel(5, 5).0[0],
+            255,
+            "paper corner must stay paper"
+        );
+        let ink = mask.iter().filter(|&&v| v == 0).count();
+        assert!(
+            ink > 200,
+            "the dark checker block must produce ink, got {ink} pixels"
+        );
     }
 
     #[test]

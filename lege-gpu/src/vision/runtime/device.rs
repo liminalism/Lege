@@ -99,6 +99,10 @@ pub(crate) struct GpuContext {
     pub(crate) queue: Arc<crate::vision::wgpu::Queue>,
     pub(crate) is_cpu_adapter: bool,
     pub(crate) supports_timestamps: bool,
+    /// Tensor-core GEMM available (Vulkan cooperative matrix, f16 x f16 -> f32
+    /// 16x16x16, 32-lane subgroups); MatMul/Gemm steps then use
+    /// `ops::gemm_gen::coop_gemm_wgsl`. `LEGE_GEMM_COOP=0` turns it off.
+    pub(crate) supports_coop_gemm: bool,
     pub(crate) adapter_name: Arc<str>,
     pub(crate) adapter_backend: crate::vision::wgpu::Backend,
     pub(crate) adapter_device_type: crate::vision::wgpu::DeviceType,
@@ -189,10 +193,22 @@ impl GpuContext {
             let adapter_features = adapter.features();
             let supports_timestamps =
                 adapter_features.contains(crate::vision::wgpu::Features::TIMESTAMP_QUERY);
-            let required_features = if supports_timestamps {
+            let mut required_features = if supports_timestamps {
                 crate::vision::wgpu::Features::TIMESTAMP_QUERY
             } else {
                 crate::vision::wgpu::Features::empty()
+            };
+            let supports_coop_gemm = coop_gemm_supported(&adapter, &info);
+            let experimental_features = if supports_coop_gemm {
+                required_features |= COOP_GEMM_FEATURES;
+                // SAFETY: the only experimental feature requested is the
+                // cooperative-matrix GEMM, used solely by
+                // `ops::gemm_gen::coop_gemm_wgsl` with a configuration the
+                // adapter reported (16x16x16, f16 operands, f32 accumulator,
+                // 32-lane subgroups) and checked against the CPU reference.
+                unsafe { crate::vision::wgpu::ExperimentalFeatures::enabled() }
+            } else {
+                crate::vision::wgpu::ExperimentalFeatures::disabled()
             };
 
             match adapter
@@ -201,12 +217,18 @@ impl GpuContext {
                     required_features,
                     required_limits: adapter.limits(),
                     memory_hints: crate::vision::wgpu::MemoryHints::Performance,
+                    experimental_features,
                     ..Default::default()
                 })
                 .await
             {
                 Ok((device, queue)) => {
                     eprintln!("wgpu: selected adapter: {adapter_desc}");
+                    if supports_coop_gemm {
+                        eprintln!(
+                            "wgpu: tensor-core GEMM enabled (cooperative matrix, f16 x f16 -> f32)"
+                        );
+                    }
                     if is_cpu {
                         eprintln!(
                             "wgpu: WARNING — no hardware GPU adapter was usable; \
@@ -233,6 +255,7 @@ impl GpuContext {
                         queue: Arc::new(queue),
                         is_cpu_adapter: is_cpu,
                         supports_timestamps,
+                        supports_coop_gemm,
                         adapter_name: Arc::from(info.name),
                         adapter_backend: info.backend,
                         adapter_device_type: info.device_type,
@@ -445,6 +468,32 @@ pub(crate) async fn dispatch_compute(
     let submission = ctx.queue.submit(Some(encoder.finish()));
 
     map_readback(ctx, &readback, output_bytes, submission).await
+}
+
+const COOP_GEMM_FEATURES: crate::vision::wgpu::Features =
+    crate::vision::wgpu::Features::EXPERIMENTAL_COOPERATIVE_MATRIX
+        .union(crate::vision::wgpu::Features::SHADER_F16);
+
+/// Whether the adapter can run the tensor-core GEMM (see `supports_coop_gemm`).
+fn coop_gemm_supported(
+    adapter: &crate::vision::wgpu::Adapter,
+    info: &crate::vision::wgpu::AdapterInfo,
+) -> bool {
+    use crate::vision::wgpu::CooperativeScalarType as T;
+    let disabled = std::env::var("LEGE_GEMM_COOP")
+        .map(|v| v == "0" || v.eq_ignore_ascii_case("false"))
+        .unwrap_or(false);
+    !disabled
+        && adapter.features().contains(COOP_GEMM_FEATURES)
+        && info.subgroup_min_size == 32
+        && info.subgroup_max_size == 32
+        && adapter.cooperative_matrix_properties().iter().any(|p| {
+            p.m_size == 16
+                && p.n_size == 16
+                && p.k_size == 16
+                && p.ab_type == T::F16
+                && p.cr_type == T::F32
+        })
 }
 
 pub(crate) fn storage_bgl_entries(

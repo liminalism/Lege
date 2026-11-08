@@ -95,6 +95,9 @@ pub(crate) fn tensor_const(tensor: &TensorProto) -> Option<TensorConst> {
         1 => Some(TensorConst::Float32(tensor_f32(tensor))),
         6 => Some(TensorConst::Int64(tensor_i32(tensor))),
         7 => Some(TensorConst::Int64(tensor_i64(tensor))),
+        // BOOL: carried as 0.0 / 1.0 floats (the executor is f32-only); used as
+        // Where conditions and masks.
+        9 => Some(TensorConst::Float32(tensor_bool_as_f32(tensor))),
         // FLOAT16: up-convert to f32 on load so the rest of the bridge (and all
         // wgpu kernels) keep operating in f32. This is the loader half of the
         // "fp16 weights on disk, f32 compute" path — it halves the on-disk model
@@ -159,6 +162,21 @@ pub(crate) fn tensor_f16_as_f32(tensor: &TensorProto) -> Vec<f32> {
 
 /// Loads an INT32 tensor, widening to i64. ONNX stores int32 in `int32_data`
 /// or little-endian `raw_data`; we treat both as shape/axis constants.
+fn tensor_bool_as_f32(tensor: &TensorProto) -> Vec<f32> {
+    if !tensor.get_int32_data().is_empty() {
+        return tensor
+            .get_int32_data()
+            .iter()
+            .map(|&v| if v != 0 { 1.0 } else { 0.0 })
+            .collect();
+    }
+    tensor
+        .get_raw_data()
+        .iter()
+        .map(|&b| if b != 0 { 1.0 } else { 0.0 })
+        .collect()
+}
+
 pub(crate) fn tensor_i32(tensor: &TensorProto) -> Vec<i64> {
     if !tensor.get_int32_data().is_empty() {
         return tensor.get_int32_data().iter().map(|&v| v as i64).collect();

@@ -97,4 +97,61 @@ impl OnnxSession {
             compiled.run(input).await.context("GPU inference failed")
         })
     }
+
+    /// Runs many inputs through one compiled graph, in order, handing each
+    /// result to `sink` (evaluation harnesses; single-flight like `run_gpu`).
+    pub fn run_gpu_each(
+        &self,
+        inputs: impl IntoIterator<Item = Result<Tensor>>,
+        mut sink: impl FnMut(usize, HashMap<String, Tensor>) -> Result<()>,
+    ) -> Result<()> {
+        pollster::block_on(async {
+            let compiled = CompiledGraph::build(&self.graph)
+                .await
+                .context("failed to compile prepared graph for GPU inference")?;
+            for (i, input) in inputs.into_iter().enumerate() {
+                let outputs = compiled
+                    .run(&input?)
+                    .await
+                    .context("GPU inference failed")?;
+                sink(i, outputs)?;
+            }
+            Ok(())
+        })
+    }
+
+    /// Per-dispatch GPU timing report (timestamp queries), grouped by op kind.
+    #[cfg(feature = "layout-detection")]
+    pub fn profile_report_gpu(&self, input: &Tensor) -> Result<String> {
+        pollster::block_on(async {
+            let compiled = CompiledGraph::build(&self.graph)
+                .await
+                .context("failed to compile prepared graph for GPU inference")?;
+            compiled.run(input).await.context("GPU warm-up failed")?;
+            compiled.profile_report(input).await
+        })
+    }
+
+    /// Latency probe for model screening: compiles the graph once, then runs
+    /// `runs` warm inferences. Returns the compile time and each run's time.
+    pub fn bench_gpu(
+        &self,
+        input: &Tensor,
+        runs: usize,
+    ) -> Result<(std::time::Duration, Vec<std::time::Duration>)> {
+        pollster::block_on(async {
+            let t0 = std::time::Instant::now();
+            let compiled = CompiledGraph::build(&self.graph)
+                .await
+                .context("failed to compile prepared graph for GPU inference")?;
+            let compile = t0.elapsed();
+            let mut times = Vec::with_capacity(runs);
+            for _ in 0..runs {
+                let t = std::time::Instant::now();
+                compiled.run(input).await.context("GPU inference failed")?;
+                times.push(t.elapsed());
+            }
+            Ok((compile, times))
+        })
+    }
 }

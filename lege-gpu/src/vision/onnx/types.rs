@@ -105,6 +105,77 @@ pub(crate) enum PlannedOpKind {
     DepthToSpace {
         blocksize: usize,
     },
+    /// Max-reduce a single axis.
+    ReduceMax {
+        axis: usize,
+        keepdims: bool,
+    },
+    /// Tile with constant repeats (the planned output shape carries them).
+    Tile {
+        out_shape: Vec<usize>,
+    },
+    /// Expand to a constant target shape (bidirectional broadcast).
+    Expand {
+        out_shape: Vec<usize>,
+    },
+    /// Where(cond, x, y) with broadcasting; cond is carried as 0.0 / 1.0.
+    Where,
+    /// Gather along `axis` of a runtime tensor with constant, normalised indices.
+    /// `out_shape` is the planned output (a scalar index drops the axis).
+    Gather {
+        axis: usize,
+        indices: Vec<usize>,
+        out_shape: Vec<usize>,
+    },
+    /// GatherElements along `axis`; indices are a runtime tensor (integers in f32).
+    GatherElements {
+        axis: usize,
+    },
+    /// TopK along `axis` with a constant k; outputs (values, indices) sorted.
+    TopK {
+        axis: usize,
+        k: usize,
+        largest: bool,
+    },
+    /// MatMul with a fused epilogue, produced by `fuse_rewrite`:
+    /// `out = act(alpha · (a @ b) + bias) + residual`, numpy-batched like MatMul.
+    /// Inputs: `a`, `b` (`[.., N, K]` when `trans_b`), then the per-column bias
+    /// (length N) if `has_bias`, then the residual (same layout as the output)
+    /// if `has_residual`. `out_shape` is the planned output (it may be a reshape
+    /// of the `[batch.., M, N]` product).
+    FusedMatMul {
+        alpha: f32,
+        trans_b: bool,
+        has_bias: bool,
+        has_residual: bool,
+        act: Activation,
+        out_shape: Vec<usize>,
+    },
+    /// LayerNorm over one axis: `(x - mean) / sqrt(var + epsilon) · gamma + beta`.
+    /// Inputs: `x`, `gamma`, `beta` (each `axis`-length).
+    LayerNorm {
+        axis: usize,
+        epsilon: f32,
+    },
+}
+
+/// Pointwise activation applied in a fused epilogue.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Activation {
+    None,
+    /// Exact (erf) GELU: `0.5 · x · (1 + erf(x / sqrt 2))`.
+    Gelu,
+    Relu,
+}
+
+impl Activation {
+    pub(crate) fn code(self) -> u32 {
+        match self {
+            Activation::None => 0,
+            Activation::Gelu => 1,
+            Activation::Relu => 2,
+        }
+    }
 }
 
 impl PlannedOpKind {
@@ -126,6 +197,9 @@ impl PlannedOpKind {
             PlannedOpKind::Unary(UnaryKind::HardSigmoid { .. }) => "HardSigmoid",
             PlannedOpKind::Unary(UnaryKind::Sqrt) => "Sqrt",
             PlannedOpKind::Unary(UnaryKind::Erf) => "Erf",
+            PlannedOpKind::Unary(UnaryKind::Exp) => "Exp",
+            PlannedOpKind::Unary(UnaryKind::Sin) => "Sin",
+            PlannedOpKind::Unary(UnaryKind::Cos) => "Cos",
             PlannedOpKind::Unary(UnaryKind::Pow { .. }) => "Pow",
             PlannedOpKind::Concat { .. } => "Concat",
             PlannedOpKind::Split { .. } => "Split",
@@ -149,6 +223,15 @@ impl PlannedOpKind {
             PlannedOpKind::ReduceSum { .. } => "ReduceSum",
             PlannedOpKind::SpaceToDepth { .. } => "SpaceToDepth",
             PlannedOpKind::DepthToSpace { .. } => "DepthToSpace",
+            PlannedOpKind::ReduceMax { .. } => "ReduceMax",
+            PlannedOpKind::Tile { .. } => "Tile",
+            PlannedOpKind::Expand { .. } => "Expand",
+            PlannedOpKind::Where => "Where",
+            PlannedOpKind::Gather { .. } => "Gather",
+            PlannedOpKind::GatherElements { .. } => "GatherElements",
+            PlannedOpKind::TopK { .. } => "TopK",
+            PlannedOpKind::FusedMatMul { .. } => "FusedMatMul",
+            PlannedOpKind::LayerNorm { .. } => "LayerNorm",
         }
     }
 }
@@ -203,4 +286,7 @@ pub(crate) enum UnaryKind {
     Pow {
         exponent: f32,
     },
+    Exp,
+    Sin,
+    Cos,
 }

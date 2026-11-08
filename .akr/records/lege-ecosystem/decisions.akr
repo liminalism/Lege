@@ -205,6 +205,38 @@ record lege-ecosystem.decision.printing-defers-prepress-to-lege-pdf-write/1 : de
     derived_from [ @lege-ecosystem.work.office-printing ]
 }
 
+record lege-ecosystem.decision.rfdetr-book-layout-model-replaces-doclayout-m/1 : decision {
+    title "lege embeds the RF-DETR-S book layout model; PP-DocLayout-M is opt-in"
+    state active
+    scope [
+        path "lege-process/Cargo.toml",
+        path "lege-process/core/lib.rs",
+        path "lege-process/models/**",
+        path "lege-process/pipeline/config.rs"
+    ]
+    decision """
+        The lege executable embeds the RF-DETR-S book layout model (lege-process/models/layout-rfdetr-s.onnx,
+        fine-tuned on the owner's book corpus, fp16 weights, PP-DocLayout I/O contract) instead of
+        PP-DocLayout-M. PP-DocLayout-M is compiled in only with the opt-in `doclayout-m` feature. A
+        `layout.onnx` (or legacy `doclayout.onnx`) runtime asset still overrides the embedded model.
+        lege-document-ocr, the business-document OCR product, keeps PP-DocLayout-M: the new model was
+        trained only on books.
+        """
+    context """
+        Owner's request on 2026-11-08 ("make sure the doclayout-m is gone from compiled builds by default"),
+        after the RF-DETR-S fine-tune beat PP-DocLayout-M on every pseudo-label metric that matters for Lege
+        (clipping and missing text roughly halved) and lege-gpu made it fast enough (about 32 ms per page with
+        tensor cores). The owner's gold-label review of the regression and dev sets is still pending.
+        """
+    consequences """
+        The lege binary grows by about 46 MB (58 MB model replacing 12 MB). Pipeline confidence threshold
+        (0.35) and its comment were tuned for PP-DocLayout-M and may deserve retuning for RF-DETR once gold
+        labels exist.
+        """
+    supported_by [ @lege-ecosystem.evidence.rfdetr-default-layout-model-20261108/2 ]
+    author "dk"
+}
+
 record lege-ecosystem.decision.sideways-pages-are-turned-upright-with-rotate/1 : decision {
     title "A sideways page is turned upright with /Rotate, never on its head"
     state proposed
@@ -469,4 +501,40 @@ record lege-ecosystem.decision.truetyping-renders-in-grayscale-by-default/1 : de
         Bilevel truetyping stays reachable by naming a binarization mode or unticking Grayscale. Truetyping remains opt-in overall (see @lege-ecosystem.decision.jbig2-is-the-default-pdf-text-format-again): dictionary matching still makes occasional substitution errors on bold text.
         """
     author "GitHub Uploader"
+}
+
+record lege-ecosystem.decision.vulkan-replaces-dx12/1 : decision {
+    title "Lege runs on Vulkan (Metal on macOS); Direct3D 12 is removed"
+    state active
+    scope [
+        path "lege-gpu/Cargo.toml",
+        path "lege-gpu/src/vision/runtime/device.rs",
+        path "lege-gpu/src/wgpu_setup.rs"
+    ]
+    decision """
+        Lege's GPU work runs on Vulkan on Windows, Linux and Android, and on Metal on macOS. The Direct3D 12
+        backend is removed from every build (lege-gpu no longer enables wgpu's dx12 or static-dxc features);
+        WGPU_BACKEND accepts only vulkan, metal or all, and ignores anything else with a warning. On Vulkan
+        adapters that report 16x16x16 f16->f32 cooperative matrices, GEMMs run on tensor cores.
+        """
+    context """
+        Owner's decision on 2026-11-08 after the tensor-core work: DX12 had been the Windows default on the
+        belief that it was faster. Measured on the owner's RTX 4060 Laptop, Vulkan matched or beat it on every
+        Lege workload (RF-DETR-S layout 42 vs 48 ms per page on f32 kernels, 32 ms with tensor cores; a
+        200-page Structures job 42 vs 48-54 s; a 200-page heavy-binarization scan job equal), outputs agreed
+        (Structures 200/200 pages pixel-identical at 100 dpi, sahib 194/200 with the worst page 0.12% of
+        pixels at the binarizer threshold), and wgpu reaches tensor cores only through Vulkan.
+        """
+    consequences """
+        Windows builds no longer need Microsoft's DXC compiler or the Visual Studio ATL component. A machine
+        whose driver has no Vulkan support loses GPU processing (layout detection is disabled and the CPU
+        paths run); the old GL fallback was never compiled in, so pre-Vulkan Intel iGPUs had no GPU path
+        before either. Speed evidence is from one NVIDIA laptop; AMD and Intel Vulkan drivers on Windows are
+        unmeasured. On macOS the choice between wgpu's Metal backend and CoreML is open.
+        """
+    supported_by [
+        @lege-ecosystem.evidence.lege-gpu-tensor-core-gemm-20261108/1,
+        @lege-ecosystem.evidence.vulkan-vs-dx12-lege-workloads-20261108/3
+    ]
+    author "dk"
 }

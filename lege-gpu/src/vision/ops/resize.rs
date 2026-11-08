@@ -7,8 +7,9 @@ pub(crate) const RESIZE_NEAREST_WGSL: &str = r#"
 @group(0) @binding(2) var<storage, read>       params : array<u32>;
 
 @compute @workgroup_size(256)
-fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let i = gid.x;
+fn main(@builtin(global_invocation_id) gid: vec3<u32>,
+        @builtin(num_workgroups) ng: vec3<u32>) {
+    let i = gid.y * ng.x * 256u + gid.x;
     if i >= params[0] { return; }
 
     let hout = params[4];

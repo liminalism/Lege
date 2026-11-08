@@ -108,6 +108,29 @@ fn main(
 }
 "#;
 
+/// Chooses the GEMM kernel for steps planned on the tiled kernels (same
+/// bindings, params block and 64x64 dispatch grid in every case): the
+/// tensor-core kernel when the device supports it, else the vectorised f32
+/// kernel from `gemm_gen` (3-8% less GEMM time than `matmul_tiled` on Vulkan,
+/// RTX 4060 Laptop). `LEGE_GEMM_KERNEL=tiled` keeps `matmul_tiled` for A/B.
+fn upgrade_gemm_steps(specs: &mut [crate::vision::ops::compile::StepSpec], coop: bool) {
+    use crate::vision::ops::gemm_gen::{coop_gemm_wgsl, simt_gemm_wgsl};
+    use crate::vision::ops::matmul_tiled::{MATMUL_TILED_VEC4_WGSL, MATMUL_TILED_WGSL};
+    static LEGACY: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    let legacy = *LEGACY.get_or_init(|| {
+        std::env::var("LEGE_GEMM_KERNEL").is_ok_and(|v| v.eq_ignore_ascii_case("tiled"))
+    });
+    for spec in specs {
+        if spec.wgsl == MATMUL_TILED_WGSL || spec.wgsl == MATMUL_TILED_VEC4_WGSL {
+            if coop {
+                spec.wgsl = coop_gemm_wgsl();
+            } else if !legacy {
+                spec.wgsl = simt_gemm_wgsl();
+            }
+        }
+    }
+}
+
 fn build_pipeline_for_shader(
     device: &crate::vision::wgpu::Device,
     wgsl: &'static str,
@@ -434,7 +457,7 @@ impl CompiledGraph {
 
         // The first session for a document has no parent to inherit pipelines
         // from, so it must compile every unique shader. naga validation and
-        // backend codegen (HLSL/FXC on DX12, SPIR-V on Vulkan) dominate cold
+        // backend codegen (SPIR-V on Vulkan, MSL on Metal) dominate cold
         // start, and each unique WGSL source is independent, so compile them in
         // parallel across Rayon workers instead of serially inside the step
         // loop. wgpu's `Device` is `Sync`, which makes concurrent pipeline
@@ -451,6 +474,7 @@ impl CompiledGraph {
                     continue;
                 }
                 let mut step_specs = op_steps(op, DUMMY_BIAS)?;
+                upgrade_gemm_steps(&mut step_specs, ctx.supports_coop_gemm);
                 if silu_overrides.contains_key(&op_idx) {
                     for spec in &mut step_specs {
                         let is_vec4 = spec.wgsl == SIGMOID_VEC4_WGSL;
@@ -500,6 +524,7 @@ impl CompiledGraph {
                 continue;
             }
             let mut step_specs = op_steps(op, DUMMY_BIAS)?;
+            upgrade_gemm_steps(&mut step_specs, ctx.supports_coop_gemm);
 
             // Apply SiLU override: replace Sigmoid shader + redirect output to Mul's buffer.
             // Preserve the vec4/scalar variant that compile.rs already chose.

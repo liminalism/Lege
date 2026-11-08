@@ -13,8 +13,9 @@ pub(crate) const MATMUL_WGSL: &str = r#"
 @group(0) @binding(3) var<storage, read>       params : array<u32>;
 
 @compute @workgroup_size(256)
-fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let i = gid.x;
+fn main(@builtin(global_invocation_id) gid: vec3<u32>,
+        @builtin(num_workgroups) ng: vec3<u32>) {
+    let i = gid.y * ng.x * 256u + gid.x;
     if i >= params[0] { return; }
 
     let out_rank = params[1];

@@ -532,7 +532,8 @@ impl PipelineConfig {
         // A layout-free build does not embed the model or compile its runtime.
         // In normal builds, an adjacent model overrides the embedded payload.
         let model_path = if cfg!(feature = "layout-detection") {
-            runtime_asset_path_if_exists("doclayout.onnx")
+            runtime_asset_path_if_exists("layout.onnx")
+                .or_else(|| runtime_asset_path_if_exists("doclayout.onnx"))
                 .map(|path| path.to_string_lossy().to_string())
                 .unwrap_or_default()
         } else {

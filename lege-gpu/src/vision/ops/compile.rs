@@ -5,7 +5,9 @@ use anyhow::{Result, bail};
 
 use super::common::{broadcast_strides_u32, c_strides_raw, c_strides_u32, linear_grid};
 use super::conv::conv_out_usize;
-use crate::vision::onnx::types::{ElementwiseKind, PlannedOp, PlannedOpKind, UnaryKind};
+use crate::vision::onnx::types::{
+    Activation, ElementwiseKind, PlannedOp, PlannedOpKind, UnaryKind,
+};
 use crate::vision::reference;
 
 /// Wraps `linear_grid` into the `[u32; 3]` shape StepSpec stores.
@@ -71,7 +73,7 @@ pub(crate) fn op_steps(op: &PlannedOp, dummy_bias_name: &str) -> Result<Vec<Step
                 input_buf_names: vec![op.inputs[0].clone()],
                 output_buf_name: op.outputs[0].clone(),
                 params: bytemuck::cast_slice(&params).to_vec(),
-                dispatch: [(cin * p).div_ceil(256) as u32, 1, 1],
+                dispatch: grid((cin * p).div_ceil(256)),
             }])
         }
 
@@ -122,7 +124,7 @@ pub(crate) fn op_steps(op: &PlannedOp, dummy_bias_name: &str) -> Result<Vec<Step
                 input_buf_names: vec![op.inputs[0].clone(), bias_name],
                 output_buf_name: op.outputs[0].clone(),
                 params: bytemuck::cast_slice(&params).to_vec(),
-                dispatch: [(cout * p).div_ceil(256) as u32, 1, 1],
+                dispatch: grid((cout * p).div_ceil(256)),
             }])
         }
 
@@ -157,7 +159,13 @@ pub(crate) fn op_steps(op: &PlannedOp, dummy_bias_name: &str) -> Result<Vec<Step
 
         // ── Pointwise activations (Relu / HardSwish / HardSigmoid / Sqrt / Erf / Pow) ─
         PlannedOpKind::Unary(
-            kind @ (UnaryKind::Relu | UnaryKind::HardSwish | UnaryKind::Sqrt | UnaryKind::Erf),
+            kind @ (UnaryKind::Relu
+            | UnaryKind::HardSwish
+            | UnaryKind::Sqrt
+            | UnaryKind::Erf
+            | UnaryKind::Exp
+            | UnaryKind::Sin
+            | UnaryKind::Cos),
         )
         | PlannedOpKind::Unary(kind @ UnaryKind::HardSigmoid { .. })
         | PlannedOpKind::Unary(kind @ UnaryKind::Pow { .. }) => {
@@ -167,6 +175,9 @@ pub(crate) fn op_steps(op: &PlannedOp, dummy_bias_name: &str) -> Result<Vec<Step
                 UnaryKind::HardSwish => (super::activations::HARDSWISH_WGSL, vec![len as u32]),
                 UnaryKind::Sqrt => (super::activations::SQRT_WGSL, vec![len as u32]),
                 UnaryKind::Erf => (super::activations::ERF_WGSL, vec![len as u32]),
+                UnaryKind::Exp => (super::extra::EXP_WGSL, vec![len as u32]),
+                UnaryKind::Sin => (super::extra::SIN_WGSL, vec![len as u32]),
+                UnaryKind::Cos => (super::extra::COS_WGSL, vec![len as u32]),
                 UnaryKind::HardSigmoid { alpha, beta } => (
                     super::activations::HARDSIGMOID_WGSL,
                     vec![len as u32, alpha.to_bits(), beta.to_bits()],
@@ -227,6 +238,52 @@ pub(crate) fn op_steps(op: &PlannedOp, dummy_bias_name: &str) -> Result<Vec<Step
             } else {
                 0
             };
+            let bias_mode = match bias_len {
+                0 => 0,
+                1 => 1,
+                l if l == n && in_shapes[2].last() == Some(&n) => 2,
+                l if l == m * n => 4,
+                l if l == m => 3,
+                _ => 4,
+            };
+            let a_strides = if *trans_a { (1, m) } else { (ka, 1) };
+            let b_strides = if *trans_b { (1, ka) } else { (n, 1) };
+            if let Some(dispatch) = super::matmul_tiled::tiled_dispatch(m, n, 1) {
+                let p = super::matmul_tiled::tiled_params(
+                    m,
+                    n,
+                    ka,
+                    a_strides,
+                    b_strides,
+                    &[],
+                    &[],
+                    &[],
+                    bias_mode,
+                    *alpha,
+                    *beta,
+                    0,
+                    false,
+                );
+                let wgsl =
+                    if super::matmul_tiled::vec4_eligible(ka, n, a_strides, b_strides, &[], &[]) {
+                        super::matmul_tiled::MATMUL_TILED_VEC4_WGSL
+                    } else {
+                        super::matmul_tiled::MATMUL_TILED_WGSL
+                    };
+                return Ok(vec![StepSpec {
+                    wgsl,
+                    n_read_inputs: 4,
+                    input_buf_names: vec![
+                        op.inputs[0].clone(),
+                        op.inputs[1].clone(),
+                        bias_name,
+                        dummy_bias_name.to_owned(),
+                    ],
+                    output_buf_name: op.outputs[0].clone(),
+                    params: bytemuck::cast_slice(&p).to_vec(),
+                    dispatch,
+                }]);
+            }
             let params = [
                 m as u32,
                 n as u32,
@@ -982,7 +1039,7 @@ pub(crate) fn op_steps(op: &PlannedOp, dummy_bias_name: &str) -> Result<Vec<Step
                 input_buf_names: vec![op.inputs[0].clone()],
                 output_buf_name: op.outputs[0].clone(),
                 params: bytemuck::cast_slice(&p).to_vec(),
-                dispatch: [num_out.div_ceil(256) as u32, 1, 1],
+                dispatch: grid(num_out.div_ceil(256)),
             }])
         }
 
@@ -1024,6 +1081,11 @@ pub(crate) fn op_steps(op: &PlannedOp, dummy_bias_name: &str) -> Result<Vec<Step
             let out_strides = c_strides_u32(&out_shape);
             let lhs_batch = matmul_batch_strides(&batch_shape, &lhs[..lhs.len() - 2], m * k)?;
             let rhs_batch = matmul_batch_strides(&batch_shape, &rhs[..rhs.len() - 2], k * n)?;
+            if let Some(step) =
+                tiled_matmul_step(op, &in_shapes, TiledEpilogue::plain(), dummy_bias_name)?
+            {
+                return Ok(vec![step]);
+            }
             let mut p = [0u32; 30];
             p[0] = total_out as u32;
             p[1] = out_shape.len() as u32;
@@ -1046,7 +1108,49 @@ pub(crate) fn op_steps(op: &PlannedOp, dummy_bias_name: &str) -> Result<Vec<Step
                 input_buf_names: op.inputs.clone(),
                 output_buf_name: op.outputs[0].clone(),
                 params: bytemuck::cast_slice(&p).to_vec(),
-                dispatch: [total_out.div_ceil(256) as u32, 1, 1],
+                dispatch: grid(total_out.div_ceil(256)),
+            }])
+        }
+
+        // ── Fused MatMul (onnx::fuse_rewrite) ─────────────────────────────
+        PlannedOpKind::FusedMatMul {
+            alpha,
+            trans_b,
+            has_bias,
+            has_residual,
+            act,
+            ..
+        } => {
+            let bias = has_bias.then(|| op.inputs[2].clone());
+            let residual = has_residual.then(|| op.inputs[2 + *has_bias as usize].clone());
+            let epilogue = TiledEpilogue {
+                alpha: *alpha,
+                trans_b: *trans_b,
+                bias,
+                residual,
+                act: *act,
+            };
+            match tiled_matmul_step(op, &in_shapes, epilogue, dummy_bias_name)? {
+                Some(step) => Ok(vec![step]),
+                None => bail!("FusedMatMul `{}`: shape exceeds the tiled kernel", op.name),
+            }
+        }
+
+        // ── LayerNorm (onnx::fuse_rewrite) ────────────────────────────────
+        PlannedOpKind::LayerNorm { axis, epsilon } => {
+            let s = &in_shapes[0];
+            let outer: usize = s[..*axis].iter().product();
+            let dim = s[*axis];
+            let inner: usize = s[*axis + 1..].iter().product();
+            let rows = outer * inner;
+            let p = [rows as u32, dim as u32, inner as u32, epsilon.to_bits()];
+            Ok(vec![StepSpec {
+                wgsl: super::layernorm::LAYERNORM_WGSL,
+                n_read_inputs: 3,
+                input_buf_names: op.inputs[..3].to_vec(),
+                output_buf_name: op.outputs[0].clone(),
+                params: bytemuck::cast_slice(&p).to_vec(),
+                dispatch: grid(rows),
             }])
         }
 
@@ -1059,13 +1163,19 @@ pub(crate) fn op_steps(op: &PlannedOp, dummy_bias_name: &str) -> Result<Vec<Step
             let inner: usize = s[axis + 1..].iter().product();
             let row_count = outer * inner;
             let p = [row_count as u32, dim as u32, inner as u32, 0u32];
+            // Wide rows get a workgroup each; narrow rows keep one thread per row.
+            let (wgsl, dispatch) = if dim >= 128 {
+                (super::softmax::SOFTMAX_ROW_WGSL, grid(row_count))
+            } else {
+                (super::softmax::SOFTMAX_WGSL, grid(row_count.div_ceil(256)))
+            };
             Ok(vec![StepSpec {
-                wgsl: super::softmax::SOFTMAX_WGSL,
+                wgsl,
                 n_read_inputs: 1,
                 input_buf_names: vec![op.inputs[0].clone()],
                 output_buf_name: op.outputs[0].clone(),
                 params: bytemuck::cast_slice(&p).to_vec(),
-                dispatch: [row_count.div_ceil(256) as u32, 1, 1],
+                dispatch,
             }])
         }
         PlannedOpKind::PRelu => {
@@ -1184,8 +1294,14 @@ pub(crate) fn op_steps(op: &PlannedOp, dummy_bias_name: &str) -> Result<Vec<Step
             let inner = shape[*axis + 1..].iter().product::<usize>();
             let num_out = outer * inner;
             let is_mean = u32::from(*mean);
+            // Long reductions get a workgroup each; short ones keep one thread per output.
+            let (wgsl, dispatch) = if axis_dim >= 128 {
+                (super::extra::REDUCESUM_ROW_WGSL, grid(num_out))
+            } else {
+                (super::sauvola::REDUCESUM_WGSL, grid(num_out.div_ceil(256)))
+            };
             Ok(vec![StepSpec {
-                wgsl: super::sauvola::REDUCESUM_WGSL,
+                wgsl,
                 n_read_inputs: 1,
                 input_buf_names: vec![op.inputs[0].clone()],
                 output_buf_name: op.outputs[0].clone(),
@@ -1196,8 +1312,159 @@ pub(crate) fn op_steps(op: &PlannedOp, dummy_bias_name: &str) -> Result<Vec<Step
                     is_mean,
                 ])
                 .to_vec(),
+                dispatch,
+            }])
+        }
+        PlannedOpKind::ReduceMax { axis, .. } => {
+            let shape = &in_shapes[0];
+            let outer = shape[..*axis].iter().product::<usize>();
+            let axis_dim = shape[*axis];
+            let inner = shape[*axis + 1..].iter().product::<usize>();
+            let num_out = outer * inner;
+            Ok(vec![StepSpec {
+                wgsl: super::extra::REDUCEMAX_WGSL,
+                n_read_inputs: 1,
+                input_buf_names: vec![op.inputs[0].clone()],
+                output_buf_name: op.outputs[0].clone(),
+                params: bytemuck::cast_slice(&[num_out as u32, axis_dim as u32, inner as u32])
+                    .to_vec(),
                 dispatch: grid(num_out.div_ceil(256)),
             }])
+        }
+        PlannedOpKind::Tile { .. } | PlannedOpKind::Expand { .. } => {
+            let out = &out_shapes[0];
+            let inp = &in_shapes[0];
+            let rank = out.len();
+            if rank > 6 || inp.len() > rank {
+                bail!("Tile/Expand: rank {rank} unsupported");
+            }
+            let pad = rank - inp.len();
+            let in_dims: Vec<usize> = (0..pad).map(|_| 1).chain(inp.iter().copied()).collect();
+            let in_strides = c_strides_raw(&in_dims);
+            let out_strides = c_strides_raw(out);
+            let total = out.iter().product::<usize>();
+            let mut p = [1u32; 20];
+            p[0] = total as u32;
+            p[1] = rank as u32;
+            for d in 0..rank {
+                p[2 + d] = out_strides[d] as u32;
+                p[8 + d] = in_dims[d] as u32;
+                p[14 + d] = in_strides[d] as u32;
+            }
+            Ok(vec![StepSpec {
+                wgsl: super::extra::INDEX_MAP_WGSL,
+                n_read_inputs: 1,
+                input_buf_names: vec![op.inputs[0].clone()],
+                output_buf_name: op.outputs[0].clone(),
+                params: bytemuck::cast_slice(&p).to_vec(),
+                dispatch: grid(total.div_ceil(256)),
+            }])
+        }
+        PlannedOpKind::Where => {
+            let out = &out_shapes[0];
+            let rank = out.len();
+            if rank > 6 {
+                bail!("Where: rank {rank} > 6");
+            }
+            let out_strides = c_strides_raw(out);
+            let total = out.iter().product::<usize>();
+            let mut p = [0u32; 26];
+            p[0] = total as u32;
+            p[1] = rank as u32;
+            for d in 0..rank {
+                p[2 + d] = out_strides[d] as u32;
+            }
+            p[8..14].copy_from_slice(&broadcast_strides_u32(out, &in_shapes[0]));
+            p[14..20].copy_from_slice(&broadcast_strides_u32(out, &in_shapes[1]));
+            p[20..26].copy_from_slice(&broadcast_strides_u32(out, &in_shapes[2]));
+            Ok(vec![StepSpec {
+                wgsl: super::extra::WHERE_WGSL,
+                n_read_inputs: 3,
+                input_buf_names: op.inputs.clone(),
+                output_buf_name: op.outputs[0].clone(),
+                params: bytemuck::cast_slice(&p).to_vec(),
+                dispatch: grid(total.div_ceil(256)),
+            }])
+        }
+        PlannedOpKind::Gather { axis, indices, .. } => {
+            let s = &in_shapes[0];
+            let outer = s[..*axis].iter().product::<usize>();
+            let inner = s[*axis + 1..].iter().product::<usize>();
+            let total = outer * indices.len() * inner;
+            let mut p = vec![
+                total as u32,
+                s[*axis] as u32,
+                inner as u32,
+                indices.len() as u32,
+            ];
+            p.extend(indices.iter().map(|&i| i as u32));
+            Ok(vec![StepSpec {
+                wgsl: super::extra::GATHER_WGSL,
+                n_read_inputs: 1,
+                input_buf_names: vec![op.inputs[0].clone()],
+                output_buf_name: op.outputs[0].clone(),
+                params: bytemuck::cast_slice(&p).to_vec(),
+                dispatch: grid(total.div_ceil(256)),
+            }])
+        }
+        PlannedOpKind::GatherElements { axis } => {
+            let data = &in_shapes[0];
+            let idx = &in_shapes[1];
+            let rank = idx.len();
+            if rank > 6 || data.len() != rank {
+                bail!("GatherElements: ranks must match and be <= 6");
+            }
+            let out_strides = c_strides_raw(idx);
+            let data_strides = c_strides_raw(data);
+            let total = idx.iter().product::<usize>();
+            let mut p = [1u32; 16];
+            p[0] = total as u32;
+            p[1] = rank as u32;
+            p[2] = *axis as u32;
+            p[3] = data[*axis] as u32;
+            for d in 0..rank {
+                p[4 + d] = out_strides[d] as u32;
+                p[10 + d] = data_strides[d] as u32;
+            }
+            Ok(vec![StepSpec {
+                wgsl: super::extra::GATHER_ELEMENTS_WGSL,
+                n_read_inputs: 2,
+                input_buf_names: vec![op.inputs[0].clone(), op.inputs[1].clone()],
+                output_buf_name: op.outputs[0].clone(),
+                params: bytemuck::cast_slice(&p).to_vec(),
+                dispatch: grid(total.div_ceil(256)),
+            }])
+        }
+        PlannedOpKind::TopK { axis, k, largest } => {
+            let s = &in_shapes[0];
+            let outer = s[..*axis].iter().product::<usize>();
+            let dim = s[*axis];
+            let inner = s[*axis + 1..].iter().product::<usize>();
+            let total = outer * dim * inner;
+            // One step per requested output: values, then indices.
+            Ok(op
+                .outputs
+                .iter()
+                .enumerate()
+                .map(|(which, name)| {
+                    let p = [
+                        total as u32,
+                        dim as u32,
+                        inner as u32,
+                        *k as u32,
+                        u32::from(*largest),
+                        which as u32,
+                    ];
+                    StepSpec {
+                        wgsl: super::extra::TOPK_WGSL,
+                        n_read_inputs: 1,
+                        input_buf_names: vec![op.inputs[0].clone()],
+                        output_buf_name: name.clone(),
+                        params: bytemuck::cast_slice(&p).to_vec(),
+                        dispatch: grid(total.div_ceil(256)),
+                    }
+                })
+                .collect())
         }
         PlannedOpKind::SpaceToDepth { blocksize } | PlannedOpKind::DepthToSpace { blocksize } => {
             let s = &in_shapes[0];
@@ -1234,6 +1501,111 @@ fn norm_slice(idx: i64, dim: usize) -> usize {
     } else {
         (idx as usize).min(dim)
     }
+}
+
+/// Epilogue of a tiled MatMul step: `act(alpha · acc + bias) + residual`.
+struct TiledEpilogue {
+    alpha: f32,
+    trans_b: bool,
+    bias: Option<String>,
+    residual: Option<String>,
+    act: Activation,
+}
+
+impl TiledEpilogue {
+    fn plain() -> Self {
+        Self {
+            alpha: 1.0,
+            trans_b: false,
+            bias: None,
+            residual: None,
+            act: Activation::None,
+        }
+    }
+}
+
+/// One tiled-kernel step for a numpy-batched MatMul (`op.inputs[0..2]`), or
+/// `None` when the shape is outside what the tiled kernel dispatches.
+fn tiled_matmul_step(
+    op: &PlannedOp,
+    in_shapes: &[Vec<usize>],
+    epi: TiledEpilogue,
+    dummy_bias_name: &str,
+) -> Result<Option<StepSpec>> {
+    // ONNX 1-D operand promotion (lhs [k]->[1,k], rhs [k]->[k,1]). The squeezed
+    // output has the same contiguous element layout as the promoted [.,m,n].
+    let l = &in_shapes[0];
+    let r = &in_shapes[1];
+    let lhs = if l.len() == 1 {
+        vec![1, l[0]]
+    } else {
+        l.clone()
+    };
+    let rhs = if r.len() == 1 {
+        vec![r[0], 1]
+    } else if epi.trans_b {
+        let mut t = r.clone();
+        let n = t.len();
+        t.swap(n - 2, n - 1);
+        t
+    } else {
+        r.clone()
+    };
+    let m = lhs[lhs.len() - 2];
+    let k = lhs[lhs.len() - 1];
+    let n = rhs[rhs.len() - 1];
+    let batch_shape = reference::broadcast_shape(&lhs[..lhs.len() - 2], &rhs[..rhs.len() - 2])
+        .map_err(|e| anyhow::anyhow!("matmul compile batch: {e}"))?;
+    if batch_shape.len() > 4 {
+        return Ok(None);
+    }
+    let batch: usize = batch_shape.iter().product();
+    let Some(dispatch) = super::matmul_tiled::tiled_dispatch(m, n, batch) else {
+        return Ok(None);
+    };
+    let lhs_batch = matmul_batch_strides(&batch_shape, &lhs[..lhs.len() - 2], m * k)?;
+    let rhs_batch = matmul_batch_strides(&batch_shape, &rhs[..rhs.len() - 2], k * n)?;
+    let b_strides = if epi.trans_b { (1, k) } else { (n, 1) };
+    let p = super::matmul_tiled::tiled_params(
+        m,
+        n,
+        k,
+        (k, 1),
+        b_strides,
+        &batch_shape,
+        &lhs_batch[..batch_shape.len()],
+        &rhs_batch[..batch_shape.len()],
+        if epi.bias.is_some() { 2 } else { 0 },
+        epi.alpha,
+        1.0,
+        epi.act.code(),
+        epi.residual.is_some(),
+    );
+    let wgsl = if super::matmul_tiled::vec4_eligible(
+        k,
+        n,
+        (k, 1),
+        b_strides,
+        &lhs_batch[..batch_shape.len()],
+        &rhs_batch[..batch_shape.len()],
+    ) {
+        super::matmul_tiled::MATMUL_TILED_VEC4_WGSL
+    } else {
+        super::matmul_tiled::MATMUL_TILED_WGSL
+    };
+    Ok(Some(StepSpec {
+        wgsl,
+        n_read_inputs: 4,
+        input_buf_names: vec![
+            op.inputs[0].clone(),
+            op.inputs[1].clone(),
+            epi.bias.unwrap_or_else(|| dummy_bias_name.to_owned()),
+            epi.residual.unwrap_or_else(|| dummy_bias_name.to_owned()),
+        ],
+        output_buf_name: op.outputs[0].clone(),
+        params: bytemuck::cast_slice(&p).to_vec(),
+        dispatch,
+    }))
 }
 
 fn matmul_batch_strides(

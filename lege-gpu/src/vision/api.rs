@@ -322,6 +322,18 @@ impl SauvolaProcessor {
                 config.model_path.display()
             )
         })?;
+        Self::from_model(model, config)
+    }
+
+    /// Build from an in-memory ONNX payload, such as a model embedded with
+    /// `include_bytes!`.
+    pub fn from_model_bytes(bytes: &[u8]) -> Result<Self> {
+        let model =
+            load_model_from_bytes(bytes).context("failed to load embedded sauvola model")?;
+        Self::from_model(model, SauvolaConfig::new(PathBuf::new()))
+    }
+
+    fn from_model(model: ModelProto, config: SauvolaConfig) -> Result<Self> {
         let report = ModelReport::from_model(&model).context("failed to inspect sauvola model")?;
         if !report.rejection_reasons.is_empty() {
             bail!(
@@ -410,6 +422,30 @@ impl SauvolaProcessor {
         let output = graph_output(&entry.graph, &outputs, 0)
             .context("sauvola output missing from WGPU result")?;
         nhwc_gray_tensor_to_image(output)
+    }
+
+    /// Like [`Self::binarize_rgb`], for fully convolutional (tileable) models
+    /// whose spatial dims must be a multiple of the network stride. The page is
+    /// edge-replicated up to a multiple of `multiple` (which also lets nearby
+    /// page sizes share one compiled graph) and the mask is cropped back.
+    /// Do not use this for models with global statistics: the padding would
+    /// shift them.
+    pub fn binarize_rgb_padded(&self, image: &RgbImage, multiple: u32) -> Result<GrayImage> {
+        let (width, height) = image.dimensions();
+        if width == 0 || height == 0 {
+            bail!("sauvola input image must be non-empty");
+        }
+        let multiple = multiple.max(1);
+        let pw = width.div_ceil(multiple) * multiple;
+        let ph = height.div_ceil(multiple) * multiple;
+        if pw == width && ph == height {
+            return self.binarize_rgb(image);
+        }
+        let padded = RgbImage::from_fn(pw, ph, |x, y| {
+            *image.get_pixel(x.min(width - 1), y.min(height - 1))
+        });
+        let mask = self.binarize_rgb(&padded)?;
+        Ok(image::imageops::crop_imm(&mask, 0, 0, width, height).to_image())
     }
 }
 

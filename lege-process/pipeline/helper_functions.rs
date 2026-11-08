@@ -86,8 +86,8 @@ pub(crate) fn initialize_inference_or_fallback(
         Err(error) if crate::pipeline::inference::is_gpu_device_error(error.as_ref()) => {
             let message = format!(
                 "GPU initialization failed ({}). Layout detection disabled; processing will \
-                 continue without it. Check that your GPU driver supports DX12 (Windows) or \
-                 Vulkan (Linux/macOS).",
+                 continue without it. Check that your GPU driver supports Vulkan (Windows/Linux) or \
+                 Metal (macOS).",
                 error
             );
             warn_log!("[{}] {}", pipeline_label, message);

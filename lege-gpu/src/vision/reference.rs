@@ -2,7 +2,7 @@ use anyhow::{Context, Result, bail};
 use rayon::prelude::*;
 
 use crate::vision::onnx::types::{
-    Conv2dPlan, ElementwiseKind, PadMode, PlannedOpKind, Pool2dPlan, UnaryKind,
+    Activation, Conv2dPlan, ElementwiseKind, PadMode, PlannedOpKind, Pool2dPlan, UnaryKind,
 };
 use crate::vision::ops::winograd::{input_transform_f23, output_transform_f23};
 
@@ -100,7 +100,298 @@ pub(crate) fn run_op(kind: &PlannedOpKind, inputs: &[&Tensor]) -> Result<Vec<Ten
         PlannedOpKind::GridSample { align_corners } => {
             Ok(vec![grid_sample(inputs[0], inputs[1], *align_corners)?])
         }
+        PlannedOpKind::ReduceMax { axis, keepdims } => {
+            Ok(vec![reduce_max(inputs[0], *axis, *keepdims)?])
+        }
+        PlannedOpKind::Tile { out_shape } | PlannedOpKind::Expand { out_shape } => {
+            Ok(vec![run_index_map(inputs[0], out_shape)?])
+        }
+        PlannedOpKind::Where => Ok(vec![where_op(inputs)?]),
+        PlannedOpKind::Gather {
+            axis,
+            indices,
+            out_shape,
+        } => {
+            let mut t = gather(inputs[0], *axis, indices)?;
+            t.shape = out_shape.clone();
+            Ok(vec![t])
+        }
+        PlannedOpKind::GatherElements { axis } => {
+            Ok(vec![gather_elements(inputs[0], inputs[1], *axis)?])
+        }
+        PlannedOpKind::TopK { axis, k, largest } => top_k(inputs[0], *axis, *k, *largest),
+        PlannedOpKind::FusedMatMul {
+            alpha,
+            trans_b,
+            has_bias,
+            has_residual,
+            act,
+            out_shape,
+        } => Ok(vec![fused_matmul(
+            inputs,
+            *alpha,
+            *trans_b,
+            *has_bias,
+            *has_residual,
+            *act,
+            out_shape,
+        )?]),
+        PlannedOpKind::LayerNorm { axis, epsilon } => {
+            Ok(vec![layer_norm(inputs, *axis, *epsilon)?])
+        }
     }
+}
+
+/// Epilogue activation; must match `ops::matmul_tiled`'s `act()` term for term.
+pub(crate) fn activation(act: Activation, y: f32) -> f32 {
+    match act {
+        Activation::None => y,
+        Activation::Gelu => 0.5 * y * (1.0 + erf(y * std::f32::consts::FRAC_1_SQRT_2)),
+        Activation::Relu => y.max(0.0),
+    }
+}
+
+fn fused_matmul(
+    inputs: &[&Tensor],
+    alpha: f32,
+    trans_b: bool,
+    has_bias: bool,
+    has_residual: bool,
+    act: Activation,
+    out_shape: &[usize],
+) -> Result<Tensor> {
+    let b = if trans_b {
+        let r = inputs[1].shape.len();
+        if r < 2 {
+            bail!("FusedMatMul trans_b needs a rank >= 2 rhs");
+        }
+        let mut perm: Vec<usize> = (0..r).collect();
+        perm.swap(r - 2, r - 1);
+        transpose(inputs[1], &perm)?
+    } else {
+        inputs[1].clone()
+    };
+    let mut y = matmul(inputs[0], &b)?;
+    let n = *y.shape.last().context("FusedMatMul output has rank 0")?;
+    let mut next = 2;
+    let bias = if has_bias {
+        next += 1;
+        let bias = inputs[2];
+        if bias.data.len() != n {
+            bail!("FusedMatMul bias length {} != N {n}", bias.data.len());
+        }
+        Some(bias)
+    } else {
+        None
+    };
+    let residual = if has_residual {
+        let r = inputs[next];
+        if r.data.len() != y.data.len() {
+            bail!(
+                "FusedMatMul residual size {} != output {}",
+                r.data.len(),
+                y.data.len()
+            );
+        }
+        Some(r)
+    } else {
+        None
+    };
+    for (i, v) in y.data.iter_mut().enumerate() {
+        let mut t = alpha * *v;
+        if let Some(bias) = bias {
+            t += bias.data[i % n];
+        }
+        t = activation(act, t);
+        if let Some(r) = residual {
+            t += r.data[i];
+        }
+        *v = t;
+    }
+    Tensor::new(out_shape.to_vec(), y.data)
+}
+
+/// LayerNorm over `axis`, two-pass mean/variance in f32 (matches `LAYERNORM_WGSL`).
+fn layer_norm(inputs: &[&Tensor], axis: usize, epsilon: f32) -> Result<Tensor> {
+    let x = inputs[0];
+    let (gamma, beta) = (inputs[1], inputs[2]);
+    if axis >= x.shape.len() {
+        bail!("LayerNorm axis {axis} out of range for {:?}", x.shape);
+    }
+    let dim = x.shape[axis];
+    let inner: usize = x.shape[axis + 1..].iter().product();
+    let outer: usize = x.shape[..axis].iter().product();
+    if gamma.data.len() != dim || beta.data.len() != dim {
+        bail!("LayerNorm gamma/beta length != {dim}");
+    }
+    let mut out = vec![0.0f32; x.data.len()];
+    for o in 0..outer {
+        for i in 0..inner {
+            let at = |d: usize| (o * dim + d) * inner + i;
+            let mean = (0..dim).map(|d| x.data[at(d)]).sum::<f32>() / dim as f32;
+            let var = (0..dim)
+                .map(|d| {
+                    let c = x.data[at(d)] - mean;
+                    c * c
+                })
+                .sum::<f32>()
+                / dim as f32;
+            let inv = 1.0 / (var + epsilon).sqrt();
+            for d in 0..dim {
+                out[at(d)] = (x.data[at(d)] - mean) * inv * gamma.data[d] + beta.data[d];
+            }
+        }
+    }
+    Tensor::new(x.shape.clone(), out)
+}
+
+/// Tile/Expand on the CPU: output coord c maps to input coord c % in_dim
+/// (input right-aligned to the output rank).
+fn run_index_map(input: &Tensor, out_shape: &[usize]) -> Result<Tensor> {
+    let rank = out_shape.len();
+    if input.shape.len() > rank {
+        bail!("Tile/Expand input rank exceeds output rank");
+    }
+    let pad = rank - input.shape.len();
+    let in_dims: Vec<usize> = (0..pad)
+        .map(|_| 1)
+        .chain(input.shape.iter().copied())
+        .collect();
+    let in_strides = strides(&in_dims);
+    let len = out_shape.iter().product::<usize>();
+    let mut data = Vec::with_capacity(len);
+    for index in 0..len {
+        let coords = unravel(index, out_shape);
+        let src: usize = (0..rank)
+            .map(|d| (coords[d] % in_dims[d]) * in_strides[d])
+            .sum();
+        data.push(input.data[src]);
+    }
+    Tensor::new(out_shape.to_vec(), data)
+}
+
+fn reduce_max(input: &Tensor, axis: usize, keepdims: bool) -> Result<Tensor> {
+    if axis >= input.rank() {
+        bail!(
+            "ReduceMax axis {axis} out of range for rank {}",
+            input.rank()
+        );
+    }
+    let (outer, axis_dim, inner) = axis_split(&input.shape, axis);
+    let mut data = vec![f32::MIN; outer * inner];
+    for o in 0..outer {
+        for i in 0..inner {
+            let mut m = -f32::MAX;
+            for k in 0..axis_dim {
+                m = m.max(input.data[(o * axis_dim + k) * inner + i]);
+            }
+            data[o * inner + i] = m;
+        }
+    }
+    let mut shape = input.shape.clone();
+    if keepdims {
+        shape[axis] = 1;
+    } else {
+        shape.remove(axis);
+    }
+    Tensor::new(shape, data)
+}
+
+fn where_op(inputs: &[&Tensor]) -> Result<Tensor> {
+    if inputs.len() != 3 {
+        bail!("Where expects 3 inputs, got {}", inputs.len());
+    }
+    let (c, x, y) = (inputs[0], inputs[1], inputs[2]);
+    let shape = broadcast_shape(&broadcast_shape(&c.shape, &x.shape)?, &y.shape)?;
+    let len = shape.iter().product::<usize>();
+    let mut data = Vec::with_capacity(len);
+    for index in 0..len {
+        let coords = unravel(index, &shape);
+        let ci = broadcast_index(&coords, &shape, &c.shape);
+        data.push(if c.data[ci] != 0.0 {
+            x.data[broadcast_index(&coords, &shape, &x.shape)]
+        } else {
+            y.data[broadcast_index(&coords, &shape, &y.shape)]
+        });
+    }
+    Tensor::new(shape, data)
+}
+
+fn gather(input: &Tensor, axis: usize, indices: &[usize]) -> Result<Tensor> {
+    if axis >= input.rank() {
+        bail!("Gather axis {axis} out of range for rank {}", input.rank());
+    }
+    let (outer, axis_dim, inner) = axis_split(&input.shape, axis);
+    let mut data = Vec::with_capacity(outer * indices.len() * inner);
+    for o in 0..outer {
+        for &j in indices {
+            if j >= axis_dim {
+                bail!("Gather index {j} out of range for axis length {axis_dim}");
+            }
+            let base = (o * axis_dim + j) * inner;
+            data.extend_from_slice(&input.data[base..base + inner]);
+        }
+    }
+    // The planned output shape (scalar index drops the axis) is applied by the
+    // caller's known shape; here the axis holds indices.len() entries.
+    let mut shape = input.shape.clone();
+    shape[axis] = indices.len();
+    Tensor::new(shape, data)
+}
+
+fn gather_elements(data: &Tensor, indices: &Tensor, axis: usize) -> Result<Tensor> {
+    if data.rank() != indices.rank() || axis >= data.rank() {
+        bail!("GatherElements needs equal ranks and a valid axis");
+    }
+    let dim = data.shape[axis] as i64;
+    let data_strides = strides(&data.shape);
+    let mut out = Vec::with_capacity(indices.data.len());
+    for (index, &raw) in indices.data.iter().enumerate() {
+        let mut coords = unravel(index, &indices.shape);
+        let mut k = raw.round() as i64;
+        if k < 0 {
+            k += dim;
+        }
+        coords[axis] = k.clamp(0, dim - 1) as usize;
+        let src: usize = coords.iter().zip(&data_strides).map(|(c, s)| c * s).sum();
+        out.push(data.data[src]);
+    }
+    Tensor::new(indices.shape.clone(), out)
+}
+
+fn top_k(input: &Tensor, axis: usize, k: usize, largest: bool) -> Result<Vec<Tensor>> {
+    if axis >= input.rank() || k > input.shape[axis] {
+        bail!("TopK axis/k out of range");
+    }
+    let (outer, dim, inner) = axis_split(&input.shape, axis);
+    let mut values = vec![0.0f32; outer * k * inner];
+    let mut idx = vec![0.0f32; outer * k * inner];
+    for o in 0..outer {
+        for n in 0..inner {
+            let mut order: Vec<usize> = (0..dim).collect();
+            let at = |j: usize| input.data[(o * dim + j) * inner + n];
+            // Stable sort keeps lower indices first among equal values (ONNX rule).
+            order.sort_by(|&a, &b| {
+                let (x, y) = (at(a), at(b));
+                if largest {
+                    y.partial_cmp(&x)
+                } else {
+                    x.partial_cmp(&y)
+                }
+                .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            for (r, &j) in order.iter().take(k).enumerate() {
+                values[(o * k + r) * inner + n] = at(j);
+                idx[(o * k + r) * inner + n] = j as f32;
+            }
+        }
+    }
+    let mut shape = input.shape.clone();
+    shape[axis] = k;
+    Ok(vec![
+        Tensor::new(shape.clone(), values)?,
+        Tensor::new(shape, idx)?,
+    ])
 }
 
 fn prelu(inputs: &[&Tensor]) -> Result<Tensor> {
@@ -191,7 +482,9 @@ fn gemm(inputs: &[&Tensor], alpha: f32, beta: f32, trans_a: bool, trans_b: bool)
             if let Some(bias) = bias {
                 let bi = match bias.data.len() {
                     1 => 0,
-                    len if len == n => col,
+                    len if len == n && bias.shape.last() == Some(&n) => col,
+                    // [M, 1]: one value per row (ONNX unidirectional broadcast).
+                    len if len == m && bias.shape.last() == Some(&1) => row,
                     _ => row * n + col,
                 };
                 y += beta * bias.data[bi];
@@ -509,6 +802,9 @@ fn unary(kind: &UnaryKind, inputs: &[&Tensor]) -> Result<Tensor> {
         UnaryKind::Sqrt => input.data.iter().map(|x| x.sqrt()).collect(),
         UnaryKind::Erf => input.data.iter().copied().map(erf).collect(),
         UnaryKind::Pow { exponent } => input.data.iter().map(|x| x.powf(*exponent)).collect(),
+        UnaryKind::Exp => input.data.iter().map(|x| x.exp()).collect(),
+        UnaryKind::Sin => input.data.iter().map(|x| x.sin()).collect(),
+        UnaryKind::Cos => input.data.iter().map(|x| x.cos()).collect(),
     };
     Tensor::new(input.shape.clone(), data)
 }

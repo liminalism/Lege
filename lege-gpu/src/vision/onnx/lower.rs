@@ -124,6 +124,66 @@ fn lower_node(
         "Relu" => PlannedOpKind::Unary(UnaryKind::Relu),
         "Sqrt" => PlannedOpKind::Unary(UnaryKind::Sqrt),
         "Erf" => PlannedOpKind::Unary(UnaryKind::Erf),
+        "Exp" => PlannedOpKind::Unary(UnaryKind::Exp),
+        "Sin" => PlannedOpKind::Unary(UnaryKind::Sin),
+        "Cos" => PlannedOpKind::Unary(UnaryKind::Cos),
+        "Tile" => PlannedOpKind::Tile {
+            out_shape: usize_shape(&output_shapes[0])?,
+        },
+        "Expand" => PlannedOpKind::Expand {
+            out_shape: usize_shape(&output_shapes[0])?,
+        },
+        "Where" => PlannedOpKind::Where,
+        "GatherElements" => PlannedOpKind::GatherElements {
+            axis: normalize_axis(attr_i64(node, "axis").unwrap_or(0), input_shapes[0].len())?,
+        },
+        "Gather" => {
+            let axis = normalize_axis(attr_i64(node, "axis").unwrap_or(0), input_shapes[0].len())?;
+            let dim = input_shapes[0][axis];
+            let indices = const_i64(tensor_consts, &node.get_input()[1])
+                .context("runtime Gather needs constant indices")?
+                .iter()
+                .map(|&i| {
+                    let j = if i < 0 { i + dim } else { i };
+                    if j < 0 || j >= dim {
+                        bail!("Gather index {i} out of range for axis length {dim}");
+                    }
+                    Ok(j as usize)
+                })
+                .collect::<Result<Vec<_>>>()?;
+            PlannedOpKind::Gather {
+                axis,
+                indices,
+                out_shape: usize_shape(&output_shapes[0])?,
+            }
+        }
+        "TopK" => {
+            let axis = normalize_axis(attr_i64(node, "axis").unwrap_or(-1), input_shapes[0].len())?;
+            let k = const_i64(tensor_consts, &node.get_input()[1])
+                .and_then(|v| v.first().copied())
+                .context("TopK k must be a constant")?;
+            PlannedOpKind::TopK {
+                axis,
+                k: usize::try_from(k).context("TopK k must be non-negative")?,
+                largest: attr_i64(node, "largest").unwrap_or(1) != 0,
+            }
+        }
+        "ReduceMax" => {
+            let axes = if node.get_input().len() > 1 && !node.get_input()[1].is_empty() {
+                const_i64(tensor_consts, &node.get_input()[1])
+                    .context("ReduceMax axes must be constant")?
+                    .to_vec()
+            } else {
+                attr_i64s(node, "axes").context("ReduceMax axes are required")?
+            };
+            if axes.len() != 1 {
+                bail!("ReduceMax only supports a single reduction axis");
+            }
+            PlannedOpKind::ReduceMax {
+                axis: normalize_axis(axes[0], input_shapes[0].len())?,
+                keepdims: attr_i64(node, "keepdims").unwrap_or(1) != 0,
+            }
+        }
         "Pow" => {
             // The exponent is a constant scalar (e.g. 2.0) materialized as input[1].
             let exponent = const_f32(tensor_consts, &node.get_input()[1])
@@ -421,7 +481,12 @@ fn lower_node(
         | PlannedOpKind::Squeeze { .. }
         | PlannedOpKind::Unary(UnaryKind::Pow { .. })
         | PlannedOpKind::CumSum { .. }
-        | PlannedOpKind::ReduceSum { .. } => {
+        | PlannedOpKind::ReduceSum { .. }
+        | PlannedOpKind::ReduceMax { .. }
+        | PlannedOpKind::Tile { .. }
+        | PlannedOpKind::Expand { .. }
+        | PlannedOpKind::Gather { .. }
+        | PlannedOpKind::TopK { .. } => {
             let mut inp = inputs;
             let mut sh = input_shapes;
             inp.truncate(1);
@@ -472,16 +537,25 @@ fn pool_plan(node: &NodeProto, input_shape: &[i64]) -> Result<Pool2dPlan> {
     })
 }
 
+fn usize_shape(shape: &[i64]) -> Result<Vec<usize>> {
+    shape
+        .iter()
+        .map(|&d| usize::try_from(d).context("negative dimension in planned shape"))
+        .collect()
+}
+
 fn validate_lowering_arity(node: &NodeProto) -> Result<()> {
     let op = node.get_op_type();
     let required_positions: &[usize] = match op {
         "Conv" | "Add" | "Mul" | "Sub" | "Div" | "Max" | "Pow" | "PRelu" | "MatMul" | "Gemm"
-        | "GridSample" | "CumSum" | "ReduceSum" | "Reshape" | "Pad" => &[0, 1],
+        | "GridSample" | "CumSum" | "ReduceSum" | "Reshape" | "Pad" | "Tile" | "Expand"
+        | "Gather" | "GatherElements" | "TopK" => &[0, 1],
+        "Where" => &[0, 1, 2],
         "Slice" => &[0, 1, 2],
-        "Identity" | "Sigmoid" | "Relu" | "Sqrt" | "Erf" | "HardSwish" | "HardSigmoid"
-        | "GlobalAveragePool" | "Unsqueeze" | "Squeeze" | "Concat" | "Split" | "Transpose"
-        | "MaxPool" | "AveragePool" | "Resize" | "Softmax" | "ReduceMean" | "SpaceToDepth"
-        | "DepthToSpace" => &[0],
+        "Identity" | "Sigmoid" | "Relu" | "Sqrt" | "Erf" | "Exp" | "Sin" | "Cos" | "ReduceMax"
+        | "HardSwish" | "HardSigmoid" | "GlobalAveragePool" | "Unsqueeze" | "Squeeze"
+        | "Concat" | "Split" | "Transpose" | "MaxPool" | "AveragePool" | "Resize" | "Softmax"
+        | "ReduceMean" | "SpaceToDepth" | "DepthToSpace" => &[0],
         _ => &[],
     };
     for &index in required_positions {
@@ -548,6 +622,16 @@ mod tests {
             "ReduceMean",
             "SpaceToDepth",
             "DepthToSpace",
+            "Exp",
+            "Sin",
+            "Cos",
+            "ReduceMax",
+            "Tile",
+            "Expand",
+            "Where",
+            "Gather",
+            "GatherElements",
+            "TopK",
         ];
         let names = ["a", "b", "c", ""];
         let mut state = 0x243f_6a88_85a3_08d3u64;

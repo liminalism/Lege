@@ -2,7 +2,7 @@
 build = "build.rs"
 name = "lege"
 default-run = "lege"
-version = "1.5.2"
+version = "1.5.21"
 edition = "2024"
 description = "Document binarization and re-encoding especially for E-Ink ebook readers"
 authors = ["Lege Apps"]
@@ -132,6 +132,9 @@ android = [
 debug-logging = ["lege-gpu/debug-logging", "lege-gui-liminalui?/debug-logging"]
 jp2-lam = ["dep:jp2lam"]
 layout-detection = ["lege-gpu/layout-detection"]
+# Embed PP-DocLayout-M instead of the default RF-DETR-S book layout model
+# (comparison builds only; not in any default feature set).
+doclayout-m = ["layout-detection"]
 # Minimal worker feature set used by the Sheet Music Edition. Layout and the
 # optional OCR backends remain disabled; JP2 stays available for Archive.org scans.
 music-sheet = ["jp2-lam"]
