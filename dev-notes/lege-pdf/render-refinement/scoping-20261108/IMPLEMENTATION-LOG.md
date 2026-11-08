@@ -174,3 +174,44 @@ would paint a hard one.
 - mimalloc: measured only; adoption is a product decision (peak working set grows 13–65%).
 - B8 per-thread contexts still linger for a closed document until the thread serves another; the budget bounds them.
 - B14 was not A/B'd for speed on group-heavy pages.
+
+---
+
+# Local round 3, 2026-11-08: the deferred items
+
+The items the local round left as "deferred, minor" were landed on the same
+branch after the round's log was written, each with a failing-then-passing or
+oracle test, the corpus hash gate (HEAD `7ea2f836` probe against the working
+tree) and a paired timing where the change is meant to be felt.
+
+| ID | Commit | What changed | Tests | Output |
+|---|---|---|---|---|
+| B14 speed | n/a | A/B of `42e69c9a` against its parent on `corpus/mkgroups.py` (400 right-edge-crossing groups, 400 soft masks, 2000 tiny groups) and vogtle: B/A 1.005 and 1.007, speed-neutral ([measurements/b14-group-speed-ab-20261108.md](measurements/b14-group-speed-ab-20261108.md)). | n/a | n/a |
+| A20 | `fb4d313f` | O(log n) eviction: every shard of the font, glyph and image caches keeps a `BTreeMap<clock, key>` recency index; hits and inserts maintain it, eviction pops the first key (the image cache takes the minimum over the shards' first keys under its global clock, and re-checks the clock under the shard lock so a hit between peek and removal is not evicted). | `evicts_the_least_recently_used_entry_first`; the three `evicts_by_byte_budget` | none |
+| A7 | `7bcbc820` | per-compile image XObject cache keyed by stream object: a page that draws one image many times inflates, converts and lowers it once. Not cached when the colour space came out of the page's `/ColorSpace` resources (`/CS0`), which another resource context could resolve differently. | `repeated_image_xobject_is_decoded_once_per_compile` (six draws charge the decode budget once; the `/CS0` variant six times) | none |
+| A12 | `721b3e76` | gray irreversible 9/7 to packed bytes takes the fused finest level the colour path already had: coarse levels into quarter-size buffers, then rows out of the synthesis ring straight to level shift, round, clamp and `u8`. Same kernel and per-sample conversion as the planar path. | `fused_gray_97_matches_the_planar_path` (whole plane and a strided window, odd sizes, 1-3 levels) | none |
+| A9 remainder | `9302d20b` | `ProcessingPipeline` opens one `RenderSession` and hands it to the page source (`PdfPageSource::from_session`, `PdfRenderer::from_session`), so the document is parsed once per job instead of twice; `read_pdf_file` reads the input straight into its `Arc<[u8]>` (one allocation, no `Vec` to `Arc` copy). The `Arc<[u8]>` to `Vec` copies at the RGB consumers stay: the seam's shared type has no owned form and the page cache may hold a clone. | `cargo test -p lege`; an end-to-end `lege` run on beans | none |
+
+## Measured
+
+Cold first pass through `RenderSession` (fresh session, pinned, 9 interleaved rounds; [measurements/round3-deferred-items-ab-20261108.md](measurements/round3-deferred-items-ab-20261108.md)):
+
+| Change | Document | Before → after | B/A | Rounds won |
+|---|---|---|---|---|
+| A7 | `repeat_image.pdf` (one 1200x1600 image drawn 12 times per page), Gray8 150 dpi | 429 → 270 ms | 0.615 | 9/9 |
+| A12 | `gray_jpx.pdf` (2000x2800 gray 9/7 JPX), Gray8 150 dpi | 214 → 207 ms | 0.984 | 7/9 |
+| A12 | same, 300 dpi | 244 → 237 ms | 0.977 | 8/9 |
+| controls | beans Gray8 / vogtle RGB8 | — | 1.025 / 1.001 | 3/9 / 4/9 |
+
+The warm pass is flat on every document (the page and image caches serve it). A20 and A9 do not register in this harness: eviction rarely runs within one document, and `sessionbench` already opened a single session.
+
+## Gate
+
+`gate.sh`, probe at `7ea2f836` against the working tree, 16 documents (beans, viaduct, vogtle, xenosystems, sahib_processed, the stencil, bilevel, ring, 8/16-bit fixtures, and the new `groups`, `gray_jpx`, `repeat_image` fixtures), scales 1.0 / 1.37 / 2.0, RGBA and Gray8: **2,202 of 2,202 renders identical.** Workspace suites: 175 suites, 2,153 passed, one failure (`lege-document-ocr-cli` `list_file_expands_urls_and_skips_comments`, a Windows `file://` path bug from September that fails identically at `7ea2f836`); jp2lam 468 passed. Clippy on the changed crates adds no new diagnostics (the `unwrap()` denials it reports are in `lege-pdf/write`, untouched). End-to-end `lege` runs of beans to CCITT4 PDF, JBIG2 PDF and DjVu succeed on the rebuilt CLI.
+
+## Still open
+
+- A5 caching half, A11c, A14, A4 hoist: declined, as in the plan.
+- Snapping masked-image edges to match PDFium (the ring follow-up).
+- mimalloc adoption (measured; product decision).
+- The three `cs`/`scn`/`Tf` intern sites keep interning by design.
