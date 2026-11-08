@@ -490,12 +490,9 @@ fn symbol_resolves_every_greek_letter_in_its_alphabet() {
     }
 }
 
-#[test]
-fn embedded_type1_fontfile_renders_through_the_native_engine() {
-    // A bare Type 1 /FontFile (not /FontFile2 or /FontFile3): Skrifa cannot
-    // read it, so this exercises the native interpreter end to end —
-    // interpreter -> eexec/charstring decryption -> outline -> pixels.
-    let t1 = pdf_test_support::fonts::minimal_type1();
+/// A one-page document showing "AAA" in a font embedded as the bare Type 1
+/// `/FontFile` `t1`.
+fn type1_fontfile_doc(t1: &[u8]) -> Vec<u8> {
     let mut b = PdfBuilder::new();
     b.add_object(1, "<</Type/Catalog/Pages 2 0 R>>");
     b.add_object(
@@ -517,13 +514,18 @@ fn embedded_type1_fontfile_renders_through_the_native_engine() {
         "<</Type/FontDescriptor/FontName/TestFont/Flags 4/ItalicAngle 0\
          /FontFile 7 0 R>>",
     );
-    b.add_stream(
-        7,
-        &format!("/Length1 {}/Length2 0/Length3 0", t1.len()),
-        &t1,
-    );
+    b.add_stream(7, &format!("/Length1 {}/Length2 0/Length3 0", t1.len()), t1);
     b.finish_classic_xref("/Root 1 0 R");
-    let host = render(b.into_bytes(), 200);
+    b.into_bytes()
+}
+
+#[test]
+fn embedded_type1_fontfile_renders_through_the_native_engine() {
+    // A bare Type 1 /FontFile (not /FontFile2 or /FontFile3): Skrifa cannot
+    // read it, so this exercises the native interpreter end to end —
+    // interpreter -> eexec/charstring decryption -> outline -> pixels.
+    let t1 = pdf_test_support::fonts::minimal_type1();
+    let host = render(type1_fontfile_doc(&t1), 200);
 
     // Three filled triangles: real ink, and nothing like a solid box.
     assert_glyph_like(&host, "embedded Type 1");
@@ -564,5 +566,22 @@ fn horizontal_scaling_scales_glyph_shapes() {
             (got as f64 - want).abs() <= 2.0,
             "Tz {tz}: an M {got} px wide, expected ~{want} (Tz 100: {normal} px)"
         );
+    }
+}
+
+/// B9 regression, end to end: the path `pdfr render` took when a `/Subrs`
+/// index from the font sized a dense table. `dup 10000000000000000` aborted
+/// the process ("memory allocation of 240000000000000024 bytes failed") and
+/// `dup 18446744073709551615` panicked. Both now compile and render the
+/// font's own glyphs.
+#[test]
+fn embedded_type1_with_hostile_subr_index_still_renders() {
+    use pdf_test_support::fonts::{type1_subr, type1_with};
+    for index in ["10000000000000000", "18446744073709551615"] {
+        let mut subrs = b"/Subrs 2 array\n".to_vec();
+        subrs.extend(type1_subr("0", &[11]));
+        subrs.extend(type1_subr(index, &[11]));
+        let host = render(type1_fontfile_doc(&type1_with(&subrs, &[])), 200);
+        assert_glyph_like(&host, &format!("dup {index}"));
     }
 }

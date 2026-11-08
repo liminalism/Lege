@@ -280,3 +280,85 @@ fn deeply_nested_distinct_forms_hit_the_depth_limit() {
     // Terminates: either a typed recursion error or a truncated-but-Ok page.
     let _ = PageCompiler::new().compile(&snap, PageIndex(0), &mut ctx);
 }
+
+/// A one-page document that shows "AB" in a font embedded as a bare Type 1
+/// `/FontFile` whose program is `program`.
+fn type1_text_doc(program: &[u8]) -> Vec<u8> {
+    let mut b = PdfBuilder::new();
+    b.add_object(1, "<</Type/Catalog/Pages 2 0 R>>");
+    b.add_object(
+        2,
+        "<</Type/Pages/Kids[3 0 R]/Count 1/MediaBox[0 0 100 100]>>",
+    );
+    b.add_object(
+        3,
+        "<</Type/Page/Parent 2 0 R/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>",
+    );
+    b.add_stream(4, "", b"BT /F1 60 Tf 10 20 Td (AB) Tj ET");
+    b.add_object(
+        5,
+        "<</Type/Font/Subtype/Type1/BaseFont/TestFont\
+         /Encoding<</Type/Encoding/Differences[65/A/B]>>/FontDescriptor 6 0 R>>",
+    );
+    b.add_object(
+        6,
+        "<</Type/FontDescriptor/FontName/TestFont/Flags 32/ItalicAngle 0/FontFile 7 0 R>>",
+    );
+    b.add_stream(
+        7,
+        &format!("/Length1 {}/Length2 0/Length3 0", program.len()),
+        program,
+    );
+    b.finish_classic_xref("/Root 1 0 R");
+    b.into_bytes()
+}
+
+/// B9 regression. Selecting an embedded Type 1 font parses its program, and
+/// `/Subrs` is parsed before anything else is validated. An index from the
+/// font sized a dense table, so `dup 10000000000000000` aborted the whole
+/// process (no `catch_unwind` contains an allocation failure) and
+/// `dup 18446744073709551615` panicked. The page must compile with the
+/// embedded font itself, not a substitute: `A` and `B` resolve to their glyphs,
+/// and `B`'s call to the skipped subroutine just draws nothing.
+#[test]
+fn type1_font_with_hostile_subr_index_compiles_with_its_own_glyphs() {
+    use pdf_test_support::fonts::{type1_number, type1_subr, type1_with};
+    // `B`: 0 600 hsbw, then call subroutine 1000000.
+    let b_glyph = [
+        type1_number(0),
+        type1_number(600),
+        vec![13],
+        type1_number(1_000_000),
+        vec![10, 14],
+    ]
+    .concat();
+    for index in [
+        "10000000000000000",
+        "1000000000000000000",
+        "18446744073709551615",
+        "1000000",
+    ] {
+        let mut subrs = b"/Subrs 2 array\n".to_vec();
+        subrs.extend(type1_subr("0", &[11]));
+        subrs.extend(type1_subr(index, &[11]));
+        let program = type1_with(&subrs, &[("B", &b_glyph)]);
+        let snap = open(type1_text_doc(&program));
+        let mut ctx = ParseContext::new();
+        let page = PageCompiler::new()
+            .compile(&snap, PageIndex(0), &mut ctx)
+            .unwrap_or_else(|e| panic!("dup {index}: the page must compile: {e:?}"));
+        let font = page.fonts.first().expect("the font is used");
+        assert_eq!(
+            &*font.program,
+            program.as_slice(),
+            "dup {index}: the embedded program is kept, not substituted"
+        );
+        let glyphs: Vec<u32> = page
+            .glyph_runs
+            .iter()
+            .flat_map(|run| run.glyphs.iter().map(|g| g.glyph))
+            .collect();
+        // .notdef is GID 0; `A` and `B` follow in CharStrings order.
+        assert_eq!(glyphs, vec![1, 2], "dup {index}");
+    }
+}

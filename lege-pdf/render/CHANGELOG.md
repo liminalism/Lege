@@ -10,6 +10,32 @@ work since the native renderer was promoted on 2026-07-26: three performance
 passes with byte-identical output, a hardened codec boundary, and the read,
 print and agent surfaces built on it.
 
+### Hardening, 2026-11-08 (Type 1 fonts)
+
+Valid Type 1 fonts render byte-identically. Over 26 real faces, a digest of
+every subroutine, charstring, encoding entry, outline and advance is
+unchanged, and so are the hashes of 52 pages that embed them.
+
+- `/Subrs` (B9 in the 2026-11-08 performance review): an index from the font
+  sized a dense table. `dup 10000000000000000` aborted the process on the
+  allocation, which no `catch_unwind` contains; `dup 18446744073709551615`
+  panicked; `dup 1000000` grew a ~24 MB table that the font cache did not
+  charge for. Subroutines are now stored sparsely, an index `callsubr` cannot
+  reach is skipped, at most 65,536 definitions are read, and an entry length
+  near `usize::MAX` no longer overflows.
+- Charstrings: a glyph executes at most 2^18 tokens across its subroutines
+  and `seac` components. Call depth was capped, fan-out was not: a
+  subroutine calling itself eight times took 10.7 s and 2.5 GB to render one
+  page, and nine times aborted under a 2 GB limit. A glyph over the budget
+  is dropped. The heaviest real glyph measured uses about 2,500 tokens.
+- The cleartext `/Encoding` is parsed in one pass. 20,000 entries took 4.2 s.
+- The document font cache retains every parsed Type 1 program and charges
+  its parsed size, not only its bytes. The faster parse had pushed real faces
+  under the 400 µs retention gate, which made a 40-page document 28% slower.
+  With Type 1 always retained, that document is 13–17% faster than before
+  these changes. One whose StandardEncoding faces the gate never retained is
+  about 34% faster. Peak RSS is the same.
+
 ### Performance, 2026-11-04, round 4 (follow-ups to round 3)
 
 Byte-identical to round 3 on the full private corpus except where noted;

@@ -40,7 +40,7 @@ pub struct Type1Font {
     /// The font's built-in encoding: code → index into `glyphs`.
     encoding: Box<[Option<u32>; 256]>,
     /// Local subroutines, referenced by `callsubr`.
-    subrs: Vec<Vec<u8>>,
+    subrs: Subrs,
     /// `/FontMatrix`'s scale, expressed as units per em (usually 1000).
     units_per_em: u16,
 }
@@ -50,6 +50,62 @@ struct Type1Glyph {
     name: Vec<u8>,
     /// Decrypted charstring bytes.
     code: Vec<u8>,
+}
+
+/// Local subroutines (`/Subrs`), called by number from charstrings.
+///
+/// Every number in a `dup <index> <len> RD <bytes> NP` entry is untrusted. A
+/// table indexed directly by `<index>` let a few bytes of font demand an
+/// arbitrary allocation: `dup 10000000000000000` aborted the process (an
+/// allocation failure is an abort, which no `catch_unwind` contains), and
+/// `dup 18446744073709551615` wrapped `index + 1` in release builds and then
+/// panicked. Entries are kept sparsely instead, so memory follows the entries
+/// a font actually defines rather than the largest index it names.
+///
+/// Fonts number their subroutines `0..n`, so the entry for `index` usually
+/// sits at position `index` and is found without a search. A subset that kept
+/// its original numbering, with gaps where unused routines were dropped,
+/// falls back to a binary search.
+#[derive(Debug, Default)]
+struct Subrs {
+    /// `(index, decrypted body)`, sorted by index, one entry per index. An
+    /// index is never negative: it is read as an unsigned number.
+    entries: Vec<(i32, Vec<u8>)>,
+}
+
+impl Subrs {
+    /// Index a font's definitions, given in source order. The first
+    /// definition of an index wins, as it always has here.
+    fn from_definitions(mut entries: Vec<(i32, Vec<u8>)>) -> Self {
+        // A stable sort keeps equal indices in source order, so `dedup`
+        // keeps each index's first definition.
+        entries.sort_by_key(|entry| entry.0);
+        entries.dedup_by_key(|entry| entry.0);
+        Self { entries }
+    }
+
+    /// The body of subroutine `index`, if the font defines it.
+    fn get(&self, index: i32) -> Option<&[u8]> {
+        let slot = usize::try_from(index).ok()?;
+        let at = match self.entries.get(slot) {
+            Some(entry) if entry.0 == index => slot,
+            _ => self
+                .entries
+                .binary_search_by_key(&index, |entry| entry.0)
+                .ok()?,
+        };
+        self.entries.get(at).map(|entry| entry.1.as_slice())
+    }
+
+    /// Heap bytes held: the entry table plus every body.
+    fn heap_bytes(&self) -> usize {
+        self.entries.capacity() * std::mem::size_of::<(i32, Vec<u8>)>()
+            + self
+                .entries
+                .iter()
+                .map(|entry| entry.1.capacity())
+                .sum::<usize>()
+    }
 }
 
 impl Type1Font {
@@ -102,6 +158,25 @@ impl Type1Font {
 
     pub fn num_glyphs(&self) -> u16 {
         self.glyphs.len().min(u16::MAX as usize) as u16
+    }
+
+    /// Heap bytes this parsed font holds beyond the program it was parsed
+    /// from: decrypted charstrings and their names, the name index, the
+    /// built-in encoding and the subroutines. Estimated from capacities, not
+    /// allocator bookkeeping, for charging the font caches.
+    pub fn heap_bytes(&self) -> usize {
+        use std::mem::size_of;
+        let glyphs = self.glyphs.capacity() * size_of::<Type1Glyph>()
+            + self
+                .glyphs
+                .iter()
+                .map(|g| g.name.capacity() + g.code.capacity())
+                .sum::<usize>();
+        // The name index owns a copy of every name; a hash map holds a key,
+        // a value and a control byte per slot.
+        let by_name = self.by_name.capacity() * (size_of::<(Vec<u8>, u32)>() + 1)
+            + self.by_name.keys().map(Vec::capacity).sum::<usize>();
+        glyphs + by_name + size_of::<[Option<u32>; 256]>() + self.subrs.heap_bytes()
     }
 
     pub fn units_per_em(&self) -> u16 {
@@ -282,13 +357,21 @@ fn font_matrix_upem(clear: &[u8]) -> u16 {
     }
 }
 
-/// Parse `/Subrs N array-of RD <binary> NP` entries.
-fn parse_subrs(private: &[u8], len_iv: i32) -> Vec<Vec<u8>> {
+/// Most `/Subrs` definitions read from one font. Real fonts define hundreds,
+/// rarely a few thousand; the cap bounds the table's memory and parse time
+/// however large a hostile font program is.
+const MAX_SUBRS: usize = 65_536;
+
+/// Parse `/Subrs N array dup <index> <len> RD <binary> NP ...`.
+///
+/// Every number here is untrusted (see [`Subrs`]). The declared count `N`
+/// only sizes the first allocation, clamped to what the section could hold.
+/// Each entry is stored under its own index whatever its magnitude, and an
+/// index no `callsubr` can name is skipped.
+fn parse_subrs(private: &[u8], len_iv: i32) -> Subrs {
     let Some(at) = find(private, b"/Subrs") else {
-        return Vec::new();
+        return Subrs::default();
     };
-    let mut subrs: Vec<Vec<u8>> = Vec::new();
-    let mut defined: Vec<bool> = Vec::new();
     let section_start = at + b"/Subrs".len();
     // Conditional Type 1 programs sometimes define a second /Subrs array for
     // a device-specific branch. A deterministic parser cannot execute the
@@ -303,9 +386,18 @@ fn parse_subrs(private: &[u8], len_iv: i32) -> Vec<Vec<u8>> {
     .min()
     .unwrap_or(private.len());
     let section = &private[..section_end];
+    // Every entry spells out at least `dup <index> <len> RD `, so a declared
+    // count beyond one entry per 8 bytes cannot be met. It is a corrupt
+    // count, or a subset that kept its original one, and reserves only what
+    // the section could hold. (FreeType makes the same assumption.)
+    let declared = read_uint(section, section_start).map_or(0, |(n, _)| n);
+    let room = section.len().saturating_sub(section_start) / 8;
+    let mut definitions = Vec::with_capacity(declared.min(room).min(MAX_SUBRS));
     let mut p = section_start;
     // Entries look like: `dup <index> <len> RD <bytes> NP`
-    while let Some(next) = find(&section[p..], b"dup ") {
+    while definitions.len() < MAX_SUBRS
+        && let Some(next) = section.get(p..).and_then(|rest| find(rest, b"dup "))
+    {
         let mut q = p + next + 4;
         let Some((idx, after)) = read_uint(section, q) else {
             break;
@@ -318,17 +410,15 @@ fn parse_subrs(private: &[u8], len_iv: i32) -> Vec<Vec<u8>> {
         let Some(bin) = binary_after_token(section, q, len) else {
             break;
         };
-        if subrs.len() <= idx {
-            subrs.resize(idx + 1, Vec::new());
-            defined.resize(idx + 1, false);
+        // `callsubr` reads its operand as an `i32`, so no charstring can
+        // call an index past `i32::MAX`. Such an entry is skipped, not stored.
+        if let Ok(index) = i32::try_from(idx) {
+            definitions.push((index, decrypt_charstring(bin, len_iv)));
         }
-        if !defined[idx] {
-            subrs[idx] = decrypt_charstring(bin, len_iv);
-            defined[idx] = true;
-        }
+        // `bin` lies inside `section` beyond `q`, so this stays in bounds.
         p = q + len;
     }
-    subrs
+    Subrs::from_definitions(definitions)
 }
 
 /// Parse `/CharStrings N dict dup begin /name <len> RD <binary> ND ... end`.
@@ -414,7 +504,9 @@ fn binary_after_token(data: &[u8], mut p: usize, len: usize) -> Option<&[u8]> {
         return None;
     }
     p += 1; // exactly one space separates the token from the binary
-    data.get(p..p + len)
+    // `len` is the font's own claim, so the end is checked: `p + len` can
+    // overflow, which panics wherever overflow checks are on.
+    data.get(p..p.checked_add(len)?)
 }
 
 /// The cleartext `/Encoding`: either `StandardEncoding` or a sequence of
@@ -439,6 +531,10 @@ fn parse_encoding(clear: &[u8], by_name: &HashMap<Vec<u8>, u32>) -> Box<[Option<
         }
         return enc;
     }
+    // `readonly def` closes the encoding vector. It is found once: searching
+    // `region` from its start again after every entry made this loop
+    // quadratic (20,000 entries took over 4 s to parse).
+    let end = find(region, b"readonly def");
     let mut p = 0usize;
     while let Some(next) = find(&region[p..], b"dup ") {
         let q = p + next + 4;
@@ -465,10 +561,7 @@ fn parse_encoding(clear: &[u8], by_name: &HashMap<Vec<u8>, u32>) -> Box<[Option<
             enc[code] = Some(gid);
         }
         p = r;
-        // `readonly def` closes the encoding vector.
-        if let Some(end) = find(region, b"readonly def")
-            && p > end
-        {
+        if end.is_some_and(|end| p > end) {
             break;
         }
     }
@@ -492,10 +585,23 @@ struct Interp<'a> {
     open: bool,
     /// Flex point collection (othersubrs 0–2).
     flex: Option<Vec<[f32; 2]>>,
+    /// Charstring tokens this glyph may still execute.
+    budget: u32,
 }
 
 /// Depth cap for `callsubr`/`seac` recursion (malformed fonts).
 const MAX_DEPTH: u32 = 10;
+
+/// Most charstring tokens (operands and operators) one glyph may execute,
+/// counting its own and those of every subroutine and `seac` component it
+/// runs. [`MAX_DEPTH`] bounds how deeply calls nest, not how many calls a
+/// subroutine makes: one that calls itself `k` times ran about `k^9` times,
+/// so a few dozen bytes of font could pin a CPU and grow the outline until
+/// the allocator gave up, an abort that no `catch_unwind` contains. A glyph
+/// that runs out is dropped, like any charstring the interpreter rejects.
+/// The heaviest glyph in 26 real faces measured runs about 2,500 tokens; the
+/// cap is a hundred times that.
+const MAX_GLYPH_TOKENS: u32 = 1 << 18;
 
 impl<'a> Interp<'a> {
     fn new(font: &'a Type1Font) -> Self {
@@ -510,6 +616,7 @@ impl<'a> Interp<'a> {
             left_side_bearing: 0.0,
             open: false,
             flex: None,
+            budget: MAX_GLYPH_TOKENS,
         }
     }
 
@@ -573,6 +680,7 @@ impl<'a> Interp<'a> {
         }
         let mut i = 0usize;
         while i < code.len() {
+            self.budget = self.budget.checked_sub(1)?;
             let b = code[i];
             i += 1;
             // Operands.
@@ -647,12 +755,10 @@ impl<'a> Interp<'a> {
                     self.stack.clear();
                 }
                 10 => {
-                    // callsubr
+                    // callsubr: an undefined (or negative) index is a no-op.
                     let n = self.stack.pop().unwrap_or(0.0) as i32;
                     let font = self.font;
-                    if n >= 0
-                        && let Some(sub) = font.subrs.get(n as usize)
-                    {
+                    if let Some(sub) = font.subrs.get(n) {
                         self.exec(sub, depth + 1)?;
                     }
                 }
@@ -921,7 +1027,7 @@ mod tests {
             }],
             by_name: HashMap::new(),
             encoding: Box::new([None; 256]),
-            subrs: Vec::new(),
+            subrs: Subrs::default(),
             units_per_em: 1000,
         }
     }
@@ -960,7 +1066,220 @@ mod tests {
         let private = b"/Subrs 6 array dup 5 2 RD \x8b\x0b NP /Subrs 6 array dup 5 1 RD \x0b NP \
               /CharStrings 0 dict";
         let subrs = parse_subrs(private, -1);
-        assert_eq!(subrs.get(5).map(Vec::as_slice), Some(&b"\x8b\x0b"[..]));
+        assert_eq!(subrs.get(5), Some(&b"\x8b\x0b"[..]));
+    }
+
+    /// One plaintext (`/lenIV -1`) `/Subrs` entry: `dup <index> <len> RD
+    /// <body> NP`.
+    fn subr_entry(index: &str, body: &[u8]) -> Vec<u8> {
+        let mut out = format!("dup {index} {} RD ", body.len()).into_bytes();
+        out.extend_from_slice(body);
+        out.extend_from_slice(b" NP\n");
+        out
+    }
+
+    /// A private dictionary whose `/Subrs` declares `declared` entries and
+    /// holds `entries`, closed by an empty `/CharStrings`.
+    fn private_with_subrs(declared: &str, entries: &[Vec<u8>]) -> Vec<u8> {
+        let mut out = format!("/Subrs {declared} array\n").into_bytes();
+        for entry in entries {
+            out.extend_from_slice(entry);
+        }
+        out.extend_from_slice(b"ND\n/CharStrings 0 dict");
+        out
+    }
+
+    /// Ordinary tables parse exactly as the old dense table did: each index
+    /// holds its first definition's bytes, and an index the font leaves out
+    /// is absent (before, an empty slot or out of range, both a no-op
+    /// `callsubr`). Contiguous indices take the direct slot; the jump to 40,
+    /// the shape of a subset that kept its original numbering, takes the
+    /// binary search.
+    #[test]
+    fn ordinary_subr_tables_parse_exactly_as_before() {
+        let private = private_with_subrs(
+            "41",
+            &[
+                subr_entry("0", b"\x8b\x8b\x15\x0b"),
+                subr_entry("1", b"\x0b"),
+                subr_entry("2", b"\x8c\x0b"),
+                subr_entry("2", b"\x8d\x0b"),
+                subr_entry("3", b""),
+                subr_entry("40", b"\x8e\x0b"),
+            ],
+        );
+        let subrs = parse_subrs(&private, -1);
+        assert_eq!(
+            subrs.entries,
+            vec![
+                (0, b"\x8b\x8b\x15\x0b".to_vec()),
+                (1, b"\x0b".to_vec()),
+                (2, b"\x8c\x0b".to_vec()),
+                (3, Vec::new()),
+                (40, b"\x8e\x0b".to_vec()),
+            ]
+        );
+        assert_eq!(subrs.get(1), Some(&b"\x0b"[..]));
+        assert_eq!(subrs.get(3), Some(&b""[..]));
+        assert_eq!(subrs.get(40), Some(&b"\x8e\x0b"[..]));
+        for absent in [-1, 4, 39, 41, i32::MAX] {
+            assert_eq!(subrs.get(absent), None, "subr {absent}");
+        }
+    }
+
+    /// B9: the index sized a dense table. `dup 10000000000000000` aborted
+    /// the process on a ~2.4e17-byte allocation, `dup 1e18` panicked with
+    /// "capacity overflow", and `dup 18446744073709551615` wrapped
+    /// `index + 1` (release builds) and panicked indexing the empty table.
+    /// `callsubr` reads an `i32`, so none of these is callable: each is
+    /// skipped and the entries around it still parse.
+    #[test]
+    fn subr_indices_no_callsubr_can_reach_are_skipped() {
+        for index in [
+            "2147483648",
+            "10000000000000000",
+            "1000000000000000000",
+            "18446744073709551615",
+        ] {
+            let private = private_with_subrs(
+                "3",
+                &[
+                    subr_entry("0", b"\x0b"),
+                    subr_entry(index, b"\x8b\x0b"),
+                    subr_entry("1", b"\x8c\x0b"),
+                ],
+            );
+            let subrs = parse_subrs(&private, -1);
+            assert_eq!(
+                subrs.entries,
+                vec![(0, b"\x0b".to_vec()), (1, b"\x8c\x0b".to_vec())],
+                "dup {index}"
+            );
+        }
+        // The largest index `callsubr` can name is kept.
+        let private = private_with_subrs("1", &[subr_entry("2147483647", b"\x0b")]);
+        assert_eq!(parse_subrs(&private, -1).get(i32::MAX), Some(&b"\x0b"[..]));
+    }
+
+    /// A large index a charstring can call costs one entry. The dense table
+    /// grew to a million slots for this (~24 MB, retained by the font
+    /// caches while they charged only the program bytes).
+    #[test]
+    fn a_large_subr_index_costs_one_entry() {
+        let private = private_with_subrs(
+            "2",
+            &[subr_entry("0", b"\x0b"), subr_entry("1000000", b"\x8b\x0b")],
+        );
+        let subrs = parse_subrs(&private, -1);
+        assert_eq!(subrs.entries.len(), 2);
+        assert!(
+            subrs.entries.capacity() < 16,
+            "storage follows the entries present, not the index"
+        );
+        assert_eq!(subrs.get(1_000_000), Some(&b"\x8b\x0b"[..]));
+        assert_eq!(subrs.get(999_999), None);
+    }
+
+    /// Through the interpreter: a glyph calls subroutine 1000000 and draws
+    /// what it draws.
+    #[test]
+    fn callsubr_reaches_a_sparse_index() {
+        let n = |v: i32| (v + 139) as u8;
+        // 0 100 hsbw, 1000000 callsubr, endchar
+        let mut glyph = vec![n(0), n(100), 13, 255];
+        glyph.extend_from_slice(&1_000_000i32.to_be_bytes());
+        glyph.extend_from_slice(&[10, 14]);
+        let mut font = synthetic(glyph);
+        // 0 0 rmoveto, 50 vlineto, 50 hlineto, closepath, return
+        let square = vec![n(0), n(0), 21, n(50), 7, n(50), 6, 9, 11];
+        font.subrs = Subrs::from_definitions(vec![(1_000_000, square)]);
+        let o = font.outline(0).expect("the subroutine draws");
+        assert_eq!(
+            o.verbs,
+            vec![
+                OutlineVerb::MoveTo,
+                OutlineVerb::LineTo,
+                OutlineVerb::LineTo,
+                OutlineVerb::Close
+            ]
+        );
+    }
+
+    /// The declared count is untrusted too. It only reserves what the
+    /// section could hold, and a count that is not a number reserves
+    /// nothing.
+    #[test]
+    fn a_declared_subr_count_only_reserves_what_fits() {
+        for declared in [
+            "99999999999999",
+            "18446744073709551615",
+            "99999999999999999999999",
+            "[",
+        ] {
+            let private = private_with_subrs(declared, &[subr_entry("0", b"\x0b")]);
+            let subrs = parse_subrs(&private, -1);
+            assert_eq!(subrs.entries, vec![(0, b"\x0b".to_vec())], "{declared}");
+            assert!(
+                subrs.entries.capacity() <= private.len() / 8,
+                "/Subrs {declared}: reserved {}",
+                subrs.entries.capacity()
+            );
+        }
+    }
+
+    /// An entry length past the data used to overflow `p + len`, a panic
+    /// wherever overflow checks are on (tests, fuzzing). It is now a
+    /// malformed entry, which ends the table as before.
+    #[test]
+    fn a_subr_length_past_the_data_ends_the_table() {
+        assert_eq!(binary_after_token(b" RD \x0b", 0, usize::MAX), None);
+        let private = private_with_subrs(
+            "2",
+            &[
+                subr_entry("0", b"\x0b"),
+                b"dup 1 18446744073709551615 RD \x0b NP\n".to_vec(),
+            ],
+        );
+        assert_eq!(
+            parse_subrs(&private, -1).entries,
+            vec![(0, b"\x0b".to_vec())]
+        );
+    }
+
+    /// However large the font, at most [`MAX_SUBRS`] definitions are read.
+    #[test]
+    fn the_subr_table_is_capped() {
+        let entries: Vec<Vec<u8>> = (0..MAX_SUBRS + 10)
+            .map(|i| subr_entry(&i.to_string(), b"\x0b"))
+            .collect();
+        let subrs = parse_subrs(&private_with_subrs("70000", &entries), -1);
+        assert_eq!(subrs.entries.len(), MAX_SUBRS);
+        let last = i32::try_from(MAX_SUBRS).unwrap();
+        assert_eq!(subrs.get(last - 1), Some(&b"\x0b"[..]));
+        assert_eq!(subrs.get(last), None);
+    }
+
+    /// A long cleartext `/Encoding` parses in one pass. The loop looked for
+    /// `readonly def` from the start of the region after every entry, which
+    /// was quadratic: 20,000 entries took over 4 s, and at this size it would
+    /// run for minutes.
+    #[test]
+    fn a_long_encoding_parses_in_one_pass() {
+        let by_name = HashMap::from([(b"A".to_vec(), 1), (b"B".to_vec(), 2)]);
+        let mut clear = b"/Encoding 256 array\n".to_vec();
+        for i in 0..50_000 {
+            let entry: &[u8] = if i % 2 == 0 {
+                b"dup 65 /A put\n"
+            } else {
+                b"dup 66 /B put\n"
+            };
+            clear.extend_from_slice(entry);
+        }
+        clear.extend_from_slice(b"readonly def\n");
+        let enc = parse_encoding(&clear, &by_name);
+        assert_eq!(enc[65], Some(1));
+        assert_eq!(enc[66], Some(2));
+        assert_eq!(enc.iter().flatten().count(), 2);
     }
 
     #[test]
@@ -1017,8 +1336,36 @@ mod tests {
         // A subr that calls itself must terminate, not blow the stack.
         let n = |v: i32| (v + 139) as u8;
         let mut font = synthetic(vec![n(0), n(0), 13, n(0), 10, 14]);
-        font.subrs = vec![vec![n(0), 10]]; // subr 0: `0 callsubr` — infinite
+        // subr 0: `0 callsubr` — infinite
+        font.subrs = Subrs::from_definitions(vec![(0, vec![n(0), 10])]);
         assert!(font.advance(0).is_some(), "recursion is capped, not fatal");
+    }
+
+    /// Depth was capped, fan-out was not: a subroutine that calls itself `k`
+    /// times ran about `k^9` times. At k = 8, rendering a page that shows
+    /// one such glyph took 10.7 s and 2.5 GB; at k = 9 under a 2 GB limit the
+    /// process aborted on an allocation failure. Here k = 12 (some 5.6e9
+    /// calls) is dropped once it spends its token budget.
+    #[test]
+    fn callsubr_fan_out_is_bounded() {
+        let n = |v: i32| (v + 139) as u8;
+        // subr 0: `0 0 rlineto`, then `0 callsubr` twelve times, `return`.
+        let mut subr = vec![n(0), n(0), 5];
+        for _ in 0..12 {
+            subr.extend_from_slice(&[n(0), 10]);
+        }
+        subr.push(11);
+        // 0 100 hsbw, 0 0 rmoveto, 0 callsubr, endchar
+        let mut font = synthetic(vec![n(0), n(100), 13, n(0), n(0), 21, n(0), 10, 14]);
+        font.subrs = Subrs::from_definitions(vec![(0, subr)]);
+        assert!(font.outline(0).is_none(), "the runaway glyph is dropped");
+        assert_eq!(font.advance(0), None);
+
+        // The budget is per glyph: each outline starts with a full one.
+        let mut ctx = Interp::new(&font);
+        assert!(ctx.run_glyph(0, 0).is_none());
+        assert_eq!(ctx.budget, 0);
+        assert_eq!(Interp::new(&font).budget, MAX_GLYPH_TOKENS);
     }
 
     #[test]
