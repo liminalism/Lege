@@ -1,0 +1,23 @@
+# P2 probe: B2 exposure through Lege's production document seam (lege-pdf-read).
+[package]
+name = "lege-read-probe"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+lege-pdf-read = { path = "../../../../../../lege-pdf/read" }
+mimalloc = { version = "0.1", optional = true, default-features = false }
+
+[features]
+mimalloc = ["dep:mimalloc"]
+
+[workspace]
+
+[profile.debug-fast]
+inherits = "release"
+lto = false
+codegen-units = 16
+incremental = true
+debug = true
+strip = false

@@ -9,8 +9,8 @@
 
 **Status:** this is a scoping document. No renderer code was changed on this branch.
 - Every claim was checked against the code by an adversarial verifier.
-- Every bug claim, and the cheapest levers, were also reproduced or measured at runtime (§3.3).
-- Still in progress, to be added in a follow-up commit: two timing probes, the allocator and the glyph-cache hash. They are marked *pending* below.
+- Every bug claim, and the cheapest levers, were also reproduced or measured at runtime (§3.3–3.4).
+- The tools, corpus generators and tested fix patches are committed in [`../scoping-20261108/`](../scoping-20261108/README.md).
 
 Contents:
 1. Summary
@@ -63,7 +63,7 @@ Four things remain:
    - `/ImageMask` stencils never take a fast path. On MRC pages about 90% of render time is spent in the generic per-pixel sampler, 3.4–3.6× slower than Poppler. Lege's own MRC output uses exactly this shape: a JBIG2 `/ImageMask` over a background image.
    - Bilevel images rebuild a 33.7 MB summed-area table on every draw.
    - 8-bit gray images are re-expanded to RGB on every draw. A gray JPEG page is about 1.8× slower than a colour one of the same size.
-   - The glyph cache hashes its key with SipHash, about 10–15% of the instructions on a text page. This bears directly on the beans gap.
+   - The glyph cache hashes its key with SipHash, about 10–16% of the instructions on a text page. **Measured:** replacing it with seeded foldhash, already in Cargo.lock, cuts warm text render by 7–13% and first visits by 5–8%, and lifts 2-worker throughput by 13–14%, with identical output. This bears directly on the beans gap.
    - Builds target baseline x86-64, so `floor`, `ceil` and `round` compile to out-of-line library calls: 290 call sites. These run per edge or per pixel in the rasteriser, the generic sampler and shadings, and per pixel in the Gray8 output conversion.
      - Building for x86-64-v2 removes them all, with bit-identical output. It saves 8–15% on vector, text and MRC pages, provided the build also disables one LLVM tuning flag (§3.4).
      - The Gray8 output conversion alone costs ~7 ms per 1224×1584 page, about 5× the whole RGBA render of a text page. `lege` uses Gray8 for every gray page. An exact rewrite verified over all 2²⁴ inputs makes it 2.3–3× faster.
@@ -264,7 +264,37 @@ Paired A/B runs, 7 interleaved rounds, pinned core, `debug-fast` builds.
 - The conversion adds 6.6 ms per text page and 7.4 ms per JPEG page at 1224×1584 (3.4–3.8 ns/px). A text page's whole RGBA render is ~1.25 ms.
 - v2 halves it. The exact table rewrite reaches 1.5 ns/px and the SSE2 rewrite 1.1–1.4 ns/px, both verified over all 2²⁴ inputs.
 
-**Allocator (mimalloc) and glyph-cache hash** *(probes pending, added in a follow-up commit)*.
+**Glyph-cache hash**
+- The change: `SharedGlyphCache` shard maps switch from std SipHash to seeded foldhash 0.2.0.
+- SipHash falls from 15.7% to 0.8% of instructions at 72 DPI, and from 10.1% to 0.5% at 144 DPI.
+- Warm text render: 0.87× (72 DPI) and 0.93× (144 DPI), winning 18–21 of 21 rounds.
+- Warm compile+render: 0.92× and 0.95×. First visit: 0.92–0.95×.
+- `probe doc` throughput on text: +14% / +13% at 1+2 workers, +9% at 2+2 (72 DPI).
+- Moving the hit/miss counters under the shard lock, off a shared atomic, adds another 2–3.5% on warm render.
+- Output identical on all 348 text renders; glyph-cache statistics identical.
+- Correction to the first profile: each glyph does one lookup, not two. A SipHash of the 11-field key costs ~726 instructions.
+
+**Allocator**
+
+mimalloc v3, mimalloc v2, snmalloc and glibc tunables were each measured against glibc 2.39.
+
+- **Round 4's "halved the median compile" does not reproduce as a general effect.**
+  - Single-threaded text compile: 0.86–0.90×. Text render: 0.90–0.96×.
+  - Compile gets *slower* where large streams are inflated: vector 1.07×, transparency 1.42× cold.
+  - "Halved" holds only for MRC and bilevel compile under concurrency, which is 0.03–0.13 ms per page.
+- **Multi-threaded scheduler at 144 DPI:**
+  - Text: 0.75–0.84× wall at 1+1, 2+2 and 2+6 (0.93× at 1+2).
+  - Bilevel: 0.82–0.88×. Colour JPEG: 0.91–0.93×. MRC: neutral.
+  - At 72 DPI, text gains only with one compile worker.
+- **Warm JPEG render is 0.79× faster, but that is page-fault avoidance.**
+  - glibc with a 32 MiB mmap threshold and no trimming gets 0.81× at glibc's RSS.
+  - Minor faults fall from 100k to 12k per process.
+- **Cost:**
+  - Peak RSS is 1.5–3× single-threaded (mostly transparent huge pages) and 1.1–1.9× in scheduler runs.
+  - RSS kept after three in-process runs is up to 5.5× glibc's.
+  - The first compile on each new thread is ~1 ms slower.
+- **mimalloc v3 makes B2 fire deterministically.** 29 of 31 Type 1 pages draw Charter Roman text with Bold shapes.
+- **snmalloc is not a candidate.** It is 4–44% slower on multi-threaded text.
 
 **Bug reproductions** (§4)
 - B1: base sharpness 0.74×; extreme sequence 0.35×; scheduler nondeterministic in 8–10 of 30 runs.
@@ -321,7 +351,7 @@ Every row was traced end to end by a verifier told to refute it. "Reproduced" me
 | # | Change | Evidence | Expected gain | Output | Effort | History |
 |---|---|---|---|---|---|---|
 | A1 | Fix B1–B15 (§4); B13–B15 are low priority | Reproduced or confirmed | Correctness | See §4 | S–M | NEW |
-| A2 | **Cheaper glyph-cache hash.** Replace SipHash on `GlyphCacheKey` (prepared.rs:309-319, 364) with seeded foldhash (already in Cargo.lock) or a hand-written hash over 2–3 u64 words. Move the hit counter off the shards' cache line (355-361). | Callgrind: 9.7–15.2% of text-page instructions | Directly on the beans gap. *Timing probe pending.* | Exact: no map iteration feeds output | S | NEW |
+| A2 | **Cheaper glyph-cache hash.** Replace SipHash on `GlyphCacheKey` (prepared.rs:309-319, 364) with seeded foldhash (already in Cargo.lock) or a hand-written hash over 2–3 u64 words. Move the hit counter off the shards' cache line (355-361). | Callgrind: 10–16% of text-page instructions. **Measured with the patch:** SipHash share 15.7% → 0.8%. | **Measured:** warm text render −7 to −13%, first visit −5 to −8%, 2-worker throughput +13–14%. The counter change adds another −2 to −3.5%. Directly on the beans gap. | Exact: 348/348 renders identical | S (patch committed) | NEW |
 | A3 | **Gray8 output conversion** (`surface.rs:256-289`). Replace the per-pixel `round()` with an exact form. Two were verified **exhaustively over all 2²⁴ inputs**: three 256-entry f32 product tables with floor/compare rounding, or an explicit SSE2 loop at the baseline ISA. `(y+0.5) as u8` and round-half-even are **not** exact: 2,752 inputs land on exact .5 ties. | **Measured:** 7.0–7.2 ms per 1224×1584 page (3.6 ns/px). That is about **5× the entire RGBA render of a text page**. Gray8 is what `lege` requests on every gray-suitable page. | **Measured:** tables 1.5 ns/px (2.3×), SSE2 1.1–1.4 ns/px for page-sized buffers (up to 7.4× in cache). About 3–4 ms saved per 1200-px gray page in lege. | Exact (exhaustive) | S | NEW |
 | A4 | **Remove libm calls where an exact rewrite exists:** `x.floor() as usize` → `x as usize` for clamped non-negative values (`pdf-color/src/icc.rs:154, 315, 453`; `axis_box_taps`); `r.trunc() as i64` → `r as i64` (`pdf-function/src/lib.rs:363`). **Hoist `axis_box_taps` per column and per row** in the generic sampler (now per pixel per axis). | MRC generic path: `axis_box_taps` 13.4% plus libm ~6.7%. Rounding ≥4.5% on vector, ≥6.7% on MRC. | Several % on vector, shading and MRC; more on the generic sampler | Exact per site; no ISA policy change | S each | NEW |
 | A5 | **Gray8 image promotion** (`image.rs:673-697`): write straight into the `Arc` (S), then cache it through `promote_through_cache` as Indexed/ICC already do (M). | DHAT: two 6.31 MB allocations per draw, 68% of bytes on a gray JPEG document; gray JPEG 1.8× slower than colour | ~10 ms and 25 MB transient per 300-dpi draw; one entry shared by lege's analysis and base renders | Exact | S / M | Cost accepted in the AKR gray8 decision; caching NEW |
@@ -350,8 +380,8 @@ Every row was traced end to end by a verifier told to refute it. "Reproduced" me
 | B2 | **Bilevel summed-area table → row-band windowed-popcount filter** (`exec.rs:1331-1460`). | SAT build plus lookup ~90% of a bilevel page; 33.7 MB per draw (72% of peak); 267 MiB at 2+6 workers; 600-dpi pages fall back to a serial path | ~2× on bilevel pages; −34 to −135 MB per concurrent draw | Exact (same integers) | M | PREV (surface-imagerows note) |
 | B3 | **Decode-level-keyed JPX/JPEG cache plus a per-page decode reference.** Implemented on `claude/jolly-ride-cyjbsm`. | That branch: analysis+base 569 → 398 ms on a synthetic JPEG book. JPX analysis and base renders miss each other today. | 15–35% of render CPU on MRC/JPX pages in lege (estimate) | Base, region and OCR exact. The analysis raster changes, so **run a layout-detection A/B on a GPU first.** | M | NEW |
 | B4 | **Native gray kernels:** nearest, bilinear, area-min and masked kernels generic over 1 or 3 channels, so promotion goes away. | A5 data | ~⅓ of area-min work on gray scans | Exact | M–L | NEW |
-| B5 | **Scheduler** (benchmarks and the published `render_all`):<br>- persistent worker contexts, plus a buffer pool that takes surfaces back when the `HostPage` drops;<br>- fused compile+render workers or work stealing;<br>- a per-request thread budget in place of the global `PAGES_IN_FLIGHT`. | The 2+2 default is the slowest configuration on scans (MRC 444 ms at 1+1 vs 736 at 2+2). On one core it is 1.3–1.5× slower than a serial loop. | Benchmark and published-crate throughput. No production consumer uses the scheduler. | Exact | M | PREV (outside review §12; optimization-plan §5.9) |
-| B6 | **Fast global allocator** (mimalloc behind a feature) in lege, lege-gui, pdfr, the agent and the bench adapters. **Fix B2 first:** with mimalloc, B2 fired in 10 of 10 runs. | Round 4: halved the median compile time | *Allocator probe pending.* | Exact | S code / M validation (C toolchain for cross builds) | PREV (not adopted in round 4) |
+| B5 | **Scheduler** (benchmarks and the published `render_all`):<br>- persistent worker contexts, plus a buffer pool that takes surfaces back when the `HostPage` drops;<br>- fused compile+render workers or work stealing;<br>- a per-request thread budget in place of the global `PAGES_IN_FLIGHT`. | The 2+2 default is the slowest configuration on scans (MRC 444 ms at 1+1 vs 736 at 2+2). On one core it is 1.3–1.5× slower than a serial loop. Render workers take pages in compile-completion order, so a slow first compile can deliver page 0 *last*: 240 → 730 ms first-page latency was observed. Prefer the lowest page index. | Benchmark and published-crate throughput. No production consumer uses the scheduler. | Exact | M | PREV (outside review §12; optimization-plan §5.9) |
+| B6 | **Fast global allocator** (mimalloc behind a feature) in lege, lege-gui, pdfr, the agent and the bench adapters. **Fix B2 first:** with mimalloc, B2 fired in 10 of 10 runs. | Round 4: halved the median compile time. **Measured here:** that does not reproduce generally (§3.4). | Text 10–25% faster, mostly under concurrency. Bilevel 12–18%, JPEG 7–9% (mostly page-fault avoidance). Compile 7–42% *slower* on stream-heavy pages. Peak RSS 1.1–3× and retained. **Recommendation:** fix B2. Then try glibc tunables first (mmap threshold 32 MiB, no trim), which capture the page-fault win at glibc's RSS. Consider mimalloc only for text-throughput builds, with THP off, and measure on Windows (NT heap), where it was never tested. | Exact once B2 is fixed | S code / M validation | PREV (not adopted in round 4) |
 | B7 | **Zero-copy tokenizer and operand moves** (`pdf-syntax/src/lexer.rs:227`; `pdf-content/src/tokenizer.rs`; `interpret.rs:923, 2107, 1705, 4843`; `lower.rs:848` capacity). | ~4,350 allocations per text page; ~10 per text-show operator; `FontMetrics::decode` runs twice | ~1 ms per text page; more under allocator contention | Exact | M | `lexer-name-bulk-scan` PREV; rest NEW |
 | B8 | **Document-scoped ICC profile and function caches** (`interpret.rs:581-583, 3474-3534, 5526-5700`). | 1–3 ms per profile per page | PDF/X and press files | Exact (keep decode-budget charging) | M | NEW |
 | B9 | **Glyph cache under contention:** an L1 cache per worker, local counters, padded shards, a document-wide outline cache. | beans scales only 1.25× from 1 to 8 workers | Multi-worker text | Exact | M | PREV (round 2, "probe per glyph") |
@@ -478,9 +508,22 @@ The history favours a particular way of working:
 
 ## Appendix A. Artefacts
 
-- **Raw data.** The measurement harness, scripts, generated corpora, profiles and bug-reproduction inputs from this review lived in a session scratchpad and are not committed.
-- **Rebuilding the corpus.** The synthetic corpus can be regenerated with reportlab and Pillow, as described in §3.3: dense Latin text in TrueType, standard-14 and Type 1 fonts; vector pages; 300-dpi JPEG scans; Pillow G4 bilevel pages; transparency; MRC with a G4 or JBIG2 `/ImageMask` over JPEG/JPX.
-- **Probe tool.** Each probe used a small out-of-workspace crate with path dependencies on the renderer crates. It ran sequential renders through one backend, whole documents through `RenderScheduler::render_range`, and printed per-page hashes. A tool of this shape is what CRATES-IO-PLAN §9 asks for as `lege-pdf/bench`.
+[`../scoping-20261108/`](../scoping-20261108/README.md) contains:
+
+- the measurement harness `lege-render-probe`, with modes `run`, `doc`, `seq` and `fontscan` and per-page hashing;
+- `lege-read-probe`, for the `RenderSession` path;
+- the Gray8 microbenchmark, with an exhaustive 2²⁴ equality check;
+- the JBIG2 MRC encoder;
+- corpus generators for the perf classes and for each bug reproduction (B1–B5);
+- four fix-candidate patches that apply to `5b24f8e`:
+  - the B1 DCT scale key;
+  - B4 and B5;
+  - the glyph-cache foldhash;
+  - foldhash plus the shard counters.
+
+The generated PDFs, profiles and logs (~11 GB) stayed in the session scratchpad and were not committed. Regenerate them with the scripts.
+
+A harness of this shape is what CRATES-IO-PLAN §9 asks for as `lege-pdf/bench`.
 
 ## Appendix B. Verification record
 
