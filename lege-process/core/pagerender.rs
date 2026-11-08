@@ -43,10 +43,20 @@ impl PdfRenderer {
             lege_pdf_read::RenderSession::open(pdf_bytes, None)
                 .map_err(|error| anyhow!("Failed to read PDF document: {error}"))?,
         );
-        Ok(Self {
+        Ok(Self::from_session(document, raster_config))
+    }
+
+    /// Wrap a session that is already open. The processing pipeline opens the
+    /// document once to count pages and hands that session on, so the file is
+    /// parsed (xref walk, page tree) a single time per job.
+    pub fn from_session(
+        document: Arc<lege_pdf_read::RenderSession>,
+        raster_config: RasterConfig,
+    ) -> Self {
+        Self {
             document,
             raster_config,
-        })
+        }
     }
 
     pub fn page_count(&self) -> u32 {

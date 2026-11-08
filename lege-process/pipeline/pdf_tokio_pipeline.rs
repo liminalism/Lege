@@ -4658,7 +4658,7 @@ pub async fn create_and_run_pdf_source_pipeline(
 }
 
 pub async fn create_and_run_pdf_parallel_pipeline(
-    pdf_bytes: Arc<[u8]>,
+    document: Arc<lege_pdf_read::RenderSession>,
     config: Arc<PipelineConfig>,
     output_path: &Path,
     page_range: Option<std::ops::Range<usize>>,
@@ -4666,7 +4666,8 @@ pub async fn create_and_run_pdf_parallel_pipeline(
     shutdown_rx: tokio::sync::broadcast::Receiver<crate::ShutdownSignal>,
     progress_callback: impl Fn(usize, usize) + Send + Sync + 'static,
 ) -> Result<()> {
-    let source: Arc<dyn PageSource> = Arc::new(PdfPageSource::new(pdf_bytes, config.clone())?);
+    let source: Arc<dyn PageSource> =
+        Arc::new(PdfPageSource::from_session(document, config.clone()));
     create_and_run_pdf_source_pipeline(
         source,
         config,
@@ -5013,7 +5014,13 @@ mod planned_products_tests {
         tokio::time::timeout(
             std::time::Duration::from_secs(10),
             create_and_run_pdf_parallel_pipeline(
-                Arc::from(pdf_test_support::builder::multipage_classic(1)),
+                Arc::new(
+                    lege_pdf_read::RenderSession::open(
+                        Arc::from(pdf_test_support::builder::multipage_classic(1)),
+                        None,
+                    )
+                    .expect("open"),
+                ),
                 Arc::new(config),
                 &output,
                 None,

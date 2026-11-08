@@ -1668,9 +1668,9 @@ async fn process_file_with_tracker(
 
     tracker.set_feature_flags(config.enable_layout_detection());
 
-    let pdf_bytes = std::fs::read(&input_path)
+    let pdf_bytes = crate::pipeline::config::read_pdf_file(&input_path)
         .with_context(|| format!("Failed to read input PDF: {}", input_path.display()))?;
-    let pipeline = crate::ProcessingPipeline::new(pdf_bytes, config.clone())?;
+    let pipeline = crate::ProcessingPipeline::from_shared_bytes(pdf_bytes, config.clone())?;
 
     let doc_pages = pipeline.get_page_count();
     let intended_pages = config

@@ -706,7 +706,7 @@ pub async fn create_and_run_djvu_source_pipeline(
 }
 
 pub async fn create_and_run_djvu_pipeline(
-    pdf_bytes: Arc<[u8]>,
+    document: Arc<lege_pdf_read::RenderSession>,
     config: Arc<PipelineConfig>,
     output_path: &Path,
     page_range: Option<std::ops::Range<usize>>,
@@ -714,7 +714,8 @@ pub async fn create_and_run_djvu_pipeline(
     shutdown_rx: tokio::sync::broadcast::Receiver<crate::ShutdownSignal>,
     progress_callback: impl Fn(usize, usize) + Send + Sync + 'static,
 ) -> Result<()> {
-    let source: Arc<dyn PageSource> = Arc::new(PdfPageSource::new(pdf_bytes, config.clone())?);
+    let source: Arc<dyn PageSource> =
+        Arc::new(PdfPageSource::from_session(document, config.clone()));
     create_and_run_djvu_source_pipeline(
         source,
         config,

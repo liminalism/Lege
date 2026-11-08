@@ -82,44 +82,75 @@ pub struct PageRange {
     pub end: usize,
 }
 
+/// Read a PDF file straight into its shared allocation. `std::fs::read` into
+/// a `Vec` and then `Arc::from` copies the whole file a second time (and the
+/// old memory-mapped arm copied it too); here the exact-size zero fill builds
+/// the `Arc` once and the file is read into it. A file that shrinks under us
+/// falls back to the plain read; one that grows is read up to its size at
+/// open, which is the same torn view either way.
+pub fn read_pdf_file(path: &std::path::Path) -> std::io::Result<Arc<[u8]>> {
+    use std::io::Read;
+    let mut file = std::fs::File::open(path)?;
+    let len = usize::try_from(file.metadata()?.len())
+        .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidData, "PDF file too large"))?;
+    let mut bytes: Arc<[u8]> = std::iter::repeat_n(0u8, len).collect();
+    match Arc::get_mut(&mut bytes) {
+        Some(buffer) => match file.read_exact(buffer) {
+            Ok(()) => Ok(bytes),
+            Err(error) if error.kind() == std::io::ErrorKind::UnexpectedEof => {
+                drop(file);
+                Ok(Arc::from(std::fs::read(path)?.into_boxed_slice()))
+            }
+            Err(error) => Err(error),
+        },
+        None => Ok(Arc::from(std::fs::read(path)?.into_boxed_slice())),
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct PageSelection {
     ranges: Vec<PageRange>,
 }
 
 pub struct ProcessingPipeline {
-    pdf_bytes: Arc<[u8]>,
+    /// The one document session for the job: opened here to count pages and
+    /// handed to the output pipeline's page source, so the file is parsed once.
+    document: Arc<lege_pdf_read::RenderSession>,
     config: PipelineConfig,
     page_count: usize,
 }
 
 impl ProcessingPipeline {
     pub fn new(pdf_bytes: Vec<u8>, config: PipelineConfig) -> Result<Self> {
-        let pdf_bytes: Arc<[u8]> = Arc::from(pdf_bytes.into_boxed_slice());
-        let document = lege_pdf_read::RenderSession::open(Arc::clone(&pdf_bytes), None)
-            .map_err(|error| anyhow!("Failed to read PDF document: {error}"))?;
+        Self::from_shared_bytes(Arc::from(pdf_bytes.into_boxed_slice()), config)
+    }
+
+    /// Open the document over bytes that are already in their shared
+    /// allocation (see [`read_pdf_file`]).
+    pub fn from_shared_bytes(pdf_bytes: Arc<[u8]>, config: PipelineConfig) -> Result<Self> {
+        let document = Arc::new(
+            lege_pdf_read::RenderSession::open(pdf_bytes, None)
+                .map_err(|error| anyhow!("Failed to read PDF document: {error}"))?,
+        );
         let page_count = document.page_count() as usize;
         Ok(Self {
-            pdf_bytes,
+            document,
             config,
             page_count,
         })
     }
 
     pub fn from_file(input_path: std::path::PathBuf, config: PipelineConfig) -> Result<Self> {
-        // The large-file arm used to map the file and immediately `to_vec()` the
-        // mapping, which copies the whole thing onto the heap anyway — a
-        // page-fault storm plus an `unsafe` block to reach the same Vec that one
-        // sized `read` produces, with a SIGBUS risk if the file is truncated
-        // underneath us. `Self::new` takes ownership of the bytes, so there is
-        // no borrowed-mapping variant to keep.
-        let pdf_bytes = std::fs::read(&input_path)?;
-
-        Self::new(pdf_bytes, config)
+        Self::from_shared_bytes(read_pdf_file(&input_path)?, config)
     }
 
     pub fn get_page_count(&self) -> usize {
         self.page_count
+    }
+
+    /// The job's document session, shared with the page source.
+    pub fn document(&self) -> Arc<lege_pdf_read::RenderSession> {
+        Arc::clone(&self.document)
     }
 
     pub fn get_provider_name(&self) -> String {
@@ -173,7 +204,7 @@ impl ProcessingPipeline {
         if self.config.text_format() == "epub" {
             crate::info_log!("Using EPUB pipeline");
             super::epub_pipeline::create_and_run_epub_pipeline(
-                self.pdf_bytes.clone(),
+                Arc::clone(&self.document),
                 Arc::new(self.config.clone()),
                 output_path,
                 page_range,
@@ -186,7 +217,7 @@ impl ProcessingPipeline {
             // Use standalone DJVU pipeline (simplified tokio version)
             crate::info_log!("Using standalone DJVU pipeline");
             super::djvu_pipeline::create_and_run_djvu_pipeline(
-                self.pdf_bytes.clone(),
+                Arc::clone(&self.document),
                 Arc::new(self.config.clone()),
                 output_path,
                 page_range,
@@ -199,7 +230,7 @@ impl ProcessingPipeline {
             // Use new tokio-based PDF pipeline for all PDF-based formats (jbig2, ccitt4, jpeg)
             crate::info_log!("Using new tokio-based PDF pipeline");
             create_and_run_pdf_tokio_pipeline(
-                self.pdf_bytes.clone(),
+                Arc::clone(&self.document),
                 Arc::new(self.config.clone()),
                 output_path,
                 page_range,

@@ -82,11 +82,21 @@ pub struct PdfPageSource {
 
 impl PdfPageSource {
     pub fn new(pdf_bytes: Arc<[u8]>, config: Arc<PipelineConfig>) -> Result<Self> {
+        let document = Arc::new(
+            RenderSession::open(pdf_bytes, None)
+                .map_err(|error| anyhow!("Failed to read PDF document: {error}"))?,
+        );
+        Ok(Self::from_session(document, config))
+    }
+
+    /// A page source over a session the caller already opened (the pipeline's
+    /// page-count session), so the document is not parsed a second time.
+    pub fn from_session(document: Arc<RenderSession>, config: Arc<PipelineConfig>) -> Self {
         let mut raster_cfg = PdfRasterConfig::default();
         raster_cfg.render_forms = false;
         raster_cfg.target_width = config.target_width();
-        let renderer = Arc::new(PdfRenderer::new_from_bytes(pdf_bytes, raster_cfg)?);
-        Ok(Self { renderer, config })
+        let renderer = Arc::new(PdfRenderer::from_session(document, raster_cfg));
+        Self { renderer, config }
     }
 }
 

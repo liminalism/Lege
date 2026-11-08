@@ -112,7 +112,7 @@ async fn epub_inference_stage(
 /// Run the full EPUB pipeline over a PDF byte buffer.
 #[allow(clippy::too_many_arguments)]
 pub async fn create_and_run_epub_pipeline(
-    pdf_bytes: Arc<[u8]>,
+    document: Arc<lege_pdf_read::RenderSession>,
     config: Arc<PipelineConfig>,
     output_path: &Path,
     page_range: Option<std::ops::Range<usize>>,
@@ -129,7 +129,8 @@ pub async fn create_and_run_epub_pipeline(
     crate::pipeline::reset_standard_dimensions();
 
     let mut config = config;
-    let source: Arc<dyn PageSource> = Arc::new(PdfPageSource::new(pdf_bytes, config.clone())?);
+    let source: Arc<dyn PageSource> =
+        Arc::new(PdfPageSource::from_session(document, config.clone()));
 
     let inference_handle = if config.enable_layout_detection() {
         crate::pipeline::helper_functions::report_layout_model_loading(progress_tracker);
