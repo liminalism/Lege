@@ -4635,10 +4635,18 @@ fn composite_group_seeded(
         return;
     }
     let pox = parent.origin_x;
+    // Fully opaque and unmasked, every pixel takes the `t == 255` copy below,
+    // so whole rows can be copied at once (the common wrapper group).
+    let whole_rows = opacity == 255 && soft.is_none();
     for ly in 0..group.height {
         let abs_y = group.origin_y + ly;
         let grow = group.local_row(ly);
         let prow = parent.row_mut(abs_y);
+        if whole_rows {
+            let plx = group.origin_x - pox;
+            prow[plx * 4..(plx + group.width) * 4].copy_from_slice(&grow[..group.width * 4]);
+            continue;
+        }
         for lx in 0..group.width {
             let src = &grow[lx * 4..lx * 4 + 4];
             // Masking the lerp weight is exactly right here: at mask 0 the
@@ -4727,8 +4735,24 @@ fn composite_px_blended(px: &mut [u8], rgb: [u8; 3], a: u8, blend: BlendChoice) 
 }
 
 /// Composite one premultiplied group pixel `src` onto `dst` at group opacity.
+///
+/// An opaque source at full opacity under Normal replaces `dst` outright:
+/// the general path below returns exactly `src` for every source value and
+/// every backdrop (`opaque_normal_layer_composite_is_a_copy` checks all
+/// 256 x 256 x 256 channel, backdrop and backdrop-alpha combinations), so
+/// the copy skips its float work for the bulk of a typical group.
 #[inline]
 fn composite_layer_px(dst: &mut [u8], src: &[u8], opacity: u8, blend: BlendChoice) {
+    if src[3] == 255 && opacity == 255 && matches!(blend, BlendChoice::Normal) {
+        dst[..4].copy_from_slice(&src[..4]);
+        return;
+    }
+    composite_layer_px_general(dst, src, opacity, blend);
+}
+
+/// [`composite_layer_px`] without the opaque-copy shortcut.
+#[inline]
+fn composite_layer_px_general(dst: &mut [u8], src: &[u8], opacity: u8, blend: BlendChoice) {
     let sa = src[3] as f32 / 255.0;
     if sa <= 0.0 {
         return;
@@ -6259,6 +6283,24 @@ mod rgb8_area_min_tests {
         let row = surface.row_mut(4);
         let px = &row[2 * 4..2 * 4 + 4];
         assert_eq!(px, [223, 0, 31, 255]);
+    }
+
+    /// The shortcut in `composite_layer_px` must be what the general path
+    /// computes: an opaque source at full opacity under Normal yields the
+    /// source byte for every channel value, backdrop value and backdrop alpha
+    /// (the general path's result depends on nothing else).
+    #[test]
+    fn opaque_normal_layer_composite_is_a_copy() {
+        for s in 0..=255u8 {
+            for da in 0..=255u8 {
+                for d in 0..=255u8 {
+                    let src = [s, s, s, 255];
+                    let mut dst = [d, d, d, da];
+                    composite_layer_px_general(&mut dst, &src, 255, BlendChoice::Normal);
+                    assert_eq!(dst, src, "source {s}, backdrop {d}, backdrop alpha {da}");
+                }
+            }
+        }
     }
 
     #[test]
