@@ -250,7 +250,7 @@ impl Surface {
     ) -> (usize, Arc<[u8]>) {
         match format {
             OutputFormat::Rgba8PremultipliedSrgb => {
-                *pool = Some(Arc::clone(&self.data));
+                park(pool, Arc::clone(&self.data));
                 (self.width * 4, self.data)
             }
             OutputFormat::Gray8 => {
@@ -281,7 +281,7 @@ impl Surface {
                 let width = self.width;
                 // The RGBA buffer is not the returned page here, so it can be
                 // parked outright — nothing else holds it.
-                *pool = Some(self.data);
+                park(pool, self.data);
                 (width, gray)
             }
         }
@@ -355,6 +355,74 @@ fn paint_background(buf: &mut [u8], background: Background) {
             }
         }
     }
+}
+
+/// Extra parked-surface slots kept per thread beside the worker context's own
+/// slot (so three sizes in all). lege-process renders one page at an analysis
+/// size, the base size and an OCR size on the same thread in turn; a single
+/// slot missed on every alternation. `CpuWorkerContext::surface_buffer` stays
+/// the most-recently-parked slot; displaced buffers of a different size move
+/// here. Parked buffers are repainted in full before use, so which slot
+/// supplies a buffer never changes output bytes.
+const SPARE_SLOTS: usize = 2;
+/// Larger buffers are not retained in the spare slots.
+const SPARE_MAX_BYTES: usize = 128 << 20;
+
+thread_local! {
+    static SPARE: std::cell::RefCell<Vec<Arc<[u8]>>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+static SLOT_HITS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static SLOT_MISSES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Process-wide `(hits, misses)` of parked-surface lookups (a hit found a
+/// parked buffer of the wanted size, in any slot; ownership is checked later).
+pub fn surface_slot_stats() -> (u64, u64) {
+    use std::sync::atomic::Ordering::Relaxed;
+    (SLOT_HITS.load(Relaxed), SLOT_MISSES.load(Relaxed))
+}
+
+/// Park `buf` in `pool` (the most-recent slot), moving a displaced buffer of a
+/// different size into the thread's spare slots.
+pub(crate) fn park(pool: &mut Option<Arc<[u8]>>, buf: Arc<[u8]>) {
+    if let Some(old) = pool.replace(buf) {
+        let new_len = pool.as_ref().map_or(0, |b| b.len());
+        if old.len() != new_len && old.len() <= SPARE_MAX_BYTES {
+            SPARE.with(|s| {
+                let mut s = s.borrow_mut();
+                // A spare of the displaced size is stale: replace it.
+                s.retain(|b| b.len() != old.len());
+                if s.len() >= SPARE_SLOTS {
+                    s.remove(0);
+                }
+                s.push(old);
+            });
+        }
+    }
+}
+
+/// Take a parked buffer for a `width x height` surface from `pool` or the
+/// spare slots, if one of exactly that size is parked.
+pub(crate) fn take_recycled(
+    pool: &mut Option<Arc<[u8]>>,
+    width: usize,
+    height: usize,
+) -> Option<Arc<[u8]>> {
+    use std::sync::atomic::Ordering::Relaxed;
+    let found = match Surface::checked_pixels(width, height).map(|p| p * 4) {
+        None => None,
+        Some(len) if pool.as_ref().is_some_and(|b| b.len() == len) => pool.take(),
+        Some(len) => SPARE.with(|s| {
+            let mut s = s.borrow_mut();
+            let i = s.iter().position(|b| b.len() == len)?;
+            Some(s.remove(i))
+        }),
+    };
+    match found {
+        Some(_) => SLOT_HITS.fetch_add(1, Relaxed),
+        None => SLOT_MISSES.fetch_add(1, Relaxed),
+    };
+    found
 }
 
 /// Accept a recycled buffer only when it is exactly the size wanted and this
@@ -501,6 +569,40 @@ mod tests {
         assert_eq!(gray.len(), 6);
         assert_eq!(Arc::as_ptr(pool.as_ref().unwrap()), allocation);
         assert!(reuse(pool, 3 * 2 * 4).is_some());
+    }
+
+    #[test]
+    fn alternating_sizes_reuse_their_parked_buffers() {
+        // Alternate three sizes the way analysis/base/OCR renders do.
+        let sizes = [(5usize, 4usize), (9, 7), (3, 2)];
+        let mut pool = None;
+        let mut addrs = [None; 3];
+        let (h0, m0) = surface_slot_stats();
+        for round in 0..4 {
+            for (i, &(w, h)) in sizes.iter().enumerate() {
+                let recycled = take_recycled(&mut pool, w, h);
+                if round == 0 {
+                    assert!(recycled.is_none());
+                } else {
+                    let r = recycled.as_ref().expect("parked slot hit");
+                    assert_eq!(Arc::as_ptr(r), addrs[i].unwrap(), "size {i} round {round}");
+                }
+                let surface = Surface::new_recycled(w, h, Background::White, recycled);
+                addrs[i].get_or_insert(Arc::as_ptr(&surface.data));
+                assert_eq!(Arc::as_ptr(&surface.data), addrs[i].unwrap());
+                let (_, out) = surface
+                    .into_output_recycling(OutputFormat::Gray8, &mut pool);
+                assert_eq!(out.len(), w * h);
+            }
+        }
+        let (h1, m1) = surface_slot_stats();
+        assert!(h1 - h0 >= 9 && m1 - m0 >= 3);
+        // Recycled output is identical to a fresh surface.
+        let fresh = Surface::new(9, 7, Background::White);
+        let again = Surface::new_recycled(
+            9, 7, Background::White, take_recycled(&mut pool, 9, 7),
+        );
+        assert_eq!(fresh.data, again.data);
     }
 
     #[test]

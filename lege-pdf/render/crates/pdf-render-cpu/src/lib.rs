@@ -57,6 +57,7 @@ pub use kernels::KernelSet;
 pub use prepared::DecodedImageCache;
 pub use prepared::{CpuPreparedPage, DrawClass};
 pub use stats::RenderStats;
+pub use surface::surface_slot_stats;
 
 use surface::Surface;
 use {
@@ -1895,7 +1896,9 @@ impl CpuBackend {
             height as usize,
             request.background,
             surface_reuse_enabled()
-                .then(|| ctx.surface_buffer.take())
+                .then(|| {
+                    surface::take_recycled(&mut ctx.surface_buffer, width as usize, height as usize)
+                })
                 .flatten(),
         );
         stats.surface_bytes = surface.bytes();
@@ -2092,7 +2095,9 @@ impl CpuBackend {
             height as usize,
             request.background,
             surface_reuse_enabled()
-                .then(|| ctx.surface_buffer.take())
+                .then(|| {
+                    surface::take_recycled(&mut ctx.surface_buffer, width as usize, height as usize)
+                })
                 .flatten(),
         );
         let mut stats = RenderStats {
