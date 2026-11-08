@@ -679,7 +679,6 @@ fn paint_image(
     let (x0, y0) = (b.x as usize, b.y as usize);
     let x1 = (b.x + b.width as i32) as usize;
     let y1 = (b.y + b.height as i32) as usize;
-    let ox = surface.origin_x;
     // Pixels this image actually marks. `covered_pixels` feeds
     // `is_silent_blank()`; an image-only page that DID paint must not be
     // mislabeled a silent blank just because no `SolidPath` ran.
@@ -852,9 +851,52 @@ fn paint_image(
         && img.inv.b == 0.0
         && img.inv.c == 0.0;
     let fast_binary = blend_is_normal && soft.is_none() && img.is_binary_box_filterable();
+    // An `/ImageMask` stencil in solid colour is a one-bit image whose
+    // painting bit is opaque and whose masking bit is transparent, so it takes
+    // the bilevel box filter when minified and a transparent-skip nearest walk
+    // otherwise, on the interior rectangle; the border band stays generic.
+    // The placement must be axis-aligned with off-diagonal terms exactly zero
+    // (that is what makes the per-axis tables and the interior test reproduce
+    // the generic `inv.apply`), and a magnified Bilinear stencil keeps the
+    // generic sampler, whose four-tap blend this path does not reproduce.
+    let stencil_lut = if blend_is_normal && soft.is_none() {
+        stencil_fast_lut(img)
+    } else {
+        None
+    };
+    // The opaque unmasked fast paths below (nearest, bilinear, low-bit LUT,
+    // RGB8 and CMYK area, bilevel box) paint the interior rectangle only,
+    // where `edge_coverage` is `None`; the generic body then paints the
+    // anti-aliased border ring around it, as it does for every masked path,
+    // so an image gets the same edge whether or not it carries a mask or a
+    // clip. That needs the off-diagonal inverse terms to be exactly zero (the
+    // per-axis interior test then reproduces `edge_coverage` bit for bit);
+    // a placement only within 1e-12 of axis-aligned keeps painting its whole
+    // rectangle by pixel centre. `Some(None)`: no pixel is interior, the
+    // generic body paints the whole draw.
+    let ring_hole = (img.inv.b == 0.0 && img.inv.c == 0.0 && img.inv.a != 0.0 && img.inv.d != 0.0)
+        .then(|| {
+            interior_span(img.inv.a, img.inv.e, x0, x1)
+                .zip(interior_span(img.inv.d, img.inv.f, y0, y1))
+                .map(|((hx0, hx1), (hy0, hy1))| [hx0, hx1, hy0, hy1])
+        });
+    // The rectangle those fast paths paint, and whether it is empty.
+    let [fx0, fx1, fy0, fy1] = match ring_hole {
+        None => [x0, x1, y0, y1],
+        Some(Some(hole)) => hole,
+        Some(None) => [x0, x0, y0, y0],
+    };
+    let fast_empty = fx0 >= fx1 || fy0 >= fy1;
+    // Set when an opaque fast path painted the interior, so the ring remains.
+    let mut ring_pending = false;
 
     if fast_rgb8 {
-        let result = paint_axis_aligned_rgb8_nearest_opaque(img, surface, x0, y0, x1, y1);
+        let result = if fast_empty {
+            (0, 0)
+        } else {
+            paint_axis_aligned_rgb8_nearest_opaque(img, surface, fx0, fy0, fx1, fy1)
+        };
+        ring_pending = true;
         covered = result.0;
         #[cfg(feature = "profiling")]
         {
@@ -862,7 +904,12 @@ fn paint_image(
             sample_taps = result.1;
         }
     } else if fast_rgb8_bilinear {
-        let result = paint_axis_aligned_rgb8_bilinear_opaque(img, surface, x0, y0, x1, y1);
+        let result = if fast_empty {
+            (0, 0)
+        } else {
+            paint_axis_aligned_rgb8_bilinear_opaque(img, surface, fx0, fy0, fx1, fy1)
+        };
+        ring_pending = true;
         covered = result.0;
         #[cfg(feature = "profiling")]
         {
@@ -870,7 +917,12 @@ fn paint_image(
             sample_taps = result.1;
         }
     } else if let Some(lut) = lut_nearest {
-        let result = paint_axis_aligned_lut_nearest_opaque(img, lut, surface, x0, y0, x1, y1);
+        let result = if fast_empty {
+            (0, 0)
+        } else {
+            paint_axis_aligned_lut_nearest_opaque(img, lut, surface, fx0, fy0, fx1, fy1)
+        };
+        ring_pending = true;
         covered = result.0;
         #[cfg(feature = "profiling")]
         {
@@ -878,7 +930,12 @@ fn paint_image(
             sample_taps = result.1;
         }
     } else if fast_rgb8_area {
-        let result = paint_axis_aligned_rgb8_area_min_opaque(img, surface, x0, y0, x1, y1);
+        let result = if fast_empty {
+            (0, 0)
+        } else {
+            paint_axis_aligned_rgb8_area_min_opaque(img, surface, fx0, fy0, fx1, fy1)
+        };
+        ring_pending = true;
         covered = result.0;
         #[cfg(feature = "profiling")]
         {
@@ -894,9 +951,18 @@ fn paint_image(
             sample_taps = result.1;
         }
     } else if let Some(result) = fast_cmyk_area
-        .then(|| paint_axis_aligned_cmyk_area_min_opaque(img, surface, x0, y0, x1, y1))
+        .then(|| {
+            // With nothing interior there is nothing to convert; the generic
+            // body paints the draw, as it would after a failed conversion.
+            if fast_empty {
+                Some((0, 0))
+            } else {
+                paint_axis_aligned_cmyk_area_min_opaque(img, surface, fx0, fy0, fx1, fy1)
+            }
+        })
         .flatten()
     {
+        ring_pending = true;
         covered = result.0;
         #[cfg(feature = "profiling")]
         {
@@ -904,107 +970,31 @@ fn paint_image(
             sample_attempts = (x1 - x0) as u64 * (y1 - y0) as u64;
             sample_taps = result.1;
         }
-    } else if fast_binary {
-        let result = paint_axis_aligned_binary_box(img, surface, cmask, x0, y0, x1, y1);
+    } else if let Some(lut) = fast_binary.then(|| img.binary_box_lut()).flatten() {
+        let result = if fast_empty {
+            (0, 0, 0)
+        } else {
+            paint_axis_aligned_binary_box(img, lut, surface, cmask, fx0, fy0, fx1, fy1)
+        };
+        ring_pending = true;
         covered = result.0;
         #[cfg(feature = "profiling")]
         {
             sample_attempts = result.1;
             sample_taps = result.2;
         }
+    } else if let Some(lut) = stencil_lut {
+        let totals = paint_axis_aligned_stencil(img, lut, surface, cmask, blend, x0, y0, x1, y1);
+        covered = totals.0;
+        #[cfg(feature = "profiling")]
+        {
+            sample_attempts = totals.1;
+            sample_taps = totals.2;
+        }
+        #[cfg(not(feature = "profiling"))]
+        let _ = (totals.1, totals.2);
     } else {
-        // Mask geometry is fixed for the whole draw; resolve it once.
-        let clip_win = cmask.map(ClipMask::clip_window);
-        let soft_win = soft.map(ClipMask::soft_window);
-        // One destination row. Every term is a pure function of the source,
-        // the masks and this pixel's own device coordinate, and the only write
-        // is into this row, so the rows are independent and the per-pixel
-        // arithmetic does not depend on how they are scheduled. Returns
-        // `(covered, sample_attempts, sample_taps)`; the last two stay zero
-        // unless the profiling counters are compiled in.
-        let paint_row = |y: usize, row: &mut [u8]| -> (u64, u64, u64) {
-            let mut covered = 0u64;
-            // Profiling-only accumulators: unread, and never assigned, in an
-            // ordinary build.
-            #[allow(unused_mut)]
-            let mut sample_attempts = 0u64;
-            #[allow(unused_mut)]
-            let mut sample_taps = 0u64;
-            for x in x0..x1 {
-                // Clip mask coverage.
-                let mut cov: u16 = 255;
-                if let Some(cw) = &clip_win {
-                    cov = cw.coverage(x, y);
-                }
-                if let Some(sw) = &soft_win {
-                    cov = mul_div_255(cov, sw.coverage(x, y));
-                }
-                if cov == 0 {
-                    continue;
-                }
-                // A10 image-edge anti-aliasing: pixels straddling the image's
-                // device-space quad edge paint at their fractional coverage
-                // (`None` = provably interior, full weight — byte-identical
-                // to the pre-A10 path there). Matches PDFium's softer
-                // Type 3 / stencil edges (workstream H).
-                let (dx, dy) = (x as f64 + 0.5, y as f64 + 0.5);
-                let edge = img.edge_coverage(dx, dy);
-                if edge == Some(0) {
-                    continue;
-                }
-                #[cfg(feature = "profiling")]
-                {
-                    sample_attempts += 1;
-                }
-                let color = match edge {
-                    None => {
-                        #[cfg(feature = "profiling")]
-                        {
-                            let (color, taps) = img.shade_profiled(dx, dy);
-                            sample_taps += taps;
-                            color
-                        }
-                        #[cfg(not(feature = "profiling"))]
-                        img.shade(dx, dy)
-                    }
-                    // Edge sliver: sample at the nearest in-quad point.
-                    Some(_) => img.shade_clamped(dx, dy),
-                };
-                let Some(color) = color else {
-                    continue;
-                };
-                let cov = match edge {
-                    Some(ec) => mul_div_255(cov, ec),
-                    None => cov,
-                };
-                if cov == 0 {
-                    continue;
-                }
-                let a = mul_div_255(mul_div_255(color[3] as u16, img.alpha as u16), cov);
-                if a == 0 {
-                    continue;
-                }
-                let px = &mut row[(x - ox) * 4..(x - ox) * 4 + 4];
-                composite_px_blended(px, [color[0], color[1], color[2]], a as u8, blend);
-                covered += 1;
-            }
-            (covered, sample_attempts, sample_taps)
-        };
-
-        let (buf, first_abs_y, row_stride) = surface.rows_mut_abs(y0, y1);
-        let parallel = image_row_parallel_enabled()
-            && (x1 - x0).saturating_mul(y1 - y0) >= IMAGE_ROW_PAR_PIXEL_THRESHOLD;
-        let totals = if parallel {
-            buf.par_chunks_mut(row_stride)
-                .enumerate()
-                .map(|(i, row)| paint_row(first_abs_y + i, row))
-                .reduce(|| (0, 0, 0), |a, b| (a.0 + b.0, a.1 + b.1, a.2 + b.2))
-        } else {
-            buf.chunks_exact_mut(row_stride)
-                .enumerate()
-                .map(|(i, row)| paint_row(first_abs_y + i, row))
-                .fold((0, 0, 0), |a, b| (a.0 + b.0, a.1 + b.1, a.2 + b.2))
-        };
+        let totals = paint_image_generic(img, surface, cmask, soft, blend, x0, y0, x1, y1, None);
         covered += totals.0;
         #[cfg(feature = "profiling")]
         {
@@ -1013,6 +1003,17 @@ fn paint_image(
         }
         #[cfg(not(feature = "profiling"))]
         let _ = (totals.1, totals.2);
+    }
+    if ring_pending && let Some(hole) = ring_hole {
+        let band = paint_image_generic(img, surface, cmask, soft, blend, x0, y0, x1, y1, hole);
+        covered += band.0;
+        #[cfg(feature = "profiling")]
+        {
+            sample_attempts += band.1;
+            sample_taps += band.2;
+        }
+        #[cfg(not(feature = "profiling"))]
+        let _ = (band.1, band.2);
     }
     stats.covered_pixels += covered;
     stats.ops_painted += 1;
@@ -1057,6 +1058,9 @@ fn paint_image(
         }
         if fast_binary {
             profile.increment("image.fast_binary_box_pixels", covered);
+        }
+        if stencil_lut.is_some() {
+            profile.increment("image.fast_stencil_pixels", covered);
         }
         if opaque_clip_elided {
             profile.increment("image.opaque_clip_elisions", 1);
@@ -1114,12 +1118,298 @@ fn paint_image(
     }
 }
 
+/// The generic per-pixel image body: the clip and soft-clip coverage, A10
+/// image-edge anti-aliasing, the full `shade()` sampler and the general
+/// compositor, for every destination pixel of `[x0, x1) × [y0, y1)`.
+///
+/// `hole`, as `[hx0, hx1, hy0, hy1]`, is a rectangle of whole destination
+/// columns and rows a fast path has already painted; it is skipped. The fast
+/// paths that pass one paint exactly the pixels whose `edge_coverage` is
+/// `None` there, so the anti-aliased border band around it is still drawn by
+/// this body, and the draw stays byte-identical to running it everywhere.
+///
+/// Returns `(covered, sample_attempts, sample_taps)`; the last two stay zero
+/// unless the profiling counters are compiled in.
+#[allow(clippy::too_many_arguments)]
+fn paint_image_generic(
+    img: &crate::image::PreparedImage,
+    surface: &mut Surface,
+    cmask: Option<&ClipMask>,
+    soft: Option<&ClipMask>,
+    blend: BlendChoice,
+    x0: usize,
+    y0: usize,
+    x1: usize,
+    y1: usize,
+    hole: Option<[usize; 4]>,
+) -> (u64, u64, u64) {
+    // Mask geometry is fixed for the whole draw; resolve it once.
+    let clip_win = cmask.map(ClipMask::clip_window);
+    let soft_win = soft.map(ClipMask::soft_window);
+    let ox = surface.origin_x;
+    // One destination pixel. Every term is a pure function of the source, the
+    // masks and this pixel's own device coordinate, and the only write is
+    // into its own row. Adds to `(covered, sample_attempts, sample_taps)`.
+    let paint_px = |x: usize, y: usize, row: &mut [u8], totals: &mut (u64, u64, u64)| {
+        // Clip mask coverage.
+        let mut cov: u16 = 255;
+        if let Some(cw) = &clip_win {
+            cov = cw.coverage(x, y);
+        }
+        if let Some(sw) = &soft_win {
+            cov = mul_div_255(cov, sw.coverage(x, y));
+        }
+        if cov == 0 {
+            return;
+        }
+        // A10 image-edge anti-aliasing: pixels straddling the image's
+        // device-space quad edge paint at their fractional coverage
+        // (`None` = provably interior, full weight — byte-identical
+        // to the pre-A10 path there). Matches PDFium's softer
+        // Type 3 / stencil edges (workstream H).
+        let (dx, dy) = (x as f64 + 0.5, y as f64 + 0.5);
+        let edge = img.edge_coverage(dx, dy);
+        if edge == Some(0) {
+            return;
+        }
+        #[cfg(feature = "profiling")]
+        {
+            totals.1 += 1;
+        }
+        let color = match edge {
+            None => {
+                #[cfg(feature = "profiling")]
+                {
+                    let (color, taps) = img.shade_profiled(dx, dy);
+                    totals.2 += taps;
+                    color
+                }
+                #[cfg(not(feature = "profiling"))]
+                img.shade(dx, dy)
+            }
+            // Edge sliver: sample at the nearest in-quad point.
+            Some(_) => img.shade_clamped(dx, dy),
+        };
+        let Some(color) = color else {
+            return;
+        };
+        let cov = match edge {
+            Some(ec) => mul_div_255(cov, ec),
+            None => cov,
+        };
+        if cov == 0 {
+            return;
+        }
+        let a = mul_div_255(mul_div_255(color[3] as u16, img.alpha as u16), cov);
+        if a == 0 {
+            return;
+        }
+        let px = &mut row[(x - ox) * 4..(x - ox) * 4 + 4];
+        composite_px_blended(px, [color[0], color[1], color[2]], a as u8, blend);
+        totals.0 += 1;
+    };
+    // One destination row: the rows are independent, so the per-pixel
+    // arithmetic does not depend on how they are scheduled.
+    let paint_row = |y: usize, row: &mut [u8]| -> (u64, u64, u64) {
+        let mut totals = (0u64, 0u64, 0u64);
+        match hole {
+            Some([hx0, hx1, hy0, hy1]) if (hy0..hy1).contains(&y) => {
+                for x in x0..hx0 {
+                    paint_px(x, y, row, &mut totals);
+                }
+                for x in hx1..x1 {
+                    paint_px(x, y, row, &mut totals);
+                }
+            }
+            _ => {
+                for x in x0..x1 {
+                    paint_px(x, y, row, &mut totals);
+                }
+            }
+        }
+        totals
+    };
+
+    let (buf, first_abs_y, row_stride) = surface.rows_mut_abs(y0, y1);
+    let parallel = image_row_parallel_enabled()
+        && (x1 - x0).saturating_mul(y1 - y0) >= IMAGE_ROW_PAR_PIXEL_THRESHOLD;
+    if parallel {
+        buf.par_chunks_mut(row_stride)
+            .enumerate()
+            .map(|(i, row)| paint_row(first_abs_y + i, row))
+            .reduce(|| (0, 0, 0), |a, b| (a.0 + b.0, a.1 + b.1, a.2 + b.2))
+    } else {
+        buf.chunks_exact_mut(row_stride)
+            .enumerate()
+            .map(|(i, row)| paint_row(first_abs_y + i, row))
+            .fold((0, 0, 0), |a, b| (a.0 + b.0, a.1 + b.1, a.2 + b.2))
+    }
+}
+
+/// The two-entry table under which `img`, an `/ImageMask` stencil, can take
+/// [`paint_axis_aligned_stencil`], or `None` to keep the generic body. The
+/// caller adds the draw-level terms (Normal blend, no soft clip).
+fn stencil_fast_lut(img: &crate::image::PreparedImage) -> Option<([u8; 4], [u8; 4])> {
+    let eligible = img.is_stencil
+        && img.inv.b == 0.0
+        && img.inv.c == 0.0
+        && img.inv.a != 0.0
+        && img.inv.d != 0.0
+        && (img.footprint[0] > 1.0
+            || img.footprint[1] > 1.0
+            || img.interpolation == pdf_page_ir::InterpolationMode::Nearest);
+    if eligible {
+        img.stencil_bilevel_lut()
+    } else {
+        None
+    }
+}
+
+/// The destination columns (or rows) `[lo, hi)` of an axis-aligned draw that
+/// `PreparedImage::edge_coverage` classifies as interior along this axis:
+/// the mapped pixel square, `t ± scale/2` with `t = scale·(i + 0.5) + offset`,
+/// stays inside `[0, 1]`. With `inv.b == inv.c == 0` exactly, `edge_coverage`'s
+/// bound and its `inv.apply` reduce to this per-axis expression bit for bit,
+/// so a pixel is interior iff its column and its row both are. `t` is
+/// monotone in `i`, so the set is one run; `None` when it is empty.
+fn interior_span(scale: f64, offset: f64, lo: usize, hi: usize) -> Option<(usize, usize)> {
+    let half = 0.5 * scale.abs();
+    let inside = |i: usize| {
+        let t = scale * (i as f64 + 0.5) + offset;
+        t >= half && t <= 1.0 - half
+    };
+    let first = (lo..hi).find(|&i| inside(i))?;
+    let end = (first..hi).find(|&i| !inside(i)).unwrap_or(hi);
+    Some((first, end))
+}
+
+/// An axis-aligned `/ImageMask` stencil in solid colour, as a one-bit image
+/// whose painting bit is `[stencil_rgb, 255]` and masking bit transparent
+/// (`lut`, from `PreparedImage::stencil_bilevel_lut`). The interior rectangle,
+/// where `edge_coverage` is `None`, takes the bilevel box filter when the draw
+/// minifies, or a nearest walk that skips masked texels when it does not; the
+/// anti-aliased border band around it keeps the generic per-pixel body. Both
+/// fast paths compute the generic stencil sampler's integers term for term,
+/// so the draw is byte-identical to the generic body. The caller has checked
+/// Normal blend, no soft clip, `inv.b == inv.c == 0` and, for a draw that
+/// does not minify, Nearest interpolation.
+#[inline(never)]
+#[allow(clippy::too_many_arguments)]
+fn paint_axis_aligned_stencil(
+    img: &crate::image::PreparedImage,
+    lut: ([u8; 4], [u8; 4]),
+    surface: &mut Surface,
+    cmask: Option<&ClipMask>,
+    blend: BlendChoice,
+    x0: usize,
+    y0: usize,
+    x1: usize,
+    y1: usize,
+) -> (u64, u64, u64) {
+    let mut totals = (0u64, 0u64, 0u64);
+    let span = interior_span(img.inv.a, img.inv.e, x0, x1)
+        .zip(interior_span(img.inv.d, img.inv.f, y0, y1));
+    let hole = span.map(|((hx0, hx1), (hy0, hy1))| {
+        totals = if img.footprint[0] > 1.0 || img.footprint[1] > 1.0 {
+            paint_axis_aligned_binary_box(img, lut, surface, cmask, hx0, hy0, hx1, hy1)
+        } else {
+            paint_axis_aligned_stencil_nearest(img, lut, surface, cmask, hx0, hy0, hx1, hy1)
+        };
+        [hx0, hx1, hy0, hy1]
+    });
+    let band = paint_image_generic(img, surface, cmask, None, blend, x0, y0, x1, y1, hole);
+    (totals.0 + band.0, totals.1 + band.1, totals.2 + band.2)
+}
+
+/// The nearest-sampled interior of an axis-aligned stencil drawn at or above
+/// its own resolution (see [`paint_axis_aligned_stencil`]). Every column and
+/// row of `[x0, x1) × [y0, y1)` maps inside the image, so each picks its
+/// source texel exactly as `shade()` does (`round`, clamped), reads its bit,
+/// and skips it when it masks; a painting texel is `[stencil_rgb, 255]`
+/// composited at the generic body's `alpha · clip` weight.
+#[allow(clippy::too_many_arguments)]
+fn paint_axis_aligned_stencil_nearest(
+    img: &crate::image::PreparedImage,
+    (zero, one): ([u8; 4], [u8; 4]),
+    surface: &mut Surface,
+    cmask: Option<&ClipMask>,
+    x0: usize,
+    y0: usize,
+    x1: usize,
+    y1: usize,
+) -> (u64, u64, u64) {
+    let columns: Vec<u32> = (x0..x1)
+        .map(|x| {
+            let u = img.inv.a * (x as f64 + 0.5) + img.inv.e;
+            let fx = u * img.width as f64 - 0.5;
+            (fx.round() as i64).clamp(0, img.width.saturating_sub(1) as i64) as u32
+        })
+        .collect();
+    // The bit value that paints, and the paint colour (the table's opaque entry).
+    let (paint_bit, paint) = if zero[3] != 0 { (0u8, zero) } else { (1u8, one) };
+    let rgb = [paint[0], paint[1], paint[2]];
+    let row_bytes = img.packed_row_bits() / 8;
+    let samples: &[u8] = &img.samples;
+    // `color[3]` is 255 for a painting texel, so the generic body's
+    // `mul_div_255(255, alpha)` is `alpha`, kept in that form.
+    let alpha = mul_div_255(255, img.alpha as u16);
+    let clip_win = cmask.map(ClipMask::clip_window);
+    let output_origin = surface.origin_x;
+    let paint_row = |y: usize, row: &mut [u8]| -> (u64, u64, u64) {
+        let v = img.inv.d * (y as f64 + 0.5) + img.inv.f;
+        let fy = (1.0 - v) * img.height as f64 - 0.5;
+        let source_row =
+            (fy.round() as i64).clamp(0, img.height.saturating_sub(1) as i64) as usize;
+        let source = &samples[source_row * row_bytes..][..row_bytes];
+        let mut painted = 0u64;
+        for (local_x, &col) in columns.iter().enumerate() {
+            let bit = (source[col as usize >> 3] >> (7 - (col & 7))) & 1;
+            if bit != paint_bit {
+                continue;
+            }
+            let x = x0 + local_x;
+            let cov = clip_win.as_ref().map_or(255, |cw| cw.coverage(x, y));
+            let a = mul_div_255(alpha, cov);
+            if a == 0 {
+                continue;
+            }
+            let px = &mut row[(x - output_origin) * 4..][..4];
+            if a == 255 {
+                px.copy_from_slice(&[rgb[0], rgb[1], rgb[2], 255]);
+            } else {
+                composite_px_blended(px, rgb, a as u8, BlendChoice::Normal);
+            }
+            painted += 1;
+        }
+        let attempts = columns.len() as u64;
+        (painted, attempts, attempts)
+    };
+    let (output, first_output_y, output_stride) = surface.rows_mut_abs(y0, y1);
+    let parallel = image_row_parallel_enabled()
+        && (x1 - x0).saturating_mul(y1 - y0) >= IMAGE_ROW_PAR_PIXEL_THRESHOLD;
+    if parallel {
+        output
+            .par_chunks_mut(output_stride)
+            .enumerate()
+            .map(|(i, row)| paint_row(first_output_y + i, row))
+            .reduce(|| (0, 0, 0), |a, b| (a.0 + b.0, a.1 + b.1, a.2 + b.2))
+    } else {
+        output
+            .chunks_exact_mut(output_stride)
+            .enumerate()
+            .map(|(i, row)| paint_row(first_output_y + i, row))
+            .fold((0, 0, 0), |a, b| (a.0 + b.0, a.1 + b.1, a.2 + b.2))
+    }
+}
+
 /// Fast path for an axis-aligned minified one-bit image. Device X and Y map
 /// independently into source space, so prepare the inclusive source box for
 /// each destination column/row once instead of repeating affine and footprint
 /// math for every pixel.
+#[allow(clippy::too_many_arguments)]
 fn paint_axis_aligned_binary_box(
     img: &crate::image::PreparedImage,
+    lut: ([u8; 4], [u8; 4]),
     surface: &mut Surface,
     cmask: Option<&ClipMask>,
     x0: usize,
@@ -1149,39 +1439,69 @@ fn paint_axis_aligned_binary_box(
         source_rows.push(img.box_taps_y(fy));
     }
 
-    let output_origin = surface.origin_x;
-
-    // Prefer the summed-area (integral image) box filter: build a running
-    // ones-count table over the referenced source sub-rectangle once, then each
-    // destination box's population count is four table reads instead of a packed
-    // popcount loop. Pure reordering of the same integer arithmetic — the `ones`
-    // count, box area `n`, two-entry mix, and source-over math are identical to
-    // `binary_box_average`, so the output is byte-for-byte unchanged.
-    if let Some(lut) = img.binary_box_lut()
-        && let Some(sat) = BilevelIntegral::build(img, &source_columns, &source_rows)
-    {
-        return paint_binary_box_sat(
+    // Prefer the row-band filter: per destination row, weight each referenced
+    // source column's bits down the row's taps once, then every destination
+    // box's weighted ones count is two edge reads and one prefix difference.
+    // The same integers as the per-pixel `binary_box_average`, in another
+    // order, so the output is byte-for-byte unchanged.
+    if let Some(window) = BilevelWindow::new(img, &source_columns, &source_rows) {
+        return paint_binary_box_rows(
             img,
             lut,
             surface,
             cmask,
             &source_columns,
             &source_rows,
-            &sat,
+            &window,
             x0,
             y0,
-            output_origin,
         );
     }
+    paint_binary_box_serial(
+        img,
+        lut,
+        surface,
+        cmask,
+        &source_columns,
+        &source_rows,
+        x0,
+        y0,
+    )
+}
 
+/// The per-pixel minified bilevel loop: each destination box's weighted ones
+/// count by packed popcount (`binary_box_average_with`, which reads the rows
+/// through `get`, so a truncated buffer counts its missing bytes as zero).
+/// The fallback when [`BilevelWindow::new`] declines the draw, and the
+/// reference the row-band filter is tested against.
+#[allow(clippy::too_many_arguments)]
+fn paint_binary_box_serial(
+    img: &crate::image::PreparedImage,
+    lut: ([u8; 4], [u8; 4]),
+    surface: &mut Surface,
+    cmask: Option<&ClipMask>,
+    source_columns: &[Option<crate::image::AxisTaps>],
+    source_rows: &[Option<crate::image::AxisTaps>],
+    x0: usize,
+    y0: usize,
+) -> (u64, u64, u64) {
+    let output_origin = surface.origin_x;
     let mut painted = 0u64;
     let mut attempts = 0u64;
     let mut taps = 0u64;
     // Fixed for the whole draw; resolve it once rather than per pixel.
     let clip_win = cmask.map(ClipMask::clip_window);
-    for (local_y, row_taps) in source_rows.iter().enumerate() {
-        let y = y0 + local_y;
-        let row = surface.row_mut(y);
+    let (output, first_output_y, output_stride) =
+        surface.rows_mut_abs(y0, y0 + source_rows.len());
+    // Align the row table with the clipped output window.
+    let row_offset = first_output_y.saturating_sub(y0);
+    let row_slice = source_rows.get(row_offset..).unwrap_or(&[]);
+    for (i, (row, row_taps)) in output
+        .chunks_exact_mut(output_stride)
+        .zip(row_slice)
+        .enumerate()
+    {
+        let y = first_output_y + i;
         for (local_x, col_taps) in source_columns.iter().enumerate() {
             let x = x0 + local_x;
             let cov = clip_win.as_ref().map_or(255, |cw| cw.coverage(x, y));
@@ -1192,7 +1512,7 @@ fn paint_axis_aligned_binary_box(
             let (Some(tx), Some(ty)) = (col_taps, row_taps) else {
                 continue;
             };
-            let Some((color, source_taps)) = img.binary_box_average(tx, ty) else {
+            let Some((color, source_taps)) = img.binary_box_average_with(lut, tx, ty) else {
                 continue;
             };
             taps += source_taps;
@@ -1224,11 +1544,270 @@ fn paint_axis_aligned_binary_box(
     (painted, attempts, taps)
 }
 
+/// The referenced source window of a minified one-bit draw, for the row-band
+/// weighted popcount ([`paint_binary_box_rows`]). It reads the packed rows in
+/// whole bytes from `byte_lo`, so its column index `i` is source column
+/// `byte_lo * 8 + i`; the few columns outside the taps' union only cost a
+/// read.
+struct BilevelWindow<'a> {
+    samples: &'a [u8],
+    row_bytes: usize,
+    byte_lo: usize,
+    nbytes: usize,
+    /// Source rows the draw's taps span, for the parallel decision.
+    rows: usize,
+}
+
+impl<'a> BilevelWindow<'a> {
+    /// `None` (keep the per-pixel loop) when no destination column or row
+    /// maps into the image, when the sample buffer is shorter than the rows
+    /// the taps reach (a truncated JBIG2 or CCITT decode: the window indexes
+    /// rows directly, the per-pixel loop reads them through `get`), or when a
+    /// row's tap weights could overflow the `u32` column sums.
+    fn new(
+        img: &'a crate::image::PreparedImage,
+        source_columns: &[Option<crate::image::AxisTaps>],
+        source_rows: &[Option<crate::image::AxisTaps>],
+    ) -> Option<Self> {
+        let col_lo = source_columns.iter().flatten().map(|t| t.lo).min()?;
+        let col_hi = source_columns.iter().flatten().map(|t| t.hi).max()?;
+        let row_lo = source_rows.iter().flatten().map(|t| t.lo).min()?;
+        let row_hi = source_rows.iter().flatten().map(|t| t.hi).max()?;
+        let max_row_total = source_rows.iter().flatten().map(|t| t.total).max()?;
+        if max_row_total > u32::MAX as u64 {
+            return None;
+        }
+        let row_bytes = img.packed_row_bits() / 8;
+        let byte_lo = col_lo as usize >> 3;
+        let nbytes = (col_hi as usize >> 3) + 1 - byte_lo;
+        let end = (row_hi as usize)
+            .checked_mul(row_bytes)?
+            .checked_add(byte_lo + nbytes)?;
+        if img.samples.len() < end {
+            return None;
+        }
+        Some(Self {
+            samples: &img.samples,
+            row_bytes,
+            byte_lo,
+            nbytes,
+            rows: (row_hi - row_lo) as usize + 1,
+        })
+    }
+
+    /// `colw[i] = Σ_y wy(y)·bit(i, y)` over the source rows of `rows`, each
+    /// row weighted by its tap weight; then `prefix[i] = Σ_{j<i} colw[j]`.
+    /// Returns whether any referenced bit is set (when none is, both stay
+    /// zero and every box of the row counts zero ones).
+    fn column_sums(
+        &self,
+        rows: &crate::image::AxisTaps,
+        colw: &mut [u32],
+        prefix: &mut [u64],
+    ) -> bool {
+        colw.fill(0);
+        let mut any = 0u8;
+        for y in rows.lo..=rows.hi {
+            let wy = rows.weight_at(y) as u32;
+            let start = y as usize * self.row_bytes + self.byte_lo;
+            let src = &self.samples[start..start + self.nbytes];
+            for (&byte, sums) in src.iter().zip(colw.chunks_exact_mut(8)) {
+                if byte == 0 {
+                    continue;
+                }
+                any |= byte;
+                for (k, sum) in sums.iter_mut().enumerate() {
+                    *sum += wy * ((byte >> (7 - k)) & 1) as u32;
+                }
+            }
+        }
+        if any == 0 {
+            return false;
+        }
+        let mut acc = 0u64;
+        prefix[0] = 0;
+        for (p, &c) in prefix[1..].iter_mut().zip(colw.iter()) {
+            acc += c as u64;
+            *p = acc;
+        }
+        true
+    }
+}
+
+/// `Σ_x wx(x)·colw[x]` over the column taps `cols`, with `colw` and its
+/// exclusive prefix from [`BilevelWindow::column_sums`] (index 0 at source
+/// column `base`): the interior columns weigh a full `AXIS_TAP_SCALE`, so
+/// they are one prefix difference. Equals `Σ_y Σ_x wy·wx·bit`, the integer
+/// `BilevelIntegral::weighted_ones` and `binary_box_average` compute.
+#[inline]
+fn row_band_weighted_ones(
+    cols: &crate::image::AxisTaps,
+    base: u32,
+    colw: &[u32],
+    prefix: &[u64],
+) -> u64 {
+    let lo = (cols.lo - base) as usize;
+    let hi = (cols.hi - base) as usize;
+    if lo == hi {
+        return cols.w_lo * colw[lo] as u64;
+    }
+    cols.w_lo * colw[lo] as u64
+        + cols.w_hi * colw[hi] as u64
+        + crate::image::AXIS_TAP_SCALE * (prefix[hi] - prefix[lo + 1])
+}
+
+/// Composite a prepared axis-aligned minified one-bit image with the row-band
+/// weighted popcount ([`BilevelWindow`]). The clip coverage, the two-entry
+/// mix and the source-over arithmetic are the per-pixel loop's
+/// ([`paint_binary_box_serial`]); only the weighted ones count is reordered,
+/// and the mix is memoized across identical `(weight, ones)` runs, which
+/// dominate bilevel scans' long white/black stretches.
+///
+/// Destination rows are independent: each band of them weights its own
+/// source rows into its own scratch and writes only its own output rows, so
+/// bands run across the rayon pool (when `PDF_RENDERER_IMAGE_ROW_PAR` and the
+/// pages in flight allow) without changing a byte. A source row a band shares
+/// with its neighbour is only read twice. The working set is two rows of the
+/// referenced source width per band, where the summed-area table this
+/// replaces held four bytes per referenced source texel (34 MB for a 300-dpi
+/// page, and none at all above its 32M-entry cap, which a 600-dpi Letter page
+/// exceeds).
+#[allow(clippy::too_many_arguments)]
+fn paint_binary_box_rows(
+    img: &crate::image::PreparedImage,
+    (zero, one): ([u8; 4], [u8; 4]),
+    surface: &mut Surface,
+    cmask: Option<&ClipMask>,
+    source_columns: &[Option<crate::image::AxisTaps>],
+    source_rows: &[Option<crate::image::AxisTaps>],
+    window: &BilevelWindow<'_>,
+    x0: usize,
+    y0: usize,
+) -> (u64, u64, u64) {
+    let alpha = img.alpha as u16;
+    let output_origin = surface.origin_x;
+    // Fixed for the whole draw; resolve it once rather than per pixel.
+    let clip_win = cmask.map(ClipMask::clip_window);
+    let base = (window.byte_lo * 8) as u32;
+    let span = window.nbytes * 8;
+
+    let paint_band = |first_y: usize,
+                      band: &mut [u8],
+                      band_rows: &[Option<crate::image::AxisTaps>],
+                      stride: usize|
+     -> (u64, u64, u64) {
+        let mut colw = vec![0u32; span];
+        let mut prefix = vec![0u64; span + 1];
+        let (mut painted, mut attempts, mut taps) = (0u64, 0u64, 0u64);
+        for (i, (row, row_taps)) in band.chunks_exact_mut(stride).zip(band_rows).enumerate() {
+            let y = first_y + i;
+            // Whether any referenced bit of this row's taps is set; when none
+            // is, every box counts zero ones and the sums are not built.
+            let any = row_taps
+                .as_ref()
+                .is_some_and(|ty| window.column_sums(ty, &mut colw, &mut prefix));
+            // All-zero / all-one boxes short-circuit without division; the
+            // mixed boxes memoize on `(weight, weighted ones)`. Clip coverage
+            // and destination blending stay per pixel.
+            let mut memo_key = (u64::MAX, u64::MAX);
+            let mut memo_color = [0u8; 4];
+            for (local_x, col_taps) in source_columns.iter().enumerate() {
+                let x = x0 + local_x;
+                let cov = clip_win.as_ref().map_or(255, |cw| cw.coverage(x, y));
+                if cov == 0 {
+                    continue;
+                }
+                attempts += 1;
+                let (Some(tx), Some(ty)) = (col_taps, row_taps) else {
+                    continue;
+                };
+                let weight = tx.total * ty.total;
+                if weight == 0 {
+                    continue;
+                }
+                taps += (tx.hi - tx.lo + 1) as u64 * (ty.hi - ty.lo + 1) as u64;
+                let ones_w = if any {
+                    row_band_weighted_ones(tx, base, &colw, &prefix)
+                } else {
+                    0
+                };
+                let color = if ones_w == 0 {
+                    zero
+                } else if ones_w >= weight {
+                    one
+                } else if memo_key == (weight, ones_w) {
+                    memo_color
+                } else {
+                    let c = crate::image::mix_bilevel(zero, one, ones_w, weight);
+                    memo_key = (weight, ones_w);
+                    memo_color = c;
+                    c
+                };
+                let a = mul_div_255(mul_div_255(color[3] as u16, alpha), cov);
+                if a == 0 {
+                    continue;
+                }
+                let target = (x - output_origin) * 4;
+                if a == 255 {
+                    row[target] = color[0];
+                    row[target + 1] = color[1];
+                    row[target + 2] = color[2];
+                    row[target + 3] = 255;
+                } else {
+                    let ia = 255 - a;
+                    row[target] = (mul_div_255(color[0] as u16, a)
+                        + mul_div_255(row[target] as u16, ia))
+                        as u8;
+                    row[target + 1] = (mul_div_255(color[1] as u16, a)
+                        + mul_div_255(row[target + 1] as u16, ia))
+                        as u8;
+                    row[target + 2] = (mul_div_255(color[2] as u16, a)
+                        + mul_div_255(row[target + 2] as u16, ia))
+                        as u8;
+                    row[target + 3] = (a + mul_div_255(row[target + 3] as u16, ia)) as u8;
+                }
+                painted += 1;
+            }
+        }
+        (painted, attempts, taps)
+    };
+
+    let dest_w = source_columns.len();
+    let dest_h = source_rows.len();
+    let (output, first_output_y, output_stride) = surface.rows_mut_abs(y0, y0 + dest_h);
+    // Align the row table with the clipped output window.
+    let row_offset = first_output_y.saturating_sub(y0);
+    let row_slice = source_rows.get(row_offset..).unwrap_or(&[]);
+
+    // Fan out on either side of the work: many destination pixels, or a large
+    // source read (a heavily minified page has few of the former).
+    let parallel = image_row_parallel_enabled()
+        && (dest_w.saturating_mul(dest_h) >= IMAGE_ROW_PAR_PIXEL_THRESHOLD
+            || span.saturating_mul(window.rows) >= BILEVEL_ROWS_PAR_MIN_BITS);
+    if parallel {
+        const BAND: usize = 16;
+        output
+            .par_chunks_mut(output_stride * BAND)
+            .zip(row_slice.par_chunks(BAND))
+            .enumerate()
+            .map(|(i, (band, rows))| {
+                paint_band(first_output_y + i * BAND, band, rows, output_stride)
+            })
+            .reduce(|| (0, 0, 0), |a, b| (a.0 + b.0, a.1 + b.1, a.2 + b.2))
+    } else {
+        paint_band(first_output_y, output, row_slice, output_stride)
+    }
+}
+
 /// A summed-area table of set bits over the referenced source sub-rectangle of a
 /// prepared one-bit image. `sat[(ay+1)*stride + (ax+1)]` holds the number of set
 /// bits in the local sub-rectangle rows `0..=ay`, columns `0..=ax`; the first
 /// row and column are zero, so any inclusive box `[ax0..=ax1] × [ay0..=ay1]`
 /// counts its ones in four reads.
+///
+/// Test-only: the oracle the row-band filter ([`BilevelWindow`]) that
+/// replaced it is checked against.
+#[cfg(test)]
 struct BilevelIntegral {
     sat: Vec<u32>,
     stride: usize,
@@ -1236,6 +1815,7 @@ struct BilevelIntegral {
     row_lo: u32,
 }
 
+#[cfg(test)]
 impl BilevelIntegral {
     /// Fill `sat` with the same table the serial walk in [`Self::build`]
     /// produces, in three passes: every block of rows sums from zero in
@@ -1333,7 +1913,6 @@ impl BilevelIntegral {
         source_columns: &[Option<crate::image::AxisTaps>],
         source_rows: &[Option<crate::image::AxisTaps>],
     ) -> Option<Self> {
-        img.binary_box_lut()?;
         let (mut col_lo, mut col_hi, mut any_col) = (u32::MAX, 0u32, false);
         for taps in source_columns.iter().flatten() {
             col_lo = col_lo.min(taps.lo);
@@ -1359,6 +1938,13 @@ impl BilevelIntegral {
 
         let row_bits = img.packed_row_bits();
         let samples: &[u8] = &img.samples;
+        // The fill indexes the packed rows directly. A truncated buffer (a
+        // short JBIG2 or CCITT decode) would panic there; the per-pixel
+        // fallback reads it through `get`, as the generic sampler does.
+        let last_bit = (row_hi as usize * row_bits).checked_add(col_hi as usize)?;
+        if samples.len() <= last_bit >> 3 {
+            return None;
+        }
         let mut sat = vec![0u32; entries];
         // The table is a running sum, so the rows form one dependency chain —
         // but a *block* of rows can be summed from zero independently and then
@@ -1367,7 +1953,7 @@ impl BilevelIntegral {
         // the serial walk below produces. That matters here because the table
         // is the draw's dominant cost: a full-page bilevel scan writes ~100 MB
         // of `u32`, most of it first-touch page faults, and those parallelize.
-        if image_row_parallel_enabled() && entries >= BILEVEL_SAT_PAR_MIN_ENTRIES {
+        if image_row_parallel_enabled() && entries >= BILEVEL_ROWS_PAR_MIN_BITS {
             Self::fill_parallel(&mut sat, samples, stride, sw, sh, row_bits, col_lo, row_lo);
         } else {
             for ly in 0..sh {
@@ -1459,127 +2045,6 @@ impl BilevelIntegral {
             }
         }
         acc.max(0) as u64
-    }
-}
-
-/// Composite a prepared axis-aligned minified one-bit image using a summed-area
-/// table for the per-box population count. The clip coverage and source-over
-/// arithmetic are identical to the per-pixel path; only the ones-count and the
-/// two-entry mix are reordered (memoized across identical `(n, ones)` runs,
-/// which dominate bilevel scans' long white/black stretches).
-#[allow(clippy::too_many_arguments)]
-fn paint_binary_box_sat(
-    img: &crate::image::PreparedImage,
-    (zero, one): ([u8; 4], [u8; 4]),
-    surface: &mut Surface,
-    cmask: Option<&ClipMask>,
-    source_columns: &[Option<crate::image::AxisTaps>],
-    source_rows: &[Option<crate::image::AxisTaps>],
-    sat: &BilevelIntegral,
-    x0: usize,
-    y0: usize,
-    output_origin: usize,
-) -> (u64, u64, u64) {
-    let alpha = img.alpha as u16;
-    // Fixed for the whole draw; resolve it once rather than per pixel.
-    let clip_win = cmask.map(ClipMask::clip_window);
-
-    // One destination row: it reads the shared summed-area table and the axis
-    // tables, and writes only its own output row, so rows are independent.
-    // The mix memo below is a pure function of `(weight, weighted ones)`, so
-    // giving each row its own memo changes only how often the division is
-    // repeated, never the colour it yields.
-    let paint_row =
-        |y: usize, row_taps: &Option<crate::image::AxisTaps>, row: &mut [u8]| -> (u64, u64, u64) {
-            let mut painted = 0u64;
-            let mut attempts = 0u64;
-            let mut taps = 0u64;
-            // All-zero / all-one boxes short-circuit without division; the mixed
-            // boxes memoize on `(weight, weighted ones)` — long runs of identical
-            // fractional boxes (repeated column patterns) then cost one division
-            // set, not one per pixel. Clip coverage and destination blending stay
-            // per pixel.
-            let mut memo_key = (u64::MAX, u64::MAX);
-            let mut memo_color = [0u8; 4];
-            for (local_x, col_taps) in source_columns.iter().enumerate() {
-                let x = x0 + local_x;
-                let cov = clip_win.as_ref().map_or(255, |cw| cw.coverage(x, y));
-                if cov == 0 {
-                    continue;
-                }
-                attempts += 1;
-                let (Some(tx), Some(ty)) = (col_taps, row_taps) else {
-                    continue;
-                };
-                let weight = tx.total * ty.total;
-                if weight == 0 {
-                    continue;
-                }
-                taps += (tx.hi - tx.lo + 1) as u64 * (ty.hi - ty.lo + 1) as u64;
-                let ones_w = sat.weighted_ones(tx, ty);
-                let color = if ones_w == 0 {
-                    zero
-                } else if ones_w >= weight {
-                    one
-                } else if memo_key == (weight, ones_w) {
-                    memo_color
-                } else {
-                    let c = crate::image::mix_bilevel(zero, one, ones_w, weight);
-                    memo_key = (weight, ones_w);
-                    memo_color = c;
-                    c
-                };
-                let a = mul_div_255(mul_div_255(color[3] as u16, alpha), cov);
-                if a == 0 {
-                    continue;
-                }
-                let target = (x - output_origin) * 4;
-                if a == 255 {
-                    row[target] = color[0];
-                    row[target + 1] = color[1];
-                    row[target + 2] = color[2];
-                    row[target + 3] = 255;
-                } else {
-                    let ia = 255 - a;
-                    row[target] = (mul_div_255(color[0] as u16, a)
-                        + mul_div_255(row[target] as u16, ia))
-                        as u8;
-                    row[target + 1] = (mul_div_255(color[1] as u16, a)
-                        + mul_div_255(row[target + 1] as u16, ia))
-                        as u8;
-                    row[target + 2] = (mul_div_255(color[2] as u16, a)
-                        + mul_div_255(row[target + 2] as u16, ia))
-                        as u8;
-                    row[target + 3] = (a + mul_div_255(row[target + 3] as u16, ia)) as u8;
-                }
-                painted += 1;
-            }
-            (painted, attempts, taps)
-        };
-
-    let dest_w = source_columns.len();
-    let dest_h = source_rows.len();
-    let (output, first_output_y, output_stride) = surface.rows_mut_abs(y0, y0 + dest_h);
-    // Align the row table with the clipped output window.
-    let row_offset = first_output_y.saturating_sub(y0);
-    let row_slice = source_rows.get(row_offset..).unwrap_or(&[]);
-
-    let parallel = image_row_parallel_enabled()
-        && dest_w.saturating_mul(dest_h) >= IMAGE_ROW_PAR_PIXEL_THRESHOLD;
-    if parallel {
-        output
-            .par_chunks_mut(output_stride)
-            .zip(row_slice.par_iter())
-            .enumerate()
-            .map(|(i, (row, taps))| paint_row(first_output_y + i, taps, row))
-            .reduce(|| (0, 0, 0), |a, b| (a.0 + b.0, a.1 + b.1, a.2 + b.2))
-    } else {
-        output
-            .chunks_exact_mut(output_stride)
-            .zip(row_slice.iter())
-            .enumerate()
-            .map(|(i, (row, taps))| paint_row(first_output_y + i, taps, row))
-            .fold((0, 0, 0), |a, b| (a.0 + b.0, a.1 + b.1, a.2 + b.2))
     }
 }
 
@@ -3677,10 +4142,11 @@ fn bilevel_smask_coverage_windowed(
     ones_w as f32 / weight as f32
 }
 
-/// Table size above which the bilevel summed-area table is filled across the
-/// rayon pool. Below it the serial walk is already a fraction of a millisecond
-/// and the fan-out would not pay for itself.
-const BILEVEL_SAT_PAR_MIN_ENTRIES: usize = 1 << 20;
+/// Referenced source bits above which a minified bilevel draw weights its
+/// source rows across the rayon pool even when its destination is small.
+/// Below it the serial walk is already a fraction of a millisecond and the
+/// fan-out would not pay for itself.
+const BILEVEL_ROWS_PAR_MIN_BITS: usize = 1 << 20;
 
 /// Destination-pixel count above which an image draw paints its independent
 /// destination rows across the rayon pool. Mirrors the bilinear fast path's
@@ -6323,33 +6789,439 @@ mod rgb8_area_min_tests {
         assert!(rect_contains(outer, r(100, 100, 0, 3)), "empty");
     }
 
-    /// Compare only the pixels the generic body paints at full weight
-    /// (`edge_coverage` is `None`). A magnified bilinear draw is allowed ±1
-    /// per channel there: the generic bilinear tap weights can sum to 254/255
-    /// on an opaque image, where the fast path keeps it opaque.
-    fn assert_interior_equal(
-        img: &PreparedImage,
-        got: &mut Surface,
-        want: &mut Surface,
-        what: &str,
-    ) {
-        let bilinear_magnified = img.interpolation == InterpolationMode::Bilinear
-            && img.footprint[0] <= 1.0
-            && img.footprint[1] <= 1.0;
-        for y in 0..got.height {
-            let (g, r) = (got.row_mut(y).to_vec(), want.row_mut(y).to_vec());
-            for x in 0..got.width {
-                if img.edge_coverage(x as f64 + 0.5, y as f64 + 0.5).is_some() {
-                    continue;
-                }
-                let (gp, rp) = (&g[x * 4..x * 4 + 4], &r[x * 4..x * 4 + 4]);
-                let close = gp.iter().zip(rp).all(|(a, b)| a.abs_diff(*b) <= 1);
-                assert!(
-                    gp == rp || (bilinear_magnified && close),
-                    "{what}: interior pixel ({x}, {y}) is {gp:?}, generic body {rp:?}"
-                );
+    /// A one-bit `/ImageMask` stencil of `sw x sh` random texels, painted in
+    /// a fixed colour, re-placed at device `(ox, oy)` with size `w x h`.
+    /// `inverted` gives it `/Decode [1 0]` (a set bit paints).
+    #[allow(clippy::too_many_arguments)]
+    fn stencil_image(
+        sw: u32,
+        sh: u32,
+        ox: f64,
+        oy: f64,
+        w: f64,
+        h: f64,
+        inverted: bool,
+        rng: &mut Rng,
+    ) -> PreparedImage {
+        let row_bytes = (sw as usize).div_ceil(8);
+        let samples: Vec<u8> = (0..row_bytes * sh as usize).map(|_| rng.byte()).collect();
+        let mut img = place(make_image(sw, sh, 1, 1, samples), ox, oy, w, h);
+        img.is_stencil = true;
+        img.bpc = 1;
+        img.color_space = ImageColorSpace::Gray;
+        img.stencil_rgb = [200, 40, 90];
+        img.decode = inverted.then(|| Arc::from([[1.0f32, 0.0]]));
+        img
+    }
+
+    /// A clip mask over most of a `side x side` surface with random coverage:
+    /// zero, full and partial bytes.
+    fn random_clip(side: u32, rng: &mut Rng) -> ClipMask {
+        let bounds = DeviceRect {
+            x: 1,
+            y: 0,
+            width: side - 2,
+            height: side - 1,
+        };
+        let data = (0..bounds.width * bounds.height)
+            .map(|_| match rng.byte() % 4 {
+                0 => 0,
+                1 => 255,
+                _ => rng.byte(),
+            })
+            .collect();
+        ClipMask {
+            bounds,
+            data,
+            outside: 0,
+            all_opaque: false,
+        }
+    }
+
+    /// A `side x side` surface with an arbitrary backdrop, so compositing at
+    /// partial alpha is exercised.
+    fn backdrop(side: u32, seed: u64) -> Surface {
+        let mut rng = Rng(seed);
+        let mut surface = Surface::new(side as usize, side as usize, Background::Transparent);
+        for y in 0..side as usize {
+            for b in surface.row_mut(y) {
+                *b = rng.byte();
             }
         }
+        surface
+    }
+
+    /// The `/ImageMask` stencil fast path (bilevel box filter when minified,
+    /// transparent-skip nearest otherwise, on the interior; generic body on
+    /// the border band) must equal the generic per-pixel body byte for byte:
+    /// both `/Decode` polarities, with and without a clip mask, opaque and
+    /// partial fill alpha, over a backdrop, at fractional placements.
+    #[test]
+    fn stencil_fast_path_matches_the_generic_body() {
+        let mut rng = Rng(0x5a7e_c11a_0dd5_beef);
+        // (source w, h, device x, y, w, h): minified, near 1:1 and magnified.
+        let placements: [(u32, u32, f64, f64, f64, f64); 7] = [
+            (37, 23, 1.3, 2.6, 9.4, 6.2),
+            (64, 48, 2.5, 1.125, 20.3, 14.7),
+            (9, 33, 3.7, 0.2, 4.6, 11.9),
+            (200, 150, 0.4, 0.7, 30.2, 22.9),
+            (16, 16, 0.25, 0.75, 15.5, 15.5),
+            (5, 7, 0.6, 1.4, 17.8, 21.3),
+            (13, 11, 2.0, 3.0, 26.0, 22.0),
+        ];
+        let mut minified = 0;
+        let mut nearest = 0;
+        for &(sw, sh, ox, oy, w, h) in &placements {
+            let side = (ox + w).max(oy + h).ceil() as u32 + 2;
+            for inverted in [false, true] {
+                for clipped in [false, true] {
+                    for alpha in [255u8, 170] {
+                        let mut img = stencil_image(sw, sh, ox, oy, w, h, inverted, &mut rng);
+                        img.alpha = alpha;
+                        let clip = clipped.then(|| random_clip(side, &mut rng));
+                        let lut = stencil_fast_lut(&img).expect("an axis-aligned stencil");
+                        assert!(
+                            interior_span(img.inv.a, img.inv.e, 0, side as usize).is_some()
+                                && interior_span(img.inv.d, img.inv.f, 0, side as usize)
+                                    .is_some(),
+                            "the placement must have an interior for the fast path"
+                        );
+                        let b = img.bounds;
+                        let (x0, y0) = (b.x as usize, b.y as usize);
+                        let (x1, y1) = (x0 + b.width as usize, y0 + b.height as usize);
+                        let seed = rng.next();
+                        let mut got = backdrop(side, seed);
+                        let fast = paint_axis_aligned_stencil(
+                            &img,
+                            lut,
+                            &mut got,
+                            clip.as_ref(),
+                            BlendChoice::Normal,
+                            x0,
+                            y0,
+                            x1,
+                            y1,
+                        );
+                        let mut want = backdrop(side, seed);
+                        let generic = paint_image_generic(
+                            &img,
+                            &mut want,
+                            clip.as_ref(),
+                            None,
+                            BlendChoice::Normal,
+                            x0,
+                            y0,
+                            x1,
+                            y1,
+                            None,
+                        );
+                        let what = format!(
+                            "stencil {sw}x{sh} at ({ox}, {oy}) size {w}x{h} inverted {inverted} \
+                             clipped {clipped} alpha {alpha}"
+                        );
+                        assert_surfaces_equal(&mut got, &mut want, &what);
+                        assert_eq!(fast.0, generic.0, "{what}: covered pixels");
+                        if img.footprint[0] > 1.0 || img.footprint[1] > 1.0 {
+                            minified += 1;
+                        } else {
+                            nearest += 1;
+                        }
+                    }
+                }
+            }
+        }
+        assert!(minified > 0 && nearest > 0, "{minified} minified, {nearest} nearest");
+    }
+
+    /// What keeps a stencil on the generic body: a rotated or sheared
+    /// placement, a magnified Bilinear draw, and sample data shorter than its
+    /// packed rows (the fast paths index rows directly; `pixel()` reads the
+    /// missing bytes as zero, which paints). Each still renders, through the
+    /// dispatcher, exactly as the generic body does.
+    #[test]
+    fn stencil_fast_path_eligibility_and_generic_fallbacks() {
+        let mut rng = Rng(0x0bad_5eed_1234_4321);
+        let side = 24u32;
+
+        // Eligible: minified, magnified Nearest, minified Bilinear, inverted.
+        let img = stencil_image(40, 30, 1.5, 2.25, 17.3, 12.8, false, &mut rng);
+        assert!(stencil_fast_lut(&img).is_some());
+        let mut img = stencil_image(5, 4, 1.5, 2.25, 17.3, 12.8, true, &mut rng);
+        assert!(stencil_fast_lut(&img).is_some());
+        img.interpolation = InterpolationMode::Bilinear;
+        assert!(stencil_fast_lut(&img).is_none(), "magnified Bilinear stays generic");
+        let mut img = stencil_image(40, 30, 1.5, 2.25, 17.3, 12.8, false, &mut rng);
+        img.interpolation = InterpolationMode::Bilinear;
+        assert!(stencil_fast_lut(&img).is_some(), "minification ignores the hint");
+
+        // Polarity: the painting entry is opaque, the masking one clear.
+        let plain = stencil_image(8, 8, 0.0, 0.0, 4.0, 4.0, false, &mut rng);
+        let (zero, one) = plain.stencil_bilevel_lut().unwrap();
+        assert_eq!((zero, one), ([200, 40, 90, 255], [200, 40, 90, 0]));
+        let inverted = stencil_image(8, 8, 0.0, 0.0, 4.0, 4.0, true, &mut rng);
+        let (zero, one) = inverted.stencil_bilevel_lut().unwrap();
+        assert_eq!((zero, one), ([200, 40, 90, 0], [200, 40, 90, 255]));
+
+        let mut cases: Vec<(&str, PreparedImage)> = Vec::new();
+        // Rotated a few degrees about the draw's centre.
+        let mut rotated = stencil_image(40, 30, 3.0, 3.0, 17.0, 13.0, false, &mut rng);
+        let (s, c) = (0.1f64.sin(), 0.1f64.cos());
+        let (cx, cy) = (11.5, 9.5);
+        // Device -> unit square: rotate back about the centre, then scale.
+        rotated.inv = Matrix {
+            a: c / 17.0,
+            b: -s / 13.0,
+            c: s / 17.0,
+            d: c / 13.0,
+            e: (-c * cx - s * cy) / 17.0 + 0.5,
+            f: (s * cx - c * cy) / 13.0 + 0.5,
+        };
+        rotated.bounds = DeviceRect {
+            x: 0,
+            y: 0,
+            width: side,
+            height: side,
+        };
+        assert!(stencil_fast_lut(&rotated).is_none(), "rotated stays generic");
+        cases.push(("rotated", rotated));
+        // Truncated: the last two packed rows are missing.
+        let mut short = stencil_image(40, 30, 1.5, 2.25, 17.3, 12.8, false, &mut rng);
+        let full = short.samples.len();
+        short.samples = Arc::from(&short.samples[..full - 2 * 5]);
+        assert!(stencil_fast_lut(&short).is_none(), "a short buffer stays generic");
+        cases.push(("short", short));
+        let mut short_magnified = stencil_image(6, 5, 1.5, 2.25, 17.3, 12.8, true, &mut rng);
+        short_magnified.samples = Arc::from(&short_magnified.samples[..3]);
+        assert!(stencil_fast_lut(&short_magnified).is_none());
+        cases.push(("short magnified", short_magnified));
+
+        for (what, img) in &cases {
+            let mut got = dispatched(img, side);
+            let (mut want, _) = generic_masked_reference(img, side, side);
+            assert_surfaces_equal(&mut got, &mut want, what);
+        }
+    }
+
+    /// A one-bit gray image of `sw x sh` packed bits from `bits`, placed at
+    /// device `(ox, oy)` with size `w x h` (a negative size mirrors that axis).
+    #[allow(clippy::too_many_arguments)]
+    fn bilevel_image(
+        sw: u32,
+        sh: u32,
+        bits: Vec<u8>,
+        ox: f64,
+        oy: f64,
+        w: f64,
+        h: f64,
+    ) -> PreparedImage {
+        let mut img = make_image(sw, sh, 1, 1, bits);
+        img.bpc = 1;
+        img.color_space = ImageColorSpace::Gray;
+        img.sample_lut = crate::image::build_sample_lut(1, &ImageColorSpace::Gray, None, false);
+        // Device -> unit square, either orientation.
+        img.inv = Matrix {
+            a: 1.0 / w,
+            b: 0.0,
+            c: 0.0,
+            d: 1.0 / h,
+            e: -ox / w,
+            f: -oy / h,
+        };
+        let (lx, hx) = (ox.min(ox + w), ox.max(ox + w));
+        let (ly, hy) = (oy.min(oy + h), oy.max(oy + h));
+        img.bounds = DeviceRect {
+            x: lx.floor() as i32,
+            y: ly.floor() as i32,
+            width: (hx.ceil() - lx.floor()) as u32,
+            height: (hy.ceil() - ly.floor()) as u32,
+        };
+        img.footprint = [sw as f64 / w.abs(), sh as f64 / h.abs()];
+        img
+    }
+
+    /// The per-column and per-row taps `paint_axis_aligned_binary_box` builds.
+    fn binary_taps(
+        img: &PreparedImage,
+    ) -> (
+        Vec<Option<crate::image::AxisTaps>>,
+        Vec<Option<crate::image::AxisTaps>>,
+    ) {
+        let b = img.bounds;
+        let cols = (b.x as usize..b.x as usize + b.width as usize)
+            .map(|x| {
+                let u = img.inv.a * (x as f64 + 0.5) + img.inv.e;
+                (0.0..1.0)
+                    .contains(&u)
+                    .then(|| img.box_taps_x(u * img.width as f64 - 0.5))
+                    .flatten()
+            })
+            .collect();
+        let rows = (b.y as usize..b.y as usize + b.height as usize)
+            .map(|y| {
+                let v = img.inv.d * (y as f64 + 0.5) + img.inv.f;
+                (0.0..1.0)
+                    .contains(&v)
+                    .then(|| img.box_taps_y((1.0 - v) * img.height as f64 - 0.5))
+                    .flatten()
+            })
+            .collect();
+        (cols, rows)
+    }
+
+    /// The row-band weighted ones count must equal the summed-area table's
+    /// and the direct per-row weighted popcount, for every destination box of
+    /// random bilevel images at random fractional (and mirrored) minifying
+    /// placements, including widths that are not a whole number of bytes
+    /// and windows that start mid-byte.
+    #[test]
+    fn row_band_weighted_ones_match_the_sat_and_the_direct_count() {
+        let mut rng = Rng(0x2b0b_a11d_0e5e_1f00);
+        let mut boxes = 0u64;
+        for trial in 0..60 {
+            let sw = 3 + (rng.next() % 140) as u32;
+            let sh = 3 + (rng.next() % 120) as u32;
+            let row_bytes = (sw as usize).div_ceil(8);
+            // Mostly sparse, sometimes dense, so the zero-row shortcut and
+            // full bytes are both exercised.
+            let dense = trial % 3 == 0;
+            let bits: Vec<u8> = (0..row_bytes * sh as usize)
+                .map(|_| {
+                    let b = rng.byte();
+                    if dense || b < 40 { rng.byte() } else { 0 }
+                })
+                .collect();
+            let scale = 1.05 + (rng.next() % 1000) as f64 / 150.0;
+            let (w, h) = (sw as f64 / scale, sh as f64 / (scale * 0.8 + 0.3));
+            let (w, h) = if trial % 4 == 1 { (-w, h) } else { (w, h) };
+            let (w, h) = if trial % 5 == 2 { (w, -h) } else { (w, h) };
+            let ox = 1.0 + (rng.next() % 100) as f64 / 37.0 + if w < 0.0 { -w } else { 0.0 };
+            let oy = 0.5 + (rng.next() % 100) as f64 / 41.0 + if h < 0.0 { -h } else { 0.0 };
+            let img = bilevel_image(sw, sh, bits, ox, oy, w, h);
+            let (cols, rows) = binary_taps(&img);
+            if cols.iter().all(Option::is_none) || rows.iter().all(Option::is_none) {
+                // No destination pixel centre lands in the image.
+                assert!(BilevelWindow::new(&img, &cols, &rows).is_none());
+                assert!(BilevelIntegral::build(&img, &cols, &rows).is_none());
+                continue;
+            }
+            let window = BilevelWindow::new(&img, &cols, &rows).expect("complete samples");
+            let sat = BilevelIntegral::build(&img, &cols, &rows).expect("small table");
+            let base = (window.byte_lo * 8) as u32;
+            let mut colw = vec![0u32; window.nbytes * 8];
+            let mut prefix = vec![0u64; window.nbytes * 8 + 1];
+            let row_bits = img.packed_row_bits();
+            for ty in rows.iter().flatten() {
+                let any = window.column_sums(ty, &mut colw, &mut prefix);
+                for tx in cols.iter().flatten() {
+                    let banded = if any {
+                        row_band_weighted_ones(tx, base, &colw, &prefix)
+                    } else {
+                        0
+                    };
+                    let direct: u64 = (ty.lo..=ty.hi)
+                        .map(|y| {
+                            ty.weight_at(y)
+                                * crate::image::weighted_row_ones_in(
+                                    &img.samples,
+                                    y as usize * row_bits,
+                                    tx,
+                                )
+                        })
+                        .sum();
+                    assert_eq!(banded, direct, "trial {trial} tx={tx:?} ty={ty:?}");
+                    assert_eq!(sat.weighted_ones(tx, ty), direct, "trial {trial}");
+                    boxes += 1;
+                }
+            }
+        }
+        assert!(boxes > 10_000, "{boxes} boxes");
+    }
+
+    /// The row-band painter must leave the same bytes as the per-pixel loop
+    /// it replaced the summed-area table in front of: gray and stencil
+    /// tables, with and without a clip mask, opaque and partial alpha, over a
+    /// backdrop.
+    #[test]
+    fn row_band_paint_matches_the_per_pixel_loop() {
+        let mut rng = Rng(0x0dd_ba11_c0de_5eed);
+        for trial in 0..24 {
+            let (sw, sh) = (40 + (rng.next() % 90) as u32, 30 + (rng.next() % 90) as u32);
+            let row_bytes = (sw as usize).div_ceil(8);
+            let bits: Vec<u8> = (0..row_bytes * sh as usize).map(|_| rng.byte()).collect();
+            let scale = 1.2 + (rng.next() % 100) as f64 / 25.0;
+            let (w, h) = (sw as f64 / scale, sh as f64 / scale);
+            let (ox, oy) = (1.3 + (trial % 3) as f64 * 0.27, 0.6 + (trial % 4) as f64 * 0.21);
+            let mut img = bilevel_image(sw, sh, bits, ox, oy, w, h);
+            img.alpha = if trial % 2 == 0 { 255 } else { 140 };
+            let lut = if trial % 3 == 2 {
+                img.is_stencil = true;
+                img.sample_lut = None;
+                img.stencil_rgb = [10, 120, 230];
+                img.stencil_bilevel_lut().unwrap()
+            } else {
+                img.binary_box_lut().unwrap()
+            };
+            let side = (ox + w).max(oy + h).ceil() as u32 + 2;
+            let clip = (trial % 4 >= 2).then(|| random_clip(side, &mut rng));
+            let (cols, rows) = binary_taps(&img);
+            let (x0, y0) = (img.bounds.x as usize, img.bounds.y as usize);
+            let (x1, y1) = (
+                x0 + img.bounds.width as usize,
+                y0 + img.bounds.height as usize,
+            );
+            let seed = rng.next();
+            let mut got = backdrop(side, seed);
+            let banded =
+                paint_axis_aligned_binary_box(&img, lut, &mut got, clip.as_ref(), x0, y0, x1, y1);
+            let mut want = backdrop(side, seed);
+            let serial =
+                paint_binary_box_serial(&img, lut, &mut want, clip.as_ref(), &cols, &rows, x0, y0);
+            let what = format!("trial {trial}: {sw}x{sh} at ({ox}, {oy}) size {w}x{h}");
+            assert_surfaces_equal(&mut got, &mut want, &what);
+            assert_eq!(banded.0, serial.0, "{what}: painted");
+        }
+    }
+
+    /// A 600-dpi Letter page (5100 x 6600 = 33.7M bits) is over the summed-area
+    /// table's 32M-entry cap, so before the row-band filter it fell to the
+    /// serial per-pixel loop. The row-band filter takes it and paints the same
+    /// bytes. A truncated buffer still takes the per-pixel loop (which reads
+    /// the missing bytes as zero) instead of indexing past the end.
+    #[test]
+    fn row_band_paints_a_600_dpi_page_and_declines_a_truncated_one() {
+        let mut rng = Rng(0x600d_0600_d0d0_6006);
+        let (sw, sh) = (5100u32, 6600u32);
+        let row_bytes = (sw as usize).div_ceil(8);
+        let bits: Vec<u8> = (0..row_bytes * sh as usize)
+            .map(|i| if (i / row_bytes) % 40 < 25 { rng.byte() & rng.byte() } else { 0 })
+            .collect();
+        // 72 dpi: 612 x 792 device pixels at a fractional offset.
+        let img = bilevel_image(sw, sh, bits, 0.4, 0.3, 612.0, 792.0);
+        let (cols, rows) = binary_taps(&img);
+        assert!(
+            BilevelIntegral::build(&img, &cols, &rows).is_none(),
+            "over the old table cap"
+        );
+        assert!(BilevelWindow::new(&img, &cols, &rows).is_some());
+        let lut = img.binary_box_lut().unwrap();
+        let side = 794u32;
+        let mut got = backdrop(side, 7);
+        paint_axis_aligned_binary_box(&img, lut, &mut got, None, 0, 0, 613, 793);
+        let mut want = backdrop(side, 7);
+        paint_binary_box_serial(&img, lut, &mut want, None, &cols, &rows, 0, 0);
+        assert_surfaces_equal(&mut got, &mut want, "600 dpi");
+
+        // Truncated: drop the last 100 rows' bytes.
+        let mut short = bilevel_image(400, 300, vec![0x5a; 50 * 300], 0.5, 0.5, 61.0, 47.0);
+        short.samples = Arc::from(&short.samples[..50 * 200]);
+        let (cols, rows) = binary_taps(&short);
+        assert!(BilevelWindow::new(&short, &cols, &rows).is_none());
+        let lut = short.binary_box_lut().unwrap();
+        let mut got = backdrop(64, 9);
+        paint_axis_aligned_binary_box(&short, lut, &mut got, None, 0, 0, 62, 48);
+        let mut want = backdrop(64, 9);
+        paint_binary_box_serial(&short, lut, &mut want, None, &cols, &rows, 0, 0);
+        assert_surfaces_equal(&mut got, &mut want, "truncated");
     }
 
     /// `img` re-placed at device `(ox, oy)` with device size `w x h`, all
@@ -6415,17 +7287,18 @@ mod rgb8_area_min_tests {
     ///
     /// Covers RGB8, Gray8 (promoted), Indexed (expanded) and CMYK sources,
     /// unmasked and under a stencil, a one-bit and an eight-bit soft mask;
-    /// minified, near 1:1 and magnified; nearest and bilinear.
+    /// minified, near 1:1 and magnified; nearest and bilinear. Also covers
+    /// `/ImageMask` stencils in both `/Decode` polarities.
     ///
-    /// Every masked path matches byte for byte, ring included. The opaque
+    /// Every path matches byte for byte, ring included. The opaque
     /// *unmasked* fast paths (`fast_rgb8`, `fast_rgb8_bilinear`,
     /// `fast_rgb8_area`, the CMYK area path, and Gray8/Indexed through their
-    /// RGB8 promotions) do not: they paint the ring by pixel centre, at full
-    /// weight or not at all, where the generic body paints its A10 fractional
-    /// edge coverage. That divergence predates this test and is a rendering
-    /// decision, not a fix to slip in (it changes every opaque image that
-    /// lands on fractional device coordinates); see the 2026-11-08 scoping
-    /// note. Until it is decided, those paths are held to the interior.
+    /// RGB8 promotions) used to paint the ring by pixel centre, at full weight
+    /// or not at all; they now paint only the interior and leave the ring to
+    /// the generic body's A10 fractional edge coverage, like the masked paths
+    /// (option A of the 2026-11-08 scoping note's open decision). The
+    /// magnified bilinear interior matches exactly too, since the generic
+    /// bilinear sampler keeps an opaque image's alpha at 255.
     #[test]
     fn fractional_placements_match_the_generic_body_including_the_border_ring() {
         let mut rng = Rng(0xb0d5_7a11_0f0f_1234);
@@ -6508,17 +7381,54 @@ mod rgb8_area_min_tests {
                             "{space_name} {mask_kind} {interpolation:?} src {sw}x{sh} at \
                              ({ox}, {oy}) size {w}x{h}"
                         );
-                        if mask_kind != "none" {
-                            assert_surfaces_equal(&mut got, &mut want, &what);
-                        } else {
-                            assert_interior_equal(&img, &mut got, &mut want, &what);
-                        }
+                        assert_surfaces_equal(&mut got, &mut want, &what);
                         checked += 1;
                     }
                 }
             }
         }
         assert_eq!(checked, 5 * 4 * 4 * 2);
+
+        // `/ImageMask` stencils: the fast path paints only the interior and
+        // leaves the ring to the generic body, so the whole surface matches.
+        for &(sw, sh, ox, oy, w, h) in &placements {
+            let side = (ox + w).max(oy + h).ceil() as u32 + 2;
+            for inverted in [false, true] {
+                for interpolation in [InterpolationMode::Nearest, InterpolationMode::Bilinear] {
+                    let mut img = stencil_image(sw, sh, ox, oy, w, h, inverted, &mut rng);
+                    img.interpolation = interpolation;
+                    let mut got = dispatched(&img, side);
+                    let (mut want, _) = generic_masked_reference(&img, side, side);
+                    let what = format!(
+                        "imagemask inverted {inverted} {interpolation:?} src {sw}x{sh} at                          ({ox}, {oy}) size {w}x{h}"
+                    );
+                    assert_surfaces_equal(&mut got, &mut want, &what);
+                    checked += 1;
+                }
+            }
+        }
+        assert_eq!(checked, 5 * 4 * 4 * 2 + 5 * 2 * 2);
+
+        // One-bit gray images: the low-bit LUT nearest path when magnified,
+        // the bilevel box filter when minified, ring left to the generic body.
+        for &(sw, sh, ox, oy, w, h) in &placements {
+            let side = (ox + w).max(oy + h).ceil() as u32 + 2;
+            for interpolation in [InterpolationMode::Nearest, InterpolationMode::Bilinear] {
+                let bits: Vec<u8> = (0..(sw as usize).div_ceil(8) * sh as usize)
+                    .map(|_| rng.byte())
+                    .collect();
+                let mut img = bilevel_image(sw, sh, bits, ox, oy, w, h);
+                img.interpolation = interpolation;
+                let mut got = dispatched(&img, side);
+                let (mut want, _) = generic_masked_reference(&img, side, side);
+                let what = format!(
+                    "gray1 {interpolation:?} src {sw}x{sh} at ({ox}, {oy}) size {w}x{h}"
+                );
+                assert_surfaces_equal(&mut got, &mut want, &what);
+                checked += 1;
+            }
+        }
+        assert_eq!(checked, 5 * 4 * 4 * 2 + 5 * 2 * 2 + 5 * 2);
     }
 }
 
