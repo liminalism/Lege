@@ -7224,34 +7224,6 @@ mod rgb8_area_min_tests {
         assert_surfaces_equal(&mut got, &mut want, "truncated");
     }
 
-    /// Compare every pixel with the generic body: the border ring (where
-    /// `edge_coverage` is `Some`) byte for byte, and the interior byte for
-    /// byte too, except that a magnified bilinear draw is allowed ±1 per
-    /// channel there: the generic bilinear sampler rounds its four-tap blend
-    /// in f32 and can land one level below the fast path's.
-    fn assert_unmasked_equal(
-        img: &PreparedImage,
-        got: &mut Surface,
-        want: &mut Surface,
-        what: &str,
-    ) {
-        let bilinear_magnified = img.interpolation == InterpolationMode::Bilinear
-            && img.footprint[0] <= 1.0
-            && img.footprint[1] <= 1.0;
-        for y in 0..got.height {
-            let (g, r) = (got.row_mut(y).to_vec(), want.row_mut(y).to_vec());
-            for x in 0..got.width {
-                let ring = img.edge_coverage(x as f64 + 0.5, y as f64 + 0.5).is_some();
-                let (gp, rp) = (&g[x * 4..x * 4 + 4], &r[x * 4..x * 4 + 4]);
-                let close = gp.iter().zip(rp).all(|(a, b)| a.abs_diff(*b) <= 1);
-                assert!(
-                    gp == rp || (!ring && bilinear_magnified && close),
-                    "{what}: pixel ({x}, {y}) (ring: {ring}) is {gp:?}, generic body {rp:?}"
-                );
-            }
-        }
-    }
-
     /// `img` re-placed at device `(ox, oy)` with device size `w x h`, all
     /// fractional, so the draw has a partially covered border ring.
     fn place(mut img: PreparedImage, ox: f64, oy: f64, w: f64, h: f64) -> PreparedImage {
@@ -7323,9 +7295,9 @@ mod rgb8_area_min_tests {
     /// RGB8 promotions) used to paint the ring by pixel centre, at full weight
     /// or not at all; they now paint only the interior and leave the ring to
     /// the generic body's A10 fractional edge coverage, like the masked paths
-    /// (option A of the 2026-11-08 scoping note's open decision). Only a
-    /// magnified bilinear interior keeps a ±1 allowance (see
-    /// `assert_unmasked_equal`).
+    /// (option A of the 2026-11-08 scoping note's open decision). The
+    /// magnified bilinear interior matches exactly too, since the generic
+    /// bilinear sampler keeps an opaque image's alpha at 255.
     #[test]
     fn fractional_placements_match_the_generic_body_including_the_border_ring() {
         let mut rng = Rng(0xb0d5_7a11_0f0f_1234);
@@ -7408,11 +7380,7 @@ mod rgb8_area_min_tests {
                             "{space_name} {mask_kind} {interpolation:?} src {sw}x{sh} at \
                              ({ox}, {oy}) size {w}x{h}"
                         );
-                        if mask_kind != "none" {
-                            assert_surfaces_equal(&mut got, &mut want, &what);
-                        } else {
-                            assert_unmasked_equal(&img, &mut got, &mut want, &what);
-                        }
+                        assert_surfaces_equal(&mut got, &mut want, &what);
                         checked += 1;
                     }
                 }
@@ -7455,7 +7423,7 @@ mod rgb8_area_min_tests {
                 let what = format!(
                     "gray1 {interpolation:?} src {sw}x{sh} at ({ox}, {oy}) size {w}x{h}"
                 );
-                assert_unmasked_equal(&img, &mut got, &mut want, &what);
+                assert_surfaces_equal(&mut got, &mut want, &what);
                 checked += 1;
             }
         }

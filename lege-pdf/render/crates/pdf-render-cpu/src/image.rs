@@ -1533,6 +1533,13 @@ impl PreparedImage {
             // one-level bright bias over scan-sized images.
             out[ch] = (top * (1.0 - ty) + bot * ty).clamp(0.0, 255.0) as u8;
         }
+        // Four equal alphas blend to that alpha exactly, but the f32 weights
+        // `(1 - t) + t` can sum to just under one, and truncation then made
+        // an opaque image 254/255 (the magnified bilinear fast path keeps
+        // it opaque). Colour channels keep the truncating blend.
+        if p00[3] == p10[3] && p00[3] == p01[3] && p00[3] == p11[3] {
+            out[3] = p00[3];
+        }
         Some(out)
     }
 
@@ -2507,6 +2514,28 @@ mod tests {
             None,
             "inverted: mask sample 0 → transparent"
         );
+    }
+
+    /// The generic bilinear sampler keeps an opaque image opaque: its f32
+    /// tap weights can sum to just under one (the guard below finds such a
+    /// point), which used to truncate the alpha to 254.
+    #[test]
+    fn bilinear_keeps_an_opaque_image_opaque() {
+        let samples: Vec<u8> = (0..4 * 3 * 3).map(|i| (i * 37 % 256) as u8).collect();
+        let im = img(4, 3, ImageColorSpace::Rgb, samples, None);
+        let mut short_of_one = 0;
+        for i in 0..400 {
+            for j in 0..300 {
+                let (fx, fy) = (i as f64 / 133.0, j as f64 / 151.0);
+                let (tx, ty) = ((fx - fx.floor()) as f32, (fy - fy.floor()) as f32);
+                let top = 255.0 * (1.0 - tx) + 255.0 * tx;
+                if ((top * (1.0 - ty) + top * ty) as u8) < 255 {
+                    short_of_one += 1;
+                }
+                assert_eq!(im.bilinear(fx, fy).unwrap()[3], 255, "at ({fx}, {fy})");
+            }
+        }
+        assert!(short_of_one > 0, "the f32 blend never fell short of one");
     }
 
     #[test]
