@@ -393,12 +393,20 @@ impl FontProgram {
         matches!(self.kind, ProgramKind::Type1(_))
     }
 
-    /// Retained backing-byte size of this parsed program, for charging a
-    /// bounded document-scoped parse cache. This is the SFNT/wrapped/Type 1
-    /// byte buffer the program holds; parsed side structures (e.g. a Type 1
-    /// interpreter) are a bounded multiple of it, so it is a stable proxy.
+    /// Bytes this parsed program retains, for charging a bounded
+    /// document-scoped parse cache. That is the SFNT/wrapped/Type 1 byte
+    /// buffer it holds, plus, for Type 1, what the native interpreter keeps
+    /// beside it: decrypted charstrings and subroutines, glyph names and
+    /// their index. For real Type 1 faces that is another 1.0–1.8× the
+    /// buffer, so charging the buffer alone counted well under half of the
+    /// program. Skrifa reads an SFNT in place, so its buffer is all it
+    /// retains.
     pub fn retained_bytes(&self) -> usize {
-        self.data.len()
+        let parsed = match &self.kind {
+            ProgramKind::Type1(t1) => t1.heap_bytes(),
+            ProgramKind::Sfnt { .. } => 0,
+        };
+        self.data.len() + parsed
     }
 
     /// Whether reparsing this program is expensive enough to retain for an

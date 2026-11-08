@@ -138,6 +138,29 @@ fn charstrings_decrypt_and_draw() {
     assert_eq!(o.points, vec![[100.0, 50.0], [900.0, 50.0], [500.0, 650.0]]);
 }
 
+/// The font caches charge `retained_bytes`. It counts the parsed program as
+/// well as its bytes, and it stays proportional to the font. When a
+/// `/Subrs` index sized the table, `dup 1000000` in a ~1 KB font retained
+/// ~24 MB while the caches charged ~1 KB.
+#[test]
+fn retained_bytes_counts_the_parsed_program() {
+    let data = minimal_type1();
+    let p = FontProgram::parse(Arc::from(data.clone())).unwrap();
+    assert!(
+        p.retained_bytes() > data.len(),
+        "the parsed glyphs count too"
+    );
+
+    let hostile = font_with_bar_at("1000000");
+    let p = FontProgram::parse(Arc::from(hostile.clone())).unwrap();
+    assert!(
+        p.retained_bytes() < hostile.len() + 16 * 1024,
+        "{} bytes retained for a {}-byte font",
+        p.retained_bytes(),
+        hostile.len()
+    );
+}
+
 #[test]
 fn hsbw_supplies_the_advance() {
     let p = program();

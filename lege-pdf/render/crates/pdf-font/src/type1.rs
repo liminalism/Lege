@@ -96,6 +96,16 @@ impl Subrs {
         };
         self.entries.get(at).map(|entry| entry.1.as_slice())
     }
+
+    /// Heap bytes held: the entry table plus every body.
+    fn heap_bytes(&self) -> usize {
+        self.entries.capacity() * std::mem::size_of::<(i32, Vec<u8>)>()
+            + self
+                .entries
+                .iter()
+                .map(|entry| entry.1.capacity())
+                .sum::<usize>()
+    }
 }
 
 impl Type1Font {
@@ -148,6 +158,25 @@ impl Type1Font {
 
     pub fn num_glyphs(&self) -> u16 {
         self.glyphs.len().min(u16::MAX as usize) as u16
+    }
+
+    /// Heap bytes this parsed font holds beyond the program it was parsed
+    /// from: decrypted charstrings and their names, the name index, the
+    /// built-in encoding and the subroutines. Estimated from capacities, not
+    /// allocator bookkeeping, for charging the font caches.
+    pub fn heap_bytes(&self) -> usize {
+        use std::mem::size_of;
+        let glyphs = self.glyphs.capacity() * size_of::<Type1Glyph>()
+            + self
+                .glyphs
+                .iter()
+                .map(|g| g.name.capacity() + g.code.capacity())
+                .sum::<usize>();
+        // The name index owns a copy of every name; a hash map holds a key,
+        // a value and a control byte per slot.
+        let by_name = self.by_name.capacity() * (size_of::<(Vec<u8>, u32)>() + 1)
+            + self.by_name.keys().map(Vec::capacity).sum::<usize>();
+        glyphs + by_name + size_of::<[Option<u32>; 256]>() + self.subrs.heap_bytes()
     }
 
     pub fn units_per_em(&self) -> u16 {
