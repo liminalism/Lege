@@ -12,6 +12,8 @@ They are kept so that the numbers in that note can be reproduced, and so that th
 | `harness/probe/` | `lege-render-probe`: an out-of-workspace measurement harness. It has path dependencies on the renderer crates and its own `[workspace]`. Its modes are `run` (sequential compile and render through one backend, with hashing and PPM dumps), `doc` (whole document through `RenderScheduler::render_range`, with per-page hashes), `seq` (one page rendered at a sequence of sizes through one `SharedImageCache`, which reproduces B1), and `fontscan`. The full CLI is in the header of `src/main.rs`. |
 | `harness/readprobe/` | `lege-read-probe`: renders through `lege_pdf_read::RenderSession` the way lege-process does: a shared session and thread-local worker context, or a fresh session per page. It reproduces B2. An optional `mimalloc` feature and an allocation tracer find the `CompiledPage` address. |
 | `harness/gray8bench/` | Standalone microbenchmark with no repository dependencies. It contains a verbatim copy of the Gray8 output loop (`pdf-render-cpu/src/surface.rs:256-289` at `5b24f8e`) and exact alternatives (tables, floor/compare rounding, SSE2), checked exhaustively over all 2²⁴ inputs. |
+| `harness/sessionbench/` | `lege-session-bench`: production-path timing. Opens one `lege_pdf_read::RenderSession` and makes N sequential compile+render passes over every page (`<pdf> <dpi> <rgb8\|gray8> [passes]`). Pass 0 is cold; later passes are warm. Prints per-pass milliseconds and a checksum. |
+| `harness/ab.py` | Paired A/B of two `sessionbench` binaries: interleaved, order-swapped rounds; reports median times, the median per-round ratio, wins, and whether the checksums match. `--pass 0` times the cold pass. |
 | `harness/mkjbig2/` | Encodes 1-bit PBM pages into a JBIG2 `/ImageMask` MRC PDF with shared `/JBIG2Globals`, using jbig2enc-rust. Used for the `mrc_jpx_jbig2` corpus class. |
 | `corpus/mkcorpus.py` | Generates the 13-file synthetic perf corpus (text with TrueType, standard-14 and Type 1 fonts; vector; JPEG scans; G4 bilevel; transparency; MRC; JPX). Usage: `python3 -I mkcorpus.py <outdir> [class ...]`. Needs reportlab, Pillow, numpy and system fonts. |
 | `corpus/mk_determinism_pdfs.py` | PDFs for B3 (near-equal glyph sizes, float-noise matrices) and B2 (pages alternating Type 1 fonts under one resource name). |
@@ -23,6 +25,8 @@ They are kept so that the numbers in that note can be reproduced, and so that th
 | `patches/glyph-cache-foldhash-plus-shard-counters.patch` | The above, plus the hit and miss counters moved under the shard lock. A further −2 to −3.5% on warm render. |
 
 All patches apply with `git apply` to `main` at `5b24f8e`.
+
+[`IMPLEMENTATION-LOG.md`](IMPLEMENTATION-LOG.md) records which fixes have since landed, how each was gated and timed, and what was left out.
 
 ## Building and running
 
