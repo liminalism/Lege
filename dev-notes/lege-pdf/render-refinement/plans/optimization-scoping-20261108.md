@@ -10,7 +10,7 @@
 **Status:** this is a scoping document. No renderer code was changed on this branch.
 - Every claim was checked against the code by an adversarial verifier.
 - Every bug claim, and the cheapest levers, were also reproduced or measured at runtime (§3.3).
-- Still in progress, to be added in a follow-up commit: three timing probes (ISA/Gray8 output, allocator, glyph-cache hasher) and the verification of three secondary bugs (B13–B15). They are marked *pending* below.
+- Still in progress, to be added in a follow-up commit: two timing probes, the allocator and the glyph-cache hash. They are marked *pending* below.
 
 Contents:
 1. Summary
@@ -64,7 +64,9 @@ Four things remain:
    - Bilevel images rebuild a 33.7 MB summed-area table on every draw.
    - 8-bit gray images are re-expanded to RGB on every draw. A gray JPEG page is about 1.8× slower than a colour one of the same size.
    - The glyph cache hashes its key with SipHash, about 10–15% of the instructions on a text page. This bears directly on the beans gap.
-   - Builds target baseline x86-64, so `floor`, `ceil` and `round` compile to out-of-line library calls. These run per edge or per pixel in the rasteriser, the generic sampler and shadings, and per pixel in the Gray8 output conversion that `lege` uses for every gray page.
+   - Builds target baseline x86-64, so `floor`, `ceil` and `round` compile to out-of-line library calls: 290 call sites. These run per edge or per pixel in the rasteriser, the generic sampler and shadings, and per pixel in the Gray8 output conversion.
+     - Building for x86-64-v2 removes them all, with bit-identical output. It saves 8–15% on vector, text and MRC pages, provided the build also disables one LLVM tuning flag (§3.4).
+     - The Gray8 output conversion alone costs ~7 ms per 1224×1584 page, about 5× the whole RGBA render of a text page. `lege` uses Gray8 for every gray page. An exact rewrite verified over all 2²⁴ inputs makes it 2.3–3× faster.
 3. **`lege-process` wastes renderer work:**
    - each page is rendered as 2–4 separate products, and JPX layers are re-decoded for each one;
    - the read seam copies every RGB raster three times;
@@ -245,7 +247,33 @@ Single thread, 144 DPI, `debug-fast` build. A fat-LTO release build of the same 
 - **The 2+2 default is the worst configuration measured on scans.** Image-row fan-out switches off as soon as two pages are in flight, while the compile workers sit idle.
 - **On one core the scheduler is 1.3–1.5× slower than a plain serial loop.** It builds a new surface and new parse caches for every page.
 
-**Pending probes:** x86-64-v2 plus the Gray8 output rewrite, mimalloc, and a faster glyph-cache hash. Their timings will be added here.
+### 3.4 Lever probes
+
+Paired A/B runs, 7 interleaved rounds, pinned core, `debug-fast` builds.
+
+**x86-64-v2 vs baseline**
+- Bit-identical output across all 156 pages × {72, 144 DPI} × {RGBA8, Gray8}.
+- MRC: 0.913× time at 72 DPI and 0.845× at 144 DPI (7/7 rounds).
+- Vector: 0.91–0.92×.
+- TrueType text: 0.92–0.94× warm; 0.91× with the glyph cache off.
+- Transparency: 0.97–0.99×.
+- JPEG scans: **1.02–1.03× (slower, 0/7 rounds faster).** The cause is LLVM's `slow-unaligned-mem-32` tuning, which v2 enables: it splits 256-bit loads in 17 existing AVX2 functions. Adding `-C target-feature=-slow-unaligned-mem-32` brings JPEG back to 0.99–1.00×, keeps the other gains, and is bit-identical on 936/936 renders.
+- Instruction counts fall by 8–15% on vector, text and MRC pages, about twice the cost of the libm functions themselves. The difference is call overhead, register spills and lost vectorisation.
+
+**Gray8 output**
+- The conversion adds 6.6 ms per text page and 7.4 ms per JPEG page at 1224×1584 (3.4–3.8 ns/px). A text page's whole RGBA render is ~1.25 ms.
+- v2 halves it. The exact table rewrite reaches 1.5 ns/px and the SSE2 rewrite 1.1–1.4 ns/px, both verified over all 2²⁴ inputs.
+
+**Allocator (mimalloc) and glyph-cache hash** *(probes pending, added in a follow-up commit)*.
+
+**Bug reproductions** (§4)
+- B1: base sharpness 0.74×; extreme sequence 0.35×; scheduler nondeterministic in 8–10 of 30 runs.
+- B2: wrong typeface in 10 of 10 runs with a reused context.
+- B3: 72% of ink pixels change with page order; every multi-worker run differs.
+- B4: glyph widths fixed at 32 pt across Tz 50/100/200.
+- B5: 100% of the keyed area painted.
+- B9: process abort; the quadratic encoding loop takes 0.81 s for 16k entries against 0.004 s for the control.
+- The fix candidates for B4 and B5 leave all 312 corpus page hashes unchanged.
 
 ---
 
@@ -267,7 +295,9 @@ Every row was traced end to end by a verifier told to refute it. "Reproduced" me
 | **B10** | **An uncoloured (PaintType 2) pattern is cached by name only**, while its underlying colour is baked in (`interpret.rs:227, 5114-5121, 5717, 5757`). | Every use after the first in one scope paints the first use's colour, for both fill and stroke. Example: a two-series hatched bar chart. | Confirmed (deterministic wrong output). The other half of the original claim (jp2lam `expect`s) is invariants only, so lint hygiene. | Key by (name, underlying-colour bits) (S). | Affected pages become correct. |
 | **B11** | **Small crops drop page-spanning paths.** The path sanity limit is 64 × the *request* size, and the whole primitive is discarded (prepared.rs:3335-3339, 3797-3801, 5346-5357). | lege image-region crops shorter than ~19 px, which leave a hole in the JP2/JPEG overlay. Zoomed print or preview windows lose backgrounds and thick strokes. | Confirmed, low severity. | Make the limit page-relative: the device AABB of the page crop, stored on `CpuPreparedPage` (S). | Crops match the full render. |
 | **B12** | **Composed print-to-file jobs hold every sheet in memory** (`print/src/spool/file.rs:176-186`). | `lege-pdf print --to-file` with a geometry option (`--n-up`, `--scaling fit`, `--margin-mm`), which the agent README recommends. 26 MB per A4 sheet at 300 DPI: a 100-page book takes 2.7 GB (10.5 GB at 600 DPI). CUPS and Windows compose one sheet at a time. | Confirmed. | Compose, write and drop each sheet (S). | PNGs are byte-identical. |
-| B13–B15 | *Pending verification:* contexts reused after a caught panic despite the `AssertUnwindSafe` justification; offscreen raster right-edge seam; unbounded name interner. | | | | |
+| B13 | **Persistent worker contexts survive a caught panic.** The read seam (`lege-pdf/read/src/session.rs:527-546`) and the wgpu CPU fallback (`pdf-render-wgpu/src/lib.rs:2638-2644, 2752-2775`) keep their thread-local `CpuWorkerContext` after catching a panic. A panic in the middle of a `RasterKernel` fill would leave its accumulators non-zero for the next render. The API-level justification (`pdf-render-api/src/lib.rs:486-489`) is correct for `submit_caught`/`render_blocking`, which use fresh contexts. | Latent: no known input panics inside a fill. Only lege's margin mode could publish the poisoned result. | LATENT, low | `RasterKernel` keeps a `dirty` flag and calls the existing `reset_cancelled_fill()` (raster.rs:485-492) at the next fill start (S). | None. |
+| B14 | **Offscreen content is anti-aliased differently at its right edge.** The raster width is the offscreen's (`exec.rs:4464-4465`), and edges are clamped there (`raster.rs:1125-1130`). Affected: transparency groups and soft masks whose clipped content crosses the right boundary; tiling fills (both edges of the fill surface); cropped region renders (either edge). | Every consumer. Pages with BBox- or clip-limited groups, soft masks and patterns. | Confirmed by emulation and code reading; low. Errors up to 114/255 for shallow edges and ~32/255 at 45°, in the edge pixels of each row. | Pass the device-plane width (`page.size.width`) in `paint_command`; output is already restricted to command bounds (S). | Bytes change only in the affected boundary pixels. Note: any "rasterise a tile cell once and stamp it" optimisation would *add* such clamps at cell edges. |
+| B15 | **The per-document name interner grows with every content-stream name.** Inline images are not counted against `max_ops` and intern every element of their `/CS` and `/F` arrays (`interpret.rs:650-667, 4745-4803`), so the real per-page bound is the 1 GiB decode budget. | Hostile PDFs only. lege drops the session at the end of each job. | Partly confirmed; memory only (NameIds never reach output). | Use `lookup` instead of `intern` at sites that only read, after `resource_subdict` (`interpret.rs:3308, 5033, 4832, 1691, 1714, 1478, 4734, 3857`) (S). | None. |
 
 **Also confirmed by code reading:**
 - **FE1:** colour operators can drop page content. Every `sc`/`scn` in a named Separation or DeviceN space rebuilds the image colour space just to test for `/Indexed`. With an `/ICCBased` alternate, that means re-inflating the profile every time.
@@ -290,9 +320,9 @@ Every row was traced end to end by a verifier told to refute it. "Reproduced" me
 
 | # | Change | Evidence | Expected gain | Output | Effort | History |
 |---|---|---|---|---|---|---|
-| A1 | Fix B1–B12 (§4) | Reproduced or confirmed | Correctness | See §4 | S–M | NEW |
+| A1 | Fix B1–B15 (§4); B13–B15 are low priority | Reproduced or confirmed | Correctness | See §4 | S–M | NEW |
 | A2 | **Cheaper glyph-cache hash.** Replace SipHash on `GlyphCacheKey` (prepared.rs:309-319, 364) with seeded foldhash (already in Cargo.lock) or a hand-written hash over 2–3 u64 words. Move the hit counter off the shards' cache line (355-361). | Callgrind: 9.7–15.2% of text-page instructions | Directly on the beans gap. *Timing probe pending.* | Exact: no map iteration feeds output | S | NEW |
-| A3 | **Gray8 output rounding** (`surface.rs:270-276`). Keep the 3 mul / 2 add order; replace `round()` with the exact `t = y as i32; t + ((y − t as f32) >= 0.5)` (`(y+0.5) as u8` is **not** exact). | objdump: four `roundf` calls per 4 px. Gray8 output was never timed. | ~2.5–4 ns/px, about 3–4 ms per 1200-px gray page in lege. *Timing probe pending.* | Exact; exhaustive test over 2²⁴ inputs | S | NEW |
+| A3 | **Gray8 output conversion** (`surface.rs:256-289`). Replace the per-pixel `round()` with an exact form. Two were verified **exhaustively over all 2²⁴ inputs**: three 256-entry f32 product tables with floor/compare rounding, or an explicit SSE2 loop at the baseline ISA. `(y+0.5) as u8` and round-half-even are **not** exact: 2,752 inputs land on exact .5 ties. | **Measured:** 7.0–7.2 ms per 1224×1584 page (3.6 ns/px). That is about **5× the entire RGBA render of a text page**. Gray8 is what `lege` requests on every gray-suitable page. | **Measured:** tables 1.5 ns/px (2.3×), SSE2 1.1–1.4 ns/px for page-sized buffers (up to 7.4× in cache). About 3–4 ms saved per 1200-px gray page in lege. | Exact (exhaustive) | S | NEW |
 | A4 | **Remove libm calls where an exact rewrite exists:** `x.floor() as usize` → `x as usize` for clamped non-negative values (`pdf-color/src/icc.rs:154, 315, 453`; `axis_box_taps`); `r.trunc() as i64` → `r as i64` (`pdf-function/src/lib.rs:363`). **Hoist `axis_box_taps` per column and per row** in the generic sampler (now per pixel per axis). | MRC generic path: `axis_box_taps` 13.4% plus libm ~6.7%. Rounding ≥4.5% on vector, ≥6.7% on MRC. | Several % on vector, shading and MRC; more on the generic sampler | Exact per site; no ISA policy change | S each | NEW |
 | A5 | **Gray8 image promotion** (`image.rs:673-697`): write straight into the `Arc` (S), then cache it through `promote_through_cache` as Indexed/ICC already do (M). | DHAT: two 6.31 MB allocations per draw, 68% of bytes on a gray JPEG document; gray JPEG 1.8× slower than colour | ~10 ms and 25 MB transient per 300-dpi draw; one entry shared by lege's analysis and base renders | Exact | S / M | Cost accepted in the AKR gray8 decision; caching NEW |
 | A6 | **Stop `sc`/`scn` rebuilding image colour spaces:** test the array head first, or memoise per resource scope (`interpret.rs:1149-1152, 1557, 3838-3872`). | Per `scn`: 256 tint evaluations (Separation), 65,536 (2-colorant DeviceN), or a 1–3 ms profile inflate (ICC alternate) | Large on spot-colour and press PDFs; fixes FE1 | Exact | S | NEW |
@@ -328,7 +358,7 @@ Every row was traced end to end by a verifier told to refute it. "Reproduced" me
 | B10 | **Shading spans:**<br>- hoist per-column and per-row terms when b = c = 0 (exact, since `(a·x + c·y) + e` with c = ±0);<br>- clamp `/Background` mesh layers to the draw bounds;<br>- build mesh layers at execution time. | `shade_pixel` 17.6% on the transparency page | 2–4× on axial shading spans | Exact | M | PREV (prepared.rs:930-931) |
 | B11 | **Memory bounds:**<br>- byte-bounded `ParseContext` (B8);<br>- a bounded name interner;<br>- release parked surfaces when a thread goes idle or a job ends;<br>- drop clip masks after their last use and prebuild in waves under a byte budget. | §6 | Peak and steady memory | Exact | M | Partly PREV |
 | B12 | **JPX coefficient planes as a strip ring** at the finest level (`t1.rs:150-167`; `stream97.rs`). | 39 MB per layer at 144 DPI; 155 MB at full resolution | ~¾ less decode memory per in-flight JPX | Exact | L | PREV (audit §5.4; phase 5) |
-| B13 | **ISA policy:** `-C target-cpu=x86-64-v2` for distribution builds (Windows 11 24H2 already requires SSE4.2/POPCNT), or `#[target_feature(enable="sse4.1,popcnt")]` multiversions of the raster fill, sampler, shading and Gray8 loops. | 191 call sites to `floorf`/`ceilf`/`roundf`; software popcount in the masked area-min | *ISA probe pending.* | Exact: roundss and roundps are IEEE-exact and there is no FMA. A global flag needs a `cfg(target_feature)` audit (e.g. `wide`'s `f32x4::round` sign of zero). | S flag / M–L multiversion | NEW for the renderer; jp2lam declined target-cpu flags |
+| B13 | **ISA policy:** `-C target-cpu=x86-64-v2` for distribution builds (Windows 11 24H2 already requires SSE4.2/POPCNT), or `#[target_feature(enable="sse4.1,popcnt")]` multiversions of the raster fill, sampler, shading and Gray8 loops. | **Measured:** the baseline build has 290 out-of-line rounding calls in 60 functions; v2 has none. **Output bit-identical across all 624 page/scale/format renders.** | **Measured, single-thread, paired over 7 rounds:** MRC −9% (72 DPI) and −15% (144 DPI), vector −8 to −9%, text with cache misses −9%, text compile stage −24%. **Caveat:** v2's LLVM tuning splits 256-bit unaligned loads in the existing AVX2 kernels, making JPEG scans ~2% slower. `-C target-feature=-slow-unaligned-mem-32` restores parity and stays bit-identical (936/936), but it is an unstable LLVM flag that rustc warns about. | Exact (measured) | S flag / M–L multiversion | NEW for the renderer; jp2lam declined target-cpu flags for portability |
 | B14 | **PGO** (cargo-pgo trained on the perf-manifest classes), plus BOLT for the AppImage. | Large, branchy hot functions (`Interpreter::run` 41.5 KB, `lower_impl` 33.9 KB); no `#[cold]` anywhere | Typically 5–15% on interpreter, parser and entropy-decode work | Exact | L | NEW (jp2lam audit §12.3, unfunded) |
 | B15 | **ARM:** enable jp2lam `simd` in every build (S); NEON kernels for JPEG IDCT/colour, `blend_mask`, `convert_coverage`, bilinear and Gray8 output (L). | Android is arm64-only with no NEON code; pdf-cli/FFI/agent builds get scalar 5/3 and colour transforms | Android, Apple Silicon | Exact (separate mul/add, no `vfma`) | S / L | PREV |
 
@@ -439,7 +469,7 @@ The history favours a particular way of working:
 | Round | Contents | Gate |
 |---|---|---|
 | 0: harness and tests | §7 items 1–7: production-like bench mode, demo reporting, profile parity, border-ring and multi-order determinism tests, a Gray8 timer | The new tests fail on HEAD for B1–B3 and pass after the fixes |
-| 1: correctness | B9 first (crash). Then B1: merge the sibling branch after a GPU layout-detection A/B, plus B6. Then B2–B5, B7, B10–B12 and FE1. | Corpus hashes, with documented intended changes for B1, B3, B4, B5, B6 and B10, plus the new determinism tests |
+| 1: correctness | B9 first (crash). Then B1: merge the sibling branch after a GPU layout-detection A/B, plus B6. Then B2–B5, B7, B10–B12 and FE1. B13–B15 when convenient. | Corpus hashes, with documented intended changes for B1, B3, B4, B5, B6 and B10, plus the new determinism tests |
 | 2: quick exact wins | A2–A21 | Hash-identical; interleaved A/B per item |
 | 3: medium | B1–B11 | Hash-identical; peak-RSS gauges |
 | 4: structural | B12–B15; output-changing options behind knobs | Severity against PDFium on the 60-page set |
@@ -469,7 +499,7 @@ Paths are under `lege-pdf/render/crates/` unless stated.
 | R6 | Tiling re-lowers every tile | P | Tile skipping is exact only with a footprint derived from content. Cells are never clipped to `/BBox`, a conformance gap. |
 | R7 | Compact-window pass 2 is dense | P | One interval per row is already tracked. `fill_into(dst, stride)` is the valuable half. |
 | N2 | Surface reuse never engages under the scheduler | C | Scheduler tools only; production reuses. The scheduler also parks an alias of the returned page, so a fix needs return-on-drop. |
-| — | Raster right-edge clamp makes offscreen content render differently from direct drawing | B14 [pending] | |
+| B14 | Raster right-edge clamp makes offscreen content render differently from direct drawing | P | Confirmed for groups and soft masks. For tiling, the effect is at the fill's left/right edges, not between tiles. Errors are up to 114/255 on shallow edges. |
 
 **Images and colour**
 
