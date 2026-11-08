@@ -5,7 +5,7 @@ build {
     tool "akr 0.6.2"
     grammar "0.1"
     vocabulary "0.2"
-    source_graph "sha256:c31b74afc90d876e7b85a371cc3e94dcb87063e77d296578224474681b3bfd2c"
+    source_graph "sha256:0fdd2527b10c107ea8267d8907c919bc62165a59b9be5cded713f527653f36ef"
 }
 
 source ".akr/project.akr" {
@@ -79,8 +79,8 @@ source ".akr/records/lege-ecosystem/observations.akr" {
 }
 
 source ".akr/records/lege-ecosystem/papercuts.akr" {
-    hash "sha256:ce0a418591488aea78ec0d58e2c8acca5e28d2be87209d7383d1ece76922d715"
-    records 330
+    hash "sha256:fac555be817ca0a287118b37514820da9e65d03a7fd9185685487d77715ea96a"
+    records 332
 }
 
 source ".akr/records/lege-ecosystem/policies.akr" {
@@ -3005,6 +3005,11 @@ seal @lege-ecosystem.papercut.akr-check-0-6-2-raises-akr-g025-exit-status/1 {
     hash "sha256:63673af25d1f3966bff9ef79bbe51c804479dde50c5b790d13a2890fe45411d9"
 }
 
+seal @lege-ecosystem.papercut.akr-explain-decision-lists-relation-names/1 {
+    state verified
+    hash "sha256:73796065b07f84575bfe47a5d141eb8939f009c55f612aa71654d284c8351818"
+}
+
 seal @lege-ecosystem.papercut.akr-import-ingest-of-a-long-planning-document/1 {
     state superseded
     hash "sha256:df3b26501c31eed337c46282567a93583794513753ecce972f723317893413a9"
@@ -3038,6 +3043,11 @@ seal @lege-ecosystem.papercut.akr-mcp-failed-to-connect-and-codegraph-mcp/3 {
 seal @lege-ecosystem.papercut.akr-mcp-failed-to-connect-and-codegraph-mcp/4 {
     state verified
     hash "sha256:c4c7c0b29d6a0afca3ce87e6b683be66087e0d1a9ccfeb9628a7f1c2726e0eff"
+}
+
+seal @lege-ecosystem.papercut.akr-mcp-resolves-its-ledger-once-from-dir-or/1 {
+    state verified
+    hash "sha256:4cf6addcff8d50023f44263c4d528ea509e5ac7551ed9434138d06831bb2dea4"
 }
 
 seal @lege-ecosystem.papercut.akr-mcp-server-failed-to-connect-at-session/1 {

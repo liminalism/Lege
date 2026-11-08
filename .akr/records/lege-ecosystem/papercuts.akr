@@ -406,6 +406,18 @@ record lege-ecosystem.papercut.akr-check-0-6-2-raises-akr-g025-exit-status/1 : p
     created_at 2026-11-05
 }
 
+record lege-ecosystem.papercut.akr-explain-decision-lists-relation-names/1 : papercut {
+    title "akr explain decision lists relation names (supported_by, supersedes,…"
+    state verified
+    statement """
+        akr explain decision lists relation names (supported_by, supersedes, ...) but not the slot-list syntax for them in a --from fragment (supported_by [ @key/1, @key/2 ]). The agent read .akr/records/lege-ecosystem/decisions.akr directly to learn it, which the workflow forbids. Fix: one syntax line in explain_kind (crates/akr-cli/src/commands.rs, relations block); covers knowledge.explain too.
+        """
+    observed_at git:8f2285d884c96e5e6bda816a5dd4b6e6c0f9fd29
+    about "akr"
+    author "claude"
+    created_at 2026-11-08
+}
+
 record lege-ecosystem.papercut.akr-import-ingest-of-a-long-planning-document/1 : papercut {
     title "akr import/ingest of a long planning document promotes essentially…"
     state superseded
@@ -538,6 +550,18 @@ record lege-ecosystem.papercut.akr-mcp-failed-to-connect-and-codegraph-mcp/4 : p
     closed_at 2026-11-04
     supersedes [ @lege-ecosystem.papercut.akr-mcp-failed-to-connect-and-codegraph-mcp/3 ]
     author "dk"
+}
+
+record lege-ecosystem.papercut.akr-mcp-resolves-its-ledger-once-from-dir-or/1 : papercut {
+    title "akr-mcp resolves its ledger once from --dir or the process cwd. A…"
+    state verified
+    statement """
+        akr-mcp resolves its ledger once from --dir or the process cwd. A Claude Code session started in D:\projects (parent of ~21 AKR workspaces) gets AKR-C011 on every knowledge.* call, so the agent fell back to the akr CLI for the whole Lege session. Scoped fix (needs an AKR decision and docs/08-mcp.md edit): optional per-call workspace argument, advertised in tools/list only when the server root has no ledger; AKR-C011 help reworded for MCP callers.
+        """
+    observed_at git:8f2285d884c96e5e6bda816a5dd4b6e6c0f9fd29
+    about "akr"
+    author "claude"
+    created_at 2026-11-08
 }
 
 record lege-ecosystem.papercut.akr-mcp-server-failed-to-connect-at-session/1 : papercut {
