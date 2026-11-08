@@ -184,6 +184,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "foldhash"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
+
+[[package]]
 name = "font-types"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -223,7 +229,7 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "jbig2enc-rust"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "anyhow",
  "fax",
@@ -236,7 +242,7 @@ dependencies = [
 
 [[package]]
 name = "jp2lam"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "jpxl-perceptual",
  "memmap2",
@@ -253,6 +259,8 @@ checksum = "a0370574b86f7eca156b9f298392b5e69a23f8c86f3f865add60bbc2e79467a6"
 [[package]]
 name = "jpxl-perceptual"
 version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b734c38ec7d53fe700caa7036a2ed764c79bb7952afdf1f51173f8fc3982b539"
 
 [[package]]
 name = "lazy_static"
@@ -420,7 +428,7 @@ dependencies = [
 
 [[package]]
 name = "pdf-color"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "pdf-object",
  "thiserror",
@@ -428,7 +436,7 @@ dependencies = [
 
 [[package]]
 name = "pdf-content"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "pdf-color",
  "pdf-document",
@@ -444,7 +452,7 @@ dependencies = [
 
 [[package]]
 name = "pdf-document"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "pdf-object",
  "pdf-profiling",
@@ -457,7 +465,7 @@ dependencies = [
 
 [[package]]
 name = "pdf-font"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "pdf-object",
  "skrifa",
@@ -466,15 +474,15 @@ dependencies = [
 
 [[package]]
 name = "pdf-function"
-version = "0.1.0"
+version = "0.4.0"
 
 [[package]]
 name = "pdf-geom"
-version = "0.1.0"
+version = "0.4.0"
 
 [[package]]
 name = "pdf-image"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "jbig2enc-rust",
  "jp2lam",
@@ -488,7 +496,7 @@ dependencies = [
 
 [[package]]
 name = "pdf-object"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "pdf-syntax",
  "thiserror",
@@ -496,7 +504,7 @@ dependencies = [
 
 [[package]]
 name = "pdf-page-ir"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "bitflags",
  "pdf-geom",
@@ -504,11 +512,11 @@ dependencies = [
 
 [[package]]
 name = "pdf-profiling"
-version = "0.1.0"
+version = "0.4.0"
 
 [[package]]
 name = "pdf-render-api"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "pdf-page-ir",
  "thiserror",
@@ -516,8 +524,9 @@ dependencies = [
 
 [[package]]
 name = "pdf-render-cpu"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
+ "foldhash",
  "pdf-color",
  "pdf-font",
  "pdf-image",
@@ -530,7 +539,7 @@ dependencies = [
 
 [[package]]
 name = "pdf-render-scheduler"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "crossbeam-channel",
  "pdf-content",
@@ -544,7 +553,7 @@ dependencies = [
 
 [[package]]
 name = "pdf-security"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "pdf-object",
  "thiserror",
@@ -552,7 +561,7 @@ dependencies = [
 
 [[package]]
 name = "pdf-source"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "memmap2",
  "thiserror",
@@ -560,7 +569,7 @@ dependencies = [
 
 [[package]]
 name = "pdf-structure"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "flate2",
  "pdf-object",
@@ -571,7 +580,7 @@ dependencies = [
 
 [[package]]
 name = "pdf-syntax"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "pdf-source",
  "thiserror",
