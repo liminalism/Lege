@@ -373,16 +373,40 @@ impl GlyphBitmap {
 pub struct SharedGlyphCache {
     shards: Box<[std::sync::Mutex<GlyphCacheShard>]>,
     per_shard_bytes: usize,
-    hits: std::sync::atomic::AtomicU64,
-    misses: std::sync::atomic::AtomicU64,
     inserts: std::sync::atomic::AtomicU64,
+}
+
+/// Hasher for the glyph-cache shard maps. The derived `Hash` of
+/// [`GlyphCacheKey`] makes about ten small `write_*` calls per key and the map
+/// is probed once per glyph occurrence, so std's SipHash-1-3 was 10-16% of a
+/// text page's instructions. foldhash is far cheaper but must stay seeded:
+/// font bytes, glyph ids and matrices all come from the PDF, so a fixed hash
+/// would let a crafted document pre-compute collisions. Each shard map's
+/// per-hasher seed is drawn from the OS through std's `RandomState` (see
+/// [`glyph_hash_state`]), on top of foldhash's process-wide seed.
+type GlyphHashState = foldhash::fast::SeedableRandomState;
+
+/// A fresh, OS-seeded [`GlyphHashState`] for one shard map.
+fn glyph_hash_state() -> GlyphHashState {
+    use std::hash::{BuildHasher, Hasher};
+    // std seeds `RandomState` from the OS; the finish of an empty hash under
+    // its keys is a uniformly distributed secret u64.
+    let os_seed = std::collections::hash_map::RandomState::new()
+        .build_hasher()
+        .finish();
+    foldhash::fast::SeedableRandomState::with_seed(os_seed, foldhash::SharedSeed::global_random())
 }
 
 #[derive(Debug, Default)]
 struct GlyphCacheShard {
-    map: HashMap<GlyphCacheKey, GlyphCacheEntry>,
+    map: HashMap<GlyphCacheKey, GlyphCacheEntry, GlyphHashState>,
     bytes: usize,
     clock: u64,
+    /// Lookup counters, bumped while the shard lock is already held, so the
+    /// per-glyph probe performs no extra atomic read-modify-write on a line
+    /// shared by every render worker. Summed across shards by `stats()`.
+    hits: u64,
+    misses: u64,
 }
 
 #[derive(Debug)]
@@ -403,14 +427,17 @@ impl SharedGlyphCache {
 
     pub fn new(total_bytes: usize) -> Self {
         let shards = (0..Self::SHARDS)
-            .map(|_| std::sync::Mutex::new(GlyphCacheShard::default()))
+            .map(|_| {
+                std::sync::Mutex::new(GlyphCacheShard {
+                    map: HashMap::with_hasher(glyph_hash_state()),
+                    ..GlyphCacheShard::default()
+                })
+            })
             .collect::<Vec<_>>()
             .into_boxed_slice();
         Self {
             shards,
             per_shard_bytes: (total_bytes / Self::SHARDS).max(1),
-            hits: std::sync::atomic::AtomicU64::new(0),
-            misses: std::sync::atomic::AtomicU64::new(0),
             inserts: std::sync::atomic::AtomicU64::new(0),
         }
     }
@@ -418,11 +445,13 @@ impl SharedGlyphCache {
     /// Lifetime `(hits, misses, inserts)` for the cache measurement report.
     pub fn stats(&self) -> (u64, u64, u64) {
         use std::sync::atomic::Ordering::Relaxed;
-        (
-            self.hits.load(Relaxed),
-            self.misses.load(Relaxed),
-            self.inserts.load(Relaxed),
-        )
+        let (mut hits, mut misses) = (0u64, 0u64);
+        for shard in self.shards.iter() {
+            let shard = lock_unpoisoned(shard);
+            hits += shard.hits;
+            misses += shard.misses;
+        }
+        (hits, misses, self.inserts.load(Relaxed))
     }
 
     fn shard(&self, key: &GlyphCacheKey) -> &std::sync::Mutex<GlyphCacheShard> {
@@ -433,19 +462,17 @@ impl SharedGlyphCache {
     }
 
     fn get(&self, key: &GlyphCacheKey) -> Option<Arc<GlyphBitmap>> {
-        use std::sync::atomic::Ordering::Relaxed;
-        let mut shard = lock_unpoisoned(self.shard(key));
+        let mut guard = lock_unpoisoned(self.shard(key));
+        let shard = &mut *guard;
         shard.clock += 1;
         let clock = shard.clock;
         let Some(entry) = shard.map.get_mut(key) else {
-            drop(shard);
-            self.misses.fetch_add(1, Relaxed);
+            shard.misses += 1;
             return None;
         };
         entry.last_used = clock;
         let bitmap = entry.bitmap.clone();
-        drop(shard);
-        self.hits.fetch_add(1, Relaxed);
+        shard.hits += 1;
         Some(bitmap)
     }
 
