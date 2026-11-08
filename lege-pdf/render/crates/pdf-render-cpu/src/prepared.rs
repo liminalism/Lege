@@ -5371,8 +5371,17 @@ fn jpx_reduce_disabled() -> bool {
 /// Destination footprint of a unit-square image placed by `ctm`, in device
 /// pixels, for codecs that can decode at reduced resolution (Phase 2).
 ///
-/// This is the bounding-box extent of the placed unit square, deliberately
-/// **unclamped** to the surface: a partly off-screen image still covers its
+/// The hint is read as (image width, image height), so it is the extent of
+/// each *image* axis: the unit square's x edge maps to the device vector
+/// `(a, b)` and its y edge to `(c, d)`, giving `(|a| + |b|, |c| + |d|)`. For an
+/// axis-aligned placement that is the device bounding box; a quarter turn
+/// (a /Rotate 90 page, a `cm` rotation) used to hand the codec the device box,
+/// i.e. a swapped pair, so a non-square image decoded one or two levels too
+/// large or too small (B6). For a pure rotation the L1 extent is the rotated
+/// edge's own projected box, which never under-reports the footprint.
+///
+/// The extent is deliberately **unclamped** to the surface: a partly
+/// off-screen image still covers its
 /// full device extent, and clamping would under-report it and risk decoding at
 /// too low a resolution. A degenerate or non-invertible placement yields `None`
 /// (decode at full resolution) — such draws paint nothing anyway.
@@ -5387,26 +5396,14 @@ fn codec_target_size(ctm: Matrix) -> Option<(u32, u32)> {
     if !ctm.is_stably_invertible() {
         return None;
     }
-    let corners = [
-        ctm.apply(Point { x: 0.0, y: 0.0 }),
-        ctm.apply(Point { x: 1.0, y: 0.0 }),
-        ctm.apply(Point { x: 1.0, y: 1.0 }),
-        ctm.apply(Point { x: 0.0, y: 1.0 }),
-    ];
-    let (mut x0, mut y0, mut x1, mut y1) = (
-        f64::INFINITY,
-        f64::INFINITY,
-        f64::NEG_INFINITY,
-        f64::NEG_INFINITY,
-    );
-    for p in corners {
-        x0 = x0.min(p.x);
-        y0 = y0.min(p.y);
-        x1 = x1.max(p.x);
-        y1 = y1.max(p.y);
-    }
-    let w = (x1 - x0).ceil();
-    let h = (y1 - y0).ceil();
+    // Mapped corner differences rather than the raw coefficients, so an
+    // axis-aligned placement gives exactly the same float extents (and decode
+    // level) as the device bounding box always did.
+    let origin = ctm.apply(Point { x: 0.0, y: 0.0 });
+    let x_edge = ctm.apply(Point { x: 1.0, y: 0.0 });
+    let y_edge = ctm.apply(Point { x: 0.0, y: 1.0 });
+    let w = ((x_edge.x - origin.x).abs() + (x_edge.y - origin.y).abs()).ceil();
+    let h = ((y_edge.x - origin.x).abs() + (y_edge.y - origin.y).abs()).ceil();
     if !w.is_finite() || !h.is_finite() || w < 1.0 || h < 1.0 {
         return None;
     }
@@ -7227,6 +7224,79 @@ mod image_cache_tests {
         );
         assert_eq!(unknown.decodes.load(Ordering::Relaxed), 3);
         assert_eq!(cache.stats(), (1, 3, 3), "only the repeated size hits");
+    }
+
+    /// B6: the codec hint is the placed image's extent along its *own* axes
+    /// (width along the image's x axis, height along its y axis), not the
+    /// device-axis bounding box. Equal for axis-aligned placements; a quarter
+    /// turn used to hand the codec a swapped (height, width) pair.
+    #[test]
+    fn codec_target_size_reads_image_axes() {
+        assert_eq!(
+            codec_target_size(Matrix::scale(100.0, 50.0)),
+            Some((100, 50))
+        );
+        assert_eq!(
+            codec_target_size(Matrix::scale(100.0, -50.0)),
+            Some((100, 50))
+        );
+        let moved = Matrix::scale(100.0, 50.0).then(Matrix::translate(37.25, -12.5));
+        assert_eq!(codec_target_size(moved), Some((100, 50)));
+        // Width axis to device (0, 50), height axis to device (-100, 0).
+        let quarter = Matrix {
+            a: 0.0,
+            b: 50.0,
+            c: -100.0,
+            d: 0.0,
+            e: 300.0,
+            f: 0.0,
+        };
+        assert_eq!(codec_target_size(quarter), Some((50, 100)));
+        let three_quarter = Matrix {
+            a: 0.0,
+            b: -50.0,
+            c: 100.0,
+            d: 0.0,
+            e: 0.0,
+            f: 400.0,
+        };
+        assert_eq!(codec_target_size(three_quarter), Some((50, 100)));
+        // A rotation's per-axis extent is its own projected box: 45 degrees
+        // of a 100-unit side spans 100 * sqrt(2) along both device axes.
+        let r = std::f64::consts::FRAC_1_SQRT_2 * 100.0;
+        let diag = Matrix {
+            a: r,
+            b: r,
+            c: -r,
+            d: r,
+            e: 0.0,
+            f: 0.0,
+        };
+        assert_eq!(codec_target_size(diag), Some((142, 142)));
+        // The decode floor composes on the image axes too: a quarter-turn
+        // reference at twice the size raises both axes of the upright draw.
+        let draw = Matrix::scale(16.0, 8.0);
+        let floor = decode_floor_map(
+            Matrix::IDENTITY,
+            Matrix {
+                a: 0.0,
+                b: 2.0,
+                c: -2.0,
+                d: 0.0,
+                e: 0.0,
+                f: 0.0,
+            },
+        );
+        assert_eq!(decode_target_size(draw, floor), Some((32, 16)));
+        let turned = Matrix {
+            a: 0.0,
+            b: 16.0,
+            c: -8.0,
+            d: 0.0,
+            e: 0.0,
+            f: 0.0,
+        };
+        assert_eq!(decode_target_size(turned, None), Some((16, 8)));
     }
 
     /// A decode floor raises a draw's footprint hint to the reference raster's,
