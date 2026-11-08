@@ -681,6 +681,19 @@ fn reconstruct_grayscale_u8_into(
             let max_sample = (1i32 << component.precision) - 1;
             write_gray_plane_i32(&centered, width, shift, max_sample as u32, &mut target);
         }
+        WaveletTransform::Irreversible97
+            if header.cod.decomposition_levels >= 1 && use_common_even_dwt(header) =>
+        {
+            reconstruct_gray_97_fused_into(
+                header,
+                tile.into_real()?,
+                width,
+                height,
+                component.precision,
+                &mut target,
+                stats,
+            )?;
+        }
         WaveletTransform::Irreversible97 => {
             let centered = reconstruct_irreversible_97_centered(
                 header,
@@ -700,6 +713,63 @@ fn reconstruct_grayscale_u8_into(
             .output_pixels
             .saturating_add((target.width * target.height) as u64);
     });
+    Ok(())
+}
+
+/// Irreversible 9/7 gray straight to bytes: every level but the finest runs
+/// into quarter-size buffers, then the finest level is synthesised row by row
+/// and each row is level-shifted, rounded and clamped into the target as it
+/// leaves the synthesis ring. The same kernel and per-sample conversion as the
+/// planar path (`reconstruct_irreversible_97_centered` +
+/// `write_gray_plane_f32`), so the bytes are identical; the full-resolution
+/// `f32` plane is never written or read back (two plane-sized passes fewer).
+/// Callers check `use_common_even_dwt` and at least one level first.
+fn reconstruct_gray_97_fused_into(
+    header: &CodestreamHeader,
+    data: Vec<f32>,
+    width: usize,
+    height: usize,
+    precision: u8,
+    target: &mut PackedWriteTarget<'_>,
+    stats: &mut StatsSink<'_>,
+) -> Result<()> {
+    let levels = header.cod.decomposition_levels;
+    let kernel = PRIMITIVES.kernel;
+    let dwt_start = stats.start();
+    let prefix = if stats.is_enabled() {
+        let mut timing = crate::dwt::InverseDwtTiming::default();
+        let prefix = crate::dwt::inverse_97_2d_even_but_last(
+            data,
+            width,
+            height,
+            levels,
+            kernel,
+            Some(&mut timing),
+        );
+        record_dwt_breakdown(stats, timing);
+        prefix
+    } else {
+        crate::dwt::inverse_97_2d_even_but_last(data, width, height, levels, kernel, None)
+    };
+    record_dwt_time(stats, dwt_start);
+    stats.update(|stats| {
+        stats.reconstructed_pixels = stats
+            .reconstructed_pixels
+            .saturating_add((width * height) as u64);
+    });
+
+    let shift = (1u32 << (precision - 1)) as f32;
+    let max_sample = (1u32 << precision) - 1;
+    let (w, h, sx) = (target.width, target.height, target.source_x);
+    let mut synth = prefix.final_level(kernel, target.source_y);
+    for y in 0..h {
+        let row = synth.next_row();
+        let off = target.pixel_offset(0, y);
+        for (dst, &sample) in target.data[off..off + w].iter_mut().zip(&row[sx..sx + w]) {
+            let value = (sample + shift + 0.5).clamp(0.0, max_sample as f32) as u32;
+            *dst = scale_unsigned_to_u8(value, max_sample);
+        }
+    }
     Ok(())
 }
 
@@ -2318,6 +2388,160 @@ mod pack_kernel_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::j2k::decode_markers::{
+        CodSegment, CodeBlockStyle, ComponentSiz, ProgressionOrder, QcdSegment, SizSegment,
+    };
+
+    fn gray_97_header(width: usize, height: usize, levels: u8) -> CodestreamHeader {
+        CodestreamHeader {
+            siz: SizSegment {
+                rsiz: 0,
+                width: width as u32,
+                height: height as u32,
+                x_origin: 0,
+                y_origin: 0,
+                tile_width: width as u32,
+                tile_height: height as u32,
+                tile_x_origin: 0,
+                tile_y_origin: 0,
+                components: vec![ComponentSiz {
+                    precision: 8,
+                    signed: false,
+                    dx: 1,
+                    dy: 1,
+                }],
+            },
+            cod: CodSegment {
+                progression_order: ProgressionOrder::Lrcp,
+                layers: 1,
+                use_mct: false,
+                decomposition_levels: levels,
+                code_block_width: 64,
+                code_block_height: 64,
+                code_block_style: CodeBlockStyle::default(),
+                transform: WaveletTransform::Irreversible97,
+                uses_precincts: false,
+                sop_markers: false,
+                eph_markers: false,
+                precinct_sizes: Vec::new(),
+            },
+            qcd: QcdSegment {
+                style: QuantizationStyle::ScalarExpounded,
+                guard_bits: 1,
+                steps: vec![QuantizationStep {
+                    exponent: 8,
+                    mantissa: 0,
+                }],
+            },
+            qcc: Vec::new(),
+            coc: Vec::new(),
+            comment_count: 0,
+        }
+    }
+
+    /// Deterministic dequantised subband plane with plenty of values past the
+    /// byte range, so clamping is exercised as well as rounding.
+    fn gray_plane(width: usize, height: usize) -> Vec<f32> {
+        let mut state = 0x2545_F491_4F6C_DD1Du64;
+        (0..width * height)
+            .map(|_| {
+                state ^= state << 13;
+                state ^= state >> 7;
+                state ^= state << 17;
+                ((state >> 40) as f32 / 65536.0 - 0.5) * 400.0
+            })
+            .collect()
+    }
+
+    fn gray_target<'a>(
+        data: &'a mut [u8],
+        stride: usize,
+        origin: (usize, usize),
+        source: (usize, usize),
+        size: (usize, usize),
+    ) -> PackedWriteTarget<'a> {
+        PackedWriteTarget {
+            data,
+            stride,
+            channels: 1,
+            origin_x: origin.0,
+            origin_y: origin.1,
+            source_x: source.0,
+            source_y: source.1,
+            width: size.0,
+            height: size.1,
+            layout: PackedLayout::Sequential,
+        }
+    }
+
+    #[test]
+    fn fused_gray_97_matches_the_planar_path() {
+        // Odd plane sizes and a strided sub-rectangle target: the fused final
+        // level must produce exactly the planar bytes in both shapes.
+        for &(width, height, levels) in &[(37usize, 23usize, 1u8), (64, 48, 3), (5, 9, 2)] {
+            let header = gray_97_header(width, height, levels);
+            let plane = gray_plane(width, height);
+
+            let mut stats = StatsSink::disabled();
+            let planar = reconstruct_irreversible_97_centered(
+                &header,
+                plane.clone(),
+                width,
+                height,
+                &mut stats,
+            )
+            .expect("planar");
+
+            // Whole plane.
+            let mut want = vec![0u8; width * height];
+            write_gray_plane_f32(
+                &planar,
+                width,
+                128.0,
+                255,
+                &mut gray_target(&mut want, width, (0, 0), (0, 0), (width, height)),
+            );
+            let mut got = vec![0u8; width * height];
+            reconstruct_gray_97_fused_into(
+                &header,
+                plane.clone(),
+                width,
+                height,
+                8,
+                &mut gray_target(&mut got, width, (0, 0), (0, 0), (width, height)),
+                &mut stats,
+            )
+            .expect("fused");
+            assert_eq!(got, want, "{width}x{height} levels {levels}");
+
+            // Sub-rectangle into a wider, offset buffer.
+            if width > 6 && height > 6 {
+                let (sx, sy, w, h) = (2usize, 3usize, width - 4, height - 5);
+                let (ox, oy, stride) = (3usize, 1usize, width + 5);
+                let rows = oy + h;
+                let mut want = vec![0xAAu8; stride * rows];
+                write_gray_plane_f32(
+                    &planar,
+                    width,
+                    128.0,
+                    255,
+                    &mut gray_target(&mut want, stride, (ox, oy), (sx, sy), (w, h)),
+                );
+                let mut got = vec![0xAAu8; stride * rows];
+                reconstruct_gray_97_fused_into(
+                    &header,
+                    plane.clone(),
+                    width,
+                    height,
+                    8,
+                    &mut gray_target(&mut got, stride, (ox, oy), (sx, sy), (w, h)),
+                    &mut stats,
+                )
+                .expect("fused window");
+                assert_eq!(got, want, "window of {width}x{height} levels {levels}");
+            }
+        }
+    }
 
     #[test]
     fn fused_ict_pack_matches_staged_ict_then_finalize() {
