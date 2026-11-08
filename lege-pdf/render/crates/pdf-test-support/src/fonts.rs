@@ -228,33 +228,22 @@ fn minimal_ttf_inner(family: Option<&str>, mac_cmap_only: bool) -> Vec<u8> {
 ///
 /// Glyph: `0 600 hsbw`, triangle (100,50) → (900,50) → (500,650), closed.
 pub fn minimal_type1() -> Vec<u8> {
-    /// Adobe's cipher (Type 1 spec §7.2), encrypt direction.
-    fn encrypt(plain: &[u8], key: u16, lead: usize) -> Vec<u8> {
-        const C1: u16 = 52845;
-        const C2: u16 = 22719;
-        let mut r = key;
-        let mut out = Vec::with_capacity(plain.len() + lead);
-        for &p in std::iter::repeat_n(&0x55u8, lead).chain(plain.iter()) {
-            let c = p ^ (r >> 8) as u8;
-            r = (c as u16).wrapping_add(r).wrapping_mul(C1).wrapping_add(C2);
-            out.push(c);
-        }
-        out
-    }
-    /// Type 1 charstring number encoding.
-    fn num(v: i32, out: &mut Vec<u8>) {
-        if (-107..=107).contains(&v) {
-            out.push((v + 139) as u8);
-        } else if (108..=1131).contains(&v) {
-            let v = v - 108;
-            out.push((247 + (v >> 8)) as u8);
-            out.push((v & 0xFF) as u8);
-        } else {
-            out.push(255);
-            out.extend_from_slice(&v.to_be_bytes());
-        }
-    }
+    // Subroutine 0 is `return`, encrypted without the four filler bytes
+    // `/lenIV 4` promises, so it decrypts to nothing: defined but empty.
+    let mut subrs = b"/Subrs 1 array\ndup 0 1 RD ".to_vec();
+    subrs.extend_from_slice(&encrypt(&[11], 4330, 0));
+    subrs.extend_from_slice(b" NP\n");
+    type1_with(&subrs, &[])
+}
 
+/// A bare Type 1 font laid out like [`minimal_type1`], with the same header,
+/// `.notdef` and `A` triangle at code 65. Its private dictionary holds
+/// `subrs` verbatim as the `/Subrs` section, followed by `extra_glyphs` as
+/// more charstrings. Each extra glyph is `(name, plaintext charstring)`,
+/// encrypted here; it is reachable by name, not through the font's built-in
+/// encoding. Use it to build fonts that attack the parser through their
+/// subroutine table.
+pub fn type1_with(subrs: &[u8], extra_glyphs: &[(&str, &[u8])]) -> Vec<u8> {
     // --- the glyph ---------------------------------------------------------
     let mut cs = Vec::new();
     num(0, &mut cs);
@@ -285,18 +274,23 @@ pub fn minimal_type1() -> Vec<u8> {
     let mut private = Vec::new();
     private.extend_from_slice(b"dup /Private 8 dict dup begin\n");
     private.extend_from_slice(b"/lenIV 4 def\n");
-    private.extend_from_slice(b"/Subrs 1 array\n");
-    private.extend_from_slice(b"dup 0 1 RD ");
-    private.extend_from_slice(&encrypt(&[11], 4330, 0)); // subr 0: `return`
-    private.extend_from_slice(b" NP\n");
+    private.extend_from_slice(subrs);
     private.extend_from_slice(b"ND\n");
-    private.extend_from_slice(b"/CharStrings 2 dict dup begin\n");
+    private.extend_from_slice(
+        format!("/CharStrings {} dict dup begin\n", 2 + extra_glyphs.len()).as_bytes(),
+    );
     private.extend_from_slice(format!("/.notdef {} RD ", nd.len()).as_bytes());
     private.extend_from_slice(&nd);
     private.extend_from_slice(b" ND\n");
     private.extend_from_slice(format!("/A {} RD ", cs.len()).as_bytes());
     private.extend_from_slice(&cs);
     private.extend_from_slice(b" ND\n");
+    for (name, plain) in extra_glyphs {
+        let body = encrypt(plain, 4330, 4);
+        private.extend_from_slice(format!("/{name} {} RD ", body.len()).as_bytes());
+        private.extend_from_slice(&body);
+        private.extend_from_slice(b" ND\n");
+    }
     private.extend_from_slice(b"end\nend\nmark currentfile closefile\n");
     let private = encrypt(&private, 55665, 4);
 
@@ -320,4 +314,51 @@ pub fn minimal_type1() -> Vec<u8> {
     }
     out.extend_from_slice(b"cleartomark\n");
     out
+}
+
+/// One `/Subrs` entry for [`type1_with`]: `dup <index> <len> RD <body> NP`,
+/// with `plain` charstring-encrypted under `/lenIV 4`. `index` is written
+/// as given, so it can name a number no integer type holds.
+pub fn type1_subr(index: &str, plain: &[u8]) -> Vec<u8> {
+    let body = encrypt(plain, 4330, 4);
+    let mut out = format!("dup {index} {} RD ", body.len()).into_bytes();
+    out.extend_from_slice(&body);
+    out.extend_from_slice(b" NP\n");
+    out
+}
+
+/// `v` as a Type 1 charstring operand, in the shortest encoding.
+pub fn type1_number(v: i32) -> Vec<u8> {
+    let mut out = Vec::new();
+    num(v, &mut out);
+    out
+}
+
+/// Adobe's cipher (Type 1 spec §7.2), encrypt direction: `lead` filler bytes
+/// (the charstring `/lenIV` or the eexec prefix), then `plain`.
+fn encrypt(plain: &[u8], key: u16, lead: usize) -> Vec<u8> {
+    const C1: u16 = 52845;
+    const C2: u16 = 22719;
+    let mut r = key;
+    let mut out = Vec::with_capacity(plain.len() + lead);
+    for &p in std::iter::repeat_n(&0x55u8, lead).chain(plain.iter()) {
+        let c = p ^ (r >> 8) as u8;
+        r = (c as u16).wrapping_add(r).wrapping_mul(C1).wrapping_add(C2);
+        out.push(c);
+    }
+    out
+}
+
+/// Type 1 charstring number encoding.
+fn num(v: i32, out: &mut Vec<u8>) {
+    if (-107..=107).contains(&v) {
+        out.push((v + 139) as u8);
+    } else if (108..=1131).contains(&v) {
+        let v = v - 108;
+        out.push((247 + (v >> 8)) as u8);
+        out.push((v & 0xFF) as u8);
+    } else {
+        out.push(255);
+        out.extend_from_slice(&v.to_be_bytes());
+    }
 }

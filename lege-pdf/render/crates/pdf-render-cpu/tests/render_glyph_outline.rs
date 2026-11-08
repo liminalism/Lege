@@ -15,7 +15,7 @@ use pdf_render_api::{
     RenderLimits, RenderQuality, RenderRequest,
 };
 use pdf_render_cpu::CpuBackend;
-use pdf_test_support::fonts::minimal_ttf;
+use pdf_test_support::fonts::{minimal_ttf, type1_subr, type1_with};
 
 fn render(program: Arc<[u8]>, dim: u32) -> HostPage {
     render_synth(program, dim, 0.0, 0.0)
@@ -236,6 +236,32 @@ fn stroke_render_mode_outlines_the_glyph() {
         painted_count(&stroke),
         painted_count(&fill)
     );
+}
+
+/// B9 regression at the render boundary. The backend parses
+/// `FontResource::program` itself, so a Type 1 font whose `/Subrs` names an
+/// absurd index reached `parse_subrs` here as well: `dup 10000000000000000`
+/// aborted the process and `dup 18446744073709551615` panicked. The page must
+/// render, and the font's `A` (GID 1, the same triangle as `minimal_ttf`)
+/// must draw from the embedded program rather than fall back to a box.
+#[test]
+fn type1_with_hostile_subr_index_still_renders_the_glyph() {
+    for index in [
+        "10000000000000000",
+        "1000000000000000000",
+        "18446744073709551615",
+        "1000000",
+    ] {
+        let mut subrs = b"/Subrs 2 array\n".to_vec();
+        subrs.extend(type1_subr("0", &[11]));
+        subrs.extend(type1_subr(index, &[11]));
+        let host = render(type1_with(&subrs, &[]).into(), 1000);
+        assert!(painted(&host, 510, 260), "dup {index}: triangle interior");
+        assert!(
+            !painted(&host, 160, 610),
+            "dup {index}: outside the triangle, so not a placement box"
+        );
+    }
 }
 
 #[test]
