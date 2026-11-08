@@ -1369,37 +1369,69 @@ fn paint_axis_aligned_binary_box(
         source_rows.push(img.box_taps_y(fy));
     }
 
-    let output_origin = surface.origin_x;
-
-    // Prefer the summed-area (integral image) box filter: build a running
-    // ones-count table over the referenced source sub-rectangle once, then each
-    // destination box's population count is four table reads instead of a packed
-    // popcount loop. Pure reordering of the same integer arithmetic — the `ones`
-    // count, box area `n`, two-entry mix, and source-over math are identical to
-    // `binary_box_average`, so the output is byte-for-byte unchanged.
-    if let Some(sat) = BilevelIntegral::build(img, &source_columns, &source_rows) {
-        return paint_binary_box_sat(
+    // Prefer the row-band filter: per destination row, weight each referenced
+    // source column's bits down the row's taps once, then every destination
+    // box's weighted ones count is two edge reads and one prefix difference.
+    // The same integers as the per-pixel `binary_box_average`, in another
+    // order, so the output is byte-for-byte unchanged.
+    if let Some(window) = BilevelWindow::new(img, &source_columns, &source_rows) {
+        return paint_binary_box_rows(
             img,
             lut,
             surface,
             cmask,
             &source_columns,
             &source_rows,
-            &sat,
+            &window,
             x0,
             y0,
-            output_origin,
         );
     }
+    paint_binary_box_serial(
+        img,
+        lut,
+        surface,
+        cmask,
+        &source_columns,
+        &source_rows,
+        x0,
+        y0,
+    )
+}
 
+/// The per-pixel minified bilevel loop: each destination box's weighted ones
+/// count by packed popcount (`binary_box_average_with`, which reads the rows
+/// through `get`, so a truncated buffer counts its missing bytes as zero).
+/// The fallback when [`BilevelWindow::new`] declines the draw, and the
+/// reference the row-band filter is tested against.
+#[allow(clippy::too_many_arguments)]
+fn paint_binary_box_serial(
+    img: &crate::image::PreparedImage,
+    lut: ([u8; 4], [u8; 4]),
+    surface: &mut Surface,
+    cmask: Option<&ClipMask>,
+    source_columns: &[Option<crate::image::AxisTaps>],
+    source_rows: &[Option<crate::image::AxisTaps>],
+    x0: usize,
+    y0: usize,
+) -> (u64, u64, u64) {
+    let output_origin = surface.origin_x;
     let mut painted = 0u64;
     let mut attempts = 0u64;
     let mut taps = 0u64;
     // Fixed for the whole draw; resolve it once rather than per pixel.
     let clip_win = cmask.map(ClipMask::clip_window);
-    for (local_y, row_taps) in source_rows.iter().enumerate() {
-        let y = y0 + local_y;
-        let row = surface.row_mut(y);
+    let (output, first_output_y, output_stride) =
+        surface.rows_mut_abs(y0, y0 + source_rows.len());
+    // Align the row table with the clipped output window.
+    let row_offset = first_output_y.saturating_sub(y0);
+    let row_slice = source_rows.get(row_offset..).unwrap_or(&[]);
+    for (i, (row, row_taps)) in output
+        .chunks_exact_mut(output_stride)
+        .zip(row_slice)
+        .enumerate()
+    {
+        let y = first_output_y + i;
         for (local_x, col_taps) in source_columns.iter().enumerate() {
             let x = x0 + local_x;
             let cov = clip_win.as_ref().map_or(255, |cw| cw.coverage(x, y));
@@ -1442,11 +1474,270 @@ fn paint_axis_aligned_binary_box(
     (painted, attempts, taps)
 }
 
+/// The referenced source window of a minified one-bit draw, for the row-band
+/// weighted popcount ([`paint_binary_box_rows`]). It reads the packed rows in
+/// whole bytes from `byte_lo`, so its column index `i` is source column
+/// `byte_lo * 8 + i`; the few columns outside the taps' union only cost a
+/// read.
+struct BilevelWindow<'a> {
+    samples: &'a [u8],
+    row_bytes: usize,
+    byte_lo: usize,
+    nbytes: usize,
+    /// Source rows the draw's taps span, for the parallel decision.
+    rows: usize,
+}
+
+impl<'a> BilevelWindow<'a> {
+    /// `None` (keep the per-pixel loop) when no destination column or row
+    /// maps into the image, when the sample buffer is shorter than the rows
+    /// the taps reach (a truncated JBIG2 or CCITT decode: the window indexes
+    /// rows directly, the per-pixel loop reads them through `get`), or when a
+    /// row's tap weights could overflow the `u32` column sums.
+    fn new(
+        img: &'a crate::image::PreparedImage,
+        source_columns: &[Option<crate::image::AxisTaps>],
+        source_rows: &[Option<crate::image::AxisTaps>],
+    ) -> Option<Self> {
+        let col_lo = source_columns.iter().flatten().map(|t| t.lo).min()?;
+        let col_hi = source_columns.iter().flatten().map(|t| t.hi).max()?;
+        let row_lo = source_rows.iter().flatten().map(|t| t.lo).min()?;
+        let row_hi = source_rows.iter().flatten().map(|t| t.hi).max()?;
+        let max_row_total = source_rows.iter().flatten().map(|t| t.total).max()?;
+        if max_row_total > u32::MAX as u64 {
+            return None;
+        }
+        let row_bytes = img.packed_row_bits() / 8;
+        let byte_lo = col_lo as usize >> 3;
+        let nbytes = (col_hi as usize >> 3) + 1 - byte_lo;
+        let end = (row_hi as usize)
+            .checked_mul(row_bytes)?
+            .checked_add(byte_lo + nbytes)?;
+        if img.samples.len() < end {
+            return None;
+        }
+        Some(Self {
+            samples: &img.samples,
+            row_bytes,
+            byte_lo,
+            nbytes,
+            rows: (row_hi - row_lo) as usize + 1,
+        })
+    }
+
+    /// `colw[i] = Σ_y wy(y)·bit(i, y)` over the source rows of `rows`, each
+    /// row weighted by its tap weight; then `prefix[i] = Σ_{j<i} colw[j]`.
+    /// Returns whether any referenced bit is set (when none is, both stay
+    /// zero and every box of the row counts zero ones).
+    fn column_sums(
+        &self,
+        rows: &crate::image::AxisTaps,
+        colw: &mut [u32],
+        prefix: &mut [u64],
+    ) -> bool {
+        colw.fill(0);
+        let mut any = 0u8;
+        for y in rows.lo..=rows.hi {
+            let wy = rows.weight_at(y) as u32;
+            let start = y as usize * self.row_bytes + self.byte_lo;
+            let src = &self.samples[start..start + self.nbytes];
+            for (&byte, sums) in src.iter().zip(colw.chunks_exact_mut(8)) {
+                if byte == 0 {
+                    continue;
+                }
+                any |= byte;
+                for (k, sum) in sums.iter_mut().enumerate() {
+                    *sum += wy * ((byte >> (7 - k)) & 1) as u32;
+                }
+            }
+        }
+        if any == 0 {
+            return false;
+        }
+        let mut acc = 0u64;
+        prefix[0] = 0;
+        for (p, &c) in prefix[1..].iter_mut().zip(colw.iter()) {
+            acc += c as u64;
+            *p = acc;
+        }
+        true
+    }
+}
+
+/// `Σ_x wx(x)·colw[x]` over the column taps `cols`, with `colw` and its
+/// exclusive prefix from [`BilevelWindow::column_sums`] (index 0 at source
+/// column `base`): the interior columns weigh a full `AXIS_TAP_SCALE`, so
+/// they are one prefix difference. Equals `Σ_y Σ_x wy·wx·bit`, the integer
+/// `BilevelIntegral::weighted_ones` and `binary_box_average` compute.
+#[inline]
+fn row_band_weighted_ones(
+    cols: &crate::image::AxisTaps,
+    base: u32,
+    colw: &[u32],
+    prefix: &[u64],
+) -> u64 {
+    let lo = (cols.lo - base) as usize;
+    let hi = (cols.hi - base) as usize;
+    if lo == hi {
+        return cols.w_lo * colw[lo] as u64;
+    }
+    cols.w_lo * colw[lo] as u64
+        + cols.w_hi * colw[hi] as u64
+        + crate::image::AXIS_TAP_SCALE * (prefix[hi] - prefix[lo + 1])
+}
+
+/// Composite a prepared axis-aligned minified one-bit image with the row-band
+/// weighted popcount ([`BilevelWindow`]). The clip coverage, the two-entry
+/// mix and the source-over arithmetic are the per-pixel loop's
+/// ([`paint_binary_box_serial`]); only the weighted ones count is reordered,
+/// and the mix is memoized across identical `(weight, ones)` runs, which
+/// dominate bilevel scans' long white/black stretches.
+///
+/// Destination rows are independent: each band of them weights its own
+/// source rows into its own scratch and writes only its own output rows, so
+/// bands run across the rayon pool (when `PDF_RENDERER_IMAGE_ROW_PAR` and the
+/// pages in flight allow) without changing a byte. A source row a band shares
+/// with its neighbour is only read twice. The working set is two rows of the
+/// referenced source width per band, where the summed-area table this
+/// replaces held four bytes per referenced source texel (34 MB for a 300-dpi
+/// page, and none at all above its 32M-entry cap, which a 600-dpi Letter page
+/// exceeds).
+#[allow(clippy::too_many_arguments)]
+fn paint_binary_box_rows(
+    img: &crate::image::PreparedImage,
+    (zero, one): ([u8; 4], [u8; 4]),
+    surface: &mut Surface,
+    cmask: Option<&ClipMask>,
+    source_columns: &[Option<crate::image::AxisTaps>],
+    source_rows: &[Option<crate::image::AxisTaps>],
+    window: &BilevelWindow<'_>,
+    x0: usize,
+    y0: usize,
+) -> (u64, u64, u64) {
+    let alpha = img.alpha as u16;
+    let output_origin = surface.origin_x;
+    // Fixed for the whole draw; resolve it once rather than per pixel.
+    let clip_win = cmask.map(ClipMask::clip_window);
+    let base = (window.byte_lo * 8) as u32;
+    let span = window.nbytes * 8;
+
+    let paint_band = |first_y: usize,
+                      band: &mut [u8],
+                      band_rows: &[Option<crate::image::AxisTaps>],
+                      stride: usize|
+     -> (u64, u64, u64) {
+        let mut colw = vec![0u32; span];
+        let mut prefix = vec![0u64; span + 1];
+        let (mut painted, mut attempts, mut taps) = (0u64, 0u64, 0u64);
+        for (i, (row, row_taps)) in band.chunks_exact_mut(stride).zip(band_rows).enumerate() {
+            let y = first_y + i;
+            // Whether any referenced bit of this row's taps is set; when none
+            // is, every box counts zero ones and the sums are not built.
+            let any = row_taps
+                .as_ref()
+                .is_some_and(|ty| window.column_sums(ty, &mut colw, &mut prefix));
+            // All-zero / all-one boxes short-circuit without division; the
+            // mixed boxes memoize on `(weight, weighted ones)`. Clip coverage
+            // and destination blending stay per pixel.
+            let mut memo_key = (u64::MAX, u64::MAX);
+            let mut memo_color = [0u8; 4];
+            for (local_x, col_taps) in source_columns.iter().enumerate() {
+                let x = x0 + local_x;
+                let cov = clip_win.as_ref().map_or(255, |cw| cw.coverage(x, y));
+                if cov == 0 {
+                    continue;
+                }
+                attempts += 1;
+                let (Some(tx), Some(ty)) = (col_taps, row_taps) else {
+                    continue;
+                };
+                let weight = tx.total * ty.total;
+                if weight == 0 {
+                    continue;
+                }
+                taps += (tx.hi - tx.lo + 1) as u64 * (ty.hi - ty.lo + 1) as u64;
+                let ones_w = if any {
+                    row_band_weighted_ones(tx, base, &colw, &prefix)
+                } else {
+                    0
+                };
+                let color = if ones_w == 0 {
+                    zero
+                } else if ones_w >= weight {
+                    one
+                } else if memo_key == (weight, ones_w) {
+                    memo_color
+                } else {
+                    let c = crate::image::mix_bilevel(zero, one, ones_w, weight);
+                    memo_key = (weight, ones_w);
+                    memo_color = c;
+                    c
+                };
+                let a = mul_div_255(mul_div_255(color[3] as u16, alpha), cov);
+                if a == 0 {
+                    continue;
+                }
+                let target = (x - output_origin) * 4;
+                if a == 255 {
+                    row[target] = color[0];
+                    row[target + 1] = color[1];
+                    row[target + 2] = color[2];
+                    row[target + 3] = 255;
+                } else {
+                    let ia = 255 - a;
+                    row[target] = (mul_div_255(color[0] as u16, a)
+                        + mul_div_255(row[target] as u16, ia))
+                        as u8;
+                    row[target + 1] = (mul_div_255(color[1] as u16, a)
+                        + mul_div_255(row[target + 1] as u16, ia))
+                        as u8;
+                    row[target + 2] = (mul_div_255(color[2] as u16, a)
+                        + mul_div_255(row[target + 2] as u16, ia))
+                        as u8;
+                    row[target + 3] = (a + mul_div_255(row[target + 3] as u16, ia)) as u8;
+                }
+                painted += 1;
+            }
+        }
+        (painted, attempts, taps)
+    };
+
+    let dest_w = source_columns.len();
+    let dest_h = source_rows.len();
+    let (output, first_output_y, output_stride) = surface.rows_mut_abs(y0, y0 + dest_h);
+    // Align the row table with the clipped output window.
+    let row_offset = first_output_y.saturating_sub(y0);
+    let row_slice = source_rows.get(row_offset..).unwrap_or(&[]);
+
+    // Fan out on either side of the work: many destination pixels, or a large
+    // source read (a heavily minified page has few of the former).
+    let parallel = image_row_parallel_enabled()
+        && (dest_w.saturating_mul(dest_h) >= IMAGE_ROW_PAR_PIXEL_THRESHOLD
+            || span.saturating_mul(window.rows) >= BILEVEL_ROWS_PAR_MIN_BITS);
+    if parallel {
+        const BAND: usize = 16;
+        output
+            .par_chunks_mut(output_stride * BAND)
+            .zip(row_slice.par_chunks(BAND))
+            .enumerate()
+            .map(|(i, (band, rows))| {
+                paint_band(first_output_y + i * BAND, band, rows, output_stride)
+            })
+            .reduce(|| (0, 0, 0), |a, b| (a.0 + b.0, a.1 + b.1, a.2 + b.2))
+    } else {
+        paint_band(first_output_y, output, row_slice, output_stride)
+    }
+}
+
 /// A summed-area table of set bits over the referenced source sub-rectangle of a
 /// prepared one-bit image. `sat[(ay+1)*stride + (ax+1)]` holds the number of set
 /// bits in the local sub-rectangle rows `0..=ay`, columns `0..=ax`; the first
 /// row and column are zero, so any inclusive box `[ax0..=ax1] × [ay0..=ay1]`
 /// counts its ones in four reads.
+///
+/// Test-only: the oracle the row-band filter ([`BilevelWindow`]) that
+/// replaced it is checked against.
+#[cfg(test)]
 struct BilevelIntegral {
     sat: Vec<u32>,
     stride: usize,
@@ -1454,6 +1745,7 @@ struct BilevelIntegral {
     row_lo: u32,
 }
 
+#[cfg(test)]
 impl BilevelIntegral {
     /// Fill `sat` with the same table the serial walk in [`Self::build`]
     /// produces, in three passes: every block of rows sums from zero in
@@ -1591,7 +1883,7 @@ impl BilevelIntegral {
         // the serial walk below produces. That matters here because the table
         // is the draw's dominant cost: a full-page bilevel scan writes ~100 MB
         // of `u32`, most of it first-touch page faults, and those parallelize.
-        if image_row_parallel_enabled() && entries >= BILEVEL_SAT_PAR_MIN_ENTRIES {
+        if image_row_parallel_enabled() && entries >= BILEVEL_ROWS_PAR_MIN_BITS {
             Self::fill_parallel(&mut sat, samples, stride, sw, sh, row_bits, col_lo, row_lo);
         } else {
             for ly in 0..sh {
@@ -1683,127 +1975,6 @@ impl BilevelIntegral {
             }
         }
         acc.max(0) as u64
-    }
-}
-
-/// Composite a prepared axis-aligned minified one-bit image using a summed-area
-/// table for the per-box population count. The clip coverage and source-over
-/// arithmetic are identical to the per-pixel path; only the ones-count and the
-/// two-entry mix are reordered (memoized across identical `(n, ones)` runs,
-/// which dominate bilevel scans' long white/black stretches).
-#[allow(clippy::too_many_arguments)]
-fn paint_binary_box_sat(
-    img: &crate::image::PreparedImage,
-    (zero, one): ([u8; 4], [u8; 4]),
-    surface: &mut Surface,
-    cmask: Option<&ClipMask>,
-    source_columns: &[Option<crate::image::AxisTaps>],
-    source_rows: &[Option<crate::image::AxisTaps>],
-    sat: &BilevelIntegral,
-    x0: usize,
-    y0: usize,
-    output_origin: usize,
-) -> (u64, u64, u64) {
-    let alpha = img.alpha as u16;
-    // Fixed for the whole draw; resolve it once rather than per pixel.
-    let clip_win = cmask.map(ClipMask::clip_window);
-
-    // One destination row: it reads the shared summed-area table and the axis
-    // tables, and writes only its own output row, so rows are independent.
-    // The mix memo below is a pure function of `(weight, weighted ones)`, so
-    // giving each row its own memo changes only how often the division is
-    // repeated, never the colour it yields.
-    let paint_row =
-        |y: usize, row_taps: &Option<crate::image::AxisTaps>, row: &mut [u8]| -> (u64, u64, u64) {
-            let mut painted = 0u64;
-            let mut attempts = 0u64;
-            let mut taps = 0u64;
-            // All-zero / all-one boxes short-circuit without division; the mixed
-            // boxes memoize on `(weight, weighted ones)` — long runs of identical
-            // fractional boxes (repeated column patterns) then cost one division
-            // set, not one per pixel. Clip coverage and destination blending stay
-            // per pixel.
-            let mut memo_key = (u64::MAX, u64::MAX);
-            let mut memo_color = [0u8; 4];
-            for (local_x, col_taps) in source_columns.iter().enumerate() {
-                let x = x0 + local_x;
-                let cov = clip_win.as_ref().map_or(255, |cw| cw.coverage(x, y));
-                if cov == 0 {
-                    continue;
-                }
-                attempts += 1;
-                let (Some(tx), Some(ty)) = (col_taps, row_taps) else {
-                    continue;
-                };
-                let weight = tx.total * ty.total;
-                if weight == 0 {
-                    continue;
-                }
-                taps += (tx.hi - tx.lo + 1) as u64 * (ty.hi - ty.lo + 1) as u64;
-                let ones_w = sat.weighted_ones(tx, ty);
-                let color = if ones_w == 0 {
-                    zero
-                } else if ones_w >= weight {
-                    one
-                } else if memo_key == (weight, ones_w) {
-                    memo_color
-                } else {
-                    let c = crate::image::mix_bilevel(zero, one, ones_w, weight);
-                    memo_key = (weight, ones_w);
-                    memo_color = c;
-                    c
-                };
-                let a = mul_div_255(mul_div_255(color[3] as u16, alpha), cov);
-                if a == 0 {
-                    continue;
-                }
-                let target = (x - output_origin) * 4;
-                if a == 255 {
-                    row[target] = color[0];
-                    row[target + 1] = color[1];
-                    row[target + 2] = color[2];
-                    row[target + 3] = 255;
-                } else {
-                    let ia = 255 - a;
-                    row[target] = (mul_div_255(color[0] as u16, a)
-                        + mul_div_255(row[target] as u16, ia))
-                        as u8;
-                    row[target + 1] = (mul_div_255(color[1] as u16, a)
-                        + mul_div_255(row[target + 1] as u16, ia))
-                        as u8;
-                    row[target + 2] = (mul_div_255(color[2] as u16, a)
-                        + mul_div_255(row[target + 2] as u16, ia))
-                        as u8;
-                    row[target + 3] = (a + mul_div_255(row[target + 3] as u16, ia)) as u8;
-                }
-                painted += 1;
-            }
-            (painted, attempts, taps)
-        };
-
-    let dest_w = source_columns.len();
-    let dest_h = source_rows.len();
-    let (output, first_output_y, output_stride) = surface.rows_mut_abs(y0, y0 + dest_h);
-    // Align the row table with the clipped output window.
-    let row_offset = first_output_y.saturating_sub(y0);
-    let row_slice = source_rows.get(row_offset..).unwrap_or(&[]);
-
-    let parallel = image_row_parallel_enabled()
-        && dest_w.saturating_mul(dest_h) >= IMAGE_ROW_PAR_PIXEL_THRESHOLD;
-    if parallel {
-        output
-            .par_chunks_mut(output_stride)
-            .zip(row_slice.par_iter())
-            .enumerate()
-            .map(|(i, (row, taps))| paint_row(first_output_y + i, taps, row))
-            .reduce(|| (0, 0, 0), |a, b| (a.0 + b.0, a.1 + b.1, a.2 + b.2))
-    } else {
-        output
-            .chunks_exact_mut(output_stride)
-            .zip(row_slice.iter())
-            .enumerate()
-            .map(|(i, (row, taps))| paint_row(first_output_y + i, taps, row))
-            .fold((0, 0, 0), |a, b| (a.0 + b.0, a.1 + b.1, a.2 + b.2))
     }
 }
 
@@ -3901,10 +4072,11 @@ fn bilevel_smask_coverage_windowed(
     ones_w as f32 / weight as f32
 }
 
-/// Table size above which the bilevel summed-area table is filled across the
-/// rayon pool. Below it the serial walk is already a fraction of a millisecond
-/// and the fan-out would not pay for itself.
-const BILEVEL_SAT_PAR_MIN_ENTRIES: usize = 1 << 20;
+/// Referenced source bits above which a minified bilevel draw weights its
+/// source rows across the rayon pool even when its destination is small.
+/// Below it the serial walk is already a fraction of a millisecond and the
+/// fan-out would not pay for itself.
+const BILEVEL_ROWS_PAR_MIN_BITS: usize = 1 << 20;
 
 /// Destination-pixel count above which an image draw paints its independent
 /// destination rows across the rayon pool. Mirrors the bilinear fast path's
@@ -6758,6 +6930,228 @@ mod rgb8_area_min_tests {
             let (mut want, _) = generic_masked_reference(img, side, side);
             assert_surfaces_equal(&mut got, &mut want, what);
         }
+    }
+
+    /// A one-bit gray image of `sw x sh` packed bits from `bits`, placed at
+    /// device `(ox, oy)` with size `w x h` (a negative size mirrors that axis).
+    #[allow(clippy::too_many_arguments)]
+    fn bilevel_image(
+        sw: u32,
+        sh: u32,
+        bits: Vec<u8>,
+        ox: f64,
+        oy: f64,
+        w: f64,
+        h: f64,
+    ) -> PreparedImage {
+        let mut img = make_image(sw, sh, 1, 1, bits);
+        img.bpc = 1;
+        img.color_space = ImageColorSpace::Gray;
+        img.sample_lut = crate::image::build_sample_lut(1, &ImageColorSpace::Gray, None, false);
+        // Device -> unit square, either orientation.
+        img.inv = Matrix {
+            a: 1.0 / w,
+            b: 0.0,
+            c: 0.0,
+            d: 1.0 / h,
+            e: -ox / w,
+            f: -oy / h,
+        };
+        let (lx, hx) = (ox.min(ox + w), ox.max(ox + w));
+        let (ly, hy) = (oy.min(oy + h), oy.max(oy + h));
+        img.bounds = DeviceRect {
+            x: lx.floor() as i32,
+            y: ly.floor() as i32,
+            width: (hx.ceil() - lx.floor()) as u32,
+            height: (hy.ceil() - ly.floor()) as u32,
+        };
+        img.footprint = [sw as f64 / w.abs(), sh as f64 / h.abs()];
+        img
+    }
+
+    /// The per-column and per-row taps `paint_axis_aligned_binary_box` builds.
+    fn binary_taps(
+        img: &PreparedImage,
+    ) -> (
+        Vec<Option<crate::image::AxisTaps>>,
+        Vec<Option<crate::image::AxisTaps>>,
+    ) {
+        let b = img.bounds;
+        let cols = (b.x as usize..b.x as usize + b.width as usize)
+            .map(|x| {
+                let u = img.inv.a * (x as f64 + 0.5) + img.inv.e;
+                (0.0..1.0)
+                    .contains(&u)
+                    .then(|| img.box_taps_x(u * img.width as f64 - 0.5))
+                    .flatten()
+            })
+            .collect();
+        let rows = (b.y as usize..b.y as usize + b.height as usize)
+            .map(|y| {
+                let v = img.inv.d * (y as f64 + 0.5) + img.inv.f;
+                (0.0..1.0)
+                    .contains(&v)
+                    .then(|| img.box_taps_y((1.0 - v) * img.height as f64 - 0.5))
+                    .flatten()
+            })
+            .collect();
+        (cols, rows)
+    }
+
+    /// The row-band weighted ones count must equal the summed-area table's
+    /// and the direct per-row weighted popcount, for every destination box of
+    /// random bilevel images at random fractional (and mirrored) minifying
+    /// placements, including widths that are not a whole number of bytes
+    /// and windows that start mid-byte.
+    #[test]
+    fn row_band_weighted_ones_match_the_sat_and_the_direct_count() {
+        let mut rng = Rng(0x2b0b_a11d_0e5e_1f00);
+        let mut boxes = 0u64;
+        for trial in 0..60 {
+            let sw = 3 + (rng.next() % 140) as u32;
+            let sh = 3 + (rng.next() % 120) as u32;
+            let row_bytes = (sw as usize).div_ceil(8);
+            // Mostly sparse, sometimes dense, so the zero-row shortcut and
+            // full bytes are both exercised.
+            let dense = trial % 3 == 0;
+            let bits: Vec<u8> = (0..row_bytes * sh as usize)
+                .map(|_| {
+                    let b = rng.byte();
+                    if dense || b < 40 { rng.byte() } else { 0 }
+                })
+                .collect();
+            let scale = 1.05 + (rng.next() % 1000) as f64 / 150.0;
+            let (w, h) = (sw as f64 / scale, sh as f64 / (scale * 0.8 + 0.3));
+            let (w, h) = if trial % 4 == 1 { (-w, h) } else { (w, h) };
+            let (w, h) = if trial % 5 == 2 { (w, -h) } else { (w, h) };
+            let ox = 1.0 + (rng.next() % 100) as f64 / 37.0 + if w < 0.0 { -w } else { 0.0 };
+            let oy = 0.5 + (rng.next() % 100) as f64 / 41.0 + if h < 0.0 { -h } else { 0.0 };
+            let img = bilevel_image(sw, sh, bits, ox, oy, w, h);
+            let (cols, rows) = binary_taps(&img);
+            if cols.iter().all(Option::is_none) || rows.iter().all(Option::is_none) {
+                // No destination pixel centre lands in the image.
+                assert!(BilevelWindow::new(&img, &cols, &rows).is_none());
+                assert!(BilevelIntegral::build(&img, &cols, &rows).is_none());
+                continue;
+            }
+            let window = BilevelWindow::new(&img, &cols, &rows).expect("complete samples");
+            let sat = BilevelIntegral::build(&img, &cols, &rows).expect("small table");
+            let base = (window.byte_lo * 8) as u32;
+            let mut colw = vec![0u32; window.nbytes * 8];
+            let mut prefix = vec![0u64; window.nbytes * 8 + 1];
+            let row_bits = img.packed_row_bits();
+            for ty in rows.iter().flatten() {
+                let any = window.column_sums(ty, &mut colw, &mut prefix);
+                for tx in cols.iter().flatten() {
+                    let banded = if any {
+                        row_band_weighted_ones(tx, base, &colw, &prefix)
+                    } else {
+                        0
+                    };
+                    let direct: u64 = (ty.lo..=ty.hi)
+                        .map(|y| {
+                            ty.weight_at(y)
+                                * crate::image::weighted_row_ones_in(
+                                    &img.samples,
+                                    y as usize * row_bits,
+                                    tx,
+                                )
+                        })
+                        .sum();
+                    assert_eq!(banded, direct, "trial {trial} tx={tx:?} ty={ty:?}");
+                    assert_eq!(sat.weighted_ones(tx, ty), direct, "trial {trial}");
+                    boxes += 1;
+                }
+            }
+        }
+        assert!(boxes > 10_000, "{boxes} boxes");
+    }
+
+    /// The row-band painter must leave the same bytes as the per-pixel loop
+    /// it replaced the summed-area table in front of: gray and stencil
+    /// tables, with and without a clip mask, opaque and partial alpha, over a
+    /// backdrop.
+    #[test]
+    fn row_band_paint_matches_the_per_pixel_loop() {
+        let mut rng = Rng(0x0dd_ba11_c0de_5eed);
+        for trial in 0..24 {
+            let (sw, sh) = (40 + (rng.next() % 90) as u32, 30 + (rng.next() % 90) as u32);
+            let row_bytes = (sw as usize).div_ceil(8);
+            let bits: Vec<u8> = (0..row_bytes * sh as usize).map(|_| rng.byte()).collect();
+            let scale = 1.2 + (rng.next() % 100) as f64 / 25.0;
+            let (w, h) = (sw as f64 / scale, sh as f64 / scale);
+            let (ox, oy) = (1.3 + (trial % 3) as f64 * 0.27, 0.6 + (trial % 4) as f64 * 0.21);
+            let mut img = bilevel_image(sw, sh, bits, ox, oy, w, h);
+            img.alpha = if trial % 2 == 0 { 255 } else { 140 };
+            let lut = if trial % 3 == 2 {
+                img.is_stencil = true;
+                img.sample_lut = None;
+                img.stencil_rgb = [10, 120, 230];
+                img.stencil_bilevel_lut().unwrap()
+            } else {
+                img.binary_box_lut().unwrap()
+            };
+            let side = (ox + w).max(oy + h).ceil() as u32 + 2;
+            let clip = (trial % 4 >= 2).then(|| random_clip(side, &mut rng));
+            let (cols, rows) = binary_taps(&img);
+            let (x0, y0) = (img.bounds.x as usize, img.bounds.y as usize);
+            let (x1, y1) = (
+                x0 + img.bounds.width as usize,
+                y0 + img.bounds.height as usize,
+            );
+            let seed = rng.next();
+            let mut got = backdrop(side, seed);
+            let banded =
+                paint_axis_aligned_binary_box(&img, lut, &mut got, clip.as_ref(), x0, y0, x1, y1);
+            let mut want = backdrop(side, seed);
+            let serial =
+                paint_binary_box_serial(&img, lut, &mut want, clip.as_ref(), &cols, &rows, x0, y0);
+            let what = format!("trial {trial}: {sw}x{sh} at ({ox}, {oy}) size {w}x{h}");
+            assert_surfaces_equal(&mut got, &mut want, &what);
+            assert_eq!(banded.0, serial.0, "{what}: painted");
+        }
+    }
+
+    /// A 600-dpi Letter page (5100 x 6600 = 33.7M bits) is over the summed-area
+    /// table's 32M-entry cap, so before the row-band filter it fell to the
+    /// serial per-pixel loop. The row-band filter takes it and paints the same
+    /// bytes. A truncated buffer still takes the per-pixel loop (which reads
+    /// the missing bytes as zero) instead of indexing past the end.
+    #[test]
+    fn row_band_paints_a_600_dpi_page_and_declines_a_truncated_one() {
+        let mut rng = Rng(0x600d_0600_d0d0_6006);
+        let (sw, sh) = (5100u32, 6600u32);
+        let row_bytes = (sw as usize).div_ceil(8);
+        let bits: Vec<u8> = (0..row_bytes * sh as usize)
+            .map(|i| if (i / row_bytes) % 40 < 25 { rng.byte() & rng.byte() } else { 0 })
+            .collect();
+        // 72 dpi: 612 x 792 device pixels at a fractional offset.
+        let img = bilevel_image(sw, sh, bits, 0.4, 0.3, 612.0, 792.0);
+        let (cols, rows) = binary_taps(&img);
+        assert!(
+            BilevelIntegral::build(&img, &cols, &rows).is_none(),
+            "over the old table cap"
+        );
+        assert!(BilevelWindow::new(&img, &cols, &rows).is_some());
+        let lut = img.binary_box_lut().unwrap();
+        let side = 794u32;
+        let mut got = backdrop(side, 7);
+        paint_axis_aligned_binary_box(&img, lut, &mut got, None, 0, 0, 613, 793);
+        let mut want = backdrop(side, 7);
+        paint_binary_box_serial(&img, lut, &mut want, None, &cols, &rows, 0, 0);
+        assert_surfaces_equal(&mut got, &mut want, "600 dpi");
+
+        // Truncated: drop the last 100 rows' bytes.
+        let mut short = bilevel_image(400, 300, vec![0x5a; 50 * 300], 0.5, 0.5, 61.0, 47.0);
+        short.samples = Arc::from(&short.samples[..50 * 200]);
+        let (cols, rows) = binary_taps(&short);
+        assert!(BilevelWindow::new(&short, &cols, &rows).is_none());
+        let lut = short.binary_box_lut().unwrap();
+        let mut got = backdrop(64, 9);
+        paint_axis_aligned_binary_box(&short, lut, &mut got, None, 0, 0, 62, 48);
+        let mut want = backdrop(64, 9);
+        paint_binary_box_serial(&short, lut, &mut want, None, &cols, &rows, 0, 0);
+        assert_surfaces_equal(&mut got, &mut want, "truncated");
     }
 
     /// Compare only the pixels the generic body paints at full weight
