@@ -7,6 +7,8 @@ use liminal_annotator::canvas::draw::{PageRaster, render_page};
 use liminal_annotator::canvas::viewport::{CanvasRect, ViewTransform};
 use liminal_annotator::image_io::decode::{decode_page, synthetic_page};
 
+const ITERS: usize = 200;
+
 fn main() {
     let img = match std::env::args().nth(1) {
         Some(p) => decode_page(std::path::Path::new(&p)).expect("decode"),
@@ -21,13 +23,25 @@ fn main() {
             h: h as f64,
         };
         let fit = ViewTransform::fit(canvas, img.width() as f64, img.height() as f64, 8.0);
+        let mut cases: Vec<(&str, ViewTransform)> = Vec::new();
         for zoom in [1.0, 1.2, 1.0 / fit.scale, 3.0 / fit.scale] {
             let mut view = fit;
             view.zoom_at(Point::new(w as f64 / 2.0, h as f64 / 2.0), zoom);
+            cases.push(("", view));
+        }
+        // Exactly 100% on whole pixels: the straight-copy path.
+        cases.push((
+            "100% exact",
+            ViewTransform {
+                origin: Point::new(((w - img.width()) / 2) as f64, 40.0),
+                scale: 1.0,
+            },
+        ));
+        for (label, view) in cases {
             for threads in [1usize, 4, 8] {
                 let mut r = PageRaster::default();
                 let mut times = Vec::new();
-                for i in 0..40 {
+                for i in 0..ITERS {
                     let mut v = view;
                     v.origin.x += (i % 2) as f64; // defeat nothing: every call renders
                     let t = Instant::now();
@@ -36,8 +50,10 @@ fn main() {
                 }
                 times.sort_by(|a, b| a.total_cmp(b));
                 println!(
-                    "{w}x{h} scale {:>5.2} threads {threads}: p50 {:>6.2} ms  p95 {:>6.2} ms",
-                    view.scale, times[20], times[38]
+                    "{w}x{h} scale {:>5.2} threads {threads}: p50 {:>6.2} ms  p95 {:>6.2} ms {label}",
+                    view.scale,
+                    times[ITERS / 2],
+                    times[ITERS * 95 / 100]
                 );
             }
         }

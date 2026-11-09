@@ -123,6 +123,9 @@ struct Plan {
     yt: Vec<Tap>,
     x_valid: (usize, usize),
     nearest: bool,
+    /// Nearest sampling where consecutive columns read consecutive source
+    /// pixels (exactly 100%): rows are straight copies.
+    contiguous: bool,
     level: usize,
 }
 
@@ -153,12 +156,70 @@ fn plan(img: &PageImage, view: &ViewTransform, x: i32, y: i32, w: u32, h: u32) -
     );
     let xa = xt.iter().position(|t| t.valid).unwrap_or(xt.len());
     let xb = xt.iter().rposition(|t| t.valid).map_or(xa, |i| i + 1);
+    let contiguous = nearest && xt[xa..xb].windows(2).all(|p| p[1].i0 == p[0].i0 + 1);
     Plan {
         xt,
         yt,
         x_valid: (xa, xb),
         nearest,
+        contiguous,
         level,
+    }
+}
+
+/// Source rows resampled horizontally, two at a time.
+///
+/// Bilinear output is a horizontal blend of two source rows followed by a
+/// vertical blend of the results. Consecutive output rows read the same or
+/// adjacent source rows, so each source row is resampled once and reused
+/// instead of once per output row that touches it.
+struct HRows {
+    id: [usize; 2],
+    buf: [Vec<u32>; 2],
+}
+
+impl HRows {
+    fn new(n: usize) -> HRows {
+        HRows {
+            id: [usize::MAX; 2],
+            buf: [vec![0; n], vec![0; n]],
+        }
+    }
+
+    /// The slot holding source row `row` resampled over `xt`, never evicting
+    /// slot `keep`. Rows are requested in non-decreasing order, so the
+    /// smaller id is the stale one.
+    fn get(&mut self, row: usize, keep: Option<usize>, lvl: &Level, xt: &[Tap]) -> usize {
+        if let Some(slot) = self.id.iter().position(|&r| r == row) {
+            return slot;
+        }
+        let slot = match keep {
+            Some(k) => 1 - k,
+            None => usize::from(self.id[0] > self.id[1]),
+        };
+        let lw = lvl.w as usize;
+        let src = &lvl.px[row * lw..row * lw + lw];
+        row_blend_x(&mut self.buf[slot], src, xt);
+        self.id[slot] = row;
+        slot
+    }
+}
+
+// Bilinear row kernels, kept out of line so each loop is compiled on its own.
+
+/// Horizontal blend of one source row into `out`.
+#[inline(never)]
+fn row_blend_x(out: &mut [u32], a: &[u32], xt: &[Tap]) {
+    for (o, tx) in out.iter_mut().zip(xt) {
+        *o = lerp_px(a[tx.i0 as usize], a[tx.i1 as usize], tx.w);
+    }
+}
+
+/// Vertical blend of two horizontally resampled rows.
+#[inline(never)]
+fn row_blend_y(out: &mut [u32], top: &[u32], bot: &[u32], wy: u32) {
+    for ((o, &t), &b) in out.iter_mut().zip(top).zip(bot) {
+        *o = lerp_px(t, b, wy);
     }
 }
 
@@ -174,10 +235,32 @@ fn render_rows(
     lvl: &Level,
     bg: u32,
 ) {
+    if p.nearest {
+        render_rows_nearest(dst, w, row0, cols, p, lvl, bg);
+    } else {
+        render_rows_bilinear(dst, w, row0, cols, p, lvl, bg);
+    }
+}
+
+/// The page's column range on the raster, clipped to `cols`.
+fn page_cols(p: &Plan, cols: (usize, usize)) -> (usize, usize) {
+    let a0 = p.x_valid.0.clamp(cols.0, cols.1);
+    (a0, p.x_valid.1.clamp(a0, cols.1))
+}
+
+/// Nearest-neighbour rows: a gather, or a straight copy at exactly 100%.
+fn render_rows_nearest(
+    dst: &mut [u32],
+    w: usize,
+    row0: usize,
+    cols: (usize, usize),
+    p: &Plan,
+    lvl: &Level,
+    bg: u32,
+) {
     let lw = lvl.w as usize;
     let (c0, c1) = cols;
-    let a0 = p.x_valid.0.clamp(c0, c1);
-    let a1 = p.x_valid.1.clamp(a0, c1);
+    let (a0, a1) = page_cols(p, cols);
     for (r, row) in dst.chunks_exact_mut(w).enumerate() {
         let ty = p.yt[row0 + r];
         let row = &mut row[c0..c1];
@@ -190,25 +273,57 @@ fn render_rows(
         let out = &mut row[a0 - c0..a1 - c0];
         let xt = &p.xt[a0..a1];
         let a = &lvl.px[ty.i0 as usize * lw..ty.i0 as usize * lw + lw];
-        if p.nearest {
-            for (o, tx) in out.iter_mut().zip(xt) {
-                *o = a[tx.i0 as usize];
-            }
+        if p.contiguous {
+            let start = xt[0].i0 as usize;
+            out.copy_from_slice(&a[start..start + out.len()]);
             continue;
         }
-        let wy = ty.w;
-        if wy == 0 {
-            for (o, tx) in out.iter_mut().zip(xt) {
-                *o = lerp_px(a[tx.i0 as usize], a[tx.i1 as usize], tx.w);
-            }
+        row_gather(out, a, xt);
+    }
+}
+
+/// Nearest-neighbour gather of one row.
+#[inline(never)]
+fn row_gather(out: &mut [u32], a: &[u32], xt: &[Tap]) {
+    for (o, tx) in out.iter_mut().zip(xt) {
+        *o = a[tx.i0 as usize];
+    }
+}
+
+/// Bilinear rows, with each source row resampled horizontally once.
+fn render_rows_bilinear(
+    dst: &mut [u32],
+    w: usize,
+    row0: usize,
+    cols: (usize, usize),
+    p: &Plan,
+    lvl: &Level,
+    bg: u32,
+) {
+    let lw = lvl.w as usize;
+    let (c0, c1) = cols;
+    let (a0, a1) = page_cols(p, cols);
+    let xt = &p.xt[a0..a1];
+    let mut hrows: Option<HRows> = None;
+    for (r, row) in dst.chunks_exact_mut(w).enumerate() {
+        let ty = p.yt[row0 + r];
+        let row = &mut row[c0..c1];
+        if !ty.valid || a0 == a1 {
+            row.fill(bg);
             continue;
         }
-        let b = &lvl.px[ty.i1 as usize * lw..ty.i1 as usize * lw + lw];
-        for (o, tx) in out.iter_mut().zip(xt) {
-            let top = lerp_px(a[tx.i0 as usize], a[tx.i1 as usize], tx.w);
-            let bot = lerp_px(b[tx.i0 as usize], b[tx.i1 as usize], tx.w);
-            *o = lerp_px(top, bot, wy);
+        row[..a0 - c0].fill(bg);
+        row[a1 - c0..].fill(bg);
+        let out = &mut row[a0 - c0..a1 - c0];
+        if ty.w == 0 {
+            let a = &lvl.px[ty.i0 as usize * lw..ty.i0 as usize * lw + lw];
+            row_blend_x(out, a, xt);
+            continue;
         }
+        let hrows = hrows.get_or_insert_with(|| HRows::new(a1 - a0));
+        let top = hrows.get(ty.i0 as usize, None, lvl, xt);
+        let bot = hrows.get(ty.i1 as usize, Some(top), lvl, xt);
+        row_blend_y(out, &hrows.buf[top], &hrows.buf[bot], ty.w);
     }
 }
 
@@ -520,6 +635,122 @@ mod tests {
             !scroll_page(&mut a, &img, &v, 0, 0, 0.5, 0.0, 1),
             "fractional pans re-render"
         );
+    }
+
+    /// Image w, h, scale, origin, canvas x, y, w, h, threads.
+    type Case = (u32, u32, f64, (f64, f64), i32, i32, u32, u32, usize);
+
+    /// The original per-pixel formulation: one bilinear sample per output
+    /// pixel (horizontal blend of two source rows, then a vertical blend),
+    /// with no row reuse and no copy path. `render_page` must match it bit
+    /// for bit.
+    fn reference_render(
+        img: &PageImage,
+        view: &ViewTransform,
+        x: i32,
+        y: i32,
+        w: u32,
+        h: u32,
+    ) -> Vec<u32> {
+        let p = plan(img, view, x, y, w, h);
+        let lvl = &img.levels[p.level];
+        let lw = lvl.w as usize;
+        let mut out = Vec::with_capacity((w * h) as usize);
+        for ty in &p.yt {
+            for tx in &p.xt {
+                out.push(if !ty.valid || !tx.valid {
+                    CANVAS_BG
+                } else if p.nearest {
+                    lvl.px[ty.i0 as usize * lw + tx.i0 as usize]
+                } else {
+                    let at = |row: u32, col: u32| lvl.px[row as usize * lw + col as usize];
+                    let top = lerp_px(at(ty.i0, tx.i0), at(ty.i0, tx.i1), tx.w);
+                    if ty.w == 0 {
+                        top
+                    } else {
+                        let bot = lerp_px(at(ty.i1, tx.i0), at(ty.i1, tx.i1), tx.w);
+                        lerp_px(top, bot, ty.w)
+                    }
+                });
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn render_matches_the_per_pixel_reference() {
+        // Minified by mips, bilinear 1x-2x, nearest from 2x, 1:1 on whole and
+        // fractional origins, pages partly or wholly off the canvas, and a
+        // canvas large enough to split across threads.
+        let cases: &[Case] = &[
+            (300, 400, 0.31, (-20.25, 10.5), 5, 40, 200, 150, 1),
+            (300, 400, 0.5, (3.0, 3.0), 0, 0, 160, 210, 1),
+            (300, 400, 0.73, (-20.25, 10.5), 5, 40, 200, 150, 2),
+            (301, 257, 0.9, (17.3, -4.7), 0, 0, 333, 211, 1),
+            (300, 400, 1.0, (-20.25, 10.5), 0, 0, 250, 300, 1),
+            (300, 400, 1.37, (-20.25, 10.5), 0, 0, 250, 300, 3),
+            (300, 400, 1.99, (11.1, 12.2), 0, 0, 640, 480, 3),
+            (300, 400, 2.0, (11.1, 12.2), 0, 0, 640, 480, 3),
+            (300, 400, 3.7, (-90.5, -300.25), 9, 11, 700, 500, 4),
+            (300, 400, 0.6, (5000.0, 5000.0), 0, 0, 100, 100, 1),
+            (300, 400, 0.6, (-5000.0, 0.0), 0, 0, 100, 100, 1),
+            (1, 1, 1.5, (0.0, 0.0), 0, 0, 20, 20, 1),
+            (2, 400, 0.8, (4.5, 0.0), 0, 0, 30, 400, 1),
+            (700, 900, 0.8, (30.1, 10.7), 0, 0, 900, 800, 4),
+        ];
+        for (n, &(iw, ih, scale, (ox, oy), x, y, w, h, threads)) in cases.iter().enumerate() {
+            let img = crate::image_io::decode::synthetic_page(iw, ih, 7 + n as u64);
+            let view = ViewTransform {
+                origin: Point::new(ox, oy),
+                scale,
+            };
+            let mut r = PageRaster::default();
+            render_page(&mut r, &img, &view, x, y, w, h, threads);
+            let want = reference_render(&img, &view, x, y, w, h);
+            let bad = r.px.iter().zip(&want).position(|(a, b)| a != b);
+            assert!(
+                bad.is_none(),
+                "case {n} {iw}x{ih} scale {scale}: first mismatch at {bad:?}"
+            );
+        }
+    }
+
+    /// At exactly 100% on whole pixels each raster pixel is a lookup of one
+    /// page pixel, or the background off the page. Independent of the taps.
+    #[test]
+    fn exact_copy_is_a_pixel_lookup() {
+        let img = crate::image_io::decode::synthetic_page(250, 180, 5);
+        let lvl0 = &img.levels[0];
+        for (ox, oy, x, y, w, h, threads) in [
+            (0.0, 0.0, 0, 0, 250u32, 180u32, 1usize),
+            (13.0, -7.0, 5, 40, 300, 200, 1),
+            (-60.0, 90.0, 0, 0, 400, 300, 3),
+            (200.0, 150.0, 3, 3, 120, 100, 1),
+            (-300.0, 0.0, 0, 0, 100, 100, 1),
+            (7.0, 5.0, 11, 13, 700, 500, 4),
+        ] {
+            let view = ViewTransform {
+                origin: Point::new(ox, oy),
+                scale: 1.0,
+            };
+            let mut r = PageRaster::default();
+            render_page(&mut r, &img, &view, x, y, w, h, threads);
+            for row in 0..h as i32 {
+                for col in 0..w as i32 {
+                    let (px, py) = (x + col - ox as i32, y + row - oy as i32);
+                    let want = if (0..250).contains(&px) && (0..180).contains(&py) {
+                        lvl0.px[py as usize * 250 + px as usize]
+                    } else {
+                        CANVAS_BG
+                    };
+                    assert_eq!(
+                        r.px[row as usize * w as usize + col as usize],
+                        want,
+                        "origin ({ox},{oy}) canvas ({x},{y}) pixel ({col},{row})"
+                    );
+                }
+            }
+        }
     }
 
     #[test]
