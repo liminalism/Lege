@@ -1,0 +1,54 @@
+[package]
+name = "liminal-annotator"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+description = "Fast rectangle annotation and model review for book-page layout datasets, built on LiminalKit"
+license = "MIT OR Apache-2.0"
+publish = false
+
+# Its own workspace: kept out of the Lege workspace (own lockfile and
+# profiles, no effect on `cargo build` at the root), like lege-codecs.
+[workspace]
+
+[lib]
+name = "liminal_annotator"
+path = "src/lib.rs"
+
+[[bin]]
+name = "liminal-annotator"
+path = "src/main.rs"
+
+[dependencies]
+# LiminalKit from its GitHub repository, as lege-gui does; Cargo.lock pins the
+# commit (`cargo update -p liminalkit-raster` moves it). To build against a
+# local checkout, add to this file:
+#   [patch."https://github.com/liminalism/liminalkit"]
+#   liminalkit-raster = { path = "../../../liminalkit/crates/liminalkit-raster" }   # etc.
+liminalkit-raster = { git = "https://github.com/liminalism/liminalkit", branch = "main" }
+liminalkit-shell = { git = "https://github.com/liminalism/liminalkit", branch = "main" }
+liminalkit-text = { git = "https://github.com/liminalism/liminalkit", branch = "main" }
+liminalkit-windowing = { git = "https://github.com/liminalism/liminalkit", branch = "main" }
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+# Decoding and resampling are unusable unoptimised; keep them fast in dev builds.
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.dev]
+opt-level = 1
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+debug = 1
+
+[lints.rust]
+unsafe_code = "forbid"

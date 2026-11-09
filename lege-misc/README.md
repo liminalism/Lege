@@ -14,6 +14,7 @@ Shared assets and tools that are not a processing crate.
 | `bindings/lege-render-ffi/` | C ABI over `lege-pdf-read`. AGPL-3.0-only, same as the renderer it links. [bindings/lege-render-ffi/README.md](bindings/lege-render-ffi/README.md). |
 | `dev-misc/` | Local build and release scripts. |
 | `bin/`, `examples/` | One-off binarization and encoding experiments. |
+| `liminal-annotator/` | Box review and dataset export for the layout-detection model (LiminalKit GUI, SQLite). Its own Cargo workspace. [liminal-annotator/README.md](liminal-annotator/README.md). |
 
 ```sh
 cargo xtask-help
