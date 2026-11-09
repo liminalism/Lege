@@ -58,4 +58,32 @@ fn main() {
             }
         }
     }
+
+    // Strips: what a pan or a partial update draws, by thread count.
+    let w = 1920u32;
+    // The page's top-left sits at the strip's, so every strip row is on the page.
+    let view = ViewTransform {
+        origin: Point::new(0.37, 40.25),
+        scale: 1.2,
+    };
+    for h in [32u32, 64, 128, 256, 512] {
+        for threads in [1usize, 2, 4, 8] {
+            let mut r = PageRaster::default();
+            let mut times = Vec::new();
+            for i in 0..ITERS {
+                let mut v = view;
+                v.origin.x += (i % 2) as f64;
+                let t = Instant::now();
+                render_page(&mut r, &img, &v, 0, 40, w, h, threads);
+                times.push(t.elapsed().as_secs_f64() * 1000.0);
+            }
+            times.sort_by(|a, b| a.total_cmp(b));
+            println!(
+                "strip {w}x{h} ({:>4} kpx) threads {threads}: p50 {:>6.3} ms  p95 {:>6.3} ms",
+                (w * h) / 1000,
+                times[ITERS / 2],
+                times[ITERS * 95 / 100]
+            );
+        }
+    }
 }
