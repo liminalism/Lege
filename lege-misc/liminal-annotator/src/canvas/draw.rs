@@ -327,6 +327,10 @@ fn render_rows_bilinear(
     }
 }
 
+/// Row bands per thread. More than one lets a thread that finishes early
+/// take over part of a slower thread's share.
+const BANDS_PER_THREAD: usize = 4;
+
 /// Render the raster-relative, half-open sub-rectangle `rows × cols`,
 /// splitting rows across threads when the area is large.
 fn render_region(
@@ -354,11 +358,22 @@ fn render_region(
         render_rows(region, wu, r0, cols, p, lvl, CANVAS_BG);
         return;
     }
-    let rows_per = (r1 - r0).div_ceil(n);
+    // Bands are claimed from a shared queue and the calling thread works
+    // too: n - 1 spawns, and one slow core delays only the band it holds.
+    let rows_per = (r1 - r0).div_ceil(n * BANDS_PER_THREAD).max(1);
+    let mut jobs: Vec<(usize, &mut [u32])> = region.chunks_mut(rows_per * wu).enumerate().collect();
+    jobs.reverse(); // pop() hands out the top band first
+    let queue = std::sync::Mutex::new(jobs);
+    let work = || loop {
+        let job = queue.lock().ok().and_then(|mut q| q.pop());
+        let Some((i, chunk)) = job else { break };
+        render_rows(chunk, wu, r0 + i * rows_per, cols, p, lvl, CANVAS_BG);
+    };
     std::thread::scope(|s| {
-        for (i, chunk) in region.chunks_mut(rows_per * wu).enumerate() {
-            s.spawn(move || render_rows(chunk, wu, r0 + i * rows_per, cols, p, lvl, CANVAS_BG));
+        for _ in 1..n {
+            s.spawn(work);
         }
+        work();
     });
 }
 
@@ -697,6 +712,10 @@ mod tests {
             (1, 1, 1.5, (0.0, 0.0), 0, 0, 20, 20, 1),
             (2, 400, 0.8, (4.5, 0.0), 0, 0, 30, 400, 1),
             (700, 900, 0.8, (30.1, 10.7), 0, 0, 900, 800, 4),
+            // degenerate shapes with more threads than bands
+            (300, 400, 0.9, (3.2, 4.1), 0, 0, 40, 8000, 8),
+            (300, 400, 0.9, (3.2, 4.1), 0, 0, 8000, 40, 16),
+            (300, 400, 2.5, (3.2, 4.1), 0, 0, 8000, 40, 16),
         ];
         for (n, &(iw, ih, scale, (ox, oy), x, y, w, h, threads)) in cases.iter().enumerate() {
             let img = crate::image_io::decode::synthetic_page(iw, ih, 7 + n as u64);
