@@ -5,7 +5,7 @@
 //! pointer — which is also the box drawn on top.
 
 use crate::annotation::commands::Annotation;
-use crate::annotation::geometry::{hit_box_scored, Handle, Point};
+use crate::annotation::geometry::{Handle, Point, hit_box_scored};
 
 use super::viewport::ViewTransform;
 

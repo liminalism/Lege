@@ -10,12 +10,12 @@
 
 use std::collections::{HashSet, VecDeque};
 use std::path::PathBuf;
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use super::decode::{decode_page, PageImage};
+use super::decode::{PageImage, decode_page};
 
 #[derive(Clone, Debug)]
 pub struct Job {

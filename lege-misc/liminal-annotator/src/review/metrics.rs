@@ -6,10 +6,10 @@
 use serde::Serialize;
 
 use crate::annotation::commands::Annotation;
-use crate::annotation::labels::{class, Group, CLASSES, NUM_CLASSES};
+use crate::annotation::labels::{CLASSES, Group, NUM_CLASSES, class};
 use crate::dataset::database::Prediction;
 
-use super::comparison::{match_boxes, Det};
+use super::comparison::{Det, match_boxes};
 
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct ClassStats {

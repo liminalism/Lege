@@ -6,8 +6,8 @@
 
 use liminalkit_shell::MouseButton;
 
-use crate::annotation::commands::{new_annotation_id, Annotation, Edit, PageDoc};
-use crate::annotation::geometry::{apply_drag, apply_edge_drag, Box2, DragLimits, Handle, Point};
+use crate::annotation::commands::{Annotation, Edit, PageDoc, new_annotation_id};
+use crate::annotation::geometry::{Box2, DragLimits, Handle, Point, apply_drag, apply_edge_drag};
 
 use super::hit_test::pick;
 use super::pointer::{PointerEvent, PointerPhase};

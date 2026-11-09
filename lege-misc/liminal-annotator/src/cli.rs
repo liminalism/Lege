@@ -7,12 +7,12 @@ use rusqlite::params;
 use serde_json::Value;
 
 use crate::annotation::commands::{Annotation, ReviewStatus};
-use crate::annotation::labels::{class, Group};
-use crate::app::{self, percentile, AnnotatorApp, AppConfig};
+use crate::annotation::labels::{Group, class};
+use crate::app::{self, AnnotatorApp, AppConfig, percentile};
 use crate::dataset::database::{self, PageFilter};
-use crate::dataset::export_coco::{export, ExportOptions};
-use crate::dataset::import_coco::{import_coco, import_predictions, ImportOptions};
-use crate::review::comparison::{match_boxes, Det};
+use crate::dataset::export_coco::{ExportOptions, export};
+use crate::dataset::import_coco::{ImportOptions, import_coco, import_predictions};
+use crate::review::comparison::{Det, match_boxes};
 use crate::review::metrics::Accumulator;
 use crate::review::queue::Signals;
 
@@ -846,8 +846,12 @@ fn cmd_bench(a: &Args) -> Result<(), String> {
     app.shutdown();
     drop(app);
     let _ = std::fs::remove_dir_all(&dir);
-    println!("(ms per frame incl. HUD. drag = continuous corner drag; zoom = wheel, page resampled every frame;");
-    println!(" pan = middle-drag, raster shifted + exposed strips; switch = navigation to a prefetched page until shown;");
+    println!(
+        "(ms per frame incl. HUD. drag = continuous corner drag; zoom = wheel, page resampled every frame;"
+    );
+    println!(
+        " pan = middle-drag, raster shifted + exposed strips; switch = navigation to a prefetched page until shown;"
+    );
     println!(" idle = cursor moves over blank canvas that were skipped as unchanged / total)");
     Ok(())
 }

@@ -19,16 +19,16 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 
-use rusqlite::{params, Connection};
-use serde_json::{json, Map, Value};
+use rusqlite::{Connection, params};
+use serde_json::{Map, Value, json};
 
 use super::database::{self, PageFilter};
 use super::manifest::{fnv1a_file, timestamp_compact, timestamp_iso};
 use super::resizing::stretch_image;
 use crate::annotation::commands::{Annotation, ReviewStatus};
-use crate::annotation::geometry::{coco_polygon, coco_xywh, stretch_box, Box2};
-use crate::annotation::labels::{class, CLASSES};
-use crate::review::comparison::{diff, Change};
+use crate::annotation::geometry::{Box2, coco_polygon, coco_xywh, stretch_box};
+use crate::annotation::labels::{CLASSES, class};
+use crate::review::comparison::{Change, diff};
 
 #[derive(Clone, Debug)]
 pub struct ExportOptions {
@@ -306,11 +306,7 @@ fn annotation_json(
 
 fn round6(v: f64) -> f64 {
     let r = (v * 1e6).round() / 1e6;
-    if r == 0.0 {
-        0.0
-    } else {
-        r
-    }
+    if r == 0.0 { 0.0 } else { r }
 }
 
 fn export_info(conn: &Connection, opts: &ExportOptions) -> Result<(Value, Value), String> {
@@ -594,18 +590,20 @@ fn export_into(
         let written = std::sync::atomic::AtomicUsize::new(0);
         std::thread::scope(|scope| {
             for _ in 0..opts.threads.max(1) {
-                scope.spawn(|| loop {
-                    let next = jobs.lock().map(|mut it| it.next().cloned()).unwrap_or(None);
-                    let Some((src, rel)) = next else { break };
-                    for &s in &opts.sizes {
-                        let dst = work.join(format!("s{s}")).join(&rel);
-                        match stretch_image(&src, &dst, s, s, opts.jpeg_quality) {
-                            Ok(_) => {
-                                written.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                            }
-                            Err(e) => {
-                                if let Ok(mut v) = errors.lock() {
-                                    v.push(e);
+                scope.spawn(|| {
+                    loop {
+                        let next = jobs.lock().map(|mut it| it.next().cloned()).unwrap_or(None);
+                        let Some((src, rel)) = next else { break };
+                        for &s in &opts.sizes {
+                            let dst = work.join(format!("s{s}")).join(&rel);
+                            match stretch_image(&src, &dst, s, s, opts.jpeg_quality) {
+                                Ok(_) => {
+                                    written.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                }
+                                Err(e) => {
+                                    if let Ok(mut v) = errors.lock() {
+                                        v.push(e);
+                                    }
                                 }
                             }
                         }

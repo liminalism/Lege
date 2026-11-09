@@ -422,11 +422,7 @@ pub fn text_on(color: u32) -> u32 {
     let g = (color >> 8) & 0xff;
     let b = color & 0xff;
     let luma = (r * 299 + g * 587 + b * 114) / 1000;
-    if luma > 150 {
-        0x0010_1010
-    } else {
-        0x00ff_ffff
-    }
+    if luma > 150 { 0x0010_1010 } else { 0x00ff_ffff }
 }
 
 #[cfg(test)]

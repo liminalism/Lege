@@ -20,14 +20,14 @@ use rusqlite::Connection;
 
 use crate::annotation::commands::{Annotation, Edit, PageDoc, ReviewStatus};
 use crate::annotation::geometry::{Box2, Handle, Point};
-use crate::annotation::labels::{class, IGNORE_COLOR, NUM_CLASSES};
+use crate::annotation::labels::{IGNORE_COLOR, NUM_CLASSES, class};
 use crate::canvas::draw::{
-    blit_raster, dashed_outline, outline, pixel_rect, render_page, scroll_page, text_on,
-    PageRaster, RasterKey, CANVAS_BG,
+    CANVAS_BG, PageRaster, RasterKey, blit_raster, dashed_outline, outline, pixel_rect,
+    render_page, scroll_page, text_on,
 };
 use crate::canvas::interaction::{Editor, Outcome, Params, ToolState};
 use crate::canvas::pointer::{PointerCapture, PointerEvent, PointerPhase, PointerQueue};
-use crate::canvas::shortcuts::{map_key, Action};
+use crate::canvas::shortcuts::{Action, map_key};
 use crate::canvas::viewport::{CanvasRect, ViewTransform, ZoomMode};
 use crate::dataset::database::{
     self, PageFilter, PageMeta, PageSave, Prediction, WriteAck, Writer,
@@ -36,7 +36,7 @@ use crate::fonts;
 use crate::image_io::cache::ImageCache;
 use crate::image_io::decode::PageImage;
 use crate::image_io::prefetch::{Job, Loader};
-use crate::review::comparison::{diff, Change, PageDiff};
+use crate::review::comparison::{Change, PageDiff, diff};
 use crate::settings::{Resolved, Settings};
 
 const SURFACE_CANVAS: u64 = 1;
@@ -963,7 +963,9 @@ impl AnnotatorApp {
         self.editor.reconcile(doc);
         self.commit("revert");
         let msg = match to {
-            RevertTo::Opened => format!("Reverted to the page as you opened it ({n} boxes). Ctrl+C again: imported boxes; Ctrl+Z: undo"),
+            RevertTo::Opened => format!(
+                "Reverted to the page as you opened it ({n} boxes). Ctrl+C again: imported boxes; Ctrl+Z: undo"
+            ),
             RevertTo::Imported => format!("Reverted to the imported boxes ({n}). Ctrl+Z: undo"),
         };
         self.flash(&msg, false);

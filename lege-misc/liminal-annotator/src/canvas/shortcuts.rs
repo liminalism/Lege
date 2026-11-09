@@ -122,28 +122,28 @@ pub fn map_key(ev: &KeyEvent, settings: &Resolved) -> Option<Action> {
                 dx: -1,
                 dy: 0,
                 resize: m.shift,
-            })
+            });
         }
         KeyInput::Right if ctrl => {
             return Some(Action::Nudge {
                 dx: 1,
                 dy: 0,
                 resize: m.shift,
-            })
+            });
         }
         KeyInput::Up if ctrl => {
             return Some(Action::Nudge {
                 dx: 0,
                 dy: -1,
                 resize: m.shift,
-            })
+            });
         }
         KeyInput::Down if ctrl => {
             return Some(Action::Nudge {
                 dx: 0,
                 dy: 1,
                 resize: m.shift,
-            })
+            });
         }
         KeyInput::Left => return Some(Action::PrevPage),
         KeyInput::Right if m.shift => return Some(Action::NextPage),

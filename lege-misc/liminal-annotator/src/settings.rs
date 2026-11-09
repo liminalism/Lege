@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::annotation::labels::{class_by_name, CLASSES, NUM_CLASSES};
+use crate::annotation::labels::{CLASSES, NUM_CLASSES, class_by_name};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]

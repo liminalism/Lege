@@ -7,7 +7,7 @@ mod common;
 use std::process::Command;
 use std::time::Duration;
 
-use common::{fixture, open_app, Screen};
+use common::{Screen, fixture, open_app};
 use liminal_annotator::annotation::commands::{Edit, ReviewStatus};
 use liminal_annotator::dataset::database::{self, PageSave, WriteAck, Writer};
 use liminalkit_shell::{KeyInput, Modifiers, MouseButton};

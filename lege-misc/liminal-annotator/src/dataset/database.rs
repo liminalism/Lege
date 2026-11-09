@@ -10,11 +10,11 @@
 //! acknowledges each revision once its transaction is durable.
 
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{Receiver, Sender, channel};
 use std::thread::JoinHandle;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::annotation::commands::{Annotation, ReviewStatus};
 use crate::annotation::geometry::Box2;
@@ -173,8 +173,7 @@ pub struct PageMeta {
     pub revision: i64,
 }
 
-const PAGE_COLS: &str =
-    "page_key, seq, book_id, split, set_name, source_path, file_name, width, height, \
+const PAGE_COLS: &str = "page_key, seq, book_id, split, set_name, source_path, file_name, width, height, \
                          book_type, page_index, queue_reason, review_status, revision";
 
 fn page_from_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<PageMeta> {

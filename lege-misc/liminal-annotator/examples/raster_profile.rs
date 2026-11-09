@@ -3,7 +3,7 @@
 use std::time::Instant;
 
 use liminal_annotator::annotation::geometry::Point;
-use liminal_annotator::canvas::draw::{render_page, PageRaster};
+use liminal_annotator::canvas::draw::{PageRaster, render_page};
 use liminal_annotator::canvas::viewport::{CanvasRect, ViewTransform};
 use liminal_annotator::image_io::decode::{decode_page, synthetic_page};
 

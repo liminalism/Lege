@@ -3,9 +3,9 @@
 //! zoom, and the original ↔ training-resolution stretch.
 
 use liminal_annotator::annotation::geometry::{
-    apply_drag, coco_xywh, hit_box, stretch_box, Box2, DragLimits, Handle, Point,
+    Box2, DragLimits, Handle, Point, apply_drag, coco_xywh, hit_box, stretch_box,
 };
-use liminal_annotator::canvas::viewport::{CanvasRect, ViewTransform, MAX_SCALE, MIN_SCALE};
+use liminal_annotator::canvas::viewport::{CanvasRect, MAX_SCALE, MIN_SCALE, ViewTransform};
 
 struct Rng(u64);
 impl Rng {

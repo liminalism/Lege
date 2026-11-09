@@ -4,7 +4,7 @@
 
 mod common;
 
-use common::{fixture, open_app, Screen};
+use common::{Screen, fixture, open_app};
 use liminal_annotator::annotation::geometry::{Box2, Point};
 use liminal_annotator::canvas::shortcuts::Action;
 use liminalkit_shell::{KeyInput, Modifiers, MouseButton};
@@ -254,7 +254,7 @@ fn hit_band_scales_with_dpi() {
 
 #[test]
 fn overlapping_boxes_prefer_the_closest_edge_then_the_inner_box() {
-    use liminal_annotator::annotation::commands::{new_annotation_id, Annotation, Edit};
+    use liminal_annotator::annotation::commands::{Annotation, Edit, new_annotation_id};
     let f = fixture(1);
     let mut app = open_app(&f);
     let mut s = Screen::new(1280, 900, 1.0);

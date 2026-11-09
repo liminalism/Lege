@@ -76,11 +76,7 @@ impl Box2 {
     pub fn iou(&self, other: &Box2) -> f64 {
         let inter = self.intersection(other).area();
         let union = self.area() + other.area() - inter;
-        if union <= 0.0 {
-            0.0
-        } else {
-            inter / union
-        }
+        if union <= 0.0 { 0.0 } else { inter / union }
     }
 
     /// Clamp into `[0, w] × [0, h]`. May return an invalid (empty) box if the

@@ -6,9 +6,9 @@ use std::path::Path;
 use liminal_annotator::annotation::commands::ReviewStatus;
 use liminal_annotator::annotation::geometry::Box2;
 use liminal_annotator::dataset::database::{self, PageFilter, PageSave};
-use liminal_annotator::dataset::export_coco::{export, ExportOptions};
-use liminal_annotator::dataset::import_coco::{import_coco, ImportOptions};
-use serde_json::{json, Value};
+use liminal_annotator::dataset::export_coco::{ExportOptions, export};
+use liminal_annotator::dataset::import_coco::{ImportOptions, import_coco};
+use serde_json::{Value, json};
 
 const CATS: [i64; 4] = [1, 7, 8, 2];
 
@@ -170,15 +170,17 @@ fn unedited_round_trip_is_lossless() {
     assert!(m["split_leaks"].as_array().unwrap().is_empty());
 
     // Never overwrite an export.
-    assert!(export(
-        &conn,
-        &ExportOptions {
-            out_dir: out.clone(),
-            name: Some("v1".into()),
-            ..Default::default()
-        }
-    )
-    .is_err());
+    assert!(
+        export(
+            &conn,
+            &ExportOptions {
+                out_dir: out.clone(),
+                name: Some("v1".into()),
+                ..Default::default()
+            }
+        )
+        .is_err()
+    );
 }
 
 #[test]

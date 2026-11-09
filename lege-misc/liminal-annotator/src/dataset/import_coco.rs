@@ -11,13 +11,13 @@ use std::fmt;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 
-use rusqlite::{params, Connection, Transaction};
-use serde::de::{DeserializeSeed, MapAccess, SeqAccess, Visitor};
+use rusqlite::{Connection, Transaction, params};
 use serde::Deserializer;
+use serde::de::{DeserializeSeed, MapAccess, SeqAccess, Visitor};
 use serde_json::{Map, Value};
 
 use super::database::{self, now_unix};
-use crate::annotation::labels::{class_by_name, NUM_CLASSES};
+use crate::annotation::labels::{NUM_CLASSES, class_by_name};
 
 #[derive(Debug, Default, Clone)]
 pub struct ImportReport {
@@ -35,7 +35,12 @@ impl fmt::Display for ImportReport {
         write!(
             f,
             "{}: {} pages ({} already present, skipped), {} boxes ({} ignore regions), {} boxes skipped",
-            self.set_name, self.pages, self.pages_skipped_existing, self.boxes, self.ignore_regions, self.boxes_skipped
+            self.set_name,
+            self.pages,
+            self.pages_skipped_existing,
+            self.boxes,
+            self.ignore_regions,
+            self.boxes_skipped
         )?;
         for w in self.warnings.iter().take(20) {
             write!(f, "\n  warning: {w}")?;
