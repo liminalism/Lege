@@ -104,6 +104,8 @@ pub struct Perf {
     pub decode_ms: VecDeque<f64>,
     pub frames: u64,
     pub raster_renders: u64,
+    /// Of `raster_renders`, those served by shifting the cached raster.
+    pub raster_scrolls: u64,
     /// Host repaints that drew nothing because nothing visible changed.
     pub skipped: u64,
 }
@@ -1268,6 +1270,7 @@ impl AnnotatorApp {
                     }
                     self.raster.key = Some(key);
                     self.perf.raster_renders += 1;
+                    self.perf.raster_scrolls += u64::from(scrolled);
                     push_ring(
                         &mut self.perf.raster_ms,
                         r0.elapsed().as_secs_f64() * 1000.0,

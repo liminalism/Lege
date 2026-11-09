@@ -787,6 +787,11 @@ fn cmd_bench(a: &Args) -> Result<(), String> {
             percentile(&app.perf.frame_ms, 0.5),
             percentile(&app.perf.frame_ms, 0.95),
         );
+        let pan_scrolled = (app.perf.raster_scrolls, app.perf.raster_renders);
+        eprintln!(
+            "  {w}x{h}: pan frames served by shifting the raster: {}/{}",
+            pan_scrolled.0, pan_scrolled.1
+        );
         // Idle hover: cursor moves over blank canvas change nothing visible.
         app.perf = Default::default();
         for i in 0..frames {
