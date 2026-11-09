@@ -468,3 +468,66 @@ impl StepF for std::ops::Range<f32> {
         Box::new((0..n).map(move |i| self.start + i as f32 * step))
     }
 }
+
+/// Wheel-zoom leaves the view origin at an arbitrary float; a middle-drag pan
+/// from there must still be served by shifting the cached raster, and every
+/// frame must equal a full render of the same view, bit for bit.
+#[test]
+fn panning_after_a_zoom_shifts_the_raster_and_matches_a_full_render() {
+    let f = fixture(1);
+    let mut app = open_app(&f);
+    let mut s = Screen::new(1280, 900, 1.0);
+    s.frame(&mut app);
+    for notch in [1.0, 1.0, -1.0] {
+        app.on_cursor(437.0, 311.0);
+        app.on_scroll_event(&ScrollEvent {
+            pixel_dx: 0.0,
+            pixel_dy: 24.0 * notch,
+            line_dx: Some(0.0),
+            line_dy: Some(notch),
+            phase: GesturePhase::Moved,
+        });
+        s.frame(&mut app);
+    }
+    assert!(
+        app.view.origin.x.fract() != 0.0
+            && app.view.origin.x * 4.0 != (app.view.origin.x * 4.0).round(),
+        "the zoom left an arbitrary fractional origin: {:?}",
+        app.view.origin
+    );
+    app.perf = Default::default();
+    app.on_cursor(600.0, 450.0);
+    app.on_mouse(MouseButton::Middle, true);
+    let path = [
+        (7.0, 3.0),
+        (-11.0, 5.0),
+        (0.0, -9.0),
+        (23.0, 0.0),
+        (-40.0, -17.0),
+        (3.0, 31.0),
+    ];
+    let (mut x, mut y) = (600.0f32, 450.0f32);
+    for (dx, dy) in path {
+        x += dx;
+        y += dy;
+        app.on_cursor(x, y);
+        s.frame(&mut app);
+        let shifted = s.buf.pixels.clone();
+        app.invalidate_raster_for_test();
+        s.frame(&mut app);
+        assert!(
+            shifted == s.buf.pixels,
+            "pan to ({x},{y}) differs from a full render"
+        );
+    }
+    app.on_mouse(MouseButton::Middle, false);
+    s.frame(&mut app);
+    // The first move leaves the raster made at the zoom's unsnapped origin, so
+    // it is a full render; every later move is a pure shift.
+    assert!(
+        app.perf.raster_scrolls >= path.len() as u64 - 1,
+        "pan frames served by a shift: {}/{}",
+        app.perf.raster_scrolls,
+        app.perf.raster_renders
+    );
+}

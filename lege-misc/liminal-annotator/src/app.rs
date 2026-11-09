@@ -667,9 +667,9 @@ impl AnnotatorApp {
         if out.edited {
             self.commit("edit");
         }
-        if out.view_changed {
-            self.raster.key = None;
-        }
+        // A view change needs no explicit raster invalidation: `RasterKey`
+        // holds the image, origin, scale and canvas rect, so the next frame
+        // sees the change and can shift the cached raster for a pure pan.
     }
 
     fn image_ok(&self) -> bool {
@@ -2137,6 +2137,13 @@ impl AnnotatorApp {
     /// Fit the page now (bench, tests).
     pub fn act_fit_for_bench(&mut self) {
         self.set_fit();
+    }
+
+    /// Drop the cached page raster and schedule a redraw, so the next frame
+    /// is a full render (tests).
+    pub fn invalidate_raster_for_test(&mut self) {
+        self.raster.key = None;
+        self.dirty = true;
     }
 
     /// Run a keyboard action as if its key were pressed (tests).

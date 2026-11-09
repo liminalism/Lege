@@ -124,6 +124,19 @@ impl ViewTransform {
     }
 }
 
+/// Snap a view origin to a multiple of 2^-20 px (under a millionth of a pixel,
+/// far below anything visible).
+///
+/// A pan moves the origin by whole pixels. From an arbitrary float origin `o`,
+/// `o + 3` and `o + 5` are each rounded, so their difference is not exactly 2
+/// and the raster cache cannot tell the pan was a pure shift. From a grid
+/// origin below 2^32 px the sums are exact, the deltas are exact integers, and
+/// a shifted raster is bit-identical to a full render of the new view.
+pub fn pan_grid(v: f64) -> f64 {
+    const GRID: f64 = 1_048_576.0; // 2^20
+    (v * GRID).round() / GRID
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

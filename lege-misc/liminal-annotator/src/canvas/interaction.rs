@@ -11,7 +11,7 @@ use crate::annotation::geometry::{Box2, DragLimits, Handle, Point, apply_drag, a
 
 use super::hit_test::pick;
 use super::pointer::{PointerEvent, PointerPhase};
-use super::viewport::{CanvasRect, ViewTransform, ZoomMode};
+use super::viewport::{CanvasRect, ViewTransform, ZoomMode, pan_grid};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ToolState {
@@ -187,7 +187,12 @@ impl Editor {
                     self.state = ToolState::Panning {
                         button,
                         screen_start: screen,
-                        original_origin: view.origin,
+                        // On the pan grid, so every later origin is the grid
+                        // origin plus a whole number of pixels, exactly.
+                        original_origin: Point::new(
+                            pan_grid(view.origin.x),
+                            pan_grid(view.origin.y),
+                        ),
                     };
                     return out;
                 }
