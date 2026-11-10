@@ -387,24 +387,19 @@ pub fn image_detection_overlaps_substantive_text(
     overlap_area.min(image_area) / image_area >= 0.20
 }
 
-/// Keep an image-class box as a raster overlay only when it is continuous-tone
-/// (photo, map, engraving). Line art is skipped so the pixels stay in the
-/// page binarization or the MRC JBIG2 mask, instead of punching a photo hole.
+/// Keep an image-class box as a raster overlay unless it lies on substantive
+/// text. What the model calls a picture is kept as one: drawings and maps
+/// included. A tone heuristic used to send line art back to the binarized
+/// layer, and it sent dark and vignetted photographs there as well.
 pub fn should_keep_image_overlay(
     image: &Detection,
-    rgb: &[u8],
-    width: usize,
-    height: usize,
     detections: &[Detection],
     classifier: &crate::types::LabelClassifier,
 ) -> bool {
     if !classifier.is_image_label(image) {
         return true;
     }
-    if image_detection_overlaps_substantive_text(image, detections, classifier) {
-        return false;
-    }
-    !crate::content_class::region_is_line_art(rgb, width, height, image.bbox)
+    !image_detection_overlaps_substantive_text(image, detections, classifier)
 }
 
 // Helper to encode a small image region; used by image overlays in the page pipeline
@@ -2091,49 +2086,18 @@ mod tests {
     }
 
     #[test]
-    fn staff_line_image_is_not_kept_as_a_photo_overlay() {
-        let (w, h) = (256usize, 256usize);
-        let mut rgb = vec![245u8; w * h * 3];
-        for y in (8..h).step_by(8) {
-            for x in 8..(w - 8) {
-                let i = (y * w + x) * 3;
-                rgb[i] = 20;
-                rgb[i + 1] = 20;
-                rgb[i + 2] = 20;
-            }
-        }
-        let image = detection("image", [0.0, 0.0, 256.0, 256.0]);
-        assert!(!should_keep_image_overlay(
-            &image,
-            &rgb,
-            w,
-            h,
-            &[image.clone()],
-            &LABEL_CLASSIFIER,
-        ));
-    }
-
-    #[test]
-    fn gradient_photo_is_kept_as_a_photo_overlay() {
-        let (w, h) = (256usize, 128usize);
-        let mut rgb = vec![0u8; w * h * 3];
-        for y in 0..h {
-            for x in 0..w {
-                let i = (y * w + x) * 3;
-                let v = x as u8;
-                rgb[i] = v;
-                rgb[i + 1] = v;
-                rgb[i + 2] = v;
-            }
-        }
+    fn an_image_box_is_kept_as_an_overlay_unless_it_lies_on_text() {
         let image = detection("image", [0.0, 0.0, 256.0, 128.0]);
         assert!(should_keep_image_overlay(
             &image,
-            &rgb,
-            w,
-            h,
             &[image.clone()],
-            &LABEL_CLASSIFIER,
+            &LABEL_CLASSIFIER
+        ));
+        let text = detection("text", [100.0, 0.0, 256.0, 128.0]);
+        assert!(!should_keep_image_overlay(
+            &image,
+            &[image.clone(), text],
+            &LABEL_CLASSIFIER
         ));
     }
 

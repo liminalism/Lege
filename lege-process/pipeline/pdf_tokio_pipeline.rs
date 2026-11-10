@@ -843,14 +843,7 @@ fn process_page_cpu_work(input: PageProcessingInput) -> Result<PageProcessingOut
             if !classifier.is_image_label(det) {
                 return true;
             }
-            if !should_keep_image_overlay(
-                det,
-                adjusted_image.as_raw(),
-                width,
-                height,
-                &all_detections,
-                classifier,
-            ) {
+            if !should_keep_image_overlay(det, &all_detections, classifier) {
                 crate::bbox_trace!(
                     "PAGE {}: dropping image region (text overlap or line art) ({:.0},{:.0},{:.0},{:.0})",
                     page_index,
@@ -3349,14 +3342,6 @@ mod image_detection_policy_tests {
                 image::Rgb([255, 255, 255])
             }
         }));
-        // Checkerboard hatching is line art (engraving-like). This test only
-        // checks that scale_detections_to_output still keeps the model box.
-        assert!(crate::content_class::region_is_line_art(
-            image.as_raw(),
-            100,
-            100,
-            [0.0, 0.0, 100.0, 100.0]
-        ));
         let rendered = RenderedPageData {
             index: 0,
             high_res_image: image.clone(),

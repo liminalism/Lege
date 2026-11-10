@@ -109,7 +109,7 @@ impl LayoutEngine {
     pub fn detect_single_blocking(&mut self, image: &RgbImage) -> Result<Vec<Detection>> {
         let detections = self.detector.detect_rgb(image)?;
         let mut detections = self.finalize_detections(detections, image.width(), image.height());
-        crate::content_class::demote_line_art_images(&mut detections, image);
+        crate::image_extent::grow_image_boxes_to_ink(&mut detections, image);
         Ok(detections)
     }
 

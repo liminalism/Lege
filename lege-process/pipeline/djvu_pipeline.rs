@@ -1035,14 +1035,7 @@ fn process_djvu_cpu_intensive_work(
             if !classifier.is_image_label(det) {
                 return true;
             }
-            should_keep_image_overlay(
-                det,
-                adjusted_image.as_raw(),
-                width,
-                height,
-                &all_detections,
-                classifier,
-            )
+            should_keep_image_overlay(det, &all_detections, classifier)
         });
     }
 

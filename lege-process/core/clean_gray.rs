@@ -501,19 +501,6 @@ pub fn clean_page_for_mrc_with_mask(
     Ok(pixels)
 }
 
-/// Decide whether a detected image region is actually line art (music systems,
-/// diagrams, ruled tables) rather than continuous-tone content. Line-art
-/// regions should NOT be overlaid as original raster crops — bilevel
-/// binarization or the MRC JBIG2 mask + cleaned background renders them
-/// far better — while true photos, maps, and engravings keep their overlay.
-///
-/// Metric: per-32×32-cell variance / Sobel / orientation features ported
-/// from the bpg-rs preanalysis classifier. A luma-histogram bimodality
-/// test cannot tell maps and engravings from line art.
-pub fn region_is_line_art(rgb: &[u8], width: usize, height: usize, bbox: [f32; 4]) -> bool {
-    crate::content_class::region_is_line_art(rgb, width, height, bbox)
-}
-
 /// Detect thin horizontal line structure that only the grayscale background
 /// carries (staff lines, rules): long horizontal runs of visibly-gray pixels
 /// that the ink mask did NOT capture. Text pages have only short antialiasing

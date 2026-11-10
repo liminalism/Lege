@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- **Pictures the model finds are kept as pictures.** The separate line-art test is removed. It
+  judged by tone whether an image region was a drawing to be binarized with the text, and it also
+  sent dark, light and vignetted photographs there, as black blobs; in 1.6.0 the tighter boxes of
+  the new model made that worse. Drawings and maps the model boxes as pictures are now kept as
+  grayscale or colour overlays too, which costs bytes: on a 200-page illustrated textbook the
+  output is 8% larger than 1.6.0 and 13% larger than 1.5.1, with 44 more pictures than 1.5.1.
+- **No black frame around a picture.** A picture's box is grown to the picture's own edge before
+  it is overlaid, so its outer rim is not left to be binarized.
+- Window: option tooltips appear in a free band clear of the buttons; the chosen output folder is
+  the Output Directory button's label; a small label beside the cursor gives a file tile's full
+  path; the options answer at once after a file is added.
+
 ## 1.6.0 (2026-11-10)
 
 ### Layout detection

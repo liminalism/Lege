@@ -452,20 +452,7 @@ fn draw_annotations(img: &RgbImage, detections: &[Detection]) -> RgbaImage {
         draw_rect(&mut canvas, x1, y1, x2, y2, color);
 
         let class_name = crate::types::detection_label(det);
-        let mut label = format!("{} ({:.0}%)", class_name, det.confidence * 100.0);
-        if crate::types::category_for_class(det.class_id).is_image() {
-            let verdict = crate::content_class::classify_image_region(
-                img.as_raw(),
-                width as usize,
-                height as usize,
-                det.bbox,
-            );
-            if verdict.is_line_art {
-                label.push_str(" line-art");
-            } else {
-                label.push_str(" photo");
-            }
-        }
+        let label = format!("{} ({:.0}%)", class_name, det.confidence * 100.0);
         // Keep the label inside the canvas: the old code clamped only `y`, so
         // a wide label on a box near the right margin ran off the image.
         let label_height = (GLYPH_ROWS as u32 * LABEL_SCALE) as i32;
@@ -558,10 +545,6 @@ pub fn run_layout_visualize_mode(
             1,
         ),
     )?;
-    let csv_path = output_dir.join("image_boxes.csv");
-    let mut csv = String::from(
-        "page,class,conf,x0,y0,x1,y1,verdict,cells,ink,texture,chroma,structured,flat,mean_chroma,mid\n",
-    );
 
     info_println!(
         "Processing {} pages from PDF with {} total pages",
@@ -586,7 +569,6 @@ pub fn run_layout_visualize_mode(
             .with_context(|| format!("Layout inference failed on page {}", page_num))?;
 
         let output_path = output_dir.join(format!("page_{:04}.png", page_num));
-        append_image_box_csv(&mut csv, page_num, &img, &detections);
 
         if detections.is_empty() {
             debug_println!("  Page {} — no detections, saving raw render", page_num);
@@ -612,65 +594,14 @@ pub fn run_layout_visualize_mode(
         crate::progress::cancellation_checkpoint("after layout-visualization page")?;
     }
 
-    std::fs::write(&csv_path, csv)
-        .with_context(|| format!("Failed to write {}", csv_path.display()))?;
     info_println!(
         "Layout visualization complete. {} pages saved to {}",
         pages_to_render.len(),
         output_dir.display()
     );
-    println!("  Image-box CSV: {}", csv_path.display());
     println!("\nOutput: {}", output_dir.display());
 
     Ok(())
-}
-
-fn append_image_box_csv(
-    csv: &mut String,
-    page_num: usize,
-    img: &RgbImage,
-    detections: &[Detection],
-) {
-    let width = img.width() as usize;
-    let height = img.height() as usize;
-    for det in detections {
-        if !crate::types::category_for_class(det.class_id).is_image() {
-            continue;
-        }
-        let v = crate::content_class::classify_image_region(img.as_raw(), width, height, det.bbox);
-        let verdict = if v.is_line_art { "line-art" } else { "photo" };
-        println!(
-            "    p{} {} {} ink={:.2} tex={:.2} flat={:.2} chroma={:.1} mid={:.2} cells={}",
-            page_num,
-            crate::types::detection_label(det),
-            verdict,
-            v.ink_share,
-            v.texture_share,
-            v.avg_flat,
-            v.mean_chroma,
-            v.mid_share,
-            v.cells
-        );
-        csv.push_str(&format!(
-            "{},{},{:.3},{:.1},{:.1},{:.1},{:.1},{},{},{:.3},{:.3},{:.3},{:.3},{:.3},{:.1},{:.3}\n",
-            page_num,
-            crate::types::detection_label(det),
-            det.confidence,
-            det.bbox[0],
-            det.bbox[1],
-            det.bbox[2],
-            det.bbox[3],
-            verdict,
-            v.cells,
-            v.ink_share,
-            v.texture_share,
-            v.chroma_share,
-            v.structured,
-            v.avg_flat,
-            v.mean_chroma,
-            v.mid_share
-        ));
-    }
 }
 
 /// Overlay DocLayout boxes on a single JPEG/PNG (or other raster) image.
