@@ -139,9 +139,11 @@ pub struct Actions {
     pub inputs: Rect,
     /// Right of the process button: the output files' tiles.
     pub outputs: Rect,
-    /// The row above the tiles: the progress meter while running, the output
-    /// directory otherwise.
+    /// The row above the tiles: the progress meter while running.
     pub meter: Rect,
+    /// Between the header row and the queue: two status lines while running,
+    /// a control's tooltip otherwise.
+    pub tooltip: Rect,
 }
 impl Actions {
     /// `status` is the status section's content area.
@@ -188,6 +190,8 @@ impl Actions {
             status.w,
             (meter.y - s.px(6) - queue_y).max(1),
         );
+        let tooltip_y = status.y + s.px(24);
+        let tooltip = Rect::new(status.x, tooltip_y, status.w, (queue_y - tooltip_y).max(1));
         Self {
             primary,
             utilities,
@@ -195,6 +199,7 @@ impl Actions {
             inputs,
             outputs,
             meter,
+            tooltip,
         }
     }
 }

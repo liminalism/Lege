@@ -1458,15 +1458,9 @@ fn choices(ui: &mut Ui<'_>, area: Rect, texts: &[&str], selected: usize) -> Opti
     }
     result
 }
-fn hover(
-    ui: &Ui<'_>,
-    area: Rect,
-    text: &'static str,
-    right: bool,
-    note: &mut Option<(bool, &'static str)>,
-) {
+fn hover(ui: &Ui<'_>, area: Rect, text: &'static str, note: &mut Option<&'static str>) {
     if ui.input.hovering(area) {
-        *note = Some((right, text));
+        *note = Some(text);
     }
 }
 
@@ -1476,11 +1470,20 @@ impl Dashboard {
         let mut note = None;
         // A running batch is a frozen options snapshot. Keep the UI visible
         // but route no editing input to file/settings controls until it ends.
-        let frozen = self.running() || self.input_busy();
+        // An open file dialog freezes them too; the page-count probe of a
+        // newly added file does not, or every control would be dead for as
+        // long as a large scan takes to open.
+        let frozen = self.running() || matches!(self.input_flow, InputFlow::Selecting(_));
         let saved_input = frozen.then(|| std::mem::take(ui.input));
         let files = card(ui, bands.files);
         let gap = ui.px(6);
         let w = (files.w - gap * 2) / 3;
+        let output_label = self
+            .options
+            .output_path
+            .clone()
+            .filter(|_| !self.options.output_path_is_auto)
+            .map(|path| fit_path(ui, &path, w - ui.px(16), ui.theme.body));
         for (i, text, tooltip) in [
             (
                 0,
@@ -1494,7 +1497,9 @@ impl Dashboard {
             ),
             (
                 2,
-                t.buttons.output_directory.as_str(),
+                output_label
+                    .as_deref()
+                    .unwrap_or(t.buttons.output_directory.as_str()),
                 t.tooltips.output_directory.as_str(),
             ),
         ] {
@@ -1506,7 +1511,7 @@ impl Dashboard {
                     _ => FileDialogKind::Output,
                 });
             }
-            hover(ui, rect, tooltip, i == 2, &mut note);
+            hover(ui, rect, tooltip, &mut note);
         }
         self.draw_right(ui, bands.left, &mut note);
         self.draw_left(ui, bands.right, &mut note, snapshot);
@@ -1648,24 +1653,6 @@ impl Dashboard {
                     ui.theme.selection,
                 );
             }
-        } else if let Some((right, text)) = note {
-            // As tall as its wrapped text and no taller.
-            let w = ui.px(TOOLTIP_WIDTH).min(status.w);
-            let inset = ui.px(TOOLTIP_INSET);
-            let style = ui.theme.body;
-            let line_h = ui.text.line_height(style).max(1);
-            let lines = wrap_lines(ui.text, style, w - 2 * inset, text);
-            let shown = lines
-                .len()
-                .min(((status.h - 2 * inset) / line_h).max(1) as usize);
-            let area = Rect::new(
-                if right { status.right() - w } else { status.x },
-                status.y,
-                w,
-                shown as i32 * line_h + 2 * inset,
-            );
-            ui.surface(area, ui.theme.panel, ui.theme.panel_edge);
-            wrapped(ui, area.inset(inset), text, shown);
         } else {
             let summary = if self.queue.is_empty() {
                 t.status.ready.clone()
@@ -1688,18 +1675,34 @@ impl Dashboard {
             // Centred over the panel, the summary would land on the queue rows
             // or the empty-queue message.
             ui.label(header, &summary, ui.theme.text_dim, Align::Left);
-            if let Some(output) = &self.options.output_path {
-                // On the meter's row, which is free while nothing runs; the
-                // button's row belongs to the file tiles.
-                small(
-                    ui,
-                    actions.meter,
-                    &format!(
-                        "{} {}",
-                        t.buttons.output_directory,
-                        backend::truncate_path(output, 90)
-                    ),
+            if let Some(text) = note {
+                // Centred in the band between the header row and the queue,
+                // which only a running job writes into: the same place for
+                // every control, over nothing else. As tall as its wrapped
+                // text and no taller than the band.
+                let band = actions.tooltip;
+                let w = ui.px(TOOLTIP_WIDTH).min(band.w);
+                let inset = ui.px(TOOLTIP_INSET);
+                let style = ui.theme.body;
+                let line_h = ui.text.line_height(style).max(1);
+                let lines = wrap_lines(ui.text, style, w - 2 * inset, text);
+                let shown = lines
+                    .len()
+                    .min(((band.h - 2 * inset) / line_h).max(1) as usize);
+                // No wider than its longest line.
+                let w = lines
+                    .iter()
+                    .map(|line| ui.text.measure(line, style))
+                    .max()
+                    .map_or(w, |widest| (widest + 2 * inset).min(w));
+                let area = Rect::new(
+                    band.x + (band.w - w) / 2,
+                    band.y,
+                    w,
+                    shown as i32 * line_h + 2 * inset,
                 );
+                ui.surface(area, ui.theme.panel, ui.theme.panel_edge);
+                wrapped(ui, area.inset(inset), text, shown);
             }
         }
         #[cfg(feature = "debug-logging")]
@@ -1727,6 +1730,10 @@ impl Dashboard {
         }
         if let Some(index) = remove {
             self.notices.remove(index);
+        }
+        // Last, so it is over everything else in the window.
+        if let Some(paths) = self.shelf.hovered.take() {
+            path_popup(ui, &paths);
         }
     }
     /// The file tiles beside the process button: drawn after the
@@ -1766,7 +1773,7 @@ impl Dashboard {
         &mut self,
         ui: &mut Ui<'_>,
         area: Rect,
-        note: &mut Option<(bool, &'static str)>,
+        note: &mut Option<&'static str>,
         snapshot: bool,
     ) {
         let t = &GUI_TEXT.interactive;
@@ -1801,7 +1808,7 @@ impl Dashboard {
                 ui.painter.fill_rect(caret, ui.theme.background);
             }
         }
-        hover(ui, card.resolution, &t.tooltips.target_height, true, note);
+        hover(ui, card.resolution, &t.tooltips.target_height, note);
 
         // Preserve the reading order, filling rows across the columns. The
         // geometry tray and OCR slot stay anchored when conditional controls
@@ -1844,7 +1851,7 @@ impl Dashboard {
                 if checkbox(ui, rect, &mut value, $label) {
                     $changed(value);
                 }
-                hover(ui, rect, $tip, true, note);
+                hover(ui, rect, $tip, note);
                 index += 1;
             }};
         }
@@ -1936,7 +1943,6 @@ impl Dashboard {
                 } else {
                     &t.tooltips.ocr_thorough
                 },
-                true,
                 note,
             );
         }
@@ -1970,7 +1976,7 @@ impl Dashboard {
             if checkbox(ui, rect, &mut checked, text) {
                 self.select_geometry(index);
             }
-            hover(ui, rect, tooltip, true, note);
+            hover(ui, rect, tooltip, note);
         }
         ui.theme.body = body;
     }
@@ -2000,7 +2006,7 @@ impl Dashboard {
         self.options.set_binarization_kind(kind);
     }
 
-    fn draw_right(&mut self, ui: &mut Ui<'_>, area: Rect, note: &mut Option<(bool, &'static str)>) {
+    fn draw_right(&mut self, ui: &mut Ui<'_>, area: Rect, note: &mut Option<&'static str>) {
         let t = &GUI_TEXT.interactive;
         let a = card(ui, area);
         let card = RightCard::new(a, ui.scale);
@@ -2034,7 +2040,6 @@ impl Dashboard {
                         } else {
                             tr("preparation_note")
                         },
-                        false,
                         note,
                     );
                 }
@@ -2051,7 +2056,7 @@ impl Dashboard {
                             OutputFormat::Djvu
                         };
                     }
-                    hover(ui, control, &t.tooltips.base_format, false, note);
+                    hover(ui, control, &t.tooltips.base_format, note);
                 }
                 2 => {
                     if self.options.preserve_mode {
@@ -2077,7 +2082,6 @@ impl Dashboard {
                         } else {
                             tr("grayscale_pdf")
                         },
-                        false,
                         note,
                     );
                 }
@@ -2093,7 +2097,7 @@ impl Dashboard {
                             self.notice(t.popups.layout_disabled.clone(), 5);
                         }
                     }
-                    hover(ui, control, &t.tooltips.layout_detection, false, note);
+                    hover(ui, control, &t.tooltips.layout_detection, note);
                 }
                 _ => {
                     if self.options.preserve_mode {
@@ -2142,7 +2146,6 @@ impl Dashboard {
                                 1 => &t.tooltips.image_output_dithered,
                                 _ => &t.tooltips.jbig2_halftone,
                             },
-                            false,
                             note,
                         );
                     }
@@ -2203,7 +2206,6 @@ impl Dashboard {
                         1 => &t.tooltips.threshold_value,
                         _ => &t.tooltips.heavy_model,
                     },
-                    false,
                     note,
                 );
             }
@@ -2217,7 +2219,6 @@ impl Dashboard {
                 } else {
                     &t.tooltips.sauvola_k_factor
                 },
-                false,
                 note,
             );
         }
@@ -2436,12 +2437,88 @@ impl Dashboard {
     }
 }
 
+/// `path` shortened from the front until it is at most `width` pixels wide.
+fn fit_path(ui: &mut Ui<'_>, path: &std::path::Path, width: i32, style: TextStyle) -> String {
+    let mut limit = path.to_string_lossy().len();
+    loop {
+        let text = backend::truncate_path(path, limit);
+        if limit <= 8 || ui.text.measure(&text, style) <= width {
+            return text;
+        }
+        limit = text.len().min(limit) - 1;
+    }
+}
+
+/// Files a path popup lists before it says how many more there are.
+const POPUP_PATHS: usize = 6;
+
+/// A small label beside the cursor with the full path of the file under it,
+/// or the first paths of a tile that stands for several files. Kept inside
+/// the window: above the cursor when there is no room below, as over the
+/// file tiles at the bottom.
+fn path_popup(ui: &mut Ui<'_>, paths: &[std::path::PathBuf]) {
+    let Some((cx, cy)) = ui.input.cursor() else {
+        return;
+    };
+    let mut style = ui.theme.body;
+    style.size = crate::theme::crisp(style.size * 0.86);
+    let inset = ui.px(6);
+    let margin = ui.px(4);
+    let window_w = ui.painter.width();
+    let window_h = ui.painter.height();
+    let max_w = (window_w - 2 * margin - 2 * inset).max(1);
+    let mut lines: Vec<String> = paths
+        .iter()
+        .take(POPUP_PATHS)
+        .map(|path| fit_path(ui, path, max_w, style))
+        .collect();
+    if paths.len() > POPUP_PATHS {
+        lines.push(format!("+{} {}", paths.len() - POPUP_PATHS, tr("more")));
+    }
+    let line_h = ui.text.line_height(style).max(1);
+    let w = lines
+        .iter()
+        .map(|line| ui.text.measure(line, style))
+        .max()
+        .unwrap_or(0)
+        + 2 * inset;
+    let h = lines.len() as i32 * line_h + 2 * inset;
+    let mut x = cx + ui.px(14);
+    let mut y = cy + ui.px(18);
+    if x + w > window_w - margin {
+        x = (window_w - margin - w).max(margin);
+    }
+    if y + h > window_h - margin {
+        y = (cy - ui.px(8) - h).max(margin);
+    }
+    ui.surface(
+        Rect::new(x, y, w, h),
+        ui.theme.panel_alt,
+        ui.theme.panel_edge,
+    );
+    for (i, line) in lines.iter().enumerate() {
+        ui.label_styled(
+            Rect::new(
+                x + inset,
+                y + inset + i as i32 * line_h,
+                w - 2 * inset,
+                line_h,
+            ),
+            line,
+            style,
+            ui.theme.text,
+            Align::Left,
+        );
+    }
+}
+
 /// Hover tooltip width and padding, logical pixels.
-const TOOLTIP_WIDTH: i32 = 250;
-const TOOLTIP_INSET: i32 = 7;
-/// Lines a tooltip shows at most in the smallest window's status card.
+const TOOLTIP_WIDTH: i32 = 640;
+const TOOLTIP_INSET: i32 = 5;
+/// Lines a tooltip shows at most: what fits between the status header and
+/// the queue.
 #[cfg(test)]
-const TOOLTIP_MAX_LINES: usize = 6;
+const TOOLTIP_MAX_LINES: usize = 2;
 
 /// Greedy word wrap to `width` pixels.
 fn wrap_lines(text_cache: &mut TextCache, style: TextStyle, width: i32, text: &str) -> Vec<String> {
@@ -2563,6 +2640,25 @@ mod tests {
             let mut buffer = WindowBuffer::new(w, h);
             app.render(&mut buffer, Scale(scale));
             liminalkit_raster::png::write(out.join(name), &buffer).unwrap();
+            if name == "shelf-1x.png" {
+                // A control of each card under the pointer, then a tile.
+                let s = Scale(scale);
+                let bands = Bands::new(w as i32, h as i32, s);
+                let range = LeftCard::new(bands.right.inset(s.px(8)), s).range;
+                let (_, mode) = RightCard::new(bands.left.inset(s.px(8)), s).setting(0);
+                let actions = Actions::new(bands.status.inset(s.px(8)), s);
+                let tile = crate::file_tiles::layout(actions.inputs, actions.outputs, s, 3, 1);
+                for (file, r) in [
+                    ("tooltip-right-card-1x.png", range),
+                    ("tooltip-left-card-1x.png", mode),
+                    ("popup-input-tile-1x.png", tile.inputs[0]),
+                    ("popup-output-tile-1x.png", tile.outputs[0]),
+                ] {
+                    app.on_cursor((r.x + r.w / 2) as f32, (r.y + r.h / 2) as f32);
+                    app.render(&mut buffer, Scale(scale));
+                    liminalkit_raster::png::write(out.join(file), &buffer).unwrap();
+                }
+            }
         }
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -3075,6 +3171,72 @@ mod tests {
         app.on_mouse(MouseButton::Left, true);
         app.on_mouse(MouseButton::Left, false);
         app.render(buffer, Scale::ONE);
+    }
+    #[test]
+    fn options_take_input_while_a_new_file_is_probed_but_not_under_a_file_dialog() {
+        let mut app = LegeApp::new();
+        app.dashboard.options = ProcessingOptions::new();
+        let mut buffer = WindowBuffer::new(940, 700);
+        app.render(&mut buffer, Scale::ONE);
+        let bands = Bands::new(940, 700, Scale::ONE);
+        let (_, mode) = RightCard::new(bands.left.inset(8), Scale::ONE).setting(0);
+        let mode_cells = cells(mode, 2, 4);
+        let centre = |r: Rect| ((r.x + r.w / 2) as f32, (r.y + r.h / 2) as f32);
+        // The page count of a file just added is still being read.
+        let (_, _probe) = app.dashboard.begin_input(false);
+        assert!(app.dashboard.input_busy());
+        let (x, y) = centre(mode_cells[1]);
+        click(&mut app, &mut buffer, x, y);
+        assert!(
+            app.dashboard.options.preserve_mode,
+            "an option must answer while the probe runs"
+        );
+        let range = LeftCard::new(bands.right.inset(8), Scale::ONE).range;
+        let (x, y) = centre(range);
+        click(&mut app, &mut buffer, x, y);
+        assert!(
+            app.dashboard.range.caret_area().is_some(),
+            "the page range field must take the caret while the probe runs"
+        );
+        // A file dialog is modal to the options.
+        let (_, _dialog) = app.dashboard.begin_input(true);
+        let (x, y) = centre(mode_cells[0]);
+        click(&mut app, &mut buffer, x, y);
+        assert!(app.dashboard.options.preserve_mode);
+    }
+    #[test]
+    fn the_chosen_output_folder_is_the_buttons_label_and_fits_it() {
+        let mut app = LegeApp::new();
+        let mut buffer = WindowBuffer::new(940, 700);
+        let mut text = TextCache::new(crate::theme::fonts());
+        let style = crate::theme::theme(appearance::active_palette()).body;
+        let long = PathBuf::from(
+            r"D:\Library\Ancient History\A very long shelf name indeed\Another long folder name\Output",
+        );
+        let mut kernel = liminalkit_raster::RasterKernel::new();
+        let mut input = liminalkit_shell::Input::new();
+        let mut scratch = WindowBuffer::new(940, 700);
+        let mut ui = Ui::new(
+            Painter::new(&mut scratch),
+            &mut text,
+            &mut input,
+            crate::theme::theme(appearance::active_palette()),
+            Scale::ONE,
+            &mut kernel,
+        );
+        let label = fit_path(&mut ui, &long, 280, style);
+        assert!(ui.text.measure(&label, style) <= 280, "{label}");
+        assert!(label.ends_with("Output"), "{label}");
+        assert_eq!(
+            fit_path(&mut ui, std::path::Path::new(r"D:\out"), 280, style),
+            r"D:\out"
+        );
+        // Drawn without panicking for a chosen and for an automatic folder.
+        app.dashboard.options.output_path = Some(long);
+        app.dashboard.options.output_path_is_auto = false;
+        app.render(&mut buffer, Scale::ONE);
+        app.dashboard.options.output_path_is_auto = true;
+        app.render(&mut buffer, Scale::ONE);
     }
     #[test]
     fn preserve_click_reaches_the_worker_and_a_modal_blocks_background_input() {

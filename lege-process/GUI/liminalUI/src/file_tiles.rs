@@ -262,6 +262,9 @@ pub struct Shelf {
     pub recent_drag: Option<(Vec<PathBuf>, Instant)>,
     /// The pointer over the shelf as of the last frame drawn.
     pub pointer: ShelfPointer,
+    /// The files of the tile under the pointer in the frame just drawn, for
+    /// the path popup; none while a tile is held.
+    pub hovered: Option<Vec<PathBuf>>,
 }
 
 impl Shelf {
@@ -287,6 +290,7 @@ impl Shelf {
         let plan = layout(left, right, ui.scale, inputs.len(), outputs.len());
         self.drawn.clear();
         self.pointer = ShelfPointer::Elsewhere;
+        self.hovered = None;
         let mut action = None;
         for (rect, group) in plan
             .inputs
@@ -305,11 +309,20 @@ impl Shelf {
                     .map(|g| g.paths.len())
                     .sum();
                 more_tile(ui, rect, files);
+                if ui.input.hovering(rect) {
+                    self.hovered = Some(
+                        groups[groups.len() - hidden..]
+                            .iter()
+                            .flat_map(|g| g.paths.iter().cloned())
+                            .collect(),
+                    );
+                }
             }
         }
         self.follow_press(ui);
         if self.press.is_some() {
             self.pointer = ShelfPointer::HoldingTile;
+            self.hovered = None;
         }
         let drawn = &self.drawn;
         self.icons.retain(|key, _| drawn.contains(key));
@@ -330,6 +343,7 @@ impl Shelf {
         // tile still draws as pressed, and the hand must not drop to an arrow.
         if ui.input.hovering(rect) {
             self.pointer = ShelfPointer::OverTile;
+            self.hovered = Some(group.paths.clone());
         }
         let first = &group.paths[0];
         let icon_rect = icon_rect(ui, rect);
@@ -689,6 +703,55 @@ mod tests {
         input.cursor_left();
         frame(&mut shelf, &mut input);
         assert_eq!(shelf.pointer, ShelfPointer::Elsewhere);
+    }
+
+    #[test]
+    fn the_tile_under_the_pointer_names_its_files_unless_it_is_held() {
+        let mut buffer = liminalkit_raster::WindowBuffer::new(800, 300);
+        let mut text = liminalkit_text::TextCache::new(crate::theme::fonts());
+        let mut kernel = liminalkit_raster::RasterKernel::new();
+        let mut input = liminalkit_shell::Input::new();
+        let left = Rect::new(0, 100, 300, 110);
+        let right = Rect::new(500, 100, 300, 110);
+        let inputs = vec![
+            PathBuf::from("Z:/no/such/one.pdf"),
+            PathBuf::from("Z:/no/such/two.pdf"),
+        ];
+        let outputs = vec![PathBuf::from("Z:/no/such/one_out.pdf")];
+        let mut shelf = Shelf::default();
+        let mut frame = |shelf: &mut Shelf, input: &mut liminalkit_shell::Input| {
+            let mut ui = Ui::new(
+                liminalkit_raster::Painter::new(&mut buffer),
+                &mut text,
+                input,
+                liminalkit_ui::Theme::default(),
+                Scale(1.0),
+                &mut kernel,
+            );
+            shelf.draw(&mut ui, left, right, &inputs, &outputs);
+            ui.input.end_frame();
+        };
+        let plan = layout(left, right, Scale(1.0), 1, 1);
+        let centre = |r: Rect| ((r.x + r.w / 2) as f32, (r.y + r.h / 2) as f32);
+        input.cursor_moved(400.0, 10.0);
+        frame(&mut shelf, &mut input);
+        assert_eq!(shelf.hovered, None);
+        // The two PDFs share one tile: both paths, in the order added.
+        let (x, y) = centre(plan.inputs[0]);
+        input.cursor_moved(x, y);
+        frame(&mut shelf, &mut input);
+        assert_eq!(shelf.hovered.as_deref(), Some(&inputs[..]));
+        let (x, y) = centre(plan.outputs[0]);
+        input.cursor_moved(x, y);
+        frame(&mut shelf, &mut input);
+        assert_eq!(shelf.hovered.as_deref(), Some(&outputs[..]));
+        // Held for a drag: no label in the way.
+        input.mouse(liminalkit_shell::MouseButton::Left, true);
+        frame(&mut shelf, &mut input);
+        frame(&mut shelf, &mut input);
+        assert_eq!(shelf.hovered, None);
+        input.mouse(liminalkit_shell::MouseButton::Left, false);
+        frame(&mut shelf, &mut input);
     }
 
     #[test]
