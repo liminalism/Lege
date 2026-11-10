@@ -53,22 +53,24 @@ ocr-check = "check --package lege-ocr"
 document-ocr = "build --package lege-document-ocr-cli"
 document-ocr-check = "check --package lege-document-ocr-cli"
 document-ocr-run = "run --package lege-document-ocr-cli --"
+titler = "build --package lege-pdf-titler"
+titler-check = "check --package lege-pdf-titler"
+titler-run = "run --package lege-pdf-titler --"
 pdf-write = "build --package lege-pdf-write"
 pdf-write-check = "check --package lege-pdf-write"
-pdf-tool = "build --package lege-pdf-agent --bin lege-pdf"
-pdf-tool-check = "check --package lege-pdf-agent --bin lege-pdf"
-pdf-tool-run = "run --package lege-pdf-agent --bin lege-pdf --"
-lege-pdf = "build --package lege-pdf-agent --bin lege-pdf"
-lege-pdf-check = "check --package lege-pdf-agent --bin lege-pdf"
-lege-pdf-run = "run --package lege-pdf-agent --bin lege-pdf --"
+# The `exprim` agent CLI / MCP server, in the sibling exprim checkout (its
+# agent/ directory is its own workspace with its own target dir).
+pdf-tool = "build --manifest-path ../exprim/agent/Cargo.toml --bin exprim"
+pdf-tool-check = "check --manifest-path ../exprim/agent/Cargo.toml --bin exprim"
+pdf-tool-run = "run --manifest-path ../exprim/agent/Cargo.toml --bin exprim --"
 ipc = "build --package lege-ipc"
 xtask-help = "run --package xtask -- help"
 
-# Standalone codec projects. These intentionally keep their own build graphs,
-# so the aliases enter them through --manifest-path instead of workspace -p.
-jbig2 = "build --manifest-path lege-codecs/jbig2enc-rust/Cargo.toml"
-jp2 = "build --manifest-path lege-codecs/jp2lam/Cargo.toml"
-djvu = "build --manifest-path lege-codecs/djvulibrust/Cargo.toml --features cli --bin djvu-encoder"
+# Standalone codec projects in the sibling exprim checkout. These keep their
+# own build graphs, so the aliases enter them through --manifest-path.
+jbig2 = "build --manifest-path ../exprim/codecs/jbig2enc-rust/Cargo.toml"
+jp2 = "build --manifest-path ../exprim/codecs/jp2lam/Cargo.toml"
+djvu = "build --manifest-path ../exprim/codecs/djvulibrust/Cargo.toml --features cli --bin djvu-encoder"
 
 # Page-native writer in the sibling Liminaldoc workspace.
 docwrite = "build --manifest-path ../liminaldoc/Cargo.toml -p docwrite-app --bin liminaldoc-writer"

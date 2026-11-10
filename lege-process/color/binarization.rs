@@ -1401,7 +1401,7 @@ mod tests {
     fn rgb_wrappers_are_byte_identical_to_legacy_cpu_on_pdf_corpus() {
         use std::sync::Arc;
 
-        use lege_pdf_read::{RasterPlane, RasterProduct, RenderSession};
+        use exprim::{RasterPlane, RasterProduct, RenderSession};
 
         let corpus = std::env::var_os("LEGE_BINARIZATION_PARITY_CORPUS")
             .expect("set LEGE_BINARIZATION_PARITY_CORPUS to PDF paths");

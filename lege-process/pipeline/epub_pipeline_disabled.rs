@@ -53,7 +53,7 @@ pub(crate) fn build_epub_from_hocr_pages_cancellable(
     _hocr_pages: &[HocrPage],
     _title: &str,
     _output_path: &Path,
-    _cancellation: Option<&lege_pdf_read::CancellationToken>,
+    _cancellation: Option<&exprim::CancellationToken>,
 ) -> Result<()> {
     unavailable()
 }
@@ -69,7 +69,7 @@ pub(crate) fn build_epub_from_hocr_pages_with_outline_cancellable(
     _title: &str,
     _output_path: &Path,
     _outline: &[lege_pdf_write::outline::OutlineItem],
-    _cancellation: Option<&lege_pdf_read::CancellationToken>,
+    _cancellation: Option<&exprim::CancellationToken>,
 ) -> Result<()> {
     unavailable()
 }
@@ -79,7 +79,7 @@ pub(crate) fn build_epub_from_spooled_hocr_pages_with_outline_cancellable(
     _title: &str,
     _output_path: &Path,
     _outline: &[lege_pdf_write::outline::OutlineItem],
-    _cancellation: Option<&lege_pdf_read::CancellationToken>,
+    _cancellation: Option<&exprim::CancellationToken>,
 ) -> Result<()> {
     unavailable()
 }

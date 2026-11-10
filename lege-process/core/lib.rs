@@ -24,7 +24,7 @@ pub mod android;
 
 /// Book layout model, embedded so layout detection works with no external
 /// asset: RF-DETR-S (DINOv2-S backbone + deformable DETR decoder, Apache-2.0)
-/// fine-tuned on Lege's own book corpus (2026-11-08; see
+/// fine-tuned on Lege's own book corpus (v2, 2026-11-10; see
 /// `models/layout-rfdetr-s.md`), exported to the PP-DocLayout contract
 /// (`pp_image` [1,3,640,640] in; xyxy boxes and PP-23 class scores out) with
 /// fp16 weights that the runtime widens to f32 at load. A `layout.onnx` (or

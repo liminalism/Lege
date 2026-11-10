@@ -6,7 +6,7 @@ use anyhow::{Context, Result, anyhow};
 use async_trait::async_trait;
 use futures_util::stream::{FuturesUnordered, StreamExt};
 use image::RgbImage;
-use lege_pdf_read::RenderSession;
+use exprim::RenderSession;
 use std::cmp::Ordering as CmpOrdering;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -55,7 +55,7 @@ pub trait PageSource: Send + Sync {
     async fn load_page_cancellable(
         &self,
         page_index: usize,
-        _cancellation: lege_pdf_read::CancellationToken,
+        _cancellation: exprim::CancellationToken,
     ) -> Result<SourcePage> {
         self.load_page(page_index).await
     }
@@ -68,7 +68,7 @@ pub trait PageSource: Send + Sync {
         &self,
         page_index: usize,
         analysis_width: u32,
-        cancellation: lege_pdf_read::CancellationToken,
+        cancellation: exprim::CancellationToken,
     ) -> Result<SourcePage> {
         let _ = analysis_width;
         self.load_page_cancellable(page_index, cancellation).await
@@ -144,7 +144,7 @@ impl PageSource for PdfPageSource {
     async fn load_page_cancellable(
         &self,
         page_index: usize,
-        cancellation: lege_pdf_read::CancellationToken,
+        cancellation: exprim::CancellationToken,
     ) -> Result<SourcePage> {
         self.load_pdf_page(page_index, Some(cancellation)).await
     }
@@ -153,7 +153,7 @@ impl PageSource for PdfPageSource {
         &self,
         page_index: usize,
         analysis_width: u32,
-        cancellation: lege_pdf_read::CancellationToken,
+        cancellation: exprim::CancellationToken,
     ) -> Result<SourcePage> {
         // Render directly at analysis resolution: the margin pass only ever
         // sees the 640-wide image, so rendering full-size first would allocate
@@ -215,7 +215,7 @@ impl PdfPageSource {
     async fn load_pdf_page(
         &self,
         page_index: usize,
-        cancellation: Option<lege_pdf_read::CancellationToken>,
+        cancellation: Option<exprim::CancellationToken>,
     ) -> Result<SourcePage> {
         // "Render high, resize low": render at the highest resolution any stage
         // needs (OCR when slow-OCR is enabled), then downstream stages resize
@@ -563,7 +563,7 @@ pub async fn source_stage(
     source: Arc<dyn PageSource>,
     config: Arc<PipelineConfig>,
     page_range: std::ops::Range<usize>,
-    cancellation: lege_pdf_read::CancellationToken,
+    cancellation: exprim::CancellationToken,
     tx: mpsc::Sender<RenderedPageData>,
     render_count: Arc<AtomicUsize>,
     detect_count: Arc<AtomicUsize>,

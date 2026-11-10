@@ -124,18 +124,18 @@ echo "== PDF crates =="
 ws "workspace (pdf + document-ocr + rest)" --workspace
 
 echo "== codecs (own build graphs) =="
-mp lege-codecs/jp2lam/Cargo.toml         "jp2lam default"
-mp lege-codecs/jp2lam/Cargo.toml         "jp2lam no-default"      --no-default-features
-mp lege-codecs/jp2lam/Cargo.toml         "jp2lam cli,profile,counters" --features cli,profile,counters
-mp lege-codecs/jbig2enc-rust/Cargo.toml  "jbig2enc default"
-mp lege-codecs/jbig2enc-rust/Cargo.toml  "jbig2enc no-default"    --no-default-features
-mp lege-codecs/jbig2enc-rust/Cargo.toml  "jbig2enc decode only"   --no-default-features --features decode
-mp lege-codecs/jbig2enc-rust/Cargo.toml  "jbig2enc cli"           --features cli
+mp ../exprim/codecs/jp2lam/Cargo.toml         "jp2lam default"
+mp ../exprim/codecs/jp2lam/Cargo.toml         "jp2lam no-default"      --no-default-features
+mp ../exprim/codecs/jp2lam/Cargo.toml         "jp2lam cli,profile,counters" --features cli,profile,counters
+mp ../exprim/codecs/jbig2enc-rust/Cargo.toml  "jbig2enc default"
+mp ../exprim/codecs/jbig2enc-rust/Cargo.toml  "jbig2enc no-default"    --no-default-features
+mp ../exprim/codecs/jbig2enc-rust/Cargo.toml  "jbig2enc decode only"   --no-default-features --features decode
+mp ../exprim/codecs/jbig2enc-rust/Cargo.toml  "jbig2enc cli"           --features cli
 # asm_zp is excluded on purpose: its own manifest calls it "bit-incorrect and
 # experimental" and it does not compile, for reasons unrelated to warnings.
-mp lege-codecs/djvulibrust/Cargo.toml    "djvu default"
-mp lege-codecs/djvulibrust/Cargo.toml    "djvu debug-logging"     --features debug-logging
-mp lege-codecs/djvulibrust/Cargo.toml    "djvu cli,rayon,simd"    --features cli,rayon,simd
+mp ../exprim/codecs/djvulibrust/Cargo.toml    "djvu default"
+mp ../exprim/codecs/djvulibrust/Cargo.toml    "djvu debug-logging"     --features debug-logging
+mp ../exprim/codecs/djvulibrust/Cargo.toml    "djvu cli,rayon,simd"    --features cli,rayon,simd
 
 echo "== nested workspace =="
 mp lege-pdf/pdf-integrity/Cargo.toml     "pdf-integrity"          --workspace
@@ -150,10 +150,10 @@ run "lege android (aarch64)"      cargo check -p lege --target aarch64-linux-and
 rel "lege-gpu default"            -p lege-gpu
 rel "lege-ocr default"            -p lege-ocr
 rel "workspace"                   --workspace
-mprel lege-codecs/jp2lam/Cargo.toml        "jp2lam default"
-mprel lege-codecs/jbig2enc-rust/Cargo.toml "jbig2enc default"
-mprel lege-codecs/jbig2enc-rust/Cargo.toml "jbig2enc cli"        --features cli
-mprel lege-codecs/djvulibrust/Cargo.toml   "djvu default"
+mprel ../exprim/codecs/jp2lam/Cargo.toml        "jp2lam default"
+mprel ../exprim/codecs/jbig2enc-rust/Cargo.toml "jbig2enc default"
+mprel ../exprim/codecs/jbig2enc-rust/Cargo.toml "jbig2enc cli"        --features cli
+mprel ../exprim/codecs/djvulibrust/Cargo.toml   "djvu default"
 
 echo
 if [ "$BASELINE" = 1 ]; then

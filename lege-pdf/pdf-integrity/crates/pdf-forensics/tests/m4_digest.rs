@@ -17,7 +17,7 @@ use pdf_forensics::{
     SignatureFacts, TimeValidity, TimestampStatus, TrustStatus, audit_bytes,
     post_signature_changes,
 };
-use pdf_test_support::builder::{PdfBuilder, layout, signed_layout};
+use exprim::test_support::builder::{PdfBuilder, layout, signed_layout};
 use rand::rngs::OsRng;
 use rsa::{RsaPrivateKey, RsaPublicKey, pkcs1v15::SigningKey};
 use sha2_10::{Digest, Sha256};

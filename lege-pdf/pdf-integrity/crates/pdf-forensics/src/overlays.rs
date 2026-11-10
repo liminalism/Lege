@@ -31,11 +31,11 @@
 
 use std::sync::Arc;
 
-use pdf_content::{PageCompiler, SemanticOp, SemanticPage};
-use pdf_document::{DocumentLimits, DocumentSnapshot, PageIndex, ParseContext};
-use pdf_page_ir::{Matrix, PaintOrigin, Point, Rect};
-use pdf_source::{OwnedBytesSource, PdfSource};
-use pdf_text::{CharType, TextPage, TextPageOptions};
+use exprim::content::{PageCompiler, SemanticOp, SemanticPage};
+use exprim::document::{DocumentLimits, DocumentSnapshot, PageIndex, ParseContext};
+use exprim::page_ir::{Matrix, PaintOrigin, Point, Rect};
+use exprim::source::{OwnedBytesSource, PdfSource};
+use exprim::text::{CharType, TextPage, TextPageOptions};
 
 use crate::document::ParseAssessment;
 use crate::evidence::{

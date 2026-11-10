@@ -678,7 +678,7 @@ fn discover(
 
 fn pdf_page_count(path: &Path) -> Option<u32> {
     let bytes: Arc<[u8]> = std::fs::read(path).ok()?.into();
-    lege_pdf_read::RenderSession::open(bytes, None)
+    exprim::RenderSession::open(bytes, None)
         .ok()
         .map(|session| session.page_count())
 }
@@ -748,7 +748,7 @@ use std::sync::Arc;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pdf_test_support::builder::PdfBuilder;
+    use exprim::test_support::builder::PdfBuilder;
     #[test]
     fn output_names_are_deterministic_and_collision_safe() {
         assert_eq!(

@@ -112,7 +112,7 @@ async fn epub_inference_stage(
 /// Run the full EPUB pipeline over a PDF byte buffer.
 #[allow(clippy::too_many_arguments)]
 pub async fn create_and_run_epub_pipeline(
-    document: Arc<lege_pdf_read::RenderSession>,
+    document: Arc<exprim::RenderSession>,
     config: Arc<PipelineConfig>,
     output_path: &Path,
     page_range: Option<std::ops::Range<usize>>,
@@ -214,7 +214,7 @@ pub async fn create_and_run_epub_pipeline(
     let render_count = Arc::new(AtomicUsize::new(0));
     let detect_count = Arc::new(AtomicUsize::new(0));
     let encode_count = Arc::new(AtomicUsize::new(0));
-    let cancellation = lege_pdf_read::CancellationToken::new();
+    let cancellation = exprim::CancellationToken::new();
     let _lifetime = crate::pipeline::helper_functions::PipelineLifetime(cancellation.clone());
 
     let (render_tx, render_rx) = mpsc::channel(limits.render_buffer);
@@ -337,7 +337,7 @@ pub async fn create_and_run_epub_pipeline(
     let synthetic_outline = outline_from_page_text(&pages);
     let source_outline = if let Some(session) = source.document_session() {
         let bookmarks =
-            crate::runtime_stats::spawn_blocking(move || lege_pdf_read::extract_outline(&session))
+            crate::runtime_stats::spawn_blocking(move || exprim::extract_outline(&session))
                 .await?;
         let source_to_output = (page_start..page_end)
             .enumerate()
@@ -428,7 +428,7 @@ pub(crate) fn build_epub_from_hocr_pages_cancellable(
     hocr_pages: &[HocrPage],
     title: &str,
     output_path: &Path,
-    cancellation: Option<&lege_pdf_read::CancellationToken>,
+    cancellation: Option<&exprim::CancellationToken>,
 ) -> Result<()> {
     build_epub_from_hocr_pages_with_outline_cancellable(
         hocr_pages,
@@ -444,7 +444,7 @@ pub(crate) fn build_epub_from_hocr_pages_with_outline_cancellable(
     title: &str,
     output_path: &Path,
     outline: &[lege_pdf_write::outline::OutlineItem],
-    cancellation: Option<&lege_pdf_read::CancellationToken>,
+    cancellation: Option<&exprim::CancellationToken>,
 ) -> Result<()> {
     let mut pages: Vec<PageText> = hocr_pages
         .iter()
@@ -462,13 +462,13 @@ pub(crate) fn build_epub_from_spooled_hocr_pages_with_outline_cancellable(
     title: &str,
     output_path: &Path,
     outline: &[lege_pdf_write::outline::OutlineItem],
-    cancellation: Option<&lege_pdf_read::CancellationToken>,
+    cancellation: Option<&exprim::CancellationToken>,
 ) -> Result<()> {
     let mut ordered: Vec<&SpooledHocrPage> = spooled_pages.iter().collect();
     ordered.sort_by_key(|page| page.page_index);
     let mut pages: Vec<PageText> = Vec::with_capacity(ordered.len());
     for spooled in ordered {
-        if cancellation.is_some_and(lege_pdf_read::CancellationToken::is_cancelled) {
+        if cancellation.is_some_and(exprim::CancellationToken::is_cancelled) {
             return Err(anyhow!("EPUB sidecar packaging cancelled"));
         }
         let hocr = std::fs::read_to_string(&spooled.path).map_err(|error| {
@@ -1016,7 +1016,7 @@ fn build_epub_cancellable(
     pages: &[PageText],
     title: &str,
     output_path: &Path,
-    cancellation: Option<&lege_pdf_read::CancellationToken>,
+    cancellation: Option<&exprim::CancellationToken>,
 ) -> Result<()> {
     let outline = outline_from_page_text(pages);
     build_epub_with_outline_cancellable(pages, title, output_path, &outline, cancellation)
@@ -1027,7 +1027,7 @@ fn build_epub_with_outline_cancellable(
     title: &str,
     output_path: &Path,
     outline: &[lege_pdf_write::outline::OutlineItem],
-    cancellation: Option<&lege_pdf_read::CancellationToken>,
+    cancellation: Option<&exprim::CancellationToken>,
 ) -> Result<()> {
     let chapters = assemble_chapters(pages, outline);
     if chapters.is_empty() {
@@ -1063,13 +1063,13 @@ fn build_epub_with_outline_cancellable(
         &metadata,
         &documents,
         &modified,
-        &|| cancellation.is_some_and(lege_pdf_read::CancellationToken::is_cancelled),
+        &|| cancellation.is_some_and(exprim::CancellationToken::is_cancelled),
     )?;
     temporary
         .as_file_mut()
         .sync_all()
         .map_err(|e| anyhow!("[EPUB] sync failed: {e}"))?;
-    if cancellation.is_some_and(lege_pdf_read::CancellationToken::is_cancelled) {
+    if cancellation.is_some_and(exprim::CancellationToken::is_cancelled) {
         return Err(anyhow!("[EPUB] packaging cancelled"));
     }
     temporary.persist(output_path).map_err(|e| {
@@ -1378,7 +1378,7 @@ mod tests {
         let directory = tempfile::tempdir().expect("temporary EPUB directory");
         let path = directory.path().join("book.epub");
         std::fs::write(&path, b"last-good-output").expect("seed destination");
-        let cancellation = lege_pdf_read::CancellationToken::new();
+        let cancellation = exprim::CancellationToken::new();
         cancellation.cancel();
 
         let error = build_epub_cancellable(&pages, "Cancelled Book", &path, Some(&cancellation))

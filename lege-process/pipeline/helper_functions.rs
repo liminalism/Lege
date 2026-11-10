@@ -941,7 +941,7 @@ pub async fn await_stage_or_cancel_with_token(
     shutdown_rx: &mut tokio::sync::broadcast::Receiver<crate::ShutdownSignal>,
     stage_name: &str,
     abort_remaining: &[tokio::task::AbortHandle],
-    cancellation: Option<&lege_pdf_read::CancellationToken>,
+    cancellation: Option<&exprim::CancellationToken>,
 ) -> anyhow::Result<()> {
     tokio::select! {
         result = &mut *task => {
@@ -959,7 +959,7 @@ pub async fn await_stage_or_cancel_with_token(
 async fn stop_pipeline_stages(
     task: &tokio::task::JoinHandle<anyhow::Result<()>>,
     remaining: &[tokio::task::AbortHandle],
-    cancellation: Option<&lege_pdf_read::CancellationToken>,
+    cancellation: Option<&exprim::CancellationToken>,
     stage_name: &str,
 ) {
     if let Some(cancellation) = cancellation {
@@ -978,7 +978,7 @@ async fn stop_pipeline_stages(
 /// Cancels submitted blocking work if its owning pipeline future is dropped.
 /// On success all work has already drained, so cancelling at scope exit is safe.
 #[derive(Debug)]
-pub(crate) struct PipelineLifetime(pub(crate) lege_pdf_read::CancellationToken);
+pub(crate) struct PipelineLifetime(pub(crate) exprim::CancellationToken);
 impl Drop for PipelineLifetime {
     fn drop(&mut self) {
         self.0.cancel();
@@ -992,13 +992,13 @@ impl Drop for PipelineLifetime {
 pub fn supervise_pipeline_stages<'a>(
     stages: Vec<(&'static str, tokio::task::JoinHandle<anyhow::Result<()>>)>,
     shutdown_rx: &'a mut tokio::sync::broadcast::Receiver<crate::ShutdownSignal>,
-    cancellation: &'a lege_pdf_read::CancellationToken,
+    cancellation: &'a exprim::CancellationToken,
     peers: &'a [tokio::task::AbortHandle],
 ) -> impl std::future::Future<Output = anyhow::Result<()>> + 'a {
     use futures_util::{StreamExt, stream::FuturesUnordered};
 
     struct RunningStages {
-        cancellation: Option<lege_pdf_read::CancellationToken>,
+        cancellation: Option<exprim::CancellationToken>,
         abort: Vec<tokio::task::AbortHandle>,
     }
     impl Drop for RunningStages {
@@ -1353,7 +1353,7 @@ enum PdfWriterState {
 
 struct PdfWriterControl {
     state: std::sync::Mutex<PdfWriterState>,
-    cancellation: lege_pdf_read::CancellationToken,
+    cancellation: exprim::CancellationToken,
     #[cfg(test)]
     before_publish: std::sync::Mutex<
         Option<(
@@ -1364,7 +1364,7 @@ struct PdfWriterControl {
 }
 
 impl PdfWriterControl {
-    fn new(cancellation: lege_pdf_read::CancellationToken) -> Self {
+    fn new(cancellation: exprim::CancellationToken) -> Self {
         Self {
             state: std::sync::Mutex::new(PdfWriterState::Collecting),
             cancellation,
@@ -1571,7 +1571,7 @@ pub fn spawn_pdf_writer_actor(
         progress_tracker,
         use_margin_label,
         channel_capacity,
-        lege_pdf_read::CancellationToken::new(),
+        exprim::CancellationToken::new(),
     )
 }
 
@@ -1582,7 +1582,7 @@ pub fn spawn_pdf_writer_actor_cancellable(
     progress_tracker: crate::progress::ProgressTracker,
     use_margin_label: bool,
     channel_capacity: usize,
-    cancellation: lege_pdf_read::CancellationToken,
+    cancellation: exprim::CancellationToken,
 ) -> (
     PdfWriterHandle,
     tokio::task::JoinHandle<Result<(), anyhow::Error>>,
@@ -1897,7 +1897,7 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn lifecycle_stage_error_aborts_siblings_and_cancels_blocking_work() {
         let (_tx, mut shutdown) = tokio::sync::broadcast::channel(1);
-        let cancellation = lege_pdf_read::CancellationToken::new();
+        let cancellation = exprim::CancellationToken::new();
         let mut failed = tokio::spawn(async { Err(anyhow::anyhow!("injected stage failure")) });
         let sibling = tokio::spawn(std::future::pending::<anyhow::Result<()>>());
         let result = await_stage_or_cancel_with_token(
@@ -1921,7 +1921,7 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn lifecycle_supervisor_observes_downstream_failure_before_upstream_finishes() {
         let (_tx, mut shutdown) = tokio::sync::broadcast::channel(1);
-        let cancellation = lege_pdf_read::CancellationToken::new();
+        let cancellation = exprim::CancellationToken::new();
         let (dropped_tx, dropped_rx) = tokio::sync::oneshot::channel();
         let (started_tx, started_rx) = tokio::sync::oneshot::channel();
         struct OnDrop(Option<tokio::sync::oneshot::Sender<()>>);
@@ -1961,7 +1961,7 @@ mod tests {
     async fn lifecycle_closed_shutdown_channel_does_not_starve_a_stage() {
         let (tx, mut shutdown) = tokio::sync::broadcast::channel(1);
         drop(tx);
-        let cancellation = lege_pdf_read::CancellationToken::new();
+        let cancellation = exprim::CancellationToken::new();
         let mut stage = tokio::spawn(async {
             tokio::task::yield_now().await;
             Ok(())
@@ -1985,7 +1985,7 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn lifecycle_unpolled_supervisor_still_owns_and_aborts_its_stages() {
         let (_tx, mut shutdown) = tokio::sync::broadcast::channel(1);
-        let cancellation = lege_pdf_read::CancellationToken::new();
+        let cancellation = exprim::CancellationToken::new();
         let (dropped, observed) = tokio::sync::oneshot::channel();
         let (started, ready) = tokio::sync::oneshot::channel();
         struct Guard(Option<tokio::sync::oneshot::Sender<()>>);
@@ -2242,7 +2242,7 @@ mod tests {
         let handle = PdfWriterHandle {
             sender: tx,
             control: Arc::new(super::PdfWriterControl::new(
-                lege_pdf_read::CancellationToken::new(),
+                exprim::CancellationToken::new(),
             )),
         };
 

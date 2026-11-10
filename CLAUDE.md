@@ -17,11 +17,11 @@ Lege is a fully-automatic PDF processor for E-Ink ebook readers. It renders PDF 
 | `lege-gpu` | `lege-gpu/` | wgpu GPU compute: binarization, resize, custom ONNX runtime |
 | `lege-ocr` | `lege-ocr/` | Shared OCR library + `lege-ocr-debug` |
 | `lege-pdf-write` | `lege-pdf/write/` | Typed append-only PDF writer |
-| `lege-pdf-print` | `lege-pdf/print/` | Office printing: imposition, sheet composition, CUPS/winspool spooling |
-| Future renderer | `lege-pdf/render/` | Reserved for the renderer's independent workspace |
-| `jbig2enc-rust` | `lege-codecs/jbig2enc-rust/` | In-tree JBIG2 encoder/decoder (patched into `lege`) |
-| `jp2lam` | `lege-codecs/jp2lam/` | In-tree JPEG2000 codec (patched into `lege`) |
-| `djvu_encoder` | `lege-codecs/djvulibrust/` | AGPL DjVu library linked by Lege; standalone codec CLI retained |
+| `lege-render-wgpu` | `lege-render-wgpu/` | wgpu image renderer + GPU postprocess executor over exprim (needs `lege-gpu`) |
+| `exprim` | `../exprim/` (sibling repo) | PDF engine: reading, text, rendering, printing (`print` feature); the `exprim` agent CLI/MCP server is `../exprim/agent` |
+| `jbig2enc-rust` | `../exprim/codecs/jbig2enc-rust/` | JBIG2 encoder/decoder (patched into `lege`) |
+| `jp2lam` | `../exprim/codecs/jp2lam/` | JPEG2000 codec (patched into `lege`) |
+| `djvu_encoder` | `../exprim/codecs/djvulibrust/` | AGPL DjVu library linked by Lege; standalone codec CLI retained |
 | `lege-gui-liminalui` | `lege-process/GUI/liminalUI/` | liminalUI GUI frontend; produces bin `lege-gui` (the only frontend) |
 | Liminaldoc reader and writer | `../liminaldoc/` | Separate native document product; old source copies remain here during migration |
 | Shared assets/tools | `lege-misc/` | Icons, packaging, scripts, docs, dev utilities, and `xtask` |
@@ -30,8 +30,10 @@ The only workspace default member is `lege-process`. Its default `gui`
 feature depends on `lege-gui-liminalui` and adds a `lege-gui` binary target, so
 plain `cargo build` (or `cargo gui`, i.e. `cargo build -p lege`) builds both
 the CLI and the GUI; `cargo cli` builds `--bin lege` alone.
-Standalone codec projects retain their own build graphs; root patches make the
-processor use the in-tree linked codecs.
+The PDF engine (`exprim`) and the codecs live in the sibling `../exprim`
+repository, which must be checked out beside this one; `exprim` is a path
+dependency, and root patches make the processor use the sibling codec sources.
+Standalone codec projects retain their own build graphs.
 
 Never select `-p lege` and `-p lege-gui-liminalui` in one invocation: both
 packages have a `lege-gui` binary, and their outputs collide in `target/`.
@@ -99,11 +101,11 @@ Before any destructive git operation, stop and ask. The only exception is deleti
 cargo test
 
 # Tests for a specific crate
-cargo test --manifest-path lege-codecs/djvulibrust/Cargo.toml
+cargo test --manifest-path ../exprim/codecs/djvulibrust/Cargo.toml
 cargo test -p lege
 
 # Single test by name
-cargo test --manifest-path lege-codecs/djvulibrust/Cargo.toml jb2_pipeline
+cargo test --manifest-path ../exprim/codecs/djvulibrust/Cargo.toml jb2_pipeline
 
 # Tests with debug-logging output visible
 cargo test --features debug-logging -- --nocapture
@@ -179,7 +181,7 @@ the existing parallel encode stage; the writer actor inserts encoded pages in
 order, adds navigation, and atomically publishes the final document. There are
 no manifest/page staging files and no runtime helper discovery.
 
-- Build the encoder: `cargo build --manifest-path lege-codecs/djvulibrust/Cargo.toml --features cli --bin djvu-encoder`
+- Build the encoder: `cargo build --manifest-path ../exprim/codecs/djvulibrust/Cargo.toml --features cli --bin djvu-encoder`
   (behind the `cli` feature; the library build stays lean). This independent
   diagnostic/user tool has a simple
   standalone mode: `djvu-encoder encode PAGE.png… -o out.djvu [--photo|--bilevel]`.

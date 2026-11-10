@@ -17,7 +17,7 @@ use pdf_forensics::{
     AuditReport, LogicalRevisionFacts, ObjectChangeFacts, ObjectChangeKind, ObjectLocationFacts,
     ObjectRole, RevisionHistoryFacts, audit_bytes,
 };
-use pdf_test_support::builder;
+use exprim::test_support::builder;
 
 /// Audit `bytes` and require the report to satisfy the schema's own rules.
 fn audit(bytes: &[u8]) -> AuditReport {

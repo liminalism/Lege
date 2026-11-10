@@ -327,7 +327,7 @@ fn rasterized_searchable_pdf(request: &ExportRequest<'_>, path: &Path) -> Result
         return Err(ExportError::Exists(path.to_path_buf()));
     }
     let source: Arc<[u8]> = fs::read(&request.document.source.path)?.into();
-    let session = lege_pdf_read::RenderSession::open(source, None)?;
+    let session = exprim::RenderSession::open(source, None)?;
     if session.page_count() as usize != request.document.pages.len() {
         return Err(ExportError::SourcePageCountChanged);
     }
@@ -343,12 +343,12 @@ fn rasterized_searchable_pdf(request: &ExportRequest<'_>, path: &Path) -> Result
             let compiled = session.compile(page.index)?;
             let rendered = session.render(
                 &compiled,
-                &lege_pdf_read::RasterProduct::rgb8(
+                &exprim::RasterProduct::rgb8(
                     page.source_size.width,
                     page.source_size.height,
                 ),
             )?;
-            let lege_pdf_read::RasterPlane::Rgb8(rgb) = rendered else {
+            let exprim::RasterPlane::Rgb8(rgb) = rendered else {
                 return Err(ExportError::UnexpectedRasterFormat);
             };
             let mut jpeg = Vec::new();
@@ -1052,7 +1052,7 @@ pub enum ExportError {
     #[error("JPEG encoding failed: {0}")]
     Jpeg(String),
     #[error("PDF intake failed: {0}")]
-    PdfRead(#[from] lege_pdf_read::ReadError),
+    PdfRead(#[from] exprim::ReadError),
     #[error("PDF writing failed: {0}")]
     PdfWrite(#[from] lege_pdf_write::types::WriteError),
     #[error("ZIP package writing failed: {0}")]
@@ -1063,7 +1063,7 @@ pub enum ExportError {
 mod tests {
     use super::*;
     use lege_docir::*;
-    use pdf_test_support::builder::PdfBuilder;
+    use exprim::test_support::builder::PdfBuilder;
 
     fn empty_document() -> Document {
         Document::new(
@@ -1324,7 +1324,7 @@ mod tests {
         let bytes: Arc<[u8]> = std::fs::read(directory.path().join("book.searchable.pdf"))
             .unwrap()
             .into();
-        let session = lege_pdf_read::RenderSession::open(bytes, None).unwrap();
-        assert_eq!(lege_pdf_read::page_text(&session, 0).unwrap(), "hello");
+        let session = exprim::RenderSession::open(bytes, None).unwrap();
+        assert_eq!(exprim::page_text(&session, 0).unwrap(), "hello");
     }
 }

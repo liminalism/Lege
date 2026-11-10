@@ -43,9 +43,9 @@
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;
 
-use pdf_document::{DocumentLimits, DocumentSnapshot, ParseContext};
-use pdf_object::{Dictionary, ObjectId, PdfObject, decode_text_string_lossy};
-use pdf_source::{OwnedBytesSource, PdfSource};
+use exprim::document::{DocumentLimits, DocumentSnapshot, ParseContext};
+use exprim::object::{Dictionary, ObjectId, PdfObject, decode_text_string_lossy};
+use exprim::source::{OwnedBytesSource, PdfSource};
 
 use crate::document::{
     DocMdpPermission, DocumentFacts, FieldMdpAction, FieldMdpPolicyFacts, ObjectChangeKind,

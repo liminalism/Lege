@@ -7,9 +7,9 @@
 
 use std::sync::Arc;
 
-use pdf_document::{DocumentLimits, DocumentSnapshot};
-use pdf_read::{CompileStatus, DocumentReport, OpenOutcome};
-use pdf_source::{OwnedBytesSource, PdfSource};
+use exprim::document::{DocumentLimits, DocumentSnapshot};
+use exprim::doctor::{CompileStatus, DocumentReport, OpenOutcome};
+use exprim::source::{OwnedBytesSource, PdfSource};
 
 use crate::document::{
     AnnotationFacts, AnnotationIdentityFacts, ByteRangeSpan, ByteRangeValidity, CompileOutcome,
@@ -66,7 +66,7 @@ pub fn audit_bytes_with_evidence(
 
     let source: Arc<dyn PdfSource> = Arc::new(OwnedBytesSource::new(bytes.to_vec()));
     let report =
-        pdf_read::examine_with_password(Arc::clone(&source), DocumentLimits::default(), password);
+        exprim::doctor::examine_with_password(Arc::clone(&source), DocumentLimits::default(), password);
 
     let facts = translate(bytes, &report, &source, password, identity);
     let mode = analysis_mode(&facts);
@@ -315,7 +315,7 @@ fn translate(
     }
 }
 
-fn translate_xmp(xmp: &pdf_read::XmpLineage) -> XmpLineageFacts {
+fn translate_xmp(xmp: &exprim::doctor::XmpLineage) -> XmpLineageFacts {
     XmpLineageFacts {
         document_id: xmp.document_id.clone(),
         instance_id: xmp.instance_id.clone(),
@@ -336,7 +336,7 @@ fn translate_xmp(xmp: &pdf_read::XmpLineage) -> XmpLineageFacts {
     }
 }
 
-fn translate_annotation(annot: &pdf_read::AnnotationRecord) -> AnnotationIdentityFacts {
+fn translate_annotation(annot: &exprim::doctor::AnnotationRecord) -> AnnotationIdentityFacts {
     AnnotationIdentityFacts {
         page: annot.page,
         object: annot.object.map(|id| id.to_string()),
@@ -352,7 +352,7 @@ fn translate_annotation(annot: &pdf_read::AnnotationRecord) -> AnnotationIdentit
 }
 
 fn translate_signature(
-    sig: &pdf_read::SignatureInfo,
+    sig: &exprim::doctor::SignatureInfo,
     history: Option<&RevisionHistoryFacts>,
     bytes: &[u8],
 ) -> SignatureFacts {
@@ -390,11 +390,11 @@ fn translate_signature(
         byte_range: sig.byte_range.clone(),
         covers_whole_file: sig.covers_whole_file,
         byte_range_validity: match sig.byte_range_validity {
-            pdf_read::ByteRangeValidity::Valid => ByteRangeValidity::Valid,
-            pdf_read::ByteRangeValidity::GapContaining => ByteRangeValidity::GapContaining,
-            pdf_read::ByteRangeValidity::Truncated => ByteRangeValidity::Truncated,
-            pdf_read::ByteRangeValidity::Overlapping => ByteRangeValidity::Overlapping,
-            pdf_read::ByteRangeValidity::Malformed => ByteRangeValidity::Malformed,
+            exprim::doctor::ByteRangeValidity::Valid => ByteRangeValidity::Valid,
+            exprim::doctor::ByteRangeValidity::GapContaining => ByteRangeValidity::GapContaining,
+            exprim::doctor::ByteRangeValidity::Truncated => ByteRangeValidity::Truncated,
+            exprim::doctor::ByteRangeValidity::Overlapping => ByteRangeValidity::Overlapping,
+            exprim::doctor::ByteRangeValidity::Malformed => ByteRangeValidity::Malformed,
         },
         ends_at_revision_end: crate::byterange::ends_at_revision_end(
             &covered_ranges,
@@ -416,7 +416,7 @@ fn translate_signature(
     }
 }
 
-fn translate_page(page: &pdf_read::PageStatus) -> PageFacts {
+fn translate_page(page: &exprim::doctor::PageStatus) -> PageFacts {
     let compile = match &page.compile {
         CompileStatus::Ok { op_count } => CompileOutcome::Ok {
             op_count: *op_count,
@@ -459,7 +459,7 @@ fn translate_page(page: &pdf_read::PageStatus) -> PageFacts {
     }
 }
 
-fn translate_font(font: &pdf_read::FontRecord) -> FontFacts {
+fn translate_font(font: &exprim::doctor::FontRecord) -> FontFacts {
     FontFacts {
         resource_name: font.resource_name.clone(),
         object: font.object.map(|id| id.to_string()),
@@ -469,7 +469,7 @@ fn translate_font(font: &pdf_read::FontRecord) -> FontFacts {
     }
 }
 
-fn translate_image(image: &pdf_read::ImageRecord) -> ImageFacts {
+fn translate_image(image: &exprim::doctor::ImageRecord) -> ImageFacts {
     ImageFacts {
         object: image.object.map(|id| id.to_string()),
         width: image.width,
@@ -484,7 +484,7 @@ fn translate_image(image: &pdf_read::ImageRecord) -> ImageFacts {
 /// interpretation step that decides which of them count as edit markers:
 /// the `/TouchUp_*` family. Sparse: only pages carrying at least one
 /// appear.
-fn translate_edit_markers(pages: &[pdf_read::PageStatus]) -> Vec<PageEditMarkers> {
+fn translate_edit_markers(pages: &[exprim::doctor::PageStatus]) -> Vec<PageEditMarkers> {
     pages
         .iter()
         .filter_map(|page| {

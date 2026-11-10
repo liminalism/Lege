@@ -3,8 +3,8 @@
 //! A revision's bytes are a prefix of the file —
 //! [`LogicalRevisionFacts::end`](crate::document::LogicalRevisionFacts::end)
 //! is one past its `%%EOF` — so historical replay needs no special parser:
-//! the ordinary [`DocumentSnapshot::open`](pdf_document::DocumentSnapshot::open)
-//! path runs over a [`PrefixSource`](pdf_source::PrefixSource) truncated at
+//! the ordinary [`DocumentSnapshot::open`](exprim::document::DocumentSnapshot::open)
+//! path runs over a [`PrefixSource`](exprim::source::PrefixSource) truncated at
 //! that end. What this module adds is the honest edge: a revision whose end
 //! was never established (low boundary confidence) refuses to replay rather
 //! than opening a guessed prefix.
@@ -12,8 +12,8 @@
 use std::fmt;
 use std::sync::Arc;
 
-use pdf_document::{DocumentLimits, DocumentSnapshot};
-use pdf_source::{OwnedBytesSource, PdfSource, PrefixSource};
+use exprim::document::{DocumentLimits, DocumentSnapshot};
+use exprim::source::{OwnedBytesSource, PdfSource, PrefixSource};
 
 use crate::document::LogicalRevisionFacts;
 
@@ -54,7 +54,7 @@ impl std::error::Error for ReplayError {}
 ///
 /// `bytes` is the whole file; only the prefix ending at the revision's
 /// established end is opened, through the same
-/// [`DocumentSnapshot::open`](pdf_document::DocumentSnapshot::open) path —
+/// [`DocumentSnapshot::open`](exprim::document::DocumentSnapshot::open) path —
 /// and the same recovery behaviour — as a full-file open. `password` is
 /// tried against an encrypted document exactly as
 /// [`audit_bytes`](crate::intake::audit_bytes) tries it.

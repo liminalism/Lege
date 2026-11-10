@@ -3876,7 +3876,7 @@ mod tests {
 
         let font = dict.build_embedded_font().unwrap();
         assert_eq!(font.cid_widths.as_ref().unwrap().len(), 5);
-        let face = lege_pdf_read::read_face_metrics(&font.data, 0).expect("font parses");
+        let face = exprim::read_face_metrics(&font.data, 0).expect("font parses");
         assert_eq!(face.num_glyphs, 5);
         // The composite must put the ring where the light frame had it:
         // one pixel right of its origin, and with descent 1 against the
@@ -3913,7 +3913,7 @@ mod tests {
         assert_eq!(widths[2], 8 * UNITS_PER_PIXEL as u16);
         // O ends the line; it takes the page's typical gap.
         assert_eq!(widths[3], 8 * UNITS_PER_PIXEL as u16);
-        let face = lege_pdf_read::read_face_metrics(&font.data, 0).expect("font parses");
+        let face = exprim::read_face_metrics(&font.data, 0).expect("font parses");
         assert_eq!(face.num_glyphs, 4);
         assert_eq!(face.units_per_em, UNITS_PER_EM);
         assert_eq!(font.bbox[3], 5 * UNITS_PER_PIXEL);
@@ -3980,7 +3980,7 @@ mod tests {
         dict.process_page(&word_page(), 72);
         assert_eq!(dict.len(), 4);
         let font = dict.build_embedded_font().unwrap();
-        let face = lege_pdf_read::read_face_metrics(&font.data, 0).unwrap();
+        let face = exprim::read_face_metrics(&font.data, 0).unwrap();
         assert_eq!(face.num_glyphs, 6);
     }
 
@@ -4022,7 +4022,7 @@ mod tests {
         assert_eq!(dict.alias_rise(variant).abs(), 10);
         assert_eq!(dict.distinct(), 2, "bar and dot own outlines");
         let font = dict.build_embedded_font().unwrap();
-        let face = lege_pdf_read::read_face_metrics(&font.data, 0).unwrap();
+        let face = exprim::read_face_metrics(&font.data, 0).unwrap();
         assert_eq!(face.num_glyphs, 5);
     }
 
@@ -4452,7 +4452,7 @@ mod tests {
                 "glyph {i} has numberOfContours {n}: a narrowed count"
             );
         }
-        lege_pdf_read::read_face_metrics(&font.data, 0).expect("font parses");
+        exprim::read_face_metrics(&font.data, 0).expect("font parses");
     }
 
     #[test]
@@ -4489,6 +4489,6 @@ mod tests {
         // emitted once and the font still parses.
         dict.finalize();
         let font = dict.build_embedded_font().unwrap();
-        lege_pdf_read::read_face_metrics(&font.data, 0).expect("font parses");
+        exprim::read_face_metrics(&font.data, 0).expect("font parses");
     }
 }

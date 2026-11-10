@@ -187,7 +187,7 @@ fn build_margin_analysis_future(
     inference_handle: Option<Arc<crate::pipeline::inference::InferenceHandle>>,
     prepared: AnalysisPreparedPage,
     config: Arc<PipelineConfig>,
-    cancellation: lege_pdf_read::CancellationToken,
+    cancellation: exprim::CancellationToken,
 ) -> BoxFuture<'static, Result<AnalysisPageResult>> {
     Box::pin(async move {
         let AnalysisPreparedPage {
@@ -265,7 +265,7 @@ pub(crate) async fn perform_document_margin_analysis(
     page_range: std::ops::Range<usize>,
     max_in_flight: usize,
     progress: &ProgressTracker,
-    cancellation: lege_pdf_read::CancellationToken,
+    cancellation: exprim::CancellationToken,
     memory_budget: Arc<tokio::sync::Semaphore>,
     memory_budget_mb: usize,
 ) -> Result<(DocumentMarginAnalysis, Vec<CachedDetections>)> {
@@ -813,7 +813,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn pre_cancelled_margin_pass_stops_before_page_loading() {
-        let cancellation = lege_pdf_read::CancellationToken::new();
+        let cancellation = exprim::CancellationToken::new();
         cancellation.cancel();
         let progress = crate::progress::ProgressManager::new().create_tracker();
 

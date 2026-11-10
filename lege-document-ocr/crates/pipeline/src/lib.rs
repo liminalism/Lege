@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::Arc;
 
+use exprim::{RasterPlane, RasterProduct, RenderSession};
 use lege_docir::{
     Document, GeometrySource, Page, PageSourceKind, Point, ProcessingManifest, Provenance,
     RecognitionConfidence, Region, RegionConfidence, RegionContent, RegionKind, Size, SizeF,
@@ -19,7 +20,6 @@ use lege_ocr::backend::{PageBatch, PageOcrBackend, RecognitionBatch};
 pub use lege_ocr::engine_tensorrt::{
     BrokeredTensorRtConfig, TensorRtPaddleConfig, nvidia_hardware_present,
 };
-use lege_pdf_read::{RasterPlane, RasterProduct, RenderSession};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct PipelineConfig {
@@ -52,6 +52,14 @@ pub struct PipelineConfig {
     /// model. Part of the resumable configuration hash via file contents.
     #[serde(default)]
     pub layout_model: Option<std::path::PathBuf>,
+    /// Keep OCR text that falls inside illustration layout boxes (`image`,
+    /// `seal`, `chart`) as plain text instead of dropping it behind a figure
+    /// placeholder. Off for documents, where text in a photo is noise; on for
+    /// covers, where the detector often boxes the whole artwork, title
+    /// included, as one image. Omitted from the serialized configuration
+    /// while off, so existing resumable-job hashes are unchanged.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub keep_figure_text: bool,
 }
 
 fn default_layout_enabled() -> bool {
@@ -76,6 +84,7 @@ impl Default for PipelineConfig {
             correction_dictionary: None,
             layout_enabled: true,
             layout_model: None,
+            keep_figure_text: false,
         }
     }
 }
@@ -308,6 +317,21 @@ impl DocumentProcessor {
         })
     }
 
+    /// Process one zero-based page of a PDF and nothing else.
+    ///
+    /// This is the per-page work `process_bytes` does: render, OCR or native
+    /// text, layout grouping, low-confidence retry. It skips the other pages
+    /// and the document-level correction pass. Tools that only need page
+    /// evidence (a cover page, say) use it.
+    pub fn process_single_page(
+        &self,
+        bytes: Arc<[u8]>,
+        page_index: u32,
+    ) -> Result<Page, PipelineError> {
+        let session = RenderSession::open(bytes, None)?;
+        self.process_page(&session, page_index)
+    }
+
     fn process_bytes_with_checkpoints(
         &self,
         path: &Path,
@@ -382,7 +406,7 @@ impl DocumentProcessor {
                 document.processing.warnings.insert(0, warning.clone());
             }
         }
-        document.outline = lege_pdf_read::extract_outline(&session)
+        document.outline = exprim::extract_outline(&session)
             .into_iter()
             .map(map_outline)
             .collect();
@@ -426,7 +450,7 @@ impl DocumentProcessor {
         page_index: u32,
         width: u32,
         height: u32,
-        evidence: &lege_pdf_read::PageTextEvidence,
+        evidence: &exprim::PageTextEvidence,
         warnings: &mut Vec<String>,
     ) -> Result<Option<(Vec<Region>, Option<Vec<String>>)>, PipelineError> {
         let Some(layout) = &self.layout else {
@@ -476,7 +500,7 @@ impl DocumentProcessor {
             self.config.render_dpi,
             self.config.max_page_pixels,
         )?;
-        let evidence = lege_pdf_read::page_text_evidence(session, page_index, width, height)?;
+        let evidence = exprim::page_text_evidence(session, page_index, width, height)?;
         let (source_kind, regions, reading_order, warnings) = if evidence.trustworthy
             && !self.config.force_ocr
         {
@@ -504,7 +528,7 @@ impl DocumentProcessor {
             };
             (
                 match evidence.kind {
-                    lege_pdf_read::PageContentKind::Hybrid => PageSourceKind::Hybrid,
+                    exprim::PageContentKind::Hybrid => PageSourceKind::Hybrid,
                     _ => PageSourceKind::NativeText,
                 },
                 regions,
@@ -554,7 +578,10 @@ impl DocumentProcessor {
             }
             let (mut regions, mut reading_order) = match &self.layout {
                 Some(layout) => {
-                    let boxes = layout.detect(&gray).map_err(PipelineError::Backend)?;
+                    let mut boxes = layout.detect(&gray).map_err(PipelineError::Backend)?;
+                    if self.config.keep_figure_text {
+                        layout::release_figure_text(&mut boxes);
+                    }
                     let (grouped, order, stats) = layout::group_ocr_lines(
                         page_index,
                         width,
@@ -643,7 +670,7 @@ impl DocumentProcessor {
     }
 }
 
-fn map_outline(node: lege_pdf_read::OwnedBookmarkNode) -> lege_docir::OutlineNode {
+fn map_outline(node: exprim::OwnedBookmarkNode) -> lege_docir::OutlineNode {
     lege_docir::OutlineNode {
         title: node.title,
         page_index: node.source_page as u32,
@@ -818,7 +845,7 @@ fn native_regions(
     width: u32,
     height: u32,
     text: &str,
-    words: &[lege_pdf_read::NativeTextWord],
+    words: &[exprim::NativeTextWord],
     language: &str,
 ) -> Vec<Region> {
     let provenance = Provenance {
@@ -1178,7 +1205,7 @@ pub enum PipelineError {
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
     #[error("PDF read error: {0}")]
-    Pdf(#[from] lege_pdf_read::ReadError),
+    Pdf(#[from] exprim::ReadError),
     #[error("backend error: {0}")]
     Backend(#[source] anyhow::Error),
     #[error("backend `{0}` is not available in this build or on this platform")]
@@ -1608,6 +1635,36 @@ mod tests {
         let first_hash = first.hash().unwrap();
         first.brokered_tensorrt.as_mut().unwrap().revision = "revision-b".to_string();
         assert_ne!(first_hash, first.hash().unwrap());
+    }
+
+    #[test]
+    fn keep_figure_text_is_invisible_to_the_hash_until_enabled() {
+        let normal = PipelineConfig::default();
+        assert!(
+            !serde_json::to_string(&normal)
+                .unwrap()
+                .contains("keep_figure_text")
+        );
+        let mut covers = normal.clone();
+        covers.keep_figure_text = true;
+        assert_ne!(normal.hash().unwrap(), covers.hash().unwrap());
+    }
+
+    #[test]
+    fn single_page_rejects_a_page_past_the_end() {
+        let processor = DocumentProcessor::new(PipelineConfig {
+            layout_enabled: false,
+            ..PipelineConfig::default()
+        })
+        .unwrap();
+        let pdf: &[u8] = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n\
+2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n\
+3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>\nendobj\n\
+trailer\n<< /Size 4 /Root 1 0 R >>\n%%EOF\n";
+        let error = processor
+            .process_single_page(Arc::from(pdf), 5)
+            .unwrap_err();
+        assert!(matches!(error, PipelineError::Pdf(_)), "{error}");
     }
 
     #[test]

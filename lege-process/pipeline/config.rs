@@ -115,7 +115,7 @@ pub struct PageSelection {
 pub struct ProcessingPipeline {
     /// The one document session for the job: opened here to count pages and
     /// handed to the output pipeline's page source, so the file is parsed once.
-    document: Arc<lege_pdf_read::RenderSession>,
+    document: Arc<exprim::RenderSession>,
     config: PipelineConfig,
     page_count: usize,
 }
@@ -129,7 +129,7 @@ impl ProcessingPipeline {
     /// allocation (see [`read_pdf_file`]).
     pub fn from_shared_bytes(pdf_bytes: Arc<[u8]>, config: PipelineConfig) -> Result<Self> {
         let document = Arc::new(
-            lege_pdf_read::RenderSession::open(pdf_bytes, None)
+            exprim::RenderSession::open(pdf_bytes, None)
                 .map_err(|error| anyhow!("Failed to read PDF document: {error}"))?,
         );
         let page_count = document.page_count() as usize;
@@ -149,7 +149,7 @@ impl ProcessingPipeline {
     }
 
     /// The job's document session, shared with the page source.
-    pub fn document(&self) -> Arc<lege_pdf_read::RenderSession> {
+    pub fn document(&self) -> Arc<exprim::RenderSession> {
         Arc::clone(&self.document)
     }
 

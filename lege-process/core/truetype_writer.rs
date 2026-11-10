@@ -814,7 +814,7 @@ mod tests {
         });
         assert_eq!(built.num_glyphs, 3);
         assert_eq!(built.bbox, [0, -20, 60, 700]);
-        let face = lege_pdf_read::read_face_metrics(&built.data, 0)
+        let face = exprim::read_face_metrics(&built.data, 0)
             .expect("assembled font should parse as a real face");
         assert_eq!(face.num_glyphs, 3);
         assert_eq!(face.units_per_em, 1000);
@@ -867,7 +867,7 @@ mod tests {
         assert_eq!(built.num_glyphs, 4);
         // The composites' bounds are their targets', shifted.
         assert_eq!(built.bbox, [0, -8, 220, 200]);
-        let face = lege_pdf_read::read_face_metrics(&built.data, 0).expect("font parses");
+        let face = exprim::read_face_metrics(&built.data, 0).expect("font parses");
         assert_eq!(face.num_glyphs, 4);
 
         // glyf record of glyph 2: numberOfContours -1, bbox, flags, index, args.

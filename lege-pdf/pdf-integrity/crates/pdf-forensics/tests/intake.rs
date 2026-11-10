@@ -7,7 +7,7 @@
 use pdf_forensics::{
     AnalysisMode, Availability, Disposition, OpenState, UnavailableReason, audit_bytes,
 };
-use pdf_test_support::builder;
+use exprim::test_support::builder;
 
 /// SHA-256 of the empty input, from the published test vectors.
 const SHA256_EMPTY: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
@@ -123,7 +123,7 @@ fn an_unopenable_file_reports_gaps_not_zeroes() {
 fn the_header_survives_a_document_that_will_not_open() {
     // AES-256, declined by the handler: the document does not open, but the
     // header and the trailer /ID need no decryption.
-    let report = audit_bytes(&pdf_test_support::builder::aes256_encrypted_fixture(), None);
+    let report = audit_bytes(&exprim::test_support::builder::aes256_encrypted_fixture(), None);
     report.validate().unwrap();
     assert_eq!(report.analysis_mode, AnalysisMode::StructureOnly);
 
@@ -159,7 +159,7 @@ fn a_file_with_no_header_says_so_rather_than_guessing() {
 fn leading_garbage_is_reported_as_an_offset() {
     let junk = b"%!PS-Adobe-3.0\n";
     let report = audit_bytes(
-        &pdf_test_support::builder::with_leading_garbage(builder::multipage_classic(1), junk),
+        &exprim::test_support::builder::with_leading_garbage(builder::multipage_classic(1), junk),
         None,
     );
     let header = report.document.header.value().unwrap();
@@ -191,7 +191,7 @@ fn xmp_lineage_pdf() -> Vec<u8> {
   </rdf:Seq></xmpMM:History>
  </rdf:Description></rdf:RDF></x:xmpmeta>"#;
 
-    let mut b = pdf_test_support::builder::PdfBuilder::new();
+    let mut b = exprim::test_support::builder::PdfBuilder::new();
     b.add_object(1, "<</Type/Catalog/Pages 2 0 R/Metadata 5 0 R>>");
     b.add_object(
         2,
@@ -345,7 +345,7 @@ fn linearization_is_a_determined_fact() {
 
 /// One 72×72 pt page painted with a 2×2 DeviceRGB image covering the crop.
 fn full_page_image_pdf(ocr_layer: bool) -> Vec<u8> {
-    let mut b = pdf_test_support::builder::PdfBuilder::new();
+    let mut b = exprim::test_support::builder::PdfBuilder::new();
     b.add_object(1, "<</Type/Catalog/Pages 2 0 R>>");
     b.add_object(2, "<</Type/Pages/Kids[3 0 R]/Count 1/MediaBox[0 0 72 72]>>");
     let resources = if ocr_layer {
@@ -376,7 +376,7 @@ fn full_page_image_pdf(ocr_layer: bool) -> Vec<u8> {
 }
 
 fn blank_page_pdf() -> Vec<u8> {
-    let mut b = pdf_test_support::builder::PdfBuilder::new();
+    let mut b = exprim::test_support::builder::PdfBuilder::new();
     b.add_object(1, "<</Type/Catalog/Pages 2 0 R>>");
     b.add_object(2, "<</Type/Pages/Kids[3 0 R]/Count 1/MediaBox[0 0 72 72]>>");
     b.add_object(3, "<</Type/Page/Parent 2 0 R/Contents 4 0 R>>");

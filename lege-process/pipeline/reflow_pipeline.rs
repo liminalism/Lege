@@ -254,7 +254,7 @@ fn mapped_toc_detections(
 
 fn cancelled_if_signalled(
     shutdown_rx: &mut tokio::sync::broadcast::Receiver<crate::ShutdownSignal>,
-    cancellation: &lege_pdf_read::CancellationToken,
+    cancellation: &exprim::CancellationToken,
 ) -> Result<()> {
     if let Ok(signal) = shutdown_rx.try_recv() {
         cancellation.cancel();
@@ -271,7 +271,7 @@ fn cancelled_if_signalled(
 async fn await_reflow_step<T>(
     future: impl std::future::Future<Output = Result<T>>,
     shutdown_rx: &mut tokio::sync::broadcast::Receiver<crate::ShutdownSignal>,
-    cancellation: &lege_pdf_read::CancellationToken,
+    cancellation: &exprim::CancellationToken,
     stage: &str,
 ) -> Result<T> {
     tokio::select! {
@@ -300,7 +300,7 @@ async fn analyze_source_page(
     page_index: usize,
     local_index: usize,
     want_rgb: bool,
-    cancellation: lege_pdf_read::CancellationToken,
+    cancellation: exprim::CancellationToken,
 ) -> Result<AnalyzedPage> {
     let crate::pipeline::source::SourcePage {
         image,
@@ -447,7 +447,7 @@ impl SourcePageWindow {
     async fn load(
         &mut self,
         needed: &std::collections::BTreeSet<usize>,
-        cancellation: lege_pdf_read::CancellationToken,
+        cancellation: exprim::CancellationToken,
     ) -> Result<crate::reflow::SourcePageSet> {
         for &local_index in needed {
             if !self.pages.contains_key(&local_index) {
@@ -500,7 +500,7 @@ async fn analyze_and_plan(
     page_range: &Option<std::ops::Range<usize>>,
     progress_tracker: &ProgressTracker,
     shutdown_rx: &mut tokio::sync::broadcast::Receiver<crate::ShutdownSignal>,
-    cancellation: &lege_pdf_read::CancellationToken,
+    cancellation: &exprim::CancellationToken,
 ) -> Result<ReflowPlan> {
     if !config.enable_layout_detection() {
         return Err(anyhow!(
@@ -700,7 +700,7 @@ pub(crate) async fn run_raster_reflow_pipeline(
 
     let runtime_limits = PipelineRuntimeLimits::from_config(&config);
     init_encode_semaphore(runtime_limits.page_workers);
-    let cancellation = lege_pdf_read::CancellationToken::new();
+    let cancellation = exprim::CancellationToken::new();
     let _lifetime = crate::pipeline::helper_functions::PipelineLifetime(cancellation.clone());
 
     let ReflowPlan {
@@ -857,7 +857,7 @@ pub(crate) async fn run_raster_reflow_pipeline(
 
     // After all pages are composed, extract bookmarks and send them before finalize.
     // Reflow re-paginates, so we build source-page → first-output-page mapping from SourceMap.
-    let mut source_metadata = lege_pdf_read::DocumentMetadata::default();
+    let mut source_metadata = exprim::DocumentMetadata::default();
     if let Some(session) = source.document_session() {
         let source_map = &doc.source_map;
         let mut src_to_out: std::collections::HashMap<usize, usize> =
@@ -870,8 +870,8 @@ pub(crate) async fn run_raster_reflow_pipeline(
         }
         let mut outline_task = crate::runtime_stats::spawn_blocking(move || {
             (
-                lege_pdf_read::extract_outline(&session),
-                lege_pdf_read::extract_metadata(&session),
+                exprim::extract_outline(&session),
+                exprim::extract_metadata(&session),
             )
         });
         let (bookmarks, metadata) = tokio::select! {
@@ -956,7 +956,7 @@ pub(crate) async fn run_raster_reflow_djvu_pipeline(
     crate::pipeline::reset_standard_dimensions();
 
     let runtime_limits = PipelineRuntimeLimits::djvu_from_config(&config);
-    let cancellation = lege_pdf_read::CancellationToken::new();
+    let cancellation = exprim::CancellationToken::new();
     let _lifetime = crate::pipeline::helper_functions::PipelineLifetime(cancellation.clone());
 
     let ReflowPlan {
@@ -1164,7 +1164,7 @@ pub(crate) async fn run_raster_reflow_djvu_pipeline(
         crate::toc::build_outline_with_contents(candidates, &stats, total_out_pages, &contents);
     let source_outline = if let Some(session) = source.document_session() {
         let bookmarks =
-            crate::runtime_stats::spawn_blocking(move || lege_pdf_read::extract_outline(&session))
+            crate::runtime_stats::spawn_blocking(move || exprim::extract_outline(&session))
                 .await?;
         let mut source_to_output = std::collections::HashMap::new();
         for placement in &doc.source_map.placements {
@@ -1264,8 +1264,8 @@ mod tests {
         SourcePageWindow::new(source, 0, doc)
     }
 
-    fn active_cancellation() -> lege_pdf_read::CancellationToken {
-        lege_pdf_read::CancellationToken::new()
+    fn active_cancellation() -> exprim::CancellationToken {
+        exprim::CancellationToken::new()
     }
 
     #[test]

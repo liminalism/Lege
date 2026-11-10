@@ -7,12 +7,12 @@
 //! replacement text on top. For every page this module:
 //!
 //! 1. compiles the page with the audit sidecar
-//!    ([`PageCompiler::compile_semantic_traced`](pdf_content::PageCompiler::compile_semantic_traced))
+//!    ([`PageCompiler::compile_semantic_traced`](exprim::content::PageCompiler::compile_semantic_traced))
 //!    and walks the semantic ops in painter order, tracking the graphics
 //!    state (fill/stroke paint and alpha, blend mode, line width, soft
 //!    masks, transparency groups) to find opaque path and image paints;
 //! 2. renders the page's diagnostic attribution map
-//!    (`pdf_render_cpu::attribution`) plus the glyph-stamp mask, and
+//!    (`exprim::render_cpu::attribution`) plus the glyph-stamp mask, and
 //!    intersects both with the extracted glyph boxes to find which earlier
 //!    text each opaque paint covers and how much of its glyph area later
 //!    paint won;
@@ -38,18 +38,18 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use pdf_content::semantic::{ImageId, PathId, TextRunId};
-use pdf_content::{PageCompiler, PageTrace, SemColor, SemanticOp, SemanticPage};
-use pdf_document::{DocumentLimits, DocumentSnapshot, PageIndex, ParseContext};
-use pdf_page_ir::{BlendMode, DeviceSize, Matrix, PaintLeaf, PaintOrigin, Point, Rect};
-use pdf_render_api::{
+use exprim::content::semantic::{ImageId, PathId, TextRunId};
+use exprim::content::{PageCompiler, PageTrace, SemColor, SemanticOp, SemanticPage};
+use exprim::document::{DocumentLimits, DocumentSnapshot, PageIndex, ParseContext};
+use exprim::page_ir::{BlendMode, DeviceSize, Matrix, PaintLeaf, PaintOrigin, Point, Rect};
+use exprim::render_api::{
     AnnotationMode, Background, OutputFormat, OutputResidency, PageTransform, RenderLimits,
     RenderQuality, RenderRequest,
 };
-use pdf_render_cpu::CpuBackend;
-use pdf_render_cpu::attribution::{AttributionMap, glyph_stamp_mask, render_attribution};
-use pdf_source::{OwnedBytesSource, PdfSource};
-use pdf_text::{CharInfo, CharType, TextPage, TextPageOptions};
+use exprim::render_cpu::CpuBackend;
+use exprim::render_cpu::attribution::{AttributionMap, glyph_stamp_mask, render_attribution};
+use exprim::source::{OwnedBytesSource, PdfSource};
+use exprim::text::{CharInfo, CharType, TextPage, TextPageOptions};
 
 use crate::document::ParseAssessment;
 use crate::evidence::{
@@ -294,7 +294,7 @@ fn detect_page(
         output_size: DeviceSize { width, height },
         output_format: OutputFormat::Rgba8PremultipliedSrgb,
         background: Background::White,
-        color_policy: pdf_render_api::RenderColorPolicy::Original,
+        color_policy: exprim::render_api::RenderColorPolicy::Original,
         annotations: AnnotationMode::None,
         quality: RenderQuality::Normal,
         limits: RenderLimits::default(),

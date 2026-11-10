@@ -47,7 +47,7 @@ use std::ffi::{CStr, CString, c_char, c_int, c_uint};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::Arc;
 
-use lege_pdf_read::{ExportColor, ExportOptions, ImageFormat, ReadError, RenderSession, page_text};
+use exprim::{ExportColor, ExportOptions, ImageFormat, ReadError, RenderSession, page_text};
 
 // ── Status codes ────────────────────────────────────────────────────────────
 
@@ -390,7 +390,7 @@ pub unsafe extern "C" fn lege_document_page_pixel_size(
 /// slow render does not have to be waited out.
 #[derive(Debug)]
 pub struct LegeCancellation {
-    token: lege_pdf_read::CancellationToken,
+    token: exprim::CancellationToken,
 }
 
 /// Create a cancellation token. Returns `NULL` only on allocation failure.
@@ -399,7 +399,7 @@ pub extern "C" fn lege_cancellation_new() -> *mut LegeCancellation {
     guarded_value(
         || {
             Box::into_raw(Box::new(LegeCancellation {
-                token: lege_pdf_read::CancellationToken::new(),
+                token: exprim::CancellationToken::new(),
             }))
         },
         std::ptr::null_mut(),
@@ -475,7 +475,7 @@ pub struct LegeRenderOptions {
 #[unsafe(no_mangle)]
 pub extern "C" fn lege_render_options_default() -> LegeRenderOptions {
     LegeRenderOptions {
-        dpi: lege_pdf_read::DEFAULT_EXPORT_DPI,
+        dpi: exprim::DEFAULT_EXPORT_DPI,
         format: LEGE_FORMAT_PNG,
         color: LEGE_COLOR_RGB,
         jpeg_quality: 85,
@@ -514,7 +514,7 @@ fn export_options_from(options: &LegeRenderOptions) -> Result<ExportOptions, c_i
         }
     };
     let max_pixels = if options.max_pixels == 0 {
-        lege_pdf_read::DEFAULT_MAX_EXPORT_PIXELS
+        exprim::DEFAULT_MAX_EXPORT_PIXELS
     } else {
         options.max_pixels
     };

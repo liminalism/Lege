@@ -28,7 +28,7 @@ fn main() -> std::io::Result<()> {
         .collect();
     std::fs::create_dir_all(&dir)?;
     let path = dir.join("pdfverse-export.pdf");
-    let bytes = pdf_test_support::builder::raster_scan(PDFVERSE_PAGES, false);
+    let bytes = exprim::test_support::builder::raster_scan(PDFVERSE_PAGES, false);
     std::fs::write(&path, bytes)?;
     println!("wrote {}", path.display());
     Ok(())

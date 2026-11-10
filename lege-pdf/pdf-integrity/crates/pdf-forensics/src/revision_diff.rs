@@ -2,12 +2,12 @@
 //!
 //! Each pair of neighbouring saves is replayed through
 //! [`open_revision`](crate::replay::open_revision) — the ordinary open path
-//! over a [`PrefixSource`](pdf_source::PrefixSource) truncated at the
+//! over a [`PrefixSource`](exprim::source::PrefixSource) truncated at the
 //! revision's established end — and every page the two replays share is
 //! compared at the semantic level: extracted words with their glyph
 //! identities and font resources, via
-//! [`PageCompiler::compile_semantic`](pdf_content::PageCompiler::compile_semantic)
-//! and [`TextPage`](pdf_text::TextPage). A page whose word sequence differs
+//! [`PageCompiler::compile_semantic`](exprim::content::PageCompiler::compile_semantic)
+//! and [`TextPage`](exprim::text::TextPage). A page whose word sequence differs
 //! in text, glyphs, or fonts yields one [`RevisionTextChange`]: a
 //! [`TEXT_CHANGED_BETWEEN_REVISIONS`] finding with the exact previous and
 //! current page strings, the union rectangle of the changed words, the
@@ -33,11 +33,11 @@
 use std::collections::BTreeSet;
 use std::ops::Range;
 
-use pdf_content::{PageCompiler, SemanticPage, semantic::SemFont};
-use pdf_document::{DocumentSnapshot, PageIndex, ParseContext};
-use pdf_object::PdfObject;
-use pdf_page_ir::Rect;
-use pdf_text::{TextPage, TextPageOptions, TextWord};
+use exprim::content::{PageCompiler, SemanticPage, semantic::SemFont};
+use exprim::document::{DocumentSnapshot, PageIndex, ParseContext};
+use exprim::object::PdfObject;
+use exprim::page_ir::Rect;
+use exprim::text::{TextPage, TextPageOptions, TextWord};
 
 use crate::document::{ParseAssessment, RevisionHistoryFacts};
 use crate::evidence::{

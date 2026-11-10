@@ -118,6 +118,18 @@ pub fn placeholder_for_label(label: &str) -> &'static str {
     }
 }
 
+/// Relabel illustration boxes as plain text so [`group_ocr_lines`] keeps the
+/// OCR lines inside them instead of replacing them with a figure placeholder.
+/// Lines still go to the smallest containing box, so a `doc_title` drawn on a
+/// cover image keeps its label.
+pub fn release_figure_text(boxes: &mut [LayoutBox]) {
+    for box_ in boxes {
+        if role_for_label(&box_.label) == LayoutRole::Figure {
+            box_.label = "text".to_string();
+        }
+    }
+}
+
 /// One layout detection in page-pixel coordinates, decoupled from the
 /// detector type so grouping stays unit-testable without a GPU.
 #[derive(Debug, Clone)]
@@ -267,7 +279,7 @@ impl LayoutEngine {
         &self,
         page: &GrayImage,
         page_index: u32,
-        words: &[lege_pdf_read::NativeTextWord],
+        words: &[exprim::NativeTextWord],
         language: &str,
     ) -> anyhow::Result<(Vec<Region>, Vec<String>, LayoutStats)> {
         let boxes = self.detect(page)?;
@@ -657,7 +669,7 @@ fn single_ocr_region(
 pub fn group_native_words(
     page_index: u32,
     page_width: u32,
-    words: &[lege_pdf_read::NativeTextWord],
+    words: &[exprim::NativeTextWord],
     boxes: &[LayoutBox],
     language: &str,
 ) -> (Vec<Region>, Vec<String>, LayoutStats) {
@@ -1020,8 +1032,8 @@ mod tests {
         }
     }
 
-    fn native_word(text: &str, bbox: [f32; 4]) -> lege_pdf_read::NativeTextWord {
-        lege_pdf_read::NativeTextWord {
+    fn native_word(text: &str, bbox: [f32; 4]) -> exprim::NativeTextWord {
+        exprim::NativeTextWord {
             text: text.to_string(),
             bbox,
         }
@@ -1161,6 +1173,48 @@ mod tests {
             Some("[image]")
         );
         assert_eq!(regions.len(), 3);
+    }
+
+    #[test]
+    fn released_figure_text_is_kept_and_a_title_inside_keeps_its_label() {
+        let lines = vec![
+            ocr_line("THE COVER TITLE", [120, 220, 480, 280]),
+            ocr_line("Jane Author", [200, 520, 400, 550]),
+        ];
+        let mut boxes = vec![
+            layout_box("image", [90.0, 200.0, 520.0, 600.0]),
+            layout_box("doc_title", [110.0, 210.0, 490.0, 290.0]),
+        ];
+        let (dropped, _, stats) = group_ocr_lines(0, 600, lines.clone(), &boxes, "paddle", "eng");
+        assert_eq!(
+            stats.dropped_image_text, 1,
+            "without release the author is lost"
+        );
+        assert!(!dropped.iter().any(|region| {
+            region
+                .content
+                .plain_text(lege_docir::TextView::Raw)
+                .as_deref()
+                == Some("Jane Author")
+        }));
+
+        release_figure_text(&mut boxes);
+        let (kept, _, stats) = group_ocr_lines(0, 600, lines, &boxes, "paddle", "eng");
+        assert_eq!(stats.dropped_image_text, 0);
+        assert_eq!(stats.figures, 0);
+        let text_of = |kind: RegionKind| {
+            kept.iter()
+                .find(|region| region.kind == kind)
+                .and_then(|region| region.content.plain_text(lege_docir::TextView::Raw))
+        };
+        assert_eq!(
+            text_of(RegionKind::Title).as_deref(),
+            Some("THE COVER TITLE")
+        );
+        assert_eq!(
+            text_of(RegionKind::Paragraph).as_deref(),
+            Some("Jane Author")
+        );
     }
 
     #[test]

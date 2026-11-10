@@ -8,7 +8,7 @@ use pdf_forensics::{
     TEXT_CHANGED_BETWEEN_REVISIONS, audit_bytes, audit_bytes_with_evidence, decide_disposition,
     write_evidence_pngs,
 };
-use pdf_test_support::builder;
+use exprim::test_support::builder;
 
 const PNG_MAGIC: [u8; 8] = [137, 80, 78, 71, 13, 10, 26, 10];
 

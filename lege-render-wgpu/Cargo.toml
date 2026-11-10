@@ -1,0 +1,26 @@
+[package]
+name = "lege-render-wgpu"
+description = "Lege's experimental wgpu backends for the exprim renderer: resident image pages and the GPU postprocess executor"
+version = "0.4.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[features]
+default = ["gpu"]
+# The GPU postprocess executor. Off, `postprocess::AdaptivePostprocess`
+# runs every graph on exprim's CPU executor.
+gpu = []
+
+[dependencies]
+bytemuck = { workspace = true }
+thiserror = { workspace = true }
+exprim = { workspace = true }
+lege-gpu = { path = "../lege-gpu" }
+
+[dev-dependencies]
+exprim = { workspace = true, features = ["test-support"] }
+
+[lints]
+workspace = true

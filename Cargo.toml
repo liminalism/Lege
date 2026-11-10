@@ -5,12 +5,11 @@
 #   * lege-gpu       — shared wgpu compute backend (binarization, resize, ONNX)
 #   * lege-ocr       — OCR pipeline library + debug binary
 #   * lege-pdf/write — typed, append-only PDF emitter
-#   * lege-pdf/read  — Lege-owned document intake/read seam
-#   * lege-pdf/agent — agent-facing structured PDF CLI (`lege-pdf`)
-#   * lege-pdf/print — office printing: imposition, sheet composition, spooling
-#   * lege-pdf/render— native Lege PDF document and rendering engine
-#   * lege-codecs/*  — JBIG2 / JPEG2000 / DjVu codecs (own build graphs — excluded,
-#                      linked codecs are wired in via [patch] below)
+#   * lege-render-wgpu — Lege's wgpu backends over the exprim renderer
+#
+# The PDF engine (reader, renderer, text, printing, the `exprim` agent CLI) and
+# the JBIG2 / JPEG2000 / DjVu codecs live in the sibling `../exprim`
+# repository; they are path dependencies here, not members.
 #
 # Build shortcuts live in `.cargo/config.toml` (e.g. `cargo process`, `cargo gui`).
 [workspace]
@@ -25,25 +24,19 @@ members = [
     "lege-document-ocr/crates/*", # business-grade OCR product libraries
     "lege-document-ocr/cli",    # package `lege-document-ocr-cli`, binary `lege-ocr`
     "lege-document-ocr/installer-winsafe", # native Windows installer/uninstaller
-    "lege-pdf/read",            # renderer-backed document intake/read seam
-    "lege-pdf/agent",           # agent-facing `lege-pdf` CLI (structured PDF tool)
-    "lege-pdf/render/crates/*", # native PDF document + rendering engine
     "lege-pdf/write",           # `lege-pdf-write`
-    "lege-pdf/print",           # `lege-pdf-print`: imposition, sheets, spooling
+    "lege-render-wgpu",         # wgpu image/postprocess backends over exprim
     "lege-misc/bindings/lege-render-ffi", # C ABI over the renderer facade
     "lege-misc/xtask",          # packaging tasks (`cargo appimage`)
+    "lege-misc/pdf-titler",     # `lege-titler`: title/author from page-1 OCR into PDF metadata
     "lege-android",             # JNI cdylib for the Android APK
 ]
 # Kept out of the workspace on purpose:
-#   lege-codecs/*            — separate build graphs / licenses (patched in below)
 #   lege-pdf/pdf-integrity   — nested forensic-triage workspace (own lockfile)
 #   lege-docwrite            — retained migration copy; active reader and
 #                              writer live in the sibling ../liminaldoc workspace
-#   (The jbig2enc Python wheel is the `python` feature of lege-codecs/
-#   jbig2enc-rust, built with maturin from its python/ directory; the C ABI
-#   binding under lege-misc/bindings is a normal member below.)
+#   (The C ABI binding under lege-misc/bindings is a normal member above.)
 exclude = [
-    "lege-codecs",
     "lege-pdf/pdf-integrity",
     "lege-docwrite",
 ]
@@ -112,39 +105,17 @@ image = { version = "0.25.10", default-features = false, features = [
 jpeg-encoder = { version = "=0.7.1", features = ["simd"] }
 # Single PNG version for the whole workspace: `lege-process/colorquant` needs
 # the palette/`ColorType::Indexed` encoder that `image` does not expose, and the
-# agent/`pdf-cli` tools write PNGs directly. Pinning it here stops 0.17 and 0.18
+# exprim's page export writes PNGs directly. Pinning it here stops 0.17 and 0.18
 # both being compiled in one workspace build.
 png = "0.18"
 flume = "0.11"
-# Native renderer crates. Their single canonical source tree is in
-# `lege-pdf/render`; the viewer consumes these APIs directly.
-pdf-color = { path = "lege-pdf/render/crates/pdf-color" }
-pdf-content = { path = "lege-pdf/render/crates/pdf-content" }
-pdf-document = { path = "lege-pdf/render/crates/pdf-document" }
-pdf-font = { path = "lege-pdf/render/crates/pdf-font" }
-pdf-function = { path = "lege-pdf/render/crates/pdf-function" }
-pdf-geom = { path = "lege-pdf/render/crates/pdf-geom" }
-pdf-image = { path = "lege-pdf/render/crates/pdf-image" }
-pdf-object = { path = "lege-pdf/render/crates/pdf-object" }
-pdf-page-ir = { path = "lege-pdf/render/crates/pdf-page-ir" }
-pdf-postprocess = { path = "lege-pdf/render/crates/pdf-postprocess" }
-pdf-profiling = { path = "lege-pdf/render/crates/pdf-profiling" }
-pdf-read = { path = "lege-pdf/render/crates/pdf-read" }
-pdf-render-api = { path = "lege-pdf/render/crates/pdf-render-api" }
-pdf-render-cpu = { path = "lege-pdf/render/crates/pdf-render-cpu" }
-pdf-render-scheduler = { path = "lege-pdf/render/crates/pdf-render-scheduler" }
-pdf-render-wgpu = { path = "lege-pdf/render/crates/pdf-render-wgpu" }
-pdf-security = { path = "lege-pdf/render/crates/pdf-security" }
-pdf-source = { path = "lege-pdf/render/crates/pdf-source" }
-pdf-structure = { path = "lege-pdf/render/crates/pdf-structure" }
-pdf-syntax = { path = "lege-pdf/render/crates/pdf-syntax" }
-pdf-test-support = { path = "lege-pdf/render/crates/pdf-test-support" }
-pdf-text = { path = "lege-pdf/render/crates/pdf-text" }
 memmap2 = "0.9"
 crossbeam-channel = "0.5"
 arc-swap = "1.7"
-jp2lam = { path = "lege-codecs/jp2lam", default-features = false }
-jbig2enc-rust = { path = "lege-codecs/jbig2enc-rust", default-features = false, features = ["decode"] }
+# The PDF engine, from the sibling exprim checkout (publishes as `exprim`).
+exprim = { path = "../exprim" }
+jp2lam = { path = "../exprim/codecs/jp2lam", default-features = false }
+jbig2enc-rust = { path = "../exprim/codecs/jbig2enc-rust", default-features = false, features = ["decode"] }
 hayro-ccitt = "0.3"
 tempfile = "3.27.0"
 flate2 = { version = "1.1.9", features = ["zlib-rs"] }
@@ -207,21 +178,21 @@ windows = { version = "0.62.2", default-features = false }
 windows-core = { version = "0.62.2", default-features = false }
 windows-future = { version = "0.3.2", default-features = false }
 
-# The JBIG2 and JPEG2000 codecs now live in-tree under lege-codecs/. Point the
-# historical Git coordinates at those local checkouts so `lege` links the vendored
+# The JBIG2 and JPEG2000 codecs live in the sibling exprim checkout. Point the
+# historical Git coordinates at those local checkouts so `lege` links that
 # source (no network needed) while the codec folders keep their own build graphs.
 [patch."https://github.com/LegeApp/jbig2enc-rust.git"]
-jbig2enc-rust = { path = "lege-codecs/jbig2enc-rust" }
+jbig2enc-rust = { path = "../exprim/codecs/jbig2enc-rust" }
 
 [patch."https://github.com/LegeApp/jp2lam.git"]
-jp2lam = { path = "lege-codecs/jp2lam" }
+jp2lam = { path = "../exprim/codecs/jp2lam" }
 
 # ---------------------------------------------------------------------------
 # Build profiles (must live in the workspace root).
 # ---------------------------------------------------------------------------
-# `panic = "unwind"` is load-bearing, not a default. The PDF renderer contains
+# `panic = "unwind"` is load-bearing, not a default. The exprim renderer contains
 # the panic from one poisoned page behind `catch_unwind` boundaries
-# (`pdf_render_api::submit_caught` / `render_blocking`, the scheduler's
+# (`exprim::render_api::submit_caught` / `render_blocking`, the scheduler's
 # `render_job`, and the wgpu backend's GPU→CPU fallback) so a malformed
 # document degrades to a typed per-page `RenderError` instead of taking down
 # the viewer, the CLI, or an embedding host. Under `panic = "abort"` every one

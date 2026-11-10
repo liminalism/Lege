@@ -15,7 +15,7 @@ use pdf_forensics::{
     FindingCode, ObjectChangeKind, ObjectRole, POST_SIGNATURE_REVISION, SignatureFacts,
     audit_bytes, post_signature_changes,
 };
-use pdf_test_support::builder;
+use exprim::test_support::builder;
 
 /// Audit `bytes` and require the report to satisfy the schema's own rules.
 fn audit(bytes: &[u8]) -> AuditReport {

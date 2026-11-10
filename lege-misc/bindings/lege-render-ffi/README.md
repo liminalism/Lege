@@ -19,8 +19,8 @@ Zig and Java 22+ (via `jextract`) all generate their own bindings from it
 with no further Rust. Only Python, Node and Wasm justify a separate Rust
 crate, because their idioms need more than a C ABI can express.
 
-The whole surface binds `lege-pdf-read`, which is already the narrow owned
-facade over the renderer's twenty-four crates.
+The whole surface binds the document API at the root of the `exprim` crate,
+which is already the narrow facade over the engine's layers.
 
 ## Build
 

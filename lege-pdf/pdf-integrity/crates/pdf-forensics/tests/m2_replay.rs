@@ -16,11 +16,11 @@
 
 use std::sync::Arc;
 
-use pdf_document::{DocumentLimits, DocumentSnapshot, PageIndex, ParseContext};
+use exprim::document::{DocumentLimits, DocumentSnapshot, PageIndex, ParseContext};
 use pdf_forensics::{AuditReport, ReplayError, RevisionHistoryFacts, audit_bytes, open_revision};
-use pdf_object::PdfObject;
-use pdf_source::{OwnedBytesSource, PdfSource, PrefixSource};
-use pdf_test_support::builder;
+use exprim::object::PdfObject;
+use exprim::source::{OwnedBytesSource, PdfSource, PrefixSource};
+use exprim::test_support::builder;
 
 /// Audit `bytes` and require the report to satisfy the schema's own rules.
 fn audit(bytes: &[u8]) -> AuditReport {
@@ -65,12 +65,12 @@ fn revision_zero_of_edited_fixture_replays_pre_edit_content() {
     // It compiles through the same path a render uses.
     let full: Arc<dyn PdfSource> = Arc::new(OwnedBytesSource::new(bytes.clone()));
     let prefix: Arc<dyn PdfSource> = Arc::new(PrefixSource::new(full, first.end.unwrap()));
-    let examined = pdf_read::examine(prefix, DocumentLimits::default());
+    let examined = exprim::doctor::examine(prefix, DocumentLimits::default());
     assert_eq!(examined.pages.len(), 1);
     assert!(
         matches!(
             examined.pages[0].compile,
-            pdf_read::CompileStatus::Ok { .. }
+            exprim::doctor::CompileStatus::Ok { .. }
         ),
         "revision-0 page compiles cleanly: {:?}",
         examined.pages[0].compile

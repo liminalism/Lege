@@ -20,11 +20,11 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use pdf_object::parser::ObjectParser;
-use pdf_object::{Dictionary, NameId, NameTable, PdfObject, PdfStream, StreamData};
-use pdf_structure::decode::{DecodeBudget, decode_stream};
-use pdf_structure::objstm::{ObjectStreamLayout, parse_object_stream_layout};
-use pdf_syntax::SyntaxLimits;
+use exprim::object::parser::ObjectParser;
+use exprim::object::{Dictionary, NameId, NameTable, PdfObject, PdfStream, StreamData};
+use exprim::structure::decode::{DecodeBudget, decode_stream};
+use exprim::structure::objstm::{ObjectStreamLayout, parse_object_stream_layout};
+use exprim::syntax::SyntaxLimits;
 use sha2::{Digest, Sha256};
 
 /// Where a revision member claims its object lives, in this crate's terms.
@@ -190,7 +190,7 @@ impl<'a> HashSources<'a> {
         let start = usize::try_from(base).ok()?;
         let window = self.bytes.get(start..)?;
         let mut parser = ObjectParser::new(window, base, &self.limits, &self.names);
-        let mut no_lengths = |_: pdf_object::ObjectId| None;
+        let mut no_lengths = |_: exprim::object::ObjectId| None;
         let parsed = parser.parse_indirect(&mut no_lengths).ok()?;
         if parsed.id.number != number {
             return None;

@@ -38,28 +38,14 @@ sha2_10 = { package = "sha2", version = "0.10" }
 # the ecosystem root's single-PNG-version pin.
 png = "0.18"
 
-# Renderer crates, consumed by path from the sibling render tree. They keep
-# inheriting from the ecosystem workspace root; only the dependency edge is
-# ours.
+# The exprim PDF engine, consumed by path from the sibling exprim checkout.
+# Evidence rendering stays CPU-only: no GPU crates, no OCR.
 #
-# The ecosystem root's [patch] entries for jbig2enc-rust and jp2lam rewrite
-# git-sourced codecs, and the ecosystem declares both by path, so they do not
-# need repeating here. If a transitive git-sourced codec dependency ever
-# appears, it must be re-patched in this manifest.
-pdf-read = { path = "../render/crates/pdf-read" }
-pdf-source = { path = "../render/crates/pdf-source" }
-pdf-document = { path = "../render/crates/pdf-document" }
-pdf-object = { path = "../render/crates/pdf-object" }
-pdf-structure = { path = "../render/crates/pdf-structure" }
-pdf-syntax = { path = "../render/crates/pdf-syntax" }
-pdf-test-support = { path = "../render/crates/pdf-test-support" }
-# Evidence rendering (CPU-only): page compilation plus the normative CPU
-# rasterizer. No GPU crates, no OCR.
-pdf-content = { path = "../render/crates/pdf-content" }
-pdf-text = { path = "../render/crates/pdf-text" }
-pdf-page-ir = { path = "../render/crates/pdf-page-ir" }
-pdf-render-api = { path = "../render/crates/pdf-render-api" }
-pdf-render-cpu = { path = "../render/crates/pdf-render-cpu" }
+# The ecosystem root's [patch] entries do not apply to this nested workspace;
+# exprim declares its codecs by path, so none are needed here. If a transitive
+# git-sourced codec dependency ever appears, it must be patched in this
+# manifest.
+exprim = { path = "../../../exprim" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

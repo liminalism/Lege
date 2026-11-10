@@ -17,8 +17,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use pdf_document::DocumentSnapshot;
-use pdf_read::{FontRecord, ImageRecord, XrefEntryFacts, XrefEntryLocation, XrefSectionFacts};
+use exprim::document::DocumentSnapshot;
+use exprim::doctor::{FontRecord, ImageRecord, XrefEntryFacts, XrefEntryLocation, XrefSectionFacts};
 
 use crate::document::{
     ObjectChangeFacts, ObjectChangeKind, ObjectLocationFacts, ObjectRole, RevisionHistoryFacts,

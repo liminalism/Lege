@@ -32,7 +32,7 @@ fn remove(path: &PathBuf) {
 fn inspect_prints_a_terminal_report() {
     let pdf = write_fixture(
         "terminal.pdf",
-        &pdf_test_support::builder::multipage_classic(2),
+        &exprim::test_support::builder::multipage_classic(2),
     );
     let output = bin().arg("inspect").arg(&pdf).output().unwrap();
     remove(&pdf);
@@ -66,7 +66,7 @@ fn inspect_prints_a_terminal_report() {
 
 #[test]
 fn json_flag_writes_a_versioned_report_file() {
-    let bytes = pdf_test_support::builder::multipage_classic(1);
+    let bytes = exprim::test_support::builder::multipage_classic(1);
     let pdf = write_fixture("json-file.pdf", &bytes);
     let json_path = work_file("json-file.audit.json");
     let output = bin()
@@ -101,7 +101,7 @@ fn json_flag_writes_a_versioned_report_file() {
 fn json_dash_writes_only_json_to_stdout() {
     let pdf = write_fixture(
         "json-stdout.pdf",
-        &pdf_test_support::builder::multipage_classic(1),
+        &exprim::test_support::builder::multipage_classic(1),
     );
     let output = bin()
         .arg("inspect")
@@ -126,7 +126,7 @@ fn json_dash_writes_only_json_to_stdout() {
 fn password_flag_is_accepted_and_structure_only_is_labelled() {
     let pdf = write_fixture(
         "aes256.pdf",
-        &pdf_test_support::builder::aes256_encrypted_fixture(),
+        &exprim::test_support::builder::aes256_encrypted_fixture(),
     );
     let output = bin()
         .arg("inspect")
@@ -165,7 +165,7 @@ fn missing_input_fails_with_a_stderr_message() {
 fn unwritable_json_path_fails_with_a_stderr_message() {
     let pdf = write_fixture(
         "unwritable-json.pdf",
-        &pdf_test_support::builder::multipage_classic(1),
+        &exprim::test_support::builder::multipage_classic(1),
     );
     let output = bin()
         .arg("inspect")
@@ -181,7 +181,7 @@ fn unwritable_json_path_fails_with_a_stderr_message() {
 
 #[test]
 fn inspect_lists_each_revision_and_finding() {
-    let pdf = write_fixture("revisions.pdf", &pdf_test_support::builder::gpa_edit());
+    let pdf = write_fixture("revisions.pdf", &exprim::test_support::builder::gpa_edit());
     let output = bin().arg("inspect").arg(&pdf).output().unwrap();
     remove(&pdf);
     assert!(
@@ -205,7 +205,7 @@ fn inspect_lists_each_revision_and_finding() {
 
 #[test]
 fn evidence_dir_writes_png_artifacts_and_lists_them() {
-    let pdf = write_fixture("evidence.pdf", &pdf_test_support::builder::gpa_edit());
+    let pdf = write_fixture("evidence.pdf", &exprim::test_support::builder::gpa_edit());
     let dir = work_file("evidence-gpa-dir");
     let output = bin()
         .arg("inspect")

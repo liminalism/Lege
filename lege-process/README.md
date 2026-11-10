@@ -180,10 +180,10 @@ Strategy:
 ## Encoding formats and where they're used
 
 Lege keeps its in-memory encoding and color-processing modules in the process
-crate. The JBIG2 and JPEG2000 implementations live under
-`../lege-codecs/{jbig2enc-rust,jp2lam}` and are patched into the root ecosystem
-workspace. The DjVu encoder is the in-tree `djvu_encoder` library under
-`../lege-codecs/djvulibrust`, linked into the processor. A diagnostic
+crate. The JBIG2 and JPEG2000 implementations live in the sibling exprim
+checkout under `../../exprim/codecs/{jbig2enc-rust,jp2lam}` and are patched into
+the root ecosystem workspace. The DjVu encoder is the `djvu_encoder` library
+under `../../exprim/codecs/djvulibrust`, linked into the processor. A diagnostic
 `djvu-encoder` binary is still built from that crate with `--features cli`.
 
 ### Bi-level / "text compression" codecs
@@ -219,9 +219,9 @@ Lege Process is one application family inside the ecosystem workspace rooted at
 * `GUI/liminalUI/` — desktop GUI frontend (`lege-gui`), drawn with liminalkit
 
 Shared ecosystem crates are siblings of this folder: `../lege-gpu`,
-`../lege-ocr`, `../lege-pdf/read`, and `../lege-pdf/write`. Page rendering
-goes through the native engine in `../lege-pdf/render`. Codecs live in
-`../lege-codecs`. Shared assets, packaging, and the in-app HTML docs live in
+`../lege-ocr`, and `../lege-pdf/write`. Page reading and rendering go through
+the `exprim` engine in the sibling `../../exprim` checkout, which also holds
+the codecs. Shared assets, packaging, and the in-app HTML docs live in
 `../lege-misc`.
 
 ---

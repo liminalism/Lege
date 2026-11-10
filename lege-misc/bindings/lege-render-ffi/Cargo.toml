@@ -5,10 +5,10 @@
 # generated header with no further Rust. Only Python, Node and Wasm justify
 # their own Rust-side crate, because their idioms need more than a C ABI.
 #
-# LICENSING: this links `lege-pdf-read`, which links the renderer crates.
-# Those are AGPL-3.0-only, so anything distributed against this library is a
-# combined AGPL work -- including over a network (AGPL section 13). Read that
-# before shipping a binary.
+# LICENSING: this links the MIT-licensed `exprim` renderer, but this crate is
+# part of Lege and AGPL-3.0-only, so anything distributed against this library
+# is a combined AGPL work -- including over a network (AGPL section 13). Read
+# that before shipping a binary.
 [package]
 name = "lege-render-ffi"
 version = "0.1.0"
@@ -27,7 +27,7 @@ name = "lege_render"
 crate-type = ["cdylib", "staticlib", "rlib"]
 
 [dependencies]
-lege-pdf-read = { path = "../../../lege-pdf/read" }
+exprim = { workspace = true }
 
 [lints]
 workspace = true

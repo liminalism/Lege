@@ -1,7 +1,7 @@
 use anyhow::{Result, anyhow};
 use std::sync::Arc;
 
-pub use lege_pdf_read::{NativeTextWord, OwnedBookmarkNode};
+pub use exprim::{NativeTextWord, OwnedBookmarkNode};
 
 /// Configuration retained at the Lege process boundary so callers can select
 /// an exact output width without depending on renderer-internal request types.
@@ -33,14 +33,14 @@ pub struct RgbPage {
 /// Lege's single PDF renderer. One document session is shared by raster,
 /// geometry, outline, and native-text consumers for the lifetime of a job.
 pub struct PdfRenderer {
-    document: Arc<lege_pdf_read::RenderSession>,
+    document: Arc<exprim::RenderSession>,
     raster_config: RasterConfig,
 }
 
 impl PdfRenderer {
     pub fn new_from_bytes(pdf_bytes: Arc<[u8]>, raster_config: RasterConfig) -> Result<Self> {
         let document = Arc::new(
-            lege_pdf_read::RenderSession::open(pdf_bytes, None)
+            exprim::RenderSession::open(pdf_bytes, None)
                 .map_err(|error| anyhow!("Failed to read PDF document: {error}"))?,
         );
         Ok(Self::from_session(document, raster_config))
@@ -50,7 +50,7 @@ impl PdfRenderer {
     /// document once to count pages and hands that session on, so the file is
     /// parsed (xref walk, page tree) a single time per job.
     pub fn from_session(
-        document: Arc<lege_pdf_read::RenderSession>,
+        document: Arc<exprim::RenderSession>,
         raster_config: RasterConfig,
     ) -> Self {
         Self {
@@ -63,7 +63,7 @@ impl PdfRenderer {
         self.document.page_count()
     }
 
-    pub fn document_session(&self) -> Arc<lege_pdf_read::RenderSession> {
+    pub fn document_session(&self) -> Arc<exprim::RenderSession> {
         Arc::clone(&self.document)
     }
 
@@ -82,7 +82,7 @@ impl PdfRenderer {
         page_index: u32,
         target_height: u32,
         target_width: Option<u32>,
-        cancellation: Option<lege_pdf_read::CancellationToken>,
+        cancellation: Option<exprim::CancellationToken>,
     ) -> Result<RgbPage> {
         let document = Arc::clone(&self.document);
         let target_width = target_width.or(self.raster_config.target_width);
@@ -115,13 +115,13 @@ impl PdfRenderer {
 
 /// Count pages through the same document reader used by the render pipeline.
 pub fn count_pdf_pages_from_bytes(pdf_bytes: &[u8]) -> Result<u16> {
-    let session = lege_pdf_read::RenderSession::open(Arc::<[u8]>::from(pdf_bytes), None)
+    let session = exprim::RenderSession::open(Arc::<[u8]>::from(pdf_bytes), None)
         .map_err(|error| anyhow!("Failed to read PDF document: {error}"))?;
     u16::try_from(session.page_count()).map_err(|_| anyhow!("PDF has more than 65,535 pages"))
 }
 
 pub fn render_session_page_rgb(
-    document: &lege_pdf_read::RenderSession,
+    document: &exprim::RenderSession,
     page_index: u32,
     target_height: u32,
     target_width: Option<u32>,
@@ -130,13 +130,13 @@ pub fn render_session_page_rgb(
 }
 
 pub fn render_session_page_rgb_cancellable(
-    document: &lege_pdf_read::RenderSession,
+    document: &exprim::RenderSession,
     page_index: u32,
     target_height: u32,
     target_width: Option<u32>,
-    cancellation: Option<&lege_pdf_read::CancellationToken>,
+    cancellation: Option<&exprim::CancellationToken>,
 ) -> Result<RgbPage> {
-    if cancellation.is_some_and(lege_pdf_read::CancellationToken::is_cancelled) {
+    if cancellation.is_some_and(exprim::CancellationToken::is_cancelled) {
         return Err(anyhow!("PDF page render cancelled"));
     }
     let geometry = document
@@ -154,11 +154,11 @@ pub fn render_session_page_rgb_cancellable(
     let plane = document
         .render_cancellable(
             &page,
-            &lege_pdf_read::RasterProduct::rgb8(width, height),
+            &exprim::RasterProduct::rgb8(width, height),
             cancellation,
         )
         .map_err(|error| anyhow!("Failed to render page {page_index}: {error}"))?;
-    let lege_pdf_read::RasterPlane::Rgb8(surface) = plane else {
+    let exprim::RasterPlane::Rgb8(surface) = plane else {
         unreachable!("an RGB raster product must return an RGB plane");
     };
 

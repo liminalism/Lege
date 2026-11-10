@@ -5,7 +5,7 @@
 //! leaving the reader to compare coverage numbers. Thresholds are documented
 //! next to the constants they live in.
 
-use pdf_read::PageMetrics;
+use exprim::doctor::PageMetrics;
 
 use crate::document::PageRepresentation;
 

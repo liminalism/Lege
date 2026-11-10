@@ -11,7 +11,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use pdf_read::{XrefSectionFacts, XrefSectionKind as ReadKind};
+use exprim::doctor::{XrefSectionFacts, XrefSectionKind as ReadKind};
 
 use crate::document::{
     AuxiliarySectionFacts, BoundaryConfidence, LogicalRevisionFacts, RevisionHistoryFacts,
@@ -218,7 +218,7 @@ fn translate_kind(kind: ReadKind) -> XrefSectionKind {
     }
 }
 
-fn translate_counts(counts: &pdf_read::XrefEntryCounts) -> XrefEntryCounts {
+fn translate_counts(counts: &exprim::doctor::XrefEntryCounts) -> XrefEntryCounts {
     XrefEntryCounts {
         total: counts.total,
         live: counts.live,

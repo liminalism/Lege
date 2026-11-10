@@ -33,7 +33,7 @@ use anyhow::{Result, anyhow};
 use futures_util::future::BoxFuture;
 use futures_util::stream::{FuturesUnordered, StreamExt};
 use image::RgbImage;
-use lege_pdf_read::RenderSession;
+use exprim::RenderSession;
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -198,7 +198,7 @@ pub async fn create_and_run_djvu_source_pipeline(
     // page pipeline. Inference itself is additionally bounded by the shared
     // GPU session pool.
     let pipeline_config = PipelineRuntimeLimits::djvu_from_config(&config);
-    let cancellation = lege_pdf_read::CancellationToken::new();
+    let cancellation = exprim::CancellationToken::new();
     let _lifetime = crate::pipeline::helper_functions::PipelineLifetime(cancellation.clone());
     let needs_margin_pass = matches!(
         config.margin_settings(),
@@ -637,7 +637,7 @@ pub async fn create_and_run_djvu_source_pipeline(
         crate::toc::build_outline_with_contents(candidates, &stats, total_pages, &printed_contents);
     let source_outline = if let Some(session) = document_session.clone() {
         let bookmarks =
-            crate::runtime_stats::spawn_blocking(move || lege_pdf_read::extract_outline(&session))
+            crate::runtime_stats::spawn_blocking(move || exprim::extract_outline(&session))
                 .await?;
         let source_to_output = (0..total_pages)
             .map(|local| (page_index_offset + local, local))
@@ -706,7 +706,7 @@ pub async fn create_and_run_djvu_source_pipeline(
 }
 
 pub async fn create_and_run_djvu_pipeline(
-    document: Arc<lege_pdf_read::RenderSession>,
+    document: Arc<exprim::RenderSession>,
     config: Arc<PipelineConfig>,
     output_path: &Path,
     page_range: Option<std::ops::Range<usize>>,
@@ -815,7 +815,7 @@ async fn process_single_djvu_page(
     inference_data: DjvuInferenceData,
     page_index_offset: usize,
     margin_analysis: Option<Arc<DocumentMarginAnalysis>>,
-    cancellation: lege_pdf_read::CancellationToken,
+    cancellation: exprim::CancellationToken,
 ) -> Result<Option<DjvuBinarizedData>> {
     if cancellation.is_cancelled() {
         return Err(anyhow!("DjVu page processing cancelled before CPU work"));
@@ -1341,7 +1341,7 @@ async fn extract_djvu_text_layer(
         let session = Arc::clone(session);
         let native_text = crate::runtime_stats::spawn_blocking_stage(
             crate::runtime_stats::Stage::Ocr,
-            move || lege_pdf_read::page_text(&session, page_index as u32),
+            move || exprim::page_text(&session, page_index as u32),
         )
         .await
         .map_err(|e| anyhow!("Renderer text task panicked: {e}"))?;

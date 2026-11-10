@@ -11,7 +11,7 @@ pdf-forensics = { path = "../pdf-forensics" }
 serde_json = { workspace = true }
 
 [dev-dependencies]
-pdf-test-support = { workspace = true }
+exprim = { workspace = true, features = ["test-support"] }
 serde_json = { workspace = true }
 
 [lints]

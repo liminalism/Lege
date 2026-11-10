@@ -40,9 +40,9 @@ use cms::content_info::ContentInfo;
 use cms::signed_data::SignerIdentifier;
 use const_oid::db::{rfc5911, rfc5912};
 use der::{Decode, Encode};
-use pdf_document::{DocumentLimits, DocumentSnapshot, ParseContext};
-use pdf_object::{ObjectId, PdfObject};
-use pdf_source::{OwnedBytesSource, PdfSource};
+use exprim::document::{DocumentLimits, DocumentSnapshot, ParseContext};
+use exprim::object::{ObjectId, PdfObject};
+use exprim::source::{OwnedBytesSource, PdfSource};
 use sha2::{Digest, Sha256, Sha384, Sha512};
 
 use crate::document::{ByteRangeValidity, DocumentFacts, SignatureFacts};
@@ -756,7 +756,7 @@ fn contents_of(
 /// `/Contents` from a signature value dictionary, resolved when indirect.
 fn contents_from_dict(
     snapshot: &DocumentSnapshot,
-    dict: &pdf_object::Dictionary,
+    dict: &exprim::object::Dictionary,
     ctx: &mut ParseContext,
 ) -> Option<Vec<u8>> {
     let key = snapshot.names().lookup(b"Contents")?;

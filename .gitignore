@@ -49,9 +49,6 @@ Thumbs.db
 # Non-source documents and one-off local migration helpers
 *.pdf
 # Small PDF fixtures are source inputs required by fresh-clone test builds.
-!lege-pdf/render/crates/pdf-document/tests/fixtures/*.pdf
-!lege-pdf/render/crates/pdf-chaos-tests/tests/fixtures/*.pdf
-!lege-pdf/print/tests/fixtures/*.pdf
 !lege-pdf/pdf-integrity/fixtures/*.pdf
 /cargo-checker
 /cargo-checker.exe
@@ -73,11 +70,7 @@ Screenshot*.PNG
 *.AppImage
 
 # Codec test corpora and generated visual outputs (dev artifacts)
-lege-codecs/jp2lam/test-set/
-lege-codecs/jp2lam/visual-output/
-lege-codecs/jp2lam/lear.png
 lege-pdf/oracle-sweep-*/
-lege-pdf/render/corpus/perf/results/
 # Same sweeps after the move under sources/. Registered AKR sources
 # (catalog.json, external/) stay tracked; only the bulk sweep payload is not.
 sources/oracle-sweep-*/
@@ -87,20 +80,14 @@ sources/oracle-sweep-*/
 *.j2k
 *.jb2
 *.pbm
-!lege-codecs/jbig2enc-rust/tests/fixtures/original/blank.pbm
-!lege-codecs/jbig2enc-rust/tests/fixtures/original/marks.pbm
-!lege-codecs/jbig2enc-rust/tests/fixtures/original/symbols.pbm
 
-# Retained JBIG2 benchmark/validation evidence; private corpus stays in scratch.
-!lege-codecs/jbig2enc-rust/docs/benchmarks/**/*.log
-!lege-codecs/jbig2enc-rust/docs/validation/**/*.log
 
 # AKR: a rebuildable cache and disposable agent notes.
 .akr/cache/
 .agent/scratch/
 .agent/handoffs/
 # The pattern above contains a slash, so git anchors it to this directory and
-# it misses nested crates (e.g. lege-codecs/jp2lam/.agent/scratch/).
+# it misses nested crates (e.g. lege-render-wgpu/.agent/scratch/).
 **/.agent/scratch/
 
 # Scratch render output from pipeline runs. Page PNGs at 12MP run to tens of
@@ -115,3 +102,6 @@ lege-misc/assets/logo-export/
 # Python test and bytecode caches (bindings).
 __pycache__/
 .pytest_cache/
+
+# Scratch target directory of a profiling build
+/target-pb/

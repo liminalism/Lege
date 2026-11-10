@@ -22,9 +22,9 @@ Shared wgpu compute: Sauvola binarization, image resize, and the ONNX runtime th
 
 The OCR library behind the processor (`lege_ocr`): line segmentation, hOCR assembly, embedded PP-OCR, Windows OCR, and an opt-in Tesseract backend. The batch product whose binary is also named `lege-ocr` lives in `lege-document-ocr`. [lege-ocr/README.md](lege-ocr/README.md).
 
-### lege-codecs
+### exprim and the codecs (sibling checkout)
 
-In-tree JBIG2 (`jbig2enc-rust`), JPEG 2000 (`jp2lam`), and DjVu (`djvulibrust`). These keep their own build graphs and licenses. The root workspace patches the first two in, and the processor links the DjVu library directly. [lege-codecs/README.md](lege-codecs/README.md).
+The PDF engine (`exprim`: reading, text, rendering, printing, and the `exprim` agent CLI) and the JBIG2 (`jbig2enc-rust`), JPEG 2000 (`jp2lam`), and DjVu (`djvulibrust`) codecs live in the sibling `../exprim` repository, which must be checked out beside this one. The root workspace depends on `exprim` by path and patches the first two codecs in; the processor links the DjVu library directly.
 
 ### lege-document-ocr
 

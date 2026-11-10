@@ -9,7 +9,7 @@ use pdf_forensics::{
     RevisionTextDiffOptions, TEXT_CHANGED_BETWEEN_REVISIONS, XrefEntryCounts, XrefSectionKind,
     audit_bytes, diff_revision_text, encode_png, highlight_changed_regions,
 };
-use pdf_test_support::builder;
+use exprim::test_support::builder;
 
 /// Audit `bytes` and require the report to satisfy the schema's own rules.
 fn audit(bytes: &[u8]) -> AuditReport {

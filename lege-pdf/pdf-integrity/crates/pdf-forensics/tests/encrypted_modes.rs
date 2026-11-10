@@ -14,7 +14,7 @@
 use pdf_forensics::{
     AnalysisMode, Availability, Disposition, OpenState, UnavailableReason, audit_bytes,
 };
-use pdf_test_support::builder;
+use exprim::test_support::builder;
 
 #[test]
 fn permissions_only_encryption_audits_in_full() {

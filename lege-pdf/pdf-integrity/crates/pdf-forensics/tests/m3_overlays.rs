@@ -10,7 +10,7 @@ use pdf_forensics::{
     render_bytes_evidence,
 };
 use pdf_forensics::{EXPLICIT_ANNOTATION_OVER_TEXT, encode_png};
-use pdf_test_support::builder;
+use exprim::test_support::builder;
 
 /// Audit `bytes` and run the overlay analysis over the same parse.
 fn detect(bytes: &[u8]) -> (AuditReport, OverlayOutcome) {

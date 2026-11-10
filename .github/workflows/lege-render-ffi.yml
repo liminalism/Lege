@@ -1,16 +1,17 @@
 name: lege-render-ffi
 
+# The FFI links `exprim` from the sibling ../exprim checkout. Until exprim has
+# a remote, these jobs need it checked out beside this repository.
+
 on:
   pull_request:
     paths:
       - "lege-misc/bindings/lege-render-ffi/**"
-      - "lege-pdf/read/**"
       - ".github/workflows/lege-render-ffi.yml"
   push:
     branches: [main]
     paths:
       - "lege-misc/bindings/lege-render-ffi/**"
-      - "lege-pdf/read/**"
       - ".github/workflows/lege-render-ffi.yml"
 
 permissions:
@@ -70,7 +71,7 @@ jobs:
         working-directory: lege-misc/bindings/lege-render-ffi
         run: |
           LD_LIBRARY_PATH=../../../target/release ./render_page \
-            ../../../lege-pdf/render/corpus/shadings/mesh-type6-coons.pdf \
+            ../../../../exprim/corpus/shadings/mesh-type6-coons.pdf \
             0 out.png 150
           test -s out.png
           head -c 8 out.png | od -An -tx1 | grep -q '89 50 4e 47'

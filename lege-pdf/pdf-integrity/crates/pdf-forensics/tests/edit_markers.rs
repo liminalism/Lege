@@ -6,7 +6,7 @@ use pdf_forensics::{Availability, UnavailableReason, audit_bytes};
 
 #[test]
 fn touchup_markers_reach_the_report() {
-    let report = audit_bytes(&pdf_test_support::builder::touchup_edit(), None);
+    let report = audit_bytes(&exprim::test_support::builder::touchup_edit(), None);
     report.validate().unwrap();
 
     let markers = report.document.edit_markers.value().unwrap();
@@ -42,7 +42,7 @@ fn touchup_markers_reach_the_report() {
 
 #[test]
 fn clean_document_reports_no_markers_not_a_gap() {
-    let report = audit_bytes(&pdf_test_support::builder::multipage_classic(1), None);
+    let report = audit_bytes(&exprim::test_support::builder::multipage_classic(1), None);
     assert_eq!(report.document.edit_markers.value().map(Vec::len), Some(0));
 }
 

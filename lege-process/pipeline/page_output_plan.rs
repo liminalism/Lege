@@ -3,7 +3,7 @@
 //! Lege builds the plan; the renderer executes one request per product.
 //!
 //! Every product of a page names the base output raster as its image decode
-//! reference ([`lege_pdf_read::DecodeReference`]). A JPEG or JPEG 2000 scan
+//! reference ([`exprim::DecodeReference`]). A JPEG or JPEG 2000 scan
 //! is decoded at a reduced resolution chosen from the draw's footprint, so
 //! without a shared reference the 800-pixel analysis render and the base
 //! render would decode the page's scan twice, at two resolutions. With it the
@@ -16,7 +16,7 @@
 //! base sets the shared level, so the base pixels are the same whichever
 //! other products the configuration enables.
 
-use lege_pdf_read::{
+use exprim::{
     AnalysisTarget, BaseTarget, DeviceCrop, GraySuitability, OcrTarget, PageOutputPlan,
     RasterProduct, RegionTarget,
 };
@@ -160,7 +160,7 @@ pub fn region_target(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lege_pdf_read::RasterFormat;
+    use exprim::RasterFormat;
 
     fn base_config() -> PipelineConfig {
         let mut config = PipelineConfig::new().expect("config");
@@ -276,7 +276,7 @@ mod tests {
         config.set_slow_ocr(true);
         config.set_slow_ocr_scale(2.0);
         let plan = plan_page_output(&config, input(GraySuitability::Exact));
-        let base = Some(lege_pdf_read::DecodeReference {
+        let base = Some(exprim::DecodeReference {
             width: 900,
             height: 1200,
         });

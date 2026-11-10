@@ -13,7 +13,7 @@ image = { workspace = true }
 lege-docir = { path = "../docir" }
 lege-gpu = { path = "../../../lege-gpu", features = ["layout-detection"] }
 lege-ocr = { path = "../../../lege-ocr" }
-lege-pdf-read = { path = "../../../lege-pdf/read" }
+exprim = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

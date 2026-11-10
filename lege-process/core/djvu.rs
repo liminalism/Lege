@@ -812,7 +812,7 @@ pub fn spawn_djvu_writer_actor(
     bg_subsample: usize,
     progress_tracker: crate::progress::ProgressTracker,
     channel_capacity: usize,
-    cancel: lege_pdf_read::CancellationToken,
+    cancel: exprim::CancellationToken,
 ) -> (
     DjvuWriterHandle,
     Arc<DjvuDocument>,
@@ -911,7 +911,7 @@ fn finalize_document_atomic(
     doc: &DjvuDocument,
     navigation: &DjVmNav,
     output_path: &Path,
-    cancel: &lege_pdf_read::CancellationToken,
+    cancel: &exprim::CancellationToken,
 ) -> Result<()> {
     if cancel.is_cancelled() || crate::progress::termination_requested() {
         return Err(anyhow!(
@@ -1105,7 +1105,7 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let output = dir.path().join("existing.djvu");
         std::fs::write(&output, b"old output").expect("seed output");
-        let cancel = lege_pdf_read::CancellationToken::new();
+        let cancel = exprim::CancellationToken::new();
         cancel.cancel();
 
         let error =
@@ -1124,7 +1124,7 @@ mod tests {
             &one_page_document(),
             &DjVmNav::default(),
             &output,
-            &lege_pdf_read::CancellationToken::new(),
+            &exprim::CancellationToken::new(),
         )
         .expect("publish");
 

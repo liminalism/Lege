@@ -5,12 +5,12 @@
 //! later means the document changed, not the toolchain. Every choice here
 //! serves that property:
 //!
-//! * The page is compiled with [`PageCompiler`](pdf_content::PageCompiler)
+//! * The page is compiled with [`PageCompiler`](exprim::content::PageCompiler)
 //!   *without* a system-font provider, so non-embedded fonts resolve to the
 //!   bundled standard faces instead of whatever the host has installed.
 //!   System-font substitution is what would make two machines disagree.
 //! * Rasterization runs on the normative CPU backend
-//!   ([`CpuBackend`](pdf_render_cpu::CpuBackend)) with its defaults: no
+//!   ([`CpuBackend`](exprim::render_cpu::CpuBackend)) with its defaults: no
 //!   hinting, normal quality, opaque white background, original colors.
 //! * The PNG writer uses fixed encoder settings and writes no timestamps.
 //!
@@ -23,15 +23,15 @@ use std::fmt;
 use std::path::Path;
 use std::sync::Arc;
 
-use pdf_content::PageCompiler;
-use pdf_document::{DocumentLimits, DocumentSnapshot, PageIndex, ParseContext};
-use pdf_page_ir::{DeviceSize, Matrix, Rect};
-use pdf_render_api::{
+use exprim::content::PageCompiler;
+use exprim::document::{DocumentLimits, DocumentSnapshot, PageIndex, ParseContext};
+use exprim::page_ir::{DeviceSize, Matrix, Rect};
+use exprim::render_api::{
     Background, OutputFormat, OutputResidency, PageTransform, RenderLimits, RenderQuality,
     RenderRequest,
 };
-use pdf_render_cpu::CpuBackend;
-use pdf_source::{OwnedBytesSource, PdfSource};
+use exprim::render_cpu::CpuBackend;
+use exprim::source::{OwnedBytesSource, PdfSource};
 
 /// How annotations participate in an evidence render.
 ///
@@ -40,7 +40,7 @@ use pdf_source::{OwnedBytesSource, PdfSource};
 /// [`AnnotationMode::StaticAppearances`] (the default) also bakes each
 /// annotation's normal appearance stream into the page, matching what a
 /// viewer shows.
-pub use pdf_render_api::AnnotationMode;
+pub use exprim::render_api::AnnotationMode;
 
 /// Options for one evidence render.
 #[derive(Debug, Clone)]
@@ -288,7 +288,7 @@ pub fn render_page_evidence(
         output_size: DeviceSize { width, height },
         output_format: OutputFormat::Rgba8PremultipliedSrgb,
         background: Background::White,
-        color_policy: pdf_render_api::RenderColorPolicy::Original,
+        color_policy: exprim::render_api::RenderColorPolicy::Original,
         annotations: options.annotations,
         quality: RenderQuality::Normal,
         limits: RenderLimits::default(),

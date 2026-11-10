@@ -5173,7 +5173,7 @@ async fn check_pdf_ocr_layer(pdf_path: &PathBuf) -> Result<bool> {
     let pdf_bytes = std::fs::read(pdf_path).map_err(|e| anyhow!("Failed to read PDF: {}", e))?;
     let pdf_bytes = Arc::from(pdf_bytes.into_boxed_slice());
 
-    let document = lege_pdf_read::RenderSession::open(pdf_bytes, None)
+    let document = exprim::RenderSession::open(pdf_bytes, None)
         .map_err(|error| anyhow!("Failed to read PDF: {error}"))?;
     let total_pages = document.page_count();
     if total_pages == 0 {
@@ -5187,7 +5187,7 @@ async fn check_pdf_ocr_layer(pdf_path: &PathBuf) -> Result<bool> {
     };
     for index in 0..sample_size {
         let page = index * step;
-        if lege_pdf_read::has_text_layer(&document, page)
+        if exprim::has_text_layer(&document, page)
             .map_err(|error| anyhow!("Failed to inspect PDF text layer: {error}"))?
         {
             return Ok(true);

@@ -5,7 +5,7 @@
 use pdf_forensics::{
     ChangedRegion, EvidenceOptions, EvidenceRender, diff_renders, encode_png, render_bytes_evidence,
 };
-use pdf_test_support::builder;
+use exprim::test_support::builder;
 
 #[test]
 fn same_fixture_renders_byte_identical_pngs() {

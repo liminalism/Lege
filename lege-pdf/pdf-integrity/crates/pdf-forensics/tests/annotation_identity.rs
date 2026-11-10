@@ -8,7 +8,7 @@ use pdf_forensics::audit_bytes;
 /// identity list — and `annotation_identity` is no longer a pending gap.
 #[test]
 fn annotation_identity_reaches_the_report() {
-    let report = audit_bytes(&pdf_test_support::builder::annotated(), None);
+    let report = audit_bytes(&exprim::test_support::builder::annotated(), None);
     report.validate().unwrap();
 
     let annotations = report.document.annotations.value().unwrap();

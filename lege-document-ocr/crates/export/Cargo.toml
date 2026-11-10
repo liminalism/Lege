@@ -8,7 +8,7 @@ description = "Exporters for the Lege canonical document representation"
 
 [dependencies]
 lege-docir = { path = "../docir" }
-lege-pdf-read = { path = "../../../lege-pdf/read" }
+exprim = { workspace = true }
 lege-pdf-write = { path = "../../../lege-pdf/write" }
 image = { workspace = true }
 jpeg-encoder = { workspace = true }
@@ -22,4 +22,4 @@ zip = { workspace = true }
 workspace = true
 
 [dev-dependencies]
-pdf-test-support = { workspace = true }
+exprim = { workspace = true, features = ["test-support"] }

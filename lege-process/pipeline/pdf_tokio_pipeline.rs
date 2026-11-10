@@ -151,11 +151,11 @@ pub(crate) fn build_inference_future(
 /// Process a single page (runs in its own task)
 async fn process_single_page(
     config: Arc<PipelineConfig>,
-    document_session: Option<Arc<lege_pdf_read::RenderSession>>,
+    document_session: Option<Arc<exprim::RenderSession>>,
     inference_data: PdfInferenceData,
     page_index_offset: usize,
     margin_analysis: Option<Arc<DocumentMarginAnalysis>>,
-    cancellation: lege_pdf_read::CancellationToken,
+    cancellation: exprim::CancellationToken,
     glyph_session: Option<Arc<GlyphFontSession>>,
 ) -> Result<ProcessedPage> {
     checkpoint(&cancellation, "before page processing")?;
@@ -458,7 +458,7 @@ struct PageProcessingInput {
     page_index: usize,
     config: Arc<PipelineConfig>,
     margin_analysis: Option<Arc<DocumentMarginAnalysis>>,
-    cancellation: lege_pdf_read::CancellationToken,
+    cancellation: exprim::CancellationToken,
 }
 
 struct RegionProcessingResult {
@@ -1534,7 +1534,7 @@ fn process_page_cpu_work(input: PageProcessingInput) -> Result<PageProcessingOut
     })
 }
 
-fn checkpoint(cancellation: &lege_pdf_read::CancellationToken, stage: &'static str) -> Result<()> {
+fn checkpoint(cancellation: &exprim::CancellationToken, stage: &'static str) -> Result<()> {
     if cancellation.is_cancelled() {
         Err(anyhow!("Processing cancelled {stage}"))
     } else {
@@ -1823,7 +1823,7 @@ async fn perform_ocr(
 /// majority; `None` when fewer than half of the sampled pages carry a
 /// bilevel ink layer, which leaves the render height as it was.
 fn bilevel_source_height(
-    session: &Arc<lege_pdf_read::RenderSession>,
+    session: &Arc<exprim::RenderSession>,
     page_start: usize,
     page_end: usize,
 ) -> Option<u32> {
@@ -1849,11 +1849,11 @@ fn bilevel_source_height(
 
 /// Whether a page's ink already comes from a one-bit source (a full-page
 /// bilevel image or a bilevel soft mask, see
-/// [`lege_pdf_read::CompiledDocumentPage::bilevel_raster_height`]). Such a
+/// [`exprim::CompiledDocumentPage::bilevel_raster_height`]). Such a
 /// page is original text: truetyping leaves it as JBIG2 instead of tracing
 /// it, and a source mask passes through untouched.
 fn page_ink_is_bilevel(
-    session: Option<&Arc<lege_pdf_read::RenderSession>>,
+    session: Option<&Arc<exprim::RenderSession>>,
     page_index: usize,
 ) -> bool {
     session
@@ -1919,7 +1919,7 @@ async fn perform_ocr_binarized(
 
 /// Extract PDF text layer
 async fn extract_pdf_text(
-    document_session: Option<&Arc<lege_pdf_read::RenderSession>>,
+    document_session: Option<&Arc<exprim::RenderSession>>,
     page_index: usize,
     output_width: u32,
     output_height: u32,
@@ -1933,7 +1933,7 @@ async fn extract_pdf_text(
     let source_height = text_transform.source_height;
     let renderer_words =
         crate::runtime_stats::spawn_blocking_stage(crate::runtime_stats::Stage::Ocr, move || {
-            lege_pdf_read::positioned_words(
+            exprim::positioned_words(
                 &session,
                 page_index as u32,
                 source_width,
@@ -2206,7 +2206,7 @@ async fn encode_preserved_mrc_base_layer(
     height: usize,
     config: &Arc<PipelineConfig>,
     page_index: usize,
-    mask: lege_pdf_read::PreservedJbig2Smask,
+    mask: exprim::PreservedJbig2Smask,
 ) -> Result<(
     crate::accumulator::ContentType,
     crate::accumulator::ContentType,
@@ -2361,7 +2361,7 @@ async fn encode_preserved_mrc_base_layer(
             pixel_height: mask.native_height,
             paint_one: matches!(
                 mask.stencil_polarity,
-                lege_pdf_read::Jbig2StencilPolarity::PaintOne
+                exprim::Jbig2StencilPolarity::PaintOne
             ),
         };
         crate::bbox_trace!(
@@ -3204,9 +3204,9 @@ struct PageOwnedJobOutput {
 }
 
 struct PlannedPdfContext {
-    page: Arc<lege_pdf_read::CompiledDocumentPage>,
-    plan: lege_pdf_read::PageOutputPlan,
-    preserved_mask: Option<lege_pdf_read::PreservedJbig2Smask>,
+    page: Arc<exprim::CompiledDocumentPage>,
+    plan: exprim::PageOutputPlan,
+    preserved_mask: Option<exprim::PreservedJbig2Smask>,
     output_width: u32,
     output_height: u32,
     analysis_image: RgbImage,
@@ -3215,7 +3215,7 @@ struct PlannedPdfContext {
 }
 
 fn dimensions_for_geometry(
-    geometry: lege_pdf_read::PageGeometry,
+    geometry: exprim::PageGeometry,
     target_height: u32,
     target_width: Option<u32>,
 ) -> (u32, u32) {
@@ -3230,10 +3230,10 @@ fn dimensions_for_geometry(
 }
 
 async fn prepare_planned_pdf_page(
-    session: Arc<lege_pdf_read::RenderSession>,
+    session: Arc<exprim::RenderSession>,
     config: Arc<PipelineConfig>,
     page_index: usize,
-    cancellation: lege_pdf_read::CancellationToken,
+    cancellation: exprim::CancellationToken,
 ) -> Result<Option<PlannedPdfContext>> {
     if config.text_format() == "jpeg" || should_preserve_cover_page(page_index, &config) {
         return Ok(None);
@@ -3277,13 +3277,13 @@ async fn prepare_planned_pdf_page(
                 output_width,
                 output_height,
                 gray_suitability: if preserved_mask.is_some() {
-                    lege_pdf_read::GraySuitability::AcceptableForBilevel
+                    exprim::GraySuitability::AcceptableForBilevel
                 } else {
                     page.gray_suitability()
                 },
             },
         );
-        if plan.base.product.format != lege_pdf_read::RasterFormat::Gray8 {
+        if plan.base.product.format != exprim::RasterFormat::Gray8 {
             return Ok(None);
         }
         let t_analysis = std::time::Instant::now();
@@ -3291,7 +3291,7 @@ async fn prepare_planned_pdf_page(
             let plane = session
                 .render_cancellable(&page, &target.product, Some(&cancellation))
                 .map_err(|error| anyhow!("analysis render failed: {error}"))?;
-            let lege_pdf_read::RasterPlane::Rgb8(surface) = plane else {
+            let exprim::RasterPlane::Rgb8(surface) = plane else {
                 return Err(anyhow!("analysis target returned a non-RGB plane"));
             };
             RgbImage::from_raw(surface.width, surface.height, surface.pixels.to_vec())
@@ -3490,7 +3490,7 @@ mod image_detection_policy_tests {
     }
 }
 
-fn compact_gray_surface(surface: lege_pdf_read::GraySurface) -> Result<Vec<u8>> {
+fn compact_gray_surface(surface: exprim::GraySurface) -> Result<Vec<u8>> {
     let width = surface.width as usize;
     let height = surface.height as usize;
     if surface.stride == width && surface.pixels.len() == width.saturating_mul(height) {
@@ -3528,14 +3528,14 @@ fn gray_to_rgb_image(gray: &[u8], width: u32, height: u32) -> Result<RgbImage> {
 #[allow(clippy::too_many_arguments)]
 async fn process_planned_pdf_products(
     config: Arc<PipelineConfig>,
-    document_session: Arc<lege_pdf_read::RenderSession>,
+    document_session: Arc<exprim::RenderSession>,
     page_index: usize,
     page_start: usize,
-    page: Arc<lege_pdf_read::CompiledDocumentPage>,
-    plan: lege_pdf_read::PageOutputPlan,
-    preserved_mask: Option<lege_pdf_read::PreservedJbig2Smask>,
+    page: Arc<exprim::CompiledDocumentPage>,
+    plan: exprim::PageOutputPlan,
+    preserved_mask: Option<exprim::PreservedJbig2Smask>,
     detections: Vec<crate::engine::Detection>,
-    cancellation: lege_pdf_read::CancellationToken,
+    cancellation: exprim::CancellationToken,
     glyph_session: Option<Arc<GlyphFontSession>>,
 ) -> Result<ProcessedPage> {
     let base_product = plan.base.product;
@@ -3561,7 +3561,7 @@ async fn process_planned_pdf_products(
         "[PROFILING] Page {} planned base render",
         page_index + 1
     );
-    let lege_pdf_read::RasterPlane::Gray8(base_surface) = base_plane else {
+    let exprim::RasterPlane::Gray8(base_surface) = base_plane else {
         return Err(anyhow!("planned gray path received a non-gray base"));
     };
     let width = base_surface.width;
@@ -3675,7 +3675,7 @@ async fn process_planned_pdf_products(
             .await
             .map_err(|error| anyhow!("page OCR render task panicked: {error}"))?
             .map_err(|error| anyhow!("page OCR render failed: {error}"))?;
-            let lege_pdf_read::RasterPlane::Rgb8(surface) = ocr_plane else {
+            let exprim::RasterPlane::Rgb8(surface) = ocr_plane else {
                 return Err(anyhow!("slow OCR target returned a non-RGB plane"));
             };
             let ocr_image =
@@ -3744,7 +3744,7 @@ async fn process_planned_pdf_products(
         .await
         .map_err(|error| anyhow!("page region render task panicked: {error}"))?
         .map_err(|error| anyhow!("page region render failed: {error}"))?;
-        let lege_pdf_read::RasterPlane::Rgb8(surface) = region_plane else {
+        let exprim::RasterPlane::Rgb8(surface) = region_plane else {
             continue;
         };
         // The source raster can be far larger than the box it is drawn in on
@@ -3878,7 +3878,7 @@ async fn process_planned_pdf_products(
 async fn abort_page_jobs(
     jobs: &mut tokio::task::JoinSet<Result<PageOwnedJobOutput>>,
     pdf_writer_task: &tokio::task::JoinHandle<Result<(), anyhow::Error>>,
-    cancellation: &lege_pdf_read::CancellationToken,
+    cancellation: &exprim::CancellationToken,
     pdf_writer_handle: &crate::pipeline::helper_functions::PdfWriterHandle,
 ) {
     cancellation.cancel();
@@ -3894,13 +3894,13 @@ async fn run_page_owned_job(
     source: Arc<dyn PageSource>,
     config: Arc<PipelineConfig>,
     inference_handle: Option<Arc<crate::pipeline::inference::InferenceHandle>>,
-    document_session: Option<Arc<lege_pdf_read::RenderSession>>,
+    document_session: Option<Arc<exprim::RenderSession>>,
     page_index: usize,
     page_start: usize,
     margin_analysis: Option<Arc<DocumentMarginAnalysis>>,
     detection_cache: Arc<Vec<CachedDetections>>,
     analysis_width: u32,
-    cancellation: lege_pdf_read::CancellationToken,
+    cancellation: exprim::CancellationToken,
     pdf_writer_handle: crate::pipeline::PdfWriterHandle,
     collect_hocr: bool,
     render_count: Arc<AtomicUsize>,
@@ -4320,7 +4320,7 @@ pub async fn create_and_run_pdf_source_pipeline(
         crate::margin::MarginSettings::StandardizeAndCenter
             | crate::margin::MarginSettings::CropAndResize
     );
-    let cancellation = lege_pdf_read::CancellationToken::new();
+    let cancellation = exprim::CancellationToken::new();
     let _lifetime = crate::pipeline::helper_functions::PipelineLifetime(cancellation.clone());
 
     // The page-memory semaphore is created before the margin pass so the
@@ -4494,13 +4494,13 @@ pub async fn create_and_run_pdf_source_pipeline(
     info_log!("[PDF-Parallel] Page-owned jobs complete");
 
     // Await extraction so writer finalization cannot race bookmark delivery.
-    let mut source_metadata = lege_pdf_read::DocumentMetadata::default();
+    let mut source_metadata = exprim::DocumentMetadata::default();
     let mut source_outline = Vec::new();
     if let Some(session) = document_session {
         let mut outline_task = crate::runtime_stats::spawn_blocking(move || {
             (
-                lege_pdf_read::extract_outline(&session),
-                lege_pdf_read::extract_metadata(&session),
+                exprim::extract_outline(&session),
+                exprim::extract_metadata(&session),
             )
         });
         let (bookmarks, metadata) = tokio::select! {
@@ -4658,7 +4658,7 @@ pub async fn create_and_run_pdf_source_pipeline(
 }
 
 pub async fn create_and_run_pdf_parallel_pipeline(
-    document: Arc<lege_pdf_read::RenderSession>,
+    document: Arc<exprim::RenderSession>,
     config: Arc<PipelineConfig>,
     output_path: &Path,
     page_range: Option<std::ops::Range<usize>>,
@@ -4736,7 +4736,7 @@ mod phase4_ocr_baseline_tests {
                 page_index: index,
                 config: Arc::new(config),
                 margin_analysis: None,
-                cancellation: lege_pdf_read::CancellationToken::new(),
+                cancellation: exprim::CancellationToken::new(),
             })
             .unwrap();
             match (case, output.base) {
@@ -4819,7 +4819,7 @@ mod phase4_ocr_baseline_tests {
             page_index: 1,
             config,
             margin_analysis: None,
-            cancellation: lege_pdf_read::CancellationToken::new(),
+            cancellation: exprim::CancellationToken::new(),
         })
         .expect("OCR-shaped CPU page work");
 
@@ -4889,7 +4889,7 @@ mod phase4_ocr_baseline_tests {
             page_index: 1,
             config,
             margin_analysis: None,
-            cancellation: lege_pdf_read::CancellationToken::new(),
+            cancellation: exprim::CancellationToken::new(),
         })
         .expect("page work with an image region");
 
@@ -4938,7 +4938,7 @@ mod phase4_ocr_baseline_tests {
             original_height_pts: 600.0,
             has_no_detections: true,
         };
-        let cancellation = lege_pdf_read::CancellationToken::new();
+        let cancellation = exprim::CancellationToken::new();
         cancellation.cancel();
         let started = std::time::Instant::now();
         let result = process_page_cpu_work(PageProcessingInput {
@@ -5015,8 +5015,8 @@ mod planned_products_tests {
             std::time::Duration::from_secs(10),
             create_and_run_pdf_parallel_pipeline(
                 Arc::new(
-                    lege_pdf_read::RenderSession::open(
-                        Arc::from(pdf_test_support::builder::multipage_classic(1)),
+                    exprim::RenderSession::open(
+                        Arc::from(exprim::test_support::builder::multipage_classic(1)),
                         None,
                     )
                     .expect("open"),
@@ -5042,9 +5042,9 @@ mod planned_products_tests {
     /// this free of GPU and OCR engines.
     #[tokio::test(flavor = "current_thread")]
     async fn staged_base_and_region_processing_on_blank_page() {
-        let pdf_bytes = pdf_test_support::builder::multipage_classic(1);
+        let pdf_bytes = exprim::test_support::builder::multipage_classic(1);
         let session =
-            Arc::new(lege_pdf_read::RenderSession::open(Arc::from(pdf_bytes), None).expect("open"));
+            Arc::new(exprim::RenderSession::open(Arc::from(pdf_bytes), None).expect("open"));
         let page = session.compile(0).expect("compile");
         let mut config = PipelineConfig::new().expect("config");
         config.set_enable_layout_detection(false);
@@ -5059,7 +5059,7 @@ mod planned_products_tests {
             PagePlanInput {
                 output_width: 150,
                 output_height: 200,
-                gray_suitability: lege_pdf_read::GraySuitability::Exact,
+                gray_suitability: exprim::GraySuitability::Exact,
             },
         );
         plan.regions
@@ -5073,7 +5073,7 @@ mod planned_products_tests {
             plan,
             None,
             Vec::new(),
-            lege_pdf_read::CancellationToken::new(),
+            exprim::CancellationToken::new(),
             None,
         )
         .await

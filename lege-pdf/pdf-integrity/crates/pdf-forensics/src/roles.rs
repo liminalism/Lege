@@ -14,10 +14,10 @@
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;
 
-use pdf_document::{DocumentSnapshot, PageIndex, ParseContext};
-use pdf_object::{Dictionary, ObjectId, PdfObject};
-use pdf_read::{FontRecord, ImageRecord};
-use pdf_structure::ObjectLocation;
+use exprim::document::{DocumentSnapshot, PageIndex, ParseContext};
+use exprim::object::{Dictionary, ObjectId, PdfObject};
+use exprim::doctor::{FontRecord, ImageRecord};
+use exprim::structure::ObjectLocation;
 
 use crate::document::ObjectRole;
 
