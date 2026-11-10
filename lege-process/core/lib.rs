@@ -76,7 +76,6 @@ pub mod engine;
 pub mod glyphless_font; // Minimal glyphless TTF for the invisible OCR text layer
 pub mod hocr; // hOCR parsing + line grouping (moved out of accumulator)
 pub mod icon;
-pub mod image_extent; // A picture's box grown to the picture's edge
 #[cfg(feature = "layout-detection")]
 #[cfg(feature = "layout-detection")]
 pub mod layout_visualize;

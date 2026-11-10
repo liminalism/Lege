@@ -155,9 +155,8 @@ Key files per concern:
 `lege-process/core/engine_impl.rs` (the `LayoutEngine` wrapping
 `lege_gpu::vision::LayoutDetector` on wgpu). The embedded model is RF-DETR-S v2
 (`lege-process/models/layout-rfdetr-s.md`), exported to the PP-DocLayout contract (23 class ids).
-Its boxes are used as detected: no boxes are added and no labels changed. Image boxes are grown
-to their picture's edge (`core/image_extent.rs`) so the overlay covers the whole picture; there is
-no line-art test, an image box is an overlay unless it lies on text.
+Its boxes are used as detected: no correction, no growing, no line-art test. An image box is a
+picture overlay unless it lies on text.
 
 `ContentCategory` (in `lege-process/core/types.rs`) is the single source of truth for what a detection means downstream — never use raw layout class IDs outside of `types.rs`.
 
