@@ -2,10 +2,10 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 use bytemuck::{Pod, Zeroable};
-use lege_gpu::compute::{AdapterInfo, SharedGpuContext, wgpu};
 use exprim::render_api::{
     HostPage, OutputFormat, PostprocessCapabilities, PostprocessOperations, RenderedPage,
 };
+use lege_gpu::compute::{AdapterInfo, SharedGpuContext, wgpu};
 use wgpu::util::DeviceExt;
 
 use exprim::postprocess::{
@@ -1096,7 +1096,9 @@ impl PostprocessBackend for WgpuPostprocess {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use exprim::postprocess::{CropSpec, FusionSpec, GraySpec, OtsuSpec, ResizeSpec, SauvolaSpec, ToneCurve};
+    use exprim::postprocess::{
+        CropSpec, FusionSpec, GraySpec, OtsuSpec, ResizeSpec, SauvolaSpec, ToneCurve,
+    };
 
     fn page(width: u32, height: u32, format: OutputFormat, pixels: Vec<u8>) -> HostPage {
         HostPage {

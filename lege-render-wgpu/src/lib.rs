@@ -18,7 +18,6 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use bytemuck::{Pod, Zeroable};
-use lege_gpu::compute::{AdapterInfo, SharedGpuContext, wgpu};
 use exprim::page_ir::{
     BlendMode, CompiledPage, DeviceSize, DisplayOp, ImageColorSpace, ImageMask, PageFeatures, Paint,
 };
@@ -34,6 +33,7 @@ use exprim::render_cpu::{
     MAX_PREPARED_RGB_CONVERSION_BYTES, PreparedGpuCommand, PreparedGpuPath, PreparedGpuPathBatch,
     PreparedRgbImage, PreparedRgbImagePage, RenderStats,
 };
+use lege_gpu::compute::{AdapterInfo, SharedGpuContext, wgpu};
 use wgpu::util::DeviceExt;
 
 const WORKGROUP_EDGE: u32 = 16;

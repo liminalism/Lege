@@ -16,8 +16,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         DitherSpec, FusionSpec, GraySpec, OtsuSpec, PostprocessBackend, PostprocessGraph,
         PostprocessOp, PostprocessOutput, ResizeFilter, ResizeSpec, ToneCurve,
     };
-    use lege_render_wgpu::postprocess::{AdaptivePostprocess, PostprocessPreference};
     use exprim::render_api::{HostPage, OutputFormat, RenderedPage};
+    use lege_render_wgpu::postprocess::{AdaptivePostprocess, PostprocessPreference};
 
     fn output_bytes(output: &PostprocessOutput) -> &[u8] {
         match output {

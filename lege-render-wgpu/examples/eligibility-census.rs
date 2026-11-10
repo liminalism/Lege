@@ -20,8 +20,8 @@ use exprim::render_api::{
     RenderLimits, RenderQuality, RenderRequest,
 };
 use exprim::render_cpu::CpuBackend;
-use lege_render_wgpu::classify_gpu_eligibility;
 use exprim::source::{MmapSource, PdfSource};
+use lege_render_wgpu::classify_gpu_eligibility;
 
 const DEFAULT_SAMPLE: usize = 240;
 const DEFAULT_SCALE: f64 = 2.0;

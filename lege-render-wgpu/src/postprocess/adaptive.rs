@@ -423,7 +423,9 @@ mod tests {
             pixels: Arc::from([0, 127, 255]),
         };
         let graph = PostprocessGraph {
-            ops: vec![exprim::postprocess::PostprocessOp::Dither(exprim::postprocess::DitherSpec::None)],
+            ops: vec![exprim::postprocess::PostprocessOp::Dither(
+                exprim::postprocess::DitherSpec::None,
+            )],
         };
         let report = backend.execute_with_report(&source, &graph).unwrap();
         let PostprocessOutput::Page(exprim::render_api::RenderedPage::Host(page)) = report.output

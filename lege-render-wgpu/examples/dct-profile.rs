@@ -14,8 +14,8 @@ use exprim::render_api::{
     RenderColorPolicy, RenderLimits, RenderQuality, RenderRequest, SupportLevel,
 };
 use exprim::render_cpu::CpuBackend;
-use lege_render_wgpu::WgpuBackend;
 use exprim::source::{MmapSource, PdfSource};
+use lege_render_wgpu::WgpuBackend;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args_os().skip(1);

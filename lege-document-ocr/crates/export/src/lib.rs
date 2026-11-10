@@ -343,10 +343,7 @@ fn rasterized_searchable_pdf(request: &ExportRequest<'_>, path: &Path) -> Result
             let compiled = session.compile(page.index)?;
             let rendered = session.render(
                 &compiled,
-                &exprim::RasterProduct::rgb8(
-                    page.source_size.width,
-                    page.source_size.height,
-                ),
+                &exprim::RasterProduct::rgb8(page.source_size.width, page.source_size.height),
             )?;
             let exprim::RasterPlane::Rgb8(rgb) = rendered else {
                 return Err(ExportError::UnexpectedRasterFormat);
@@ -1062,8 +1059,8 @@ pub enum ExportError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lege_docir::*;
     use exprim::test_support::builder::PdfBuilder;
+    use lege_docir::*;
 
     fn empty_document() -> Document {
         Document::new(
