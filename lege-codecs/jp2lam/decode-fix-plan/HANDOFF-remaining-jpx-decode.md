@@ -98,9 +98,9 @@ diagnostics now flag every failed codec draw, so these show up as counted
 ## 0. Orientation & environment
 
 - **Repo:** `D:\Rust-projects\jp2lam` on Windows; the same disk boots Linux
-  where the path is `/mnt/Samsung980_1TB/Rust-projects/jp2lam`. Dual-boot, one
-  drive: **`D:\` on Windows == `/mnt/Samsung980_1TB` on Linux.** The corpus
-  under `D:\Pol was right again\…` is the Linux `/mnt/Samsung980_1TB/Pol was
+  where the path is `{{secret:b40ab32d1cbe425c3467b158f9ce80bf}}/Rust-projects/jp2lam`. Dual-boot, one
+  drive: **`D:\` on Windows == `{{secret:b40ab32d1cbe425c3467b158f9ce80bf}}` on Linux.** The corpus
+  under `{{secret:06d6e0c693d2d651a85b329a3962d406}}\…` is the Linux `{{secret:b40ab32d1cbe425c3467b158f9ce80bf}}/Pol was
   right again/…` in the sweep CSV.
 - **Build / test:** `cargo test` (247+ lib tests; a few `#[ignore]`d ones need
   archive.org sample files). CLI decoder: `cargo build --features cli` →
@@ -126,7 +126,7 @@ stream per signature to disk (as `.jp2`) for `opj_dump`/`opj_decompress`.
 # 1. Build the blank-file list (Windows paths) from the sweep CSV:
 awk -F, 'NR>1 && $NF=="" && $(NF-2)<0.001 && $(NF-1)>0.3 {print $1}' \
   oracle-sweep-2026-07-18/pdfium-diff-out/results.csv \
-  | sed 's/"//g; s|/mnt/Samsung980_1TB|D:|' | sort -u > /tmp/blankwin.txt
+  | sed 's/"//g; s|{{secret:b40ab32d1cbe425c3467b158f9ce80bf}}|D:|' | sort -u > /tmp/blankwin.txt
 
 # 2. Run the census (2nd arg = max files; omit for all 424). ~250s per ~34 files.
 DUMP="<some-writable-dir>"; mkdir -p "$DUMP"
@@ -166,7 +166,7 @@ color). See `pdf-renderer/DEFERRED.md` corpus item 1 for the full writeup.
 - **Error:** `unsupported packet syntax: precinct partitioning, SOP markers,
   and EPH markers are not implemented`
 - **Repro:** `The-Conversion-Of-Armenia-To-The-Christian-Faith.pdf` obj8
-  (`D:\Pol was right again\…\Armenia…`). OpenJPEG decodes it.
+  (`{{secret:06d6e0c693d2d651a85b329a3962d406}}\…\Armenia…`). OpenJPEG decodes it.
 - **Reject site:** `src/j2k/decode_markers.rs` ~line 475 (`validate_decoder_scope`):
   `if cod.uses_precincts || cod.sop_markers || cod.eph_markers { … }`. The COD
   `Scod` bits are already parsed (`uses_precincts`, `sop_markers`, `eph_markers`
