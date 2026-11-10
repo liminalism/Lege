@@ -32,6 +32,22 @@ record lege-ecosystem.decision.a-fold-may-not-change-a-letters-counters/1 : deci
     derived_from [ @lege-ecosystem.work.glyph-font-text-output ]
 }
 
+record lege-ecosystem.decision.annotator-abandon-takes-pp-label/1 : decision {
+    title "Liminal Annotator: a YOLO abandon box takes PP-DocLayout-L's label for the same region"
+    state proposed
+    scope [ path "lege-misc/liminal-annotator/**" ]
+    decision """
+        When a teacher-pool folder is pre-filled from DocLayout-YOLO, each abandon box takes the label of the best-overlapping PP-DocLayout-L detection (PP score >= 0.15, IoU >= 0.3), keeping YOLO's geometry and recording both labels in provenance. Older projects get the same pass once on the next folder open, as one undoable bulk change; hand-converted boxes are untouched. Only unmatched boxes stay in the abandon holding class.
+        """
+    context """
+        The first import kept every YOLO abandon box as abandon and used PP only as a comparison layer, so 452,569 boxes (about 2 per page) needed manual conversion although PP had a labelled box for most. On a 1-in-8 sample, PP >= 0.30/IoU 0.5 resolves 92.8%, PP >= 0.15/IoU 0.3 resolves 97.5% with the same label mix; a containment fallback adds 0.9% but risks labelling page numbers as text, so it was not used.
+        """
+    consequences """
+        On the user's pool project the pass labelled 441,661 of 452,569 abandon boxes in 17 s; 10,908 remain on 9,581 pages. PP's own errors (e.g. running heads called paragraph titles) now appear as ordinary labels to correct in review.
+        """
+    author "dk"
+}
+
 record lege-ecosystem.decision.jbig2-is-the-default-pdf-text-format-again/1 : decision {
     title "JBIG2 is the Freya GUI's default PDF text encoder again; truetyping is the opt-in checkbox"
     state proposed
@@ -120,6 +136,32 @@ record lege-ecosystem.decision.jp2lam-verified-quality-scale/1 : decision {
         """
 }
 
+record lege-ecosystem.decision.layout-model-v2-without-old-model-corrections/1 : decision {
+    title "Lege 1.6 embeds layout model v2 and uses its boxes as they are; the old-model corrections are removed"
+    state proposed
+    scope [
+        path "lege-process/core/**",
+        path "lege-process/models/**",
+        path "lege-process/pipeline/**"
+    ]
+    topic layout-model
+    decision """
+        Lege embeds the v2 RF-DETR-S layout model (70k hand-corrected set) in the PP-DocLayout slot and takes its detections without geometric correction. Removed: layout_correct (text boxes widened to ink and OCR lines, synthetic text and image boxes, the inverted-page second detection pass and its LEGE_LAYOUT_IMAGE_REDETECT / LEGE_LAYOUT_OCR_DET switches), the full-page figure expansion in page_analysis with the expand_full_bleed_figure_bboxes setting, and the rule that an Abandon region on a page forces JBIG2 Generic. Kept: line-art image boxes are treated as text (content_class::demote_line_art_images). toc, reference and formula are not emitted by the model; the owner has no use for them.
+        """
+    context """
+        The corrections were written for PP-DocLayout-M's under-detection and for the earlier YOLO model, whose abandon class meant scan noise and whose box length was capped. Measured through Lege with v2 they lowered AP50 from 0.663 to 0.486 and swallowed 193 of 1,034 running headers and page numbers into text boxes. The owner asked for code that accounts for the flaws of models no longer shipped to be removed.
+        """
+    consequences """
+        Headers, footers and page numbers are Abandon (furniture) and headings are Text, so a running header the model calls a heading stays in crops and reflow: 9 of 585 on the reviewed dev pages. With the Generic rule gone, JBIG2 Symbol mode applies to ordinary book pages when the user selects it; Generic stays the default. The opt-in doclayout-m feature still embeds PP-DocLayout-M, now without its corrections.
+        """
+    derived_from [ @lege-ecosystem.decision.rfdetr-book-layout-model-replaces-doclayout-m ]
+    supported_by [
+        @lege-ecosystem.observation.layout-model-v2-benchmark-20261110,
+        @lege-ecosystem.observation.old-layout-corrections-hurt-model-v2-20261110
+    ]
+    author "dk"
+}
+
 record lege-ecosystem.decision.lege-pdf-mcp-results-are-text-with-stated-coverage/1 : decision {
     title "lege-pdf MCP tools answer in readable text, state their coverage, and return images inline"
     state proposed
@@ -203,6 +245,23 @@ record lege-ecosystem.decision.printing-defers-prepress-to-lege-pdf-write/1 : de
         A commercial printer wants a file, not a bitmap, and that file is a PDF/X -- which lege-pdf/write already has the OutputIntent and font-embedding machinery for, and which phase 0's Trim and Bleed parsing now supplies boxes to. The renderer would be involved only for on-screen soft-proofing, which is the last piece to build rather than the first.
         """
     derived_from [ @lege-ecosystem.work.office-printing ]
+}
+
+record lege-ecosystem.decision.renderer-extracted-as-exprim/1 : decision {
+    title "The PDF engine leaves Lege as exprim: one MIT crate in its own repository, codecs alongside"
+    state proposed
+    scope [ path "Cargo.toml", path "lege-pdf/**", path "lege-render-wgpu/**" ]
+    decision """
+        The renderer is renamed exprim (from Latin exprimo, the owner's choice) and moved out of lege-ecosystem into the sibling repository D:/projects/exprim (Rust-projects/exprim on Linux). It publishes as ONE package, `exprim` (CRATES-IO-PLAN option A): the 21 pdf-* engine crates become modules, lege-pdf-read becomes the crate root, lege-pdf-print becomes `exprim::print` behind the `print` feature, pdf-test-support becomes `exprim::test_support` behind `test-support`. The agent CLI/MCP server becomes exprim-agent (binary `exprim`, unpublished, own workspace). jp2lam, jbig2enc-rust and djvulibrust move to exprim/codecs. The wgpu image backend and GPU postprocess executor stay in Lege as lege-render-wgpu because they need lege-gpu. Licence MIT. Lege, Liminaldoc and other siblings depend on ../exprim by path.
+        """
+    context """
+        Owner, 2026-11-09: 'no more lege branding for the renderer, which has taken on a life of its own'; chose one crate over an exprim-* family, chose to move it and the codecs out of lege-ecosystem, and to fold read, print and the agent in. The crates.io audit of the same day found six pdf-* names taken and path-only internal dependencies, so the graph could not publish as it stood.
+        """
+    consequences """
+        exprim never depends on a Lege crate (the unpublished agent's lege-ocr edge is the one exception). Lege's CI that builds against exprim needs the exprim checkout beside it. Ledger records scoped to lege-pdf/render/**, lege-pdf/read/**, lege-pdf/print/**, lege-pdf/agent/** or lege-codecs/** are history and now match no tracked path. Publication still waits on jp2lam 0.3.1 reaching crates.io.
+        """
+    supported_by [ @lege-ecosystem.observation.renderer-crates-io-readiness-20261109 ]
+    author "dk"
 }
 
 record lege-ecosystem.decision.rfdetr-book-layout-model-replaces-doclayout-m/1 : decision {

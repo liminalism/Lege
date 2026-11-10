@@ -979,6 +979,45 @@ record lege-ecosystem.work.add-region-of-interest-decode-only-after/1 : work {
     }
 }
 
+record lege-ecosystem.work.annotator-review-queues-and-status-rules/1 : work {
+    title "Annotator: review queues by payoff, status traps, adopt-a-box, splits, book scroll bar"
+    state completed
+    scope [ path "lege-misc/liminal-annotator/**" ]
+    intent """
+        Implement the Fable advisor's ranked annotator improvements: a Q queue picker (picture pages, pictures only the model sees, abandon, empty, plain-text sample) from per-page model_fig/model_only_fig counts; Right refuses pages with abandon left; X/N toggled off restore the earlier status; a click adopts a comparison box; unsure prefill boxes drawn dashed; pages/h pace; book columns To do / Picture pp. / Pict. to do; F9/Shift+F9 and CLI split assignment by stable hash; a findable, draggable book-table scroll bar that stays slim at rest.
+        """
+    note """
+        Tier A/B/C deliberately not used as a queue (tier A edited as often as tier C).
+        """
+    acceptance {
+        check tests {
+            statement """
+                cargo test in lege-misc/liminal-annotator passes (91 tests) and clippy --all-targets is clean
+                """
+            method command
+            command "cargo test && cargo clippy --all-targets"
+            verified_by [
+                @lege-ecosystem.evidence.annotator-split-assignment-mixed-hash-20261109/1
+            ]
+        }
+    }
+    author "dk"
+}
+
+record lege-ecosystem.work.annotator-same-on-every-page-and-book-flags/1 : work {
+    title "Liminal Annotator: \"same on every page\" relabel (M) and per-book exclude/needs-work flags"
+    state completed
+    scope [ path "lege-misc/liminal-annotator/**" ]
+    intent """
+        M on a selected box finds every heading/running head/running foot/page number/abandon box of the book at the same relative vertical position, similar height and width range (any horizontal position) and relabels them to one class as one undoable bulk change; tight/normal/loose tolerance. Book manager Train checkbox (excluded books are skipped by every export and listed in the manifest) and a Needs work mark, both sortable and filterable (Show, F6/F7/F8), shown in the editor top bar; CLI flag command.
+        """
+    note """
+        Fable advisor packet ad-0006ff7b8a5b returned a ranked improvement list (rs-496a567fe691), relayed to the user for selection, not implemented.
+        """
+    after [ @lege-ecosystem.work.liminal-annotator-book-table-and-paper-tone ]
+    author "dk"
+}
+
 record lege-ecosystem.work.approach-a-strided-vertical-kernels/1 : work {
     title "Approach A — Strided vertical kernels"
     state abandoned
@@ -1591,6 +1630,42 @@ record lege-ecosystem.work.explicit-runtime-lifecycles/2 : work {
     author "dk"
 }
 
+record lege-ecosystem.work.exprim-extraction-and-packaging/1 : work {
+    title "Extract the renderer as exprim: consolidate, move out with the codecs, re-point consumers, clean the package"
+    state completed
+    scope [
+        path ".cargo/config.toml",
+        path "CLAUDE.md",
+        path "Cargo.toml",
+        path "lege-pdf/**",
+        path "lege-render-wgpu/**"
+    ]
+    intent """
+        Carry out @lege-ecosystem.decision.renderer-extracted-as-exprim: build D:/projects/exprim with one `exprim` package, the agent, cli, chaos tests, fuzz, tools, corpus, dev-notes and codecs; move the GPU backends to lege-render-wgpu; re-point lege-ecosystem, pdf-integrity, liminaldoc and the smaller siblings; make the package an allowlist with MIT licence, README and third-party notices.
+        """
+    note """
+        Nothing committed in either repository. Left for the owner: commit both trees, create the exprim remote (Cargo.toml repository URL is a placeholder), publish jp2lam 0.3.1, delete the untracked target/ leftovers under lege-pdf/render and lege-codecs, reinstall the MCP server as exprim.
+        """
+    acceptance {
+        check package-clean {
+            statement """
+                cargo package lists only library sources, embedded data and notices, and the unpacked archive builds standalone
+                """
+            method command
+            verified_by [ @lege-ecosystem.evidence.exprim-package-archive-test-20261109/1 ]
+        }
+        check suites-green {
+            statement """
+                exprim, exprim-agent and Lege's exprim consumers pass their tests; lege-ecosystem checks clean
+                """
+            method command
+            verified_by [ @lege-ecosystem.evidence.exprim-extraction-suites-20261109/1 ]
+        }
+    }
+    implements [ @lege-ecosystem.decision.renderer-extracted-as-exprim ]
+    author "dk"
+}
+
 record lege-ecosystem.work.fixed-point-9-7-is-a-later-experiment/1 : work {
     title "19. Fixed-point 9/7 is a later experiment"
     state abandoned
@@ -1856,6 +1931,30 @@ record lege-ecosystem.work.gui-file-tiles-beside-process-button/1 : work {
     author "dk"
 }
 
+record lege-ecosystem.work.gui-file-tiles-grab-cursor/1 : work {
+    title "GUI: a grab cursor over the draggable file tiles"
+    state completed
+    scope [
+        path "Cargo.lock",
+        path "lege-process/GUI/liminalUI/src/app.rs",
+        path "lege-process/GUI/liminalUI/src/file_tiles.rs"
+    ]
+    intent """
+        Show an open-hand cursor over the file tiles (the finished outputs, and the inputs, which drag out the same way) so the user knows they can be dragged out, and a closed hand while a press on one has not yet become the shell's drag. Uses LiminalKit's new CursorShape::Grab/Grabbing (liminalkit b60e4ce, drawn on Windows, which has no hand cursor).
+        """
+    acceptance {
+        check gui-suite {
+            statement """
+                The GUI suite passes against the published LiminalKit, including a test that a tile hover gives Grab, a held press Grabbing, the release frame Grab again, and leaving gives the arrow.
+                """
+            method command
+            command "cargo test -p lege-gui-liminalui"
+            verified_by [ @lege-ecosystem.evidence.gui-file-tiles-grab-cursor-20261109/1 ]
+        }
+    }
+    author "dk"
+}
+
 record lege-ecosystem.work.gui-file-tiles-grouped-by-kind/1 : work {
     title "GUI: one file tile per kind (PDF, ZIP, folder) with a count badge; multi-file drops queue every file"
     state completed
@@ -1888,6 +1987,26 @@ record lege-ecosystem.work.gui-file-tiles-grouped-by-kind/1 : work {
         }
     }
     after [ @lege-ecosystem.work.gui-file-tiles-beside-process-button ]
+    author "dk"
+}
+
+record lege-ecosystem.work.gui-progress-lines-steady-across-page-appends/1 : work {
+    title "GUI: page counters stay on screen as pages complete (no PdfAppend flicker)"
+    state completed
+    scope [ path "lege-process/GUI/liminalUI/src/app.rs" ]
+    intent """
+        The liminalUI status panel blanked its Render/Infer/Encode page-counter lines on every completed page because each PdfAppend/PdfAppendMargin status maps to three empty display lines; keep the last non-blank lines instead, as the CLI already does (core/main.rs skips these events).
+        """
+    acceptance {
+        check counters-survive-page-append {
+            statement """
+                After a progress status, PdfAppend and PdfAppendMargin events leave the GUI status lines unchanged; GUI crate tests pass.
+                """
+            method command
+            command "cargo test -p lege-gui-liminalui --lib"
+            verified_by [ @lege-ecosystem.evidence.gui-progress-lines-steady-20261109/1 ]
+        }
+    }
     author "dk"
 }
 
@@ -1979,6 +2098,45 @@ record lege-ecosystem.work.horizontal-lifting-kernels/1 : work {
             Horizontal rows are naturally contiguous. Implement specialized kernels for:
             """
     }
+}
+
+record lege-ecosystem.work.immediate-file-admission/1 : work {
+    title "Show input file tiles before full metadata probing"
+    state completed
+    scope [
+        path "docs/measurements/lege-size-and-input-latency-2026-11-08.md",
+        path "lege-process/GUI/liminalUI/src/app.rs",
+        path "lege-process/GUI/liminalUI/src/backend.rs"
+    ]
+    intent """
+        Explain the release executable growth after the RF-DETR-S replacement and separate bounded input admission from full metadata probing so PDF tiles appear before the CLI loads the document.
+        """
+    acceptance {
+        check immediate-admission {
+            statement """
+                Real PDF inputs are published before metadata subprocess results, with measured admission and icon retrieval latency.
+                """
+            method command
+            verified_by [ @lege-ecosystem.evidence.immediate-input-admission-20261108/1 ]
+        }
+        check lifecycle-and-build {
+            statement """
+                GUI regression tests and the release GUI build pass with metadata updating existing items and stale results rejected.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.immediate-admission-gui-tests-build-20261108/1
+            ]
+        }
+        check size-attributed {
+            statement """
+                Inspect embedded layout payloads and initializer types to account for the executable growth.
+                """
+            method command
+            verified_by [ @lege-ecosystem.evidence.release-model-size-20261108/1 ]
+        }
+    }
+    author "dk"
 }
 
 record lege-ecosystem.work.initial-target-results/1 : work {
@@ -3391,6 +3549,47 @@ record lege-ecosystem.work.level-local-operation/1 : work {
     }
 }
 
+record lege-ecosystem.work.liminal-annotator-book-table-and-paper-tone/1 : work {
+    title "Liminal Annotator: sortable book table over every label, paper-tone (yellowness) per book, full label toolbar, Home/End"
+    state completed
+    scope [ path "lege-misc/liminal-annotator/**" ]
+    intent """
+        Book manager as a database table: a column per label (boxes, per page, or % of pages with), sort by any column both ways (header click, Tab, F4), sideways scroll with frozen #/name, Home/End always, select-then-open, selected-book detail line. Per-page class counts n0..n13 on pages (migrated in place) behind a covering index. Paper tone (CIE L*, b*) measured per book in the background from five pages and cached in book_tone, so yellowed books can be found without their origin folder. Editor: every label chip visible (second toolbar row when needed); Home/End = first/last page, Ctrl+Home = first page to do.
+        """
+    note """
+        User follow-up 2026-11-09: needed to sort books by images and start with yellowed books; origin folders were not recorded.
+        """
+    after [ @lege-ecosystem.work.liminal-annotator-folder-projects ]
+    author "dk"
+}
+
+record lege-ecosystem.work.liminal-annotator-folder-projects/1 : work {
+    title "Liminal Annotator: folder projects, book manager, YOLO abandon triage and bulk conversion, Windows pass"
+    state completed
+    scope [ path "lege-misc/liminal-annotator/**" ]
+    intent """
+        Open a dataset folder (teacher pool, COCO data dir, or image folders) as a project created inside it (annotator.db) and rescanned incrementally; an in-app book manager over hundreds of image folders with review progress and YOLO abandon density; abandon kept as a holding class (never exported) with per-box, per-page and book-wide by-region bulk conversion and undo; Windows use: native folder dialog, drag-and-drop, recent projects in %APPDATA%, a console-less GUI binary, and a measured raster threading change.
+        """
+    note """
+        User request 2026-11-09: the annotator opened a default book with no way to change it.
+        """
+    after [ @lege-ecosystem.work.liminal-annotator-pass2 ]
+    author "dk"
+}
+
+record lege-ecosystem.work.liminal-annotator-pass2/1 : work {
+    title "Liminal Annotator pass 2: benchmark and optimize on an unloaded machine (cloud session)"
+    state proposed
+    scope [ path "lege-misc/liminal-annotator/**" ]
+    intent """
+        Measure and tune lege-misc/liminal-annotator (the layout-dataset box review tool, committed fd17bdd9) on a machine without the local CPU saturation: run its tests and headless `bench` at 1080p/1440p/4K, profile page re-rasterization variance and 4K drag frames, optimize only where measured, and record the numbers in its README. Targets from the spec: under 16 ms input-to-feedback at 1080p, under 50 ms to show a prefetched page.
+        """
+    note """
+        Pass 1 (working app) and the pass-2 code changes (pan by raster scroll, skipped unchanged frames, tighter sampling loop, page revert on Ctrl+C) are committed. Local timings after those changes could not be taken: the CPU was at 97-100% from background jobs. Work runs on branch annotator-pass2 in a cloud session.
+        """
+    author "dk"
+}
+
 record lege-ecosystem.work.line-art-variance-postprocess/1 : work {
     title "Skip line-art image detections via bpg-rs variance classifier"
     state completed
@@ -4503,6 +4702,39 @@ record lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec/1 : work {
     }
 }
 
+record lege-ecosystem.work.pdf-titler/1 : work {
+    title "lege-titler: guess Title/Author from page-1 thorough OCR and write them into each PDF in a folder"
+    state completed
+    scope [
+        path "lege-document-ocr/crates/pipeline/src/layout.rs",
+        path "lege-document-ocr/crates/pipeline/src/lib.rs",
+        path "lege-misc/pdf-titler/**"
+    ]
+    intent """
+        New lege-misc/pdf-titler CLI (bin lege-titler). It runs lege-document-ocr Thorough OCR plus layout detection on page 1 of every PDF in a folder. Heuristics pick the title (large text, top half, doc_title regions) and the author (smaller person-name text, bottom half, or a 'by' cue). It writes /Title and /Author (and XMP dc:title/dc:creator if present) as an in-place incremental update, filling only empty fields unless --overwrite. Damaged-xref files get a complete new table. Adds DocumentProcessor::process_single_page and PipelineConfig::keep_figure_text / layout::release_figure_text to lege-document-pipeline.
+        """
+    note """
+        Known limits: Auto refuses to fall back to WinOCR when an NVIDIA driver is present without the TensorRT runtime (use --backend paddle or a packaged TensorRT root). A row of logos can pass as a person's name (vogtle). Encrypted files are skipped.
+        """
+    acceptance {
+        check real-run {
+            statement """
+                Running on a folder of real PDFs writes Title/Author that exprim reads back, and the files stay sound
+                """
+            method manual
+            verified_by [ @lege-ecosystem.evidence.pdf-titler-real-run-20261109/1 ]
+        }
+        check unit-tests {
+            statement """
+                cargo test -p lege-pdf-titler passes (heuristics, incremental update on classic and xref-stream fixtures, XMP rewrite)
+                """
+            method command
+            command "cargo test -p lege-pdf-titler"
+            verified_by [ @lege-ecosystem.evidence.pdf-titler-tests-20261109/1 ]
+        }
+    }
+}
+
 record lege-ecosystem.work.performance-scoreboard/1 : work {
     title "36. Performance scoreboard"
     state abandoned
@@ -5481,6 +5713,34 @@ record lege-ecosystem.work.renderer-efficiency-deferrals/1 : work {
         }
     }
     author "GitHub Uploader"
+}
+
+record lege-ecosystem.work.renderer-scoping-20261108-rounds-1-2/1 : work {
+    title "Renderer scoping review 2026-11-08: land rounds 1-2 (correctness, determinism, exact speedups)"
+    state proposed
+    scope [
+        path "dev-notes/lege-pdf/render-refinement/scoping-20261108/**",
+        path "lege-codecs/jp2lam/**",
+        path "lege-pdf/print/**",
+        path "lege-pdf/read/**",
+        path "lege-pdf/render/crates/**"
+    ]
+    intent """
+        Land the 2026-11-08 renderer speed and memory scoping review (dev-notes/lege-pdf/render-refinement/plans/optimization-scoping-20261108.md). Round 1: the correctness bugs B1-B15, FE1 and N1 with failing-then-passing tests, plus the level-2 determinism harness (worker count x render order through one backend; read seam with page-cache capacity 0). Round 2: the exact speedups A2-A5, A10, A11a/b, A16, A18, A21, the RGB8 packing rewrite, the /ImageMask stencil fast path (Tier B1) and the bilevel row-band filter replacing the summed-area table (Tier B2), each hash-identical on the corpus gate and A/B timed through RenderSession. Round 3: the deferred items A7, A9 remainder, A12, A20 and the B14 speed A/B.
+        """
+    note """
+        2026-11-08, landed on lege-pdf-agent-over-poppler through 0f3a6516 (72 commits over 5b24f8e4, merges included). Cloud: B2 B3 B4 B5 B7 B10 B13 FE1, A2 A3 A4(libm) A5(Arc) A10 A11a/b, RGB8 packing (dazzling-planck); B9 (gifted-pascal); B1 with the layout-detection A/B gate passed (jolly-ride). Local round 2: B6 B8 B11 B12 B14 B15 N1, G1 level 2, Tier B1 stencil fast path (x0.25 on MRC stencil pages), Tier B2 row-band filter (x0.43 more on 600-dpi bilevel), A16 A18 A21, the bilinear alpha fix, Windows harness bring-up. Border ring: option A implemented then reverted after a PDFium probe showed PDFium paints axis-aligned image edges hard; rotated draws stay soft; masked-image rings remain the open follow-up. mimalloc measured only (8-25% faster, +13-65% peak working set), not adopted. Round 3 (fb4d313f..0f3a6516): A20 O(log n) LRU-index eviction in the font/glyph/image caches; A7 per-compile image XObject cache (repeated-image compile 0.615x cold, not cached for resource-named colour spaces); A12 fused finest level for gray 9/7 packed output (0.977-0.984x cold gray JPX page); A9 one RenderSession per lege job and the input read straight into its Arc; B14 timed speed-neutral on 2,800 groups. Round 3 gate 2,202/2,202 identical over 16 documents; 175 suites / 2,153 passed, one pre-existing lege-document-ocr-cli file:// test failure also failing at 7ea2f836; jp2lam 468. Evidence: lege-ecosystem.evidence.renderer-scoping-round3-corpus-gate-20261108, ...-round3-timing-20261108, ...-b14-group-speed-ab-20261108, ...-local-round-corpus-gate-20261108, ...-local-round-suites-20261108, ...-a16-a18-a21-landed-20261108, layout-detection-ab-jolly-merge-20261108, renderer-scoping-merge-suites-20261108. Still open: A5 caching half, A11c/d, A14, A4 hoist (declined); snapping masked-image edges to match PDFium; mimalloc adoption. Log: dev-notes/lege-pdf/render-refinement/scoping-20261108/IMPLEMENTATION-LOG.md.
+        """
+    source {
+        kind internal
+        role origin
+        path "dev-notes/lege-pdf/render-refinement/plans/optimization-scoping-20261108.md"
+    }
+    source {
+        kind internal
+        role origin
+        path "dev-notes/lege-pdf/render-refinement/scoping-20261108/LOCAL-CONTINUATION-PLAN.md"
+    }
 }
 
 record lege-ecosystem.work.replace-per-code-block-result-allocation/1 : work {

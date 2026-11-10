@@ -576,6 +576,58 @@ record lege-ecosystem.observation.jbig2enc-py-round-trip-verified/3 : observatio
     author "dk"
 }
 
+record lege-ecosystem.observation.layout-model-eval-20261108/1 : observation {
+    title "Layout models measured 2026-11-08: RF-DETR-S beats PP-DocLayout-M, trails PP-DocLayout-L; Lege's 0.35 threshold drops real text; PP-L cannot load in lege-gpu"
+    state verified
+    scope [
+        path "lege-gpu/src/vision/**",
+        path "lege-process/models/**",
+        path "lege-process/pipeline/**"
+    ]
+    statement """
+        On the teacher-labelled dev_auto (544 pages) and regression (88 pages) splits and the 28 globalhistory dev pages, AP50 and every under-detection metric rank PP-DocLayout-L > RF-DETR-S > PP-DocLayout-M (dev_auto AP50 at 0.20: 0.785 / 0.695 / 0.576; RF-DETR-S clips text 2-3x less than either PP model). RF-DETR-S scores are calibrated lower than PP-M's: at Lege's production confidence_threshold 0.35 its missed-text rate is 4x the 0.20 figure (dev_auto 2.5% vs 0.6%) and the two globalhistory misses (dust jacket p0006, time chart p0533) are detected at 0.20. PP-DocLayout-L's paddle2onnx export (3 inputs, in-graph NMS) is rejected by lege-gpu (Range, BatchNormalization, Clip, Floor, GatherND, Log, Mod); it was measured through onnxruntime only. Vulkan latency 1x3x640x640: RF-DETR-S 32.7 ms, PP-M 22.0 ms. lege-gpu's decode agrees with onnxruntime on globalhistory page 7; in Lege, text regions inside a detected image region are carved away, so a page detected as a full-page image keeps no text regions with any model. No human-verified (gold) page has been scored: the 180 dev and 130 test gold pages are still pre-filled. Details: dev-notes/lege-process/layout-model-eval-20261108.md.
+        """
+    observed_at git:9c0b9fe352a41e5c84536e27507ebc80b5f6889c
+    method command
+    watches [
+        "lege-process/models/*.onnx",
+        "lege-process/pipeline/config.rs",
+        "lege-gpu/src/vision/decode/picodet.rs"
+    ]
+    review_after 2027-02-08
+    author "dk"
+}
+
+record lege-ecosystem.observation.layout-model-v2-benchmark-20261110/1 : observation {
+    title "Layout model v2 (RF-DETR-S, 70k hand-corrected set) measured against v1 on 2026-11-10 and placed in lege-process/models (uncommitted)"
+    state verified
+    scope [ path "lege-process/models/**" ]
+    statement """
+        RF-DETR-S v2 was trained from the COCO-pretrained small checkpoint (not from v1) for 6 epochs at 640, batch 16, on 64,785 pages of 547 books from the 70k set (DocLayout-YOLO prefill, PP-DocLayout-L labels for abandon boxes, bulk fixes, 16,090 pages reviewed by hand). Colab A100, two sessions because Colab ended the first after about 2 h 10 min; about 20.7 compute units. Validation EMA mAP50:95 by epoch: 0.598, 0.611, 0.631, 0.634, 0.629, 0.645 (final epoch exported; ONNX parity with PyTorch exact).
+
+        Measured with train/eval_layout.py (Lege decode, threshold 0.20) on pages reviewed by hand from books neither model trained on, v1 -> v2 (v2 = the shipped fp16 file with toc, reference and formula rows of the class map zeroed):
+        - dev, 928 pages of 20 books: AP50 0.678 -> 0.739; AP50:95 0.547 -> 0.667; text coverage 0.976 -> 0.986; clipped text 24.1% -> 7.7%; missed text 0.7% -> 0.4%; over-merged 4.4% -> 6.1%; false text area 8.8% -> 5.7%; figure AP50 0.961 -> 0.979.
+        - final test, 514 pages of 22 books: AP50 0.800 -> 0.845; AP50:95 0.689 -> 0.789; text coverage 0.986 -> 0.988; clipped text 17.8% -> 3.8%; missed text 0.5% -> 0.5%; over-merged 2.9% -> 2.2%; false text area 3.2% -> 1.6%; figure AP50 0.962 -> 0.973.
+
+        On v1's pseudo-labelled sets v2 has lower AP and less clipped text: regression (88 pages) AP50 0.835 -> 0.703, AP50:95 0.776 -> 0.597, clipped 11.7% -> 9.0%, missed 1.9% -> 0.5%; dev_auto (544) AP50 0.697 -> 0.576, AP50:95 0.618 -> 0.471, clipped 7.7% -> 5.3%. The AP drop is the classes v2's training set lacks (toc 2 boxes, reference 150, formula 1,489 of 543,104) and running_footer conventions; the owner decided those classes are not needed and they are no longer emitted.
+
+        fp16 storage plus the zeroed rows changed no metric by more than 0.004 on the reviewed sets. The file (57,844,974 bytes, sha256 d83ea9e29c1b7945f9ae...) replaced lege-process/models/layout-rfdetr-s.onnx in the working tree; not committed and lege was not rebuilt. Loaded through LEGE_DATA_DIR by the 2026-11-08 release lege.exe it ran Structures pp. 191-200 without error on Vulkan with tensor-core GEMM. On those ten pages v2 reports 2 header and 8 paragraph_title where v1 reports 6 header and 4 paragraph_title, and no page number where v1 found 1.
+
+        Method notes: PNG was rejected for the training bundle after measurement (599 KB and 7.4 ms decode a page against 222 KB and 3.8 ms for JPEG q92 4:4:4 at long side 1024). Details: google-colab-work/layout-detection RUNBOOK.md (v2 run), DATASET-V2.md sections 16-19, eval/v2/*.json.
+        """
+    observed_at git:f11fee2e0ef3c3f95c03307ef8305fe2879b2a4b
+    method command
+    watches [
+        "lege-process/models/layout-rfdetr-s.onnx",
+        "lege-process/models/layout-rfdetr-s.md"
+    ]
+    derived_from [
+        @lege-ecosystem.decision.rfdetr-book-layout-model-replaces-doclayout-m,
+        @lege-ecosystem.observation.layout-model-eval-20261108
+    ]
+    author "dk"
+}
+
 record lege-ecosystem.observation.ocr-v5-v6-recipe-20260820/1 : observation {
     title "PP-OCRv6 TensorRT improved the recipe-PDF proxy over embedded v5"
     state superseded
@@ -605,6 +657,24 @@ record lege-ecosystem.observation.ocr-v5-v6-recipe-20260820/2 : observation {
     supersedes [ @lege-ecosystem.observation.ocr-v5-v6-recipe-20260820/1 ]
     verified_by [ @lege-ecosystem.evidence.stale-observation-requeue-20260908/1 ]
     author "GitHub Uploader"
+}
+
+record lege-ecosystem.observation.old-layout-corrections-hurt-model-v2-20261110/1 : observation {
+    title "Through Lege, the PP-DocLayout-M corrections made layout model v2 worse; without them AP50 rises from 0.486 to 0.663 on 882 reviewed pages"
+    state verified
+    scope [ path "lege-process/core/engine_impl.rs", path "lege-process/models/**" ]
+    statement """
+        Lege's own detections (LEGE_BBOX_TRACE `planned raw` lines: model v2, threshold 0.20, two-pass NMS, then post-processing) were scored against 882 hand-reviewed pages of ten held-out dev books with train/eval_lege_trace.py (google-colab-work/layout-detection), once with a debug-fast build that still had layout_correct and once with it removed.
+
+        With the corrections -> without: AP50 0.486 -> 0.663; AP50:95 0.363 -> 0.598; text AP50 0.527 -> 0.863; caption AP50 0.139 -> 0.743; heading AP50 0.494 -> 0.655; running_header AP50 0.668 -> 0.958; page_number AP50 0.707 -> 0.970; figure AP50 0.969 -> 0.969; table 0.797 -> 0.797. Over-merged text 24.4% -> 3.6%; false text area 10.7% -> 3.7%; clipped text 10.2% -> 9.2%; text coverage 0.970 -> 0.967; missed text 2.8% -> 3.1%. Of 1,034 ground-truth running headers, footers and page numbers: found as furniture 810 -> 1,003, found as text 5 -> 15, not found 219 -> 16 (with the corrections, widened text boxes swallowed them). Of 585 running headers alone, 9 (1.5%) come out as text without the corrections. Headings found 403 -> 428 of 504; none came out as furniture.
+
+        Full-page figure expansion (page_analysis) only ran on Linux and was not part of either arm on Windows. The comparison was run on Windows with --no-ocr; text detections dropped from 2,474 to 2,277 boxes, the difference being the synthetic text boxes.
+        """
+    observed_at git:8ceb9c292119c66c22632a3e580eeb7d5cfa4217
+    method command
+    watches [ "lege-process/core/engine_impl.rs", "lege-process/models/layout-rfdetr-s.onnx" ]
+    derived_from [ @lege-ecosystem.observation.layout-model-v2-benchmark-20261110 ]
+    author "dk"
 }
 
 record lege-ecosystem.observation.ppocrv6-wgpu-blockers-resolved-20260822/1 : observation {
@@ -643,6 +713,18 @@ record lege-ecosystem.observation.ppocrv6-wgpu-blockers-resolved-20260822/2 : ob
     ]
     supersedes [ @lege-ecosystem.observation.ppocrv6-wgpu-blockers-resolved-20260822/1 ]
     verified_by [ @lege-ecosystem.evidence.stale-observation-requeue-20260908/1 ]
+}
+
+record lege-ecosystem.observation.renderer-crates-io-readiness-20261109/1 : observation {
+    title "Renderer crates.io readiness audit: packaging small, manifests and names block publication"
+    state verified
+    statement """
+        cargo package --list over the 27 lege-pdf crates (2026-11-09): all far below 10 MB (about 2.6 MB total; pdf-font largest at about 0.9 MB). Dev artifacts that would ship: pdf-font/tools/gen_cmaps.py (contains a private /mnt path), pdf-image/tests/fixtures/*.truth.bin and *.src.bin (about 2 MB raw golden outputs), pdf-render-cpu/benches, pdf-postprocess/examples, and pdf-cli, pdf-render-wgpu and pdf-test-support lack publish = false. Blockers: root [workspace.dependencies] pdf-*/jp2lam/jbig2enc-rust entries are path-only with no version; the names pdf-syntax, pdf-color, pdf-font, pdf-content, pdf-text and pdf-cli are taken on crates.io; pdf-image needs the unreleased jp2lam 0.3.1 (DecodeMetadata::reduce_levels); description is missing in most render crates and license in lege-pdf-write and lege-gpu; workspace license is AGPL-3.0-only though CRATES-IO-PLAN.md records MIT as intended, lege-pdf-read says Apache-2.0, and no crate packages a LICENSE file or the Foxit font notice. The candidate names imprim, pinxel, rastra, redda, nitid, pagella, charta and lege-pdf-render were free.
+        """
+    observed_at git:fd17bdd9c43fa624587a518c292354daa51b81a1
+    method command
+    watches [ "Cargo.toml", "lege-pdf/**/Cargo.toml", "lege-pdf/CRATES-IO-PLAN.md" ]
+    author "dk"
 }
 
 record lege-ecosystem.observation.transformer-layout-models-bound-by-naive-matmul/1 : observation {

@@ -284,6 +284,58 @@ record lege-ecosystem.evidence.adapter-order-tests-20260813/2 : evidence {
     supersedes [ @lege-ecosystem.evidence.adapter-order-tests-20260813/1 ]
 }
 
+record lege-ecosystem.evidence.annotator-abandon-resolution-20261109/1 : evidence {
+    title "Abandon boxes take PP-DocLayout-L labels: tests and real-pool run"
+    state verified
+    result pass
+    method command
+    observed_at git:f11fee2e0ef3c3f95c03307ef8305fe2879b2a4b
+    command "cargo test; liminal-annotator create C:\\layout-dataset-v2 --project <copy of the user's annotator.db>"
+    summary """
+        79 tests pass (new: abandon resolved at import with provenance, older project resolved once with hand edits kept and full undo); clippy clean. On a copy of the user's 1.74 GB pool project: one-time pass labelled 441,661 of 452,569 abandon boxes in 17.3 s, leaving 10,908 on 9,581 of 236,801 pages; flagged books 106 -> 0. Teacher agreement on a 59,201-page sample: same book class on 93.5% of matched non-abandon regions; YOLO abandon by region per PP: top band header 55%/number 33%, bottom band number 50%/footer 26%/footnote 10%, large boxes footnote 81% (not pictures).
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.annotator-review-queues-20261109/1 : evidence {
+    title "91 tests pass (new review_queues suite + books unit tests), clippy clean; on a copy of the pool project the migration took ~5 s once, queue counts: pictures to do 46,633, model-only 5,759, abandon 9,580, empty 3,041, text sample 8,776; split dry-run 544 new books -> 429 train / 54 dev / 61 final_test"
+    state verified
+    result pass
+    method command
+    observed_at git:f11fee2e0ef3c3f95c03307ef8305fe2879b2a4b
+    command "cargo test && cargo clippy --all-targets (lege-misc/liminal-annotator)"
+    summary """
+        91 tests pass (new review_queues suite + books unit tests), clippy clean; on a copy of the pool project the migration took ~5 s once, queue counts: pictures to do 46,633, model-only 5,759, abandon 9,580, empty 3,041, text sample 8,776; split dry-run 544 new books -> 429 train / 54 dev / 61 final_test
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.annotator-same-on-every-page-and-flags-20261109/1 : evidence {
+    title "Same-on-every-page relabel and book flags: tests and real-data screenshots"
+    state verified
+    result pass
+    method command
+    observed_at git:f11fee2e0ef3c3f95c03307ef8305fe2879b2a4b
+    command "cargo test; cargo clippy --all-targets; liminal-annotator screenshot on a copy of C:\\layout-dataset-v2\\annotator.db"
+    summary """
+        83 tests pass (new: same-place matching ignores side and title length but not shape; running head labelled three ways becomes one class; M + Enter in the editor relabels the book and M + U undoes it; excluded books left out of export, flags in book stats, F6 sets flags); clippy clean. On a copy of the user's project: M on the george-rude p41 running head found 185 boxes on 128 of 178 pages (heading 180, running head 5); F6 excluded a book, shown dimmed with an empty checkbox. Release GUI exe was not rebuilt because the user had it running (console binary rebuilt).
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.annotator-split-assignment-mixed-hash-20261109/1 : evidence {
+    title "After adding a SplitMix64 finish to the FNV book hash (plain FNV put 30% of book-0..999 in dev), the dry run on the pool copy assigns the 544 new books 445 train / 45 dev / 54 final_test; 91 tests and clippy pass. Supersedes the 429/54/61 figure in the earlier evidence."
+    state verified
+    result pass
+    method command
+    observed_at git:f11fee2e0ef3c3f95c03307ef8305fe2879b2a4b
+    command "liminal-annotator split <pool copy> --assign-new --dry-run; cargo test (91 pass)"
+    summary """
+        After adding a SplitMix64 finish to the FNV book hash (plain FNV put 30% of book-0..999 in dev), the dry run on the pool copy assigns the 544 new books 445 train / 45 dev / 54 final_test; 91 tests and clippy pass. Supersedes the 429/54/61 figure in the earlier evidence.
+        """
+    author "dk"
+}
+
 record lege-ecosystem.evidence.auto-toc-djvu-tests/1 : evidence {
     title "The complete DjVu encoder suite and doctests passed; NAVM output was also decoded by DjVuLibre when available."
     state verified
@@ -366,6 +418,20 @@ record lege-ecosystem.evidence.automatic-toc-workspace-regression/1 : evidence {
     summary """
         The complete workspace test suite passed after automatic TOC gating and related regression repairs.
         """
+}
+
+record lege-ecosystem.evidence.b14-group-speed-ab-20261108/1 : evidence {
+    title "B14 transparency-group speed A/B, 2026-11-08"
+    state verified
+    result pass
+    method command
+    observed_at git:9302d20bda0246536c35eab92114467fc6e0d80b
+    command "ab.cmd python --pass 2 9 sessionbench@7a21b4fb sessionbench@42e69c9a -- groups.pdf 150 rgb8 3 (and vogtle.pdf)"
+    artifact "dev-notes/lege-pdf/render-refinement/scoping-20261108/measurements/b14-group-speed-ab-20261108.md"
+    summary """
+        B14 (groups and soft masks rasterised against the device-plane width) is speed-neutral: B/A median 1.005 on a 2,800-group / 400-soft-mask fixture (4/9 rounds faster) and 1.007 on vogtle (identical output); the fixture's output differs only by the intended edge coverage.
+        """
+    author "dk"
 }
 
 record lege-ecosystem.evidence.calrgb-adaptation-matrix-cache-landed/1 : evidence {
@@ -897,6 +963,45 @@ record lege-ecosystem.evidence.evidence-broker-ocr-provider-20260822/1 : evidenc
     author "GitHub Uploader"
 }
 
+record lege-ecosystem.evidence.exprim-extraction-suites-20261109/1 : evidence {
+    title "Uncommitted trees on lege-ecosystem fd17bdd9 + new exprim repo (no commits). exprim workspace 1,224 passed / 0 failed (twice: after consolidation, and after the comment scrub + cargo fmt); exprim-agent 106 passed / 0 failed; clippy 0 errors in both exprim workspaces. lege-ecosystem check --workspace --all-targets clean (pre-existing GUI dead-code warnings only); Lege exprim consumers 144 passed / 0 failed. pdf-integrity, fuzz (check), pdfium-diff (with bench-profiling), pdfium-text-diff, liminaldoc --workspace --all-targets, render-lege, templar-preview-codecs and the four scoping harnesses all build against exprim."
+    state verified
+    result pass
+    method command
+    observed_at git:fd17bdd9c43fa624587a518c292354daa51b81a1
+    command "D:/projects/exprim: cargo test --workspace --features print; (cd agent && cargo test); cargo clippy --workspace --all-targets --features print --keep-going. Lege-ecosystem: cargo check --workspace --all-targets; cargo test -p lege-render-wgpu -p lege-render-ffi -p lege-document-export -p lege-document-pipeline -p lege-document-ocr-cli -p lege-pdf-write"
+    summary """
+        Uncommitted trees on lege-ecosystem fd17bdd9 + new exprim repo (no commits). exprim workspace 1,224 passed / 0 failed (twice: after consolidation, and after the comment scrub + cargo fmt); exprim-agent 106 passed / 0 failed; clippy 0 errors in both exprim workspaces. lege-ecosystem check --workspace --all-targets clean (pre-existing GUI dead-code warnings only); Lege exprim consumers 144 passed / 0 failed. pdf-integrity, fuzz (check), pdfium-diff (with bench-profiling), pdfium-text-diff, liminaldoc --workspace --all-targets, render-lege, templar-preview-codecs and the four scoping harnesses all build against exprim.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.exprim-lege-process-integrity-20261109/1 : evidence {
+    title "Against ../exprim, uncommitted tree on fd17bdd9: lege-process lib 391 passed, 0 failed, 1 ignored; pdf-integrity workspace 136 passed, 0 failed, 8 ignored."
+    state verified
+    result pass
+    method command
+    observed_at git:fd17bdd9c43fa624587a518c292354daa51b81a1
+    command "cargo test -p lege --lib --no-fail-fast; (cd lege-pdf/pdf-integrity && cargo test --workspace --no-fail-fast)"
+    summary """
+        Against ../exprim, uncommitted tree on fd17bdd9: lege-process lib 391 passed, 0 failed, 1 ignored; pdf-integrity workspace 136 passed, 0 failed, 8 ignored.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.exprim-package-archive-test-20261109/1 : evidence {
+    title "exprim 0.4.0 packages 149 files, 8.3 MiB raw / 1.8 MiB compressed, from an include allowlist: src/**/*.rs, build.rs, upstream/pdfium (LICENSE, README, core sources), fonts/*.otf + README, the 8 CMap blobs, README, CHANGELOG, LICENSE-MIT, THIRD-PARTY-NOTICES. No tests, fixtures, benches, examples, corpus, fuzz, tools, dev-notes, codecs or CLAUDE.md. The unpacked archive builds standalone with all features against crates.io jbig2enc-rust 0.6.0 and local jp2lam 0.3.1; rustdoc generates with 15 intra-doc link warnings in hidden modules. A real cargo package/publish fails only on jp2lam ^0.3.1 (crates.io has 0.3.0)."
+    state verified
+    result pass
+    method command
+    observed_at git:fd17bdd9c43fa624587a518c292354daa51b81a1
+    command "cargo package --list --allow-dirty; cargo package --allow-dirty --no-verify (jp2lam requirement temporarily 0.3.0, restored); unpack the .crate, set jp2lam back to 0.3.1, [patch.crates-io] jp2lam to codecs/jp2lam, cargo build --all-features && cargo doc --no-deps --all-features"
+    summary """
+        exprim 0.4.0 packages 149 files, 8.3 MiB raw / 1.8 MiB compressed, from an include allowlist: src/**/*.rs, build.rs, upstream/pdfium (LICENSE, README, core sources), fonts/*.otf + README, the 8 CMap blobs, README, CHANGELOG, LICENSE-MIT, THIRD-PARTY-NOTICES. No tests, fixtures, benches, examples, corpus, fuzz, tools, dev-notes, codecs or CLAUDE.md. The unpacked archive builds standalone with all features against crates.io jbig2enc-rust 0.6.0 and local jp2lam 0.3.1; rustdoc generates with 15 intra-doc link warnings in hidden modules. A real cargo package/publish fails only on jp2lam ^0.3.1 (crates.io has 0.3.0).
+        """
+    author "dk"
+}
+
 record lege-ecosystem.evidence.freya-embedded-about-tests/1 : evidence {
     title "All 37 Freya tests passed, including compile-time document presence, current-content assertions, stale cache refresh, and traversal rejection."
     state verified
@@ -1039,6 +1144,19 @@ record lege-ecosystem.evidence.gui-file-tiles-beside-process-button-20261108/1 :
     author "dk"
 }
 
+record lege-ecosystem.evidence.gui-file-tiles-grab-cursor-20261109/1 : evidence {
+    title "Windows 11, uncommitted tree on fd17bdd9 with Cargo.lock moved to liminalkit b60e4ce (from GitHub, no patch): GUI crate 79 passed, 0 failed, 5 ignored. New test the_pointer_is_a_hand_over_a_tile_and_a_closed_hand_while_holding_it (arrow away from tiles, Grab over an output tile, Grabbing while pressed, Grab on the release frame, arrow after the cursor leaves). Clippy: no findings in file_tiles.rs or the new app.rs lines."
+    state verified
+    result pass
+    method command
+    observed_at git:fd17bdd9c43fa624587a518c292354daa51b81a1
+    command "cargo test -p lege-gui-liminalui"
+    summary """
+        Windows 11, uncommitted tree on fd17bdd9 with Cargo.lock moved to liminalkit b60e4ce (from GitHub, no patch): GUI crate 79 passed, 0 failed, 5 ignored. New test the_pointer_is_a_hand_over_a_tile_and_a_closed_hand_while_holding_it (arrow away from tiles, Grab over an output tile, Grabbing while pressed, Grab on the release frame, arrow after the cursor leaves). Clippy: no findings in file_tiles.rs or the new app.rs lines.
+        """
+    author "dk"
+}
+
 record lege-ecosystem.evidence.gui-file-tiles-grouped-by-kind-render-20261108/1 : evidence {
     title "shelf_review_snapshot (LEGE_SHELF_SNAPSHOT_DIR, --ignored) with three PDFs, two ZIPs and a folder in and two PDFs out. At 1040x760 the tiles read '3 PDFs' with badge 3, '2 ZIP files' with badge 2, then 'Scans 1923', and '2 PDFs' with badge 2 at the right, all at full icon size. At 720x660 all three kinds fit in narrower tiles with smaller icons ('2 ZIP…' is truncated) and no +N. With one file, named two-line tiles appear and no badge."
     state verified
@@ -1060,6 +1178,19 @@ record lege-ecosystem.evidence.gui-file-tiles-grouped-by-kind-tests-20261108/1 :
     command "cargo test -p lege-gui-liminalui"
     summary """
         GUI crate: 75 passed, 4 ignored, 0 failed (uncommitted working tree on 34d4291f). New tests: files_group_by_kind_pdfs_then_zips_then_folders, a_group_is_captioned_by_its_size, pdfs_zips_and_folders_all_fit_beside_the_button_at_every_window_size (1x/1.5x/2x at 720x660, 1040x760 and 1600x1000, no +N), the_shell_data_object_lists_every_file_for_a_drop (CF_HDROP lists both files from two folders), a_drop_of_several_files_queues_every_one_of_them (3-file drop plus a drop during the check: all 4 queued in order). debug-fast build of lege and lege-gui succeeded.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.gui-progress-lines-steady-20261109/1 : evidence {
+    title "GUI crate 80 passed, 5 ignored, 0 failed (uncommitted tree on fd17bdd9). New test a_finished_page_keeps_the_page_counters_on_screen. One earlier run failed appearance::tests::preview_drives_active_palette_light_and_dark (global PREVIEW static raced by a parallel test); it passes alone and on rerun."
+    state verified
+    result pass
+    method command
+    observed_at git:fd17bdd9c43fa624587a518c292354daa51b81a1
+    command "cargo test -p lege-gui-liminalui --lib"
+    summary """
+        GUI crate 80 passed, 5 ignored, 0 failed (uncommitted tree on fd17bdd9). New test a_finished_page_keeps_the_page_counters_on_screen. One earlier run failed appearance::tests::preview_drives_active_palette_light_and_dark (global PREVIEW static raced by a parallel test); it passes alone and on rerun.
         """
     author "dk"
 }
@@ -1088,6 +1219,35 @@ record lege-ecosystem.evidence.image-detection-policy-tests/1 : evidence {
     summary """
         Both planned-path image policy regressions and the bounded analysis-surface plan test passed.
         """
+}
+
+record lege-ecosystem.evidence.immediate-admission-gui-tests-build-20261108/1 : evidence {
+    title "Working tree: GUI suite 78 passed, 0 failed, 5 ignored; release lege-gui build passed in 3m50s and output is 3,167,232 bytes. Regressions hold metadata pending while all selected PDFs/ZIPs already supply file tiles, update counts in place, retain items after metadata failure, ignore stale/missing-item metadata, and reject missing/empty/unsupported input before probing. Existing localization dead-code warnings remain."
+    state verified
+    result pass
+    method command
+    observed_at git:5b24f8e412ef8a6f9b58b015382d4d07f5d4a8f2
+    command "cargo test -p lege-gui-liminalui --lib; cargo build --release -p lege --bin lege-gui"
+    artifact "docs/measurements/lege-size-and-input-latency-2026-11-08.md"
+    summary """
+        Working tree: GUI suite 78 passed, 0 failed, 5 ignored; release lege-gui build passed in 3m50s and output is 3,167,232 bytes. Regressions hold metadata pending while all selected PDFs/ZIPs already supply file tiles, update counts in place, retain items after metadata failure, ignore stale/missing-item metadata, and reject missing/empty/unsupported input before probing. Existing localization dead-code warnings remain.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.immediate-input-admission-20261108/1 : evidence {
+    title "Working-tree GUI admission against the release CLI with target/release on PATH and LEGE_GUI_PROBE_INPUT_DIR=D:/pdf-test: ten PDFs published in 3.287 ms before any metadata result; first native Windows icon ready at 66.044 ms. First page count at 1676.943 ms; all ten at 2649.405 ms. Ignored integration test passed; explicit directory canonicalized for shell APIs."
+    state verified
+    result pass
+    method command
+    observed_at git:5b24f8e412ef8a6f9b58b015382d4d07f5d4a8f2
+    command "cargo test -p lege-gui-liminalui --lib real_input_admission_latency -- --ignored --nocapture"
+    artifact "docs/measurements/lege-size-and-input-latency-2026-11-08.md"
+    summary """
+        Working-tree GUI admission against the release CLI with target/release on PATH and LEGE_GUI_PROBE_INPUT_DIR=D:/pdf-test: ten PDFs published in 3.287 ms before any metadata result; first native Windows icon ready at 66.044 ms. First page count at 1676.943 ms; all ten at 2649.405 ms. Ignored integration test passed; explicit directory canonicalized for shell APIs.
+        Capture ".agent/scratch/lege-input-latency-20261108/admission.txt": 4766 bytes; sha256:a56221e47c50b53f6e9184f72f90928e70455451b23acd7b8af9af4b4d53ffbf (identity only; raw capture is not a retained artifact).
+        """
+    author "dk"
 }
 
 record lege-ecosystem.evidence.installer-ready-tensorrt-payload-20260815/1 : evidence {
@@ -1744,6 +1904,19 @@ record lege-ecosystem.evidence.jp2-native-dims-sniff-tests/1 : evidence {
     author "dk"
 }
 
+record lege-ecosystem.evidence.jp2lam-0-3-1-published-20261109/1 : evidence {
+    title "jp2lam 0.3.1 published to crates.io on 2026-11-09 from exprim commit a437fd2 (codecs/jp2lam, the 124 files lege-ecosystem tracked, homepage/repository now liminalism/exprim, CHANGELOG dated). 468 tests passed, 0 failed; package 99 files, 431 KiB compressed. This unblocks exprim's `jp2lam = \"0.3.1\"` requirement. The exprim commit is not pushed."
+    state verified
+    result pass
+    method command
+    observed_at git:fd17bdd9c43fa624587a518c292354daa51b81a1
+    command "cd D:/projects/exprim/codecs/jp2lam && cargo test --release && cargo publish"
+    summary """
+        jp2lam 0.3.1 published to crates.io on 2026-11-09 from exprim commit a437fd2 (codecs/jp2lam, the 124 files lege-ecosystem tracked, homepage/repository now liminalism/exprim, CHANGELOG dated). 468 tests passed, 0 failed; package 99 files, 431 KiB compressed. This unblocks exprim's `jp2lam = "0.3.1"` requirement. The exprim commit is not pushed.
+        """
+    author "dk"
+}
+
 record lege-ecosystem.evidence.jp2lam-perceptual-curve-2026-08-12/1 : evidence {
     title "Size-matched jp2lam perceptual curve qualification"
     state superseded
@@ -1819,6 +1992,20 @@ record lege-ecosystem.evidence.layout-correction-source-review-20261027/1 : evid
     observed_at git:b4fb52b5851b94911e12524bb7836debdb42afb1
     summary """
         Inspected layout_correct.rs and layout detection integration: correction, OCR gap handling, image growth and optional redetection are present. Tests were not run in this inspection.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.layout-detection-ab-jolly-merge-20261108/1 : evidence {
+    title "Layout-detection A/B gate for the B1 decode-level cache merge"
+    state verified
+    result pass
+    method command
+    observed_at git:fb71b63127b3a096ac9b9bfa5eb915e2555e04c7
+    command "bash scratchpad/layout-ab.sh lege-prejolly.exe lege-postjolly.exe (LEGE_BBOX_TRACE=1 --no-ocr over D:\\pdf-test: beans, viaduct, vogtle, xenosystems 1-20, sahib 1-10, Structures 1-12), detection lines compared order-independently"
+    artifact "dev-notes/lege-pdf/render-refinement/scoping-20261108/measurements/layout-ab-jolly-20261108.md"
+    summary """
+        Layout detections identical before and after the B1 (jolly-ride) merge on five of six documents; on viaduct the two image boxes move at most 0.5 px with confidence 0.85->0.83 and 0.86->0.84, same class, no region decision changes.
         """
     author "dk"
 }
@@ -2045,6 +2232,32 @@ record lege-ecosystem.evidence.lege-process-about-gpu-focused-checks-2026-08-09/
     summary """
         Touched Rust modules passed focused formatting, both GUI locale tests passed, the GPU sharing test passed on hardware WGPU, Lege and lege-gpu checks passed, and the patch has no whitespace errors. Existing dependency and legacy-code warnings remain non-fatal.
         """
+}
+
+record lege-ecosystem.evidence.liminal-annotator-book-table-paper-tone-20261109/1 : evidence {
+    title "Liminal Annotator book table, per-label counts and paper tone: tests and real-pool check"
+    state verified
+    result pass
+    method command
+    observed_at git:f11fee2e0ef3c3f95c03307ef8305fe2879b2a4b
+    command "cargo test; cargo clippy --all-targets; liminal-annotator books <copy of C:\\layout-dataset-v2\\annotator.db> --paper --sort paper"
+    summary """
+        Uncommitted tree on f11fee2e: 77 tests pass (new: any-column sort both ways, unmeasured paper sorts last, Home/End while filtering, Lab b* and bright-fifth paper tests, per-class counts after import/bulk conversion/schema upgrade); clippy clean. On a copy of the user's 1.74 GB pool project (647 books, 236,801 pages): per-class count migration ~4 s once, book stats ~180 ms, paper tone for all 647 books 2.6 s; contact sheet across the b* range matched visual paper colour (top b* 41-44 browned/aged scans, ~11-17 cream, 0 white digital; one -43 outlier is a blue page). Screenshots: book table sorted by Paper and by Figure; editor shows all 14 label chips on a second toolbar row at 1360 px.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.liminal-annotator-folder-projects-tests-20261109/1 : evidence {
+    title "Liminal Annotator folder projects, abandon conversion and Windows raster pool: tests, real-pool import, A/B"
+    state verified
+    result pass
+    method command
+    observed_at git:f11fee2e0ef3c3f95c03307ef8305fe2879b2a4b
+    command "cargo test; cargo clippy --all-targets (in lege-misc/liminal-annotator)"
+    summary """
+        Uncommitted working tree on f11fee2e: 73 tests pass (new folder_project and shell suites: pool folder -> annotator.db, incremental rescan, region counts SQL vs in-memory, bulk convert + undo, export skips unresolved abandon, schema-1 upgrade, editor A / Shift+A / U via key events, shell import-then-books, no stray db on failure); clippy clean. Real pool C:\layout-dataset-v2 imported into a scratch project: 231,822 pages, 622 books, 1.79M boxes (445,623 abandon) in 32 s, 1.7 GB; book stats 66 ms (was 1.5 s before per-page counts); 106 of 622 books flagged at 3+ abandon/page. Windows i7-13700H interleaved A/B, 8 threads: persistent rayon pool vs per-render spawn, raster 4K@1.57 p50 1.05-1.09 -> 0.82-0.86 ms, 1080p exact copy 0.21-0.22 -> 0.06-0.07 ms; parallel threshold 250k -> 100k px: 245 kpx strip 0.42 -> 0.14 ms. GUI binary starts under the real host.
+        """
+    author "dk"
 }
 
 record lege-ecosystem.evidence.line-art-source-review-20261027/1 : evidence {
@@ -2619,6 +2832,31 @@ record lege-ecosystem.evidence.pdf-render-headsup-partial-timing-20261104/1 : ev
     author "dk"
 }
 
+record lege-ecosystem.evidence.pdf-titler-real-run-20261109/1 : evidence {
+    title "debug-fast lege-titler, --backend paddle, on 14 PDFs (10 archive.org scans from D:\\pdf-test\\archiveorg plus beans/viaduct/vogtle/xenosystems) copied to a session scratchpad. Dry run with --overwrite: 9 guesses, 3 no guess, 1 encrypted skip, 1 truncated file error. Against catalogue metadata: titles exact on 3 (1933 also exact on author), partial on 2; vogtle author wrong (a logo row). Real run filled 3 files and rewrote one damaged-xref scan with --overwrite. Poppler pdfinfo reads every written file without syntax errors, with page counts unchanged, Producer kept and XMP dc:title/dc:creator updated. A rerun reports kept existing. Auto backend fails closed on this machine: NVIDIA driver present, TensorRT SDK absent."
+    state verified
+    result pass
+    method manual
+    observed_at git:f11fee2e0ef3c3f95c03307ef8305fe2879b2a4b
+    summary """
+        debug-fast lege-titler, --backend paddle, on 14 PDFs (10 archive.org scans from D:\pdf-test\archiveorg plus beans/viaduct/vogtle/xenosystems) copied to a session scratchpad. Dry run with --overwrite: 9 guesses, 3 no guess, 1 encrypted skip, 1 truncated file error. Against catalogue metadata: titles exact on 3 (1933 also exact on author), partial on 2; vogtle author wrong (a logo row). Real run filled 3 files and rewrote one damaged-xref scan with --overwrite. Poppler pdfinfo reads every written file without syntax errors, with page counts unchanged, Producer kept and XMP dc:title/dc:creator updated. A rerun reports kept existing. Auto backend fails closed on this machine: NVIDIA driver present, TensorRT SDK absent.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.pdf-titler-tests-20261109/1 : evidence {
+    title "lege-pdf-titler 42 passed. Covers heuristics (incl. regression shapes from real page-1 dumps), incremental update on classic and xref-stream fixtures, XMP rewrite, signed-file block, and a damaged-table full xref rewrite. lege-document-pipeline lib 29 passed, incl. process_single_page, keep_figure_text hash stability and release_figure_text. Clippy clean on the new crate. Uncommitted working tree on f11fee2e."
+    state verified
+    result pass
+    method command
+    observed_at git:f11fee2e0ef3c3f95c03307ef8305fe2879b2a4b
+    command "cargo test -p lege-pdf-titler; cargo test -p lege-document-pipeline --lib; cargo clippy -p lege-pdf-titler --no-deps --tests"
+    summary """
+        lege-pdf-titler 42 passed. Covers heuristics (incl. regression shapes from real page-1 dumps), incremental update on classic and xref-stream fixtures, XMP rewrite, signed-file block, and a damaged-table full xref rewrite. lege-document-pipeline lib 29 passed, incl. process_single_page, keep_figure_text hash stability and release_figure_text. Clippy clean on the new crate. Uncommitted working tree on f11fee2e.
+        """
+    author "dk"
+}
+
 record lege-ecosystem.evidence.pipeline-writer-and-spooled-epub-tests/1 : evidence {
     title "Uncommitted working tree on top of b4fb52b5: spawn_pdf_writer_actor now runs its blocking DocumentWriter loop on a dedicated blocking worker thread (runtime_stats::spawn_blocking + blocking_recv) off the current-thread control executor, and PDF EPUB sidecar packaging streams spooled hOCR files into PageText one page at a time via build_epub_from_spooled_hocr_pages_with_outline_cancellable without collecting all raw hOCR strings into memory at once. 15 helper_functions tests and 15 epub_pipeline tests (including new spooled_hocr_pages_stream_in_page_order_into_epub) pass."
     state verified
@@ -2941,6 +3179,114 @@ record lege-ecosystem.evidence.release-document-copy-audit/1 : evidence {
     summary """
         Before canonical edits, project, Linux staging, and MSIX documentation.html copies were byte-identical at SHA-256 c78277275d80915433e541dc2e712d18281dd19c7a855b66e0145929d84c9e5a and all contained the Reflow section.
         """
+}
+
+record lege-ecosystem.evidence.release-model-size-20261108/1 : evidence {
+    title "Existing release lege.exe is 85,720,064 bytes. Complete RF-DETR-S payload (57,844,802 bytes) present; old DocLayout-M payload absent. Initializer inspection found 57,417,532 raw FP16 bytes versus old model 11,540,708; layout payload increase 46,207,182 bytes. Warm direct CLI probes on eight PDFs took median 35-172 ms each; version-only first launch 3.58 seconds, later 35-37 ms."
+    state verified
+    result pass
+    method command
+    observed_at git:5b24f8e412ef8a6f9b58b015382d4d07f5d4a8f2
+    command "python .agent/scratch/lege-input-latency-20261108/measure.py"
+    artifact "docs/measurements/lege-size-and-input-latency-2026-11-08.md"
+    summary """
+        Existing release lege.exe is 85,720,064 bytes. Complete RF-DETR-S payload (57,844,802 bytes) present; old DocLayout-M payload absent. Initializer inspection found 57,417,532 raw FP16 bytes versus old model 11,540,708; layout payload increase 46,207,182 bytes. Warm direct CLI probes on eight PDFs took median 35-172 ms each; version-only first launch 3.58 seconds, later 35-37 ms.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.renderer-scoping-a16-a18-a21-landed-20261108/1 : evidence {
+    title "A16, A18, A21 landed hash-identical; mimalloc Windows A/B measured"
+    state verified
+    result pass
+    method command
+    observed_at git:596fd3964ce0133a62264aebbf3b76fea0329c1c
+    command "probe run --hash at scales 1.0/1.37/2.0, RGBA and Gray8, fresh and shared backend, on beans, vogtle, viaduct, sahib_processed_1794115972 plus cmyk8/gray16/rgb16/cmyk16 fixtures, baseline 5763a86b vs scoping-r2-small; sessionbench + ab.cmd pinned to P-cores, 9 interleaved rounds; cargo test -p pdf-render-cpu -p pdf-color -p lege-pdf-read after merge 596fd396"
+    summary """
+        A21 surface slots, A16 DeviceCMYK direct conversion with /Decode byte tables, A18 16-bit promotion: 96/96 page hashes identical to baseline; A21 0.79-0.89x time on alternating analysis/base sizes (9/9 wins), A16 0.50x on a 2000x2800 CMYK cover, A18 0.065-0.41x on 16-bit pages; after merge 25 suites, 305 passed, 0 failed; clippy clean of denied lints. mimalloc Windows A/B (measurement only): 8-12% faster pinned, 10-25% faster at 4 threads, +13-65% peak working set.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.renderer-scoping-local-round-corpus-gate-20261108/1 : evidence {
+    title "Corpus hash gate for the local round: 2,148 renders, real documents identical"
+    state verified
+    result pass
+    method command
+    observed_at git:e6ed086f393ce66512f8c6f06659d6fcdc7b8531
+    command "gate.sh <probe 5763a86b> <probe HEAD> : lege-render-probe run --hash --fresh-backend at scales 1.0/1.37/2.0, RGBA and Gray8 (PROBE_GRAY8=1), over D:\\pdf-test beans, viaduct, vogtle, xenosystems, sahib_processed_1794115972 and the stencil_flate, stencil_jbig2, bilevel_600, ring, cmyk8, gray16, rgb16, cmyk16 fixtures"
+    artifact "dev-notes/lege-pdf/render-refinement/scoping-20261108/IMPLEMENTATION-LOG.md"
+    summary """
+        2,148 renders compared between the pre-worker base and the final tree with Tier B1 stencil fast path, Tier B2 row-band filter, B6 B8 B11 B12 B14 B15 N1, A16 A18 A21 and the bilinear alpha fix: every real document identical at every scale and format; only stencil_flate page 2 (the /Interpolate stencils) differs, by the intended bilinear alpha fix.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.renderer-scoping-local-round-suites-20261108/1 : evidence {
+    title "Final suites green on the completed scoping round (983 tests), lege builds"
+    state verified
+    result pass
+    method command
+    observed_at git:7ea2f836e03b0d1c2a566b8986299b1feb2fb49e
+    command "cargo test -p pdf-render-cpu -p pdf-content -p pdf-font -p pdf-image -p pdf-document -p pdf-object -p pdf-color -p pdf-function -p pdf-syntax -p lege-pdf-read -p lege-pdf-print -p pdf-cli; cargo build --profile debug-fast -p lege --bin lege"
+    summary """
+        Final tree after merging scoping-r1-correctness, scoping-r2-stencil (ring option A reverted) and scoping-r2-small: 89 suites, 983 tests passed, 0 failed, 0 ignored; the lege CLI builds. Clippy on the changed crates reports no denied lint in code from this round (the expect() errors are in pre-existing pdf-document outline/direct_page_leaf tests untouched since 5b24f8e4).
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.renderer-scoping-merge-suites-20261108/1 : evidence {
+    title "Renderer, read-seam and pdf-cli suites green on the integrated scoping branches"
+    state verified
+    result pass
+    method command
+    observed_at git:fb71b63127b3a096ac9b9bfa5eb915e2555e04c7
+    command "cargo test -p pdf-render-cpu -p pdf-content -p pdf-font -p pdf-image -p pdf-document -p pdf-object -p pdf-color -p pdf-function -p lege-pdf-read -p pdf-cli"
+    summary """
+        After merging dazzling-planck, gifted-pascal and jolly-ride (27debaee): 78 suites, 825 passed, 0 failed, 0 ignored on the Windows host.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.renderer-scoping-ring-gate-20261108/1 : evidence {
+    title "Masked-image border ring: gate and suites after the merge, 2026-11-08"
+    state verified
+    result pass
+    method command
+    observed_at git:9c0b9fe352a41e5c84536e27507ebc80b5f6889c
+    command "harness probe run --hash --fresh-backend at 9c0b9fe3 vs round-3 hashes of 0f3a6516; 16 documents, scales 1.0/1.37/2.0, RGBA+Gray8; cargo test -p pdf-render-cpu -p pdf-cli -p lege-pdf-read -p pdf-content"
+    artifact "dev-notes/lege-pdf/render-refinement/scoping-20261108/measurements/masked-image-ring-20261108.md"
+    summary """
+        Masked-image ring merge (cd576089 via 9c0b9fe3): 2,162/2,202 renders identical; the 40 differing are the intended hard edge only (stencil_flate p1-5, bilevel_600 p2, and cmyk16/gray16/rgb16 at 1.37, verified column/row-wise); 509 renderer/CLI/read-seam tests pass, 0 fail. PDFium itself rounds image rectangles outward (full-weight slivers), so 3,343/3,344 centre-inside boundary pixels now match PDFium and 2,741 centre-outside pixels still differ.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.renderer-scoping-round3-corpus-gate-20261108/1 : evidence {
+    title "Renderer scoping round 3 corpus hash gate, 2026-11-08"
+    state verified
+    result pass
+    method command
+    observed_at git:9302d20bda0246536c35eab92114467fc6e0d80b
+    command "bash dev-notes/lege-pdf/render-refinement/scoping-20261108/harness/gate.sh <probe@7ea2f836> <probe@working-tree> gate-r3 beans viaduct vogtle xenosystems sahib_processed_1794115972 stencil_flate bilevel_600 ring stencil_jbig2 cmyk8 cmyk16 gray16 rgb16 groups gray_jpx repeat_image"
+    summary """
+        Round 3 (A20 O(log n) eviction, A7 per-compile image XObject cache, A12 fused gray 9/7, A9 session reuse) against HEAD 7ea2f836: 2,202 of 2,202 renders hash-identical at scales 1.0/1.37/2.0, RGBA and Gray8, over 16 documents including the new gray JPX, repeated-image and transparency-group fixtures.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.renderer-scoping-round3-timing-20261108/1 : evidence {
+    title "Renderer scoping round 3 (A7/A12) timing, 2026-11-08"
+    state verified
+    result pass
+    method command
+    observed_at git:9302d20bda0246536c35eab92114467fc6e0d80b
+    command "ab.cmd python --pass 0 9 sessionbench@7ea2f836 sessionbench@working-tree -- {gray_jpx.pdf 150|300 gray8, repeat_image.pdf 150 gray8, beans.pdf 150 gray8, vogtle.pdf 150 rgb8} 1"
+    artifact "dev-notes/lege-pdf/render-refinement/scoping-20261108/measurements/round3-deferred-items-ab-20261108.md"
+    summary """
+        Cold first pass, pinned to P-cores, 9 interleaved rounds: repeated-image page compile 0.615x (A7, 9/9), gray JPX page 0.984x at 150 dpi and 0.977x at 300 dpi (A12, 7/9 and 8/9), controls beans 1.025x and vogtle 1.001x; warm third pass flat everywhere; all outputs identical.
+        """
+    author "dk"
 }
 
 record lege-ecosystem.evidence.rfdetr-default-layout-model-20261108/1 : evidence {

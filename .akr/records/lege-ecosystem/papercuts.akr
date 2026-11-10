@@ -505,6 +505,18 @@ record lege-ecosystem.papercut.akr-import-ingest-of-a-long-planning-document/3 :
     created_at 2026-09-08
 }
 
+record lege-ecosystem.papercut.akr-knowledge-papercut-rejected-a-call-with/1 : papercut {
+    title "AKR knowledge.papercut rejected a call with `model` instead of the…"
+    state verified
+    statement """
+        AKR knowledge.papercut rejected a call with `model` instead of the required `agent` field; corrected after inspecting its tool schema.
+        """
+    observed_at git:5b24f8e412ef8a6f9b58b015382d4d07f5d4a8f2
+    about "knowledge.papercut"
+    author "codex"
+    created_at 2026-11-08
+}
+
 record lege-ecosystem.papercut.akr-mcp-failed-to-connect-and-codegraph-mcp/1 : papercut {
     title "AKR MCP failed to connect and codegraph MCP timed out this session; akr…"
     state superseded
@@ -2776,6 +2788,17 @@ record lege-ecosystem.papercut.configuring-the-lean-turboocr-tensorrt-text/2 : p
     created_at 2026-09-19
 }
 
+record lege-ecosystem.papercut.creating-a-git-worktree-on-the-windows-checkout/1 : papercut {
+    title "Creating a git worktree on the Windows checkout (core.autocrlf=true)…"
+    state verified
+    statement """
+        Creating a git worktree on the Windows checkout (core.autocrlf=true) converts lege-pdf/render/crates/pdf-text/upstream/pdfium/core/fxcrt/fx_ucddata.inc to CRLF, so pdf-text's build.rs digest check fails and nothing depending on pdf-text (pdf-cli, lege-pdf-read) builds in that worktree. Workaround: `git -c core.autocrlf=false worktree add`. A `.gitattributes` `-text` rule for the upstream tree, or a digest over LF-normalised bytes, would remove the trap.
+        """
+    observed_at git:3343fbf3f875582e85ed3785b16dbba35ae240c5
+    author "claude"
+    created_at 2026-11-08
+}
+
 record lege-ecosystem.papercut.creating-the-jbig2-roadmap-work-record-failed/1 : papercut {
     title "Creating the JBIG2 roadmap work record failed because knowledge_propose…"
     state verified
@@ -4966,6 +4989,18 @@ record lege-ecosystem.papercut.the-real-confed-benchmark-session-returned-exit/2
     created_at 2026-11-01
 }
 
+record lege-ecosystem.papercut.the-real-pdf-admission-timing-test-initially/1 : papercut {
+    title "The real PDF admission timing test initially could not retrieve a…"
+    state verified
+    statement """
+        The real PDF admission timing test initially could not retrieve a Windows shell icon for paths built from D:/pdf-test (mixed forward/back slashes). Canonicalizing the explicit benchmark directory supplies native Windows paths, matching the file dialog.
+        """
+    observed_at git:5b24f8e412ef8a6f9b58b015382d4d07f5d4a8f2
+    about "Windows-shell"
+    author "codex"
+    created_at 2026-11-08
+}
+
 record lege-ecosystem.papercut.the-recipe-that-turned-stock-paddleocr-onnx/1 : papercut {
     title "The recipe that turned stock PaddleOCR ONNX exports into the embedded…"
     state superseded
@@ -5059,6 +5094,17 @@ record lege-ecosystem.papercut.the-running-knowledge-validate-server-rejects/2 :
     supersedes [ @lege-ecosystem.papercut.the-running-knowledge-validate-server-rejects/1 ]
     author "codex"
     created_at 2026-10-27
+}
+
+record lege-ecosystem.papercut.the-scoping-20261108-measurement-harnesses/1 : papercut {
+    title "The scoping-20261108 measurement harnesses (probe, sessionbench,…"
+    state verified
+    statement """
+        The scoping-20261108 measurement harnesses (probe, sessionbench, readprobe) declare path dependencies six directory levels up and each needs the root Cargo.lock copied in by hand before it builds, so they only build when checked out at exactly that relative path inside a full tree. A workspace-excluded `[workspace]` member list or a `.cargo/config.toml` alias at the repo root would let them build with one command.
+        """
+    observed_at git:3343fbf3f875582e85ed3785b16dbba35ae240c5
+    author "claude"
+    created_at 2026-11-08
 }
 
 record lege-ecosystem.papercut.the-session-8c-49-94mp-oracle-sweep-makes-no/1 : papercut {
@@ -5769,6 +5815,18 @@ record lege-ecosystem.papercut.while-reproducing-the-publishing-plan-s-single/2 
     created_at 2026-11-04
 }
 
+record lege-ecosystem.papercut.while-reviewing-the-remote-image-cache-fix-rg/1 : papercut {
+    title "While reviewing the remote image-cache fix, rg rejected a wildcard in…"
+    state verified
+    statement """
+        While reviewing the remote image-cache fix, rg rejected a wildcard in an explicit Windows path (lege-pdf/read/src/*plan*). Pass the directory with an rg glob filter instead.
+        """
+    observed_at git:5b24f8e412ef8a6f9b58b015382d4d07f5d4a8f2
+    about "exec_command"
+    author "codex"
+    created_at 2026-11-08
+}
+
 record lege-ecosystem.papercut.while-revising-a-stale-named-claim-akr-explain/1 : papercut {
     title "While revising a stale named claim, akr explain claim and claims…"
     state verified
@@ -5804,6 +5862,17 @@ record lege-ecosystem.papercut.while-running-focused-rust-tests-i-passed-two/2 :
     supersedes [ @lege-ecosystem.papercut.while-running-focused-rust-tests-i-passed-two/1 ]
     author "gpt-5.6-sol"
     created_at 2026-08-11
+}
+
+record lege-ecosystem.papercut.while-tracing-pdf-admission-literal-wildcard/1 : papercut {
+    title "While tracing PDF admission, literal wildcard paths passed to rg failed…"
+    state verified
+    statement """
+        While tracing PDF admission, literal wildcard paths passed to rg failed on Windows and a guessed patch anchor missed the actual function signature. Use directory paths with rg -g filters and read exact source anchors before patching.
+        """
+    observed_at git:5b24f8e412ef8a6f9b58b015382d4d07f5d4a8f2
+    author "codex"
+    created_at 2026-11-08
 }
 
 record lege-ecosystem.papercut.while-validating-a-single-structures-pdf-page/1 : papercut {

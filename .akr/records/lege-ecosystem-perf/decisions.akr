@@ -41,31 +41,32 @@ record lege-ecosystem-perf.renderer.final-buffer-ownership/1 : decision {
 }
 
 record lege-ecosystem-perf.renderer.gray8-draws-take-the-rgb8-fast-paths/1 : decision {
-    title "Gray8 image draws take the axis-aligned RGB8 fast paths through a one-time promotion; non-JPX decodes are cached without a target size"
+    title "Gray8 image draws take the axis-aligned RGB8 fast paths through a one-time promotion; reduced-resolution decodes are cached by their decode level"
     state proposed
     scope [
         path "lege-pdf/read/src/session.rs",
         path "lege-pdf/render/crates/pdf-render-cpu/**"
     ]
     decision """
-        In `paint_image`, an opaque, normal-blend, unclipped, axis-aligned 8-bit gray image with no `/Decode` is re-expressed once as RGB8 (`PreparedImage::gray8_promoted_to_rgb8`: each byte tripled, colour space marked RGB, everything else cloned) before the fast-path eligibility tests, so the nearest, bilinear, area-minified and masked area-minified RGB8 painters apply to it. `pixel()` answers `[g, g, g, 255]` for such a gray texel and `[r, g, b, 255]` for RGB8, so the promoted draw is byte-identical by construction (test `gray8_draws_match_their_rgb8_twins`). A magnified draw under a mask has no fast path either way and is not expanded. Separately, `ImageCacheKey` keeps the target size only for JPX, the one codec that decodes at a reduced resolution; JBIG2, DCT and CCITT payloads are the same whatever the draw size, so a page rendered at two sizes decodes them once.
+        In `paint_image`, an opaque, normal-blend, unclipped, axis-aligned 8-bit gray image with no `/Decode` and no colour-key mask is re-expressed once as RGB8 (`PreparedImage::gray8_promoted_to_rgb8`: each byte tripled straight into the shared allocation, colour space marked RGB, everything else cloned) before the fast-path eligibility tests, so the nearest, bilinear, area-minified and masked area-minified RGB8 painters apply to it. `pixel()` answers `[g, g, g, 255]` for such a gray texel and `[r, g, b, 255]` for RGB8, so the promoted draw is byte-identical to the RGB8 twin by construction (test `gray8_draws_match_their_rgb8_twins`). Colour-keyed gray images are not promoted (B5, 2026-11-08: the one-pair key was rejected after promotion). A magnified draw under a mask has no fast path either way and is not expanded. Separately, `ImageCacheKey` keys DCT and JPX entries by the codec's reported decode level and by the declared colour space (B1, 2026-11-08, branch jolly-ride); JBIG2 and CCITT payloads are the same whatever the draw size and are keyed without a level, so a page rendered at two sizes decodes them once.
         """
     context """
-        The existing fast paths (@lege-ecosystem-perf.renderer.mrc-masked-draw-fast-path) accepted only RGB8 and CMYK sources. Scanned books and Lege's own MRC output are 8-bit DeviceGray almost without exception, so every page draw of Lege's main workload was taking the generic per-pixel sampler at roughly 250 ns per destination pixel: 1.0 s for a 1697x2400 page, 0.4 s at 1200 px, and the analysis render on top. Lege renders each page twice (bounded analysis render, then the output render), and the JBIG2 mask was decoded for both because the cache key carried the target size.
+        The existing fast paths (@lege-ecosystem-perf.renderer.mrc-masked-draw-fast-path) accepted only RGB8 and CMYK sources. Scanned books and Lege's own MRC output are 8-bit DeviceGray almost without exception, so every page draw of Lege's main workload was taking the generic per-pixel sampler at roughly 250 ns per destination pixel: 1.0 s for a 1697x2400 page, 0.4 s at 1200 px, and the analysis render on top. Lege renders each page twice (bounded analysis render, then the output render), and the JBIG2 mask was decoded for both because the cache key carried the target size. The 2026-11-08 scoping review then found that DCT also decodes at a reduced scale chosen from the target, so a key without the level served a quarter-area decode to the base render (B1).
         """
     consequences """
-        Gobineau (MRC source: gray JPX foreground and background, JBIG2 SMask), 20 pages, per-stage CPU: output render 22.7 s -> 3.0 s at 2400 px and 8.1 s -> 1.7 s at 1200 px; analysis render 6.2 s -> 2.3 s; the shared image cache went from 0 hits to one hit per page. The JBIG2-mode output was byte-identical before the coverage-plane change that followed. The promotion costs one 3x copy of the source per draw (a 6 Mpx page: about 5 ms and 18 MiB transient), capped at 64 Mpx like the CMYK conversion.
+        Gobineau (MRC source: gray JPX foreground and background, JBIG2 SMask), 20 pages, per-stage CPU: output render 22.7 s -> 3.0 s at 2400 px and 8.1 s -> 1.7 s at 1200 px; analysis render 6.2 s -> 2.3 s; the shared image cache went from 0 hits to one hit per page. The promotion costs one 3x copy of the source per draw (a 6 Mpx page: about 5 ms and 18 MiB transient, halved by writing into the final Arc on 2026-11-08), capped at 64 Mpx like the CMYK conversion. The ring caveat below was confirmed and left as the PDFium-matching behaviour on 2026-11-08 (dev-notes/lege-pdf/render-refinement/scoping-20261108/measurements/image-edge-ring-pdfium-probe-20261108.md).
         """
-    claim promotion-is-exact {
+    claim decode-level-in-key {
         text """
-            For an 8-bit gray image without `/Decode` (hence without a sample LUT, which is only built up to 4 bits), the generic sampler returns the gray byte tripled, exactly what an RGB8 image with tripled bytes returns; so promoting the samples changes no painted pixel, on the fast path or on the generic border band that the masked painter keeps for edge anti-aliasing.
+            DCT and JPX decode at a reduced resolution chosen from `DecodeParameters::target_size`, so their cache entries are keyed by the codec-reported decode level and the declared colour space; JBIG2 and CCITT samples are independent of the draw size and are keyed without a level, so rendering a page at several sizes decodes them once.
             """
     }
-    claim target-only-for-jpx {
+    claim promotion-is-exact-interior {
         text """
-            Only the JPX decoder honours `DecodeParameters::target_size`; every other codec's samples are independent of the draw size, so keying their cache entries by target only defeats the cache whenever a page is rendered at more than one size.
+            For an 8-bit gray image without `/Decode` or colour key, the generic sampler returns the gray byte tripled, exactly what an RGB8 image with tripled bytes returns; so promoting the samples changes no painted pixel on the fast paths' interior, nor on the generic border band that the masked painter keeps. For an UNMASKED opaque image at a fractional axis-aligned placement the promoted fast path paints the 1-px edge ring by pixel centre (full weight or none) where the generic body would paint fractional coverage; PDFium paints that ring the same hard way, so the fast paths are kept as they are (pinned by `fractional_placements_match_the_generic_body_including_the_border_ring`).
             """
     }
+    retired_claims [ promotion-is-exact, target-only-for-jpx ]
     derived_from [ @lege-ecosystem-perf.renderer.mrc-masked-draw-fast-path ]
 }
 
