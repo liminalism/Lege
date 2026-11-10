@@ -19,6 +19,13 @@ path = "src/lib.rs"
 name = "liminal-annotator"
 path = "src/main.rs"
 
+# The same program without a console window (Windows GUI subsystem), for
+# Explorer, shortcuts and file associations. Command-line tools stay in
+# `liminal-annotator`, which keeps its console for their output.
+[[bin]]
+name = "liminal-annotator-gui"
+path = "src/gui_main.rs"
+
 [dependencies]
 # LiminalKit from its GitHub repository, as lege-gui does; Cargo.lock pins the
 # commit (`cargo update -p liminalkit-raster` moves it). To build against a
@@ -33,6 +40,10 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+# Native folder dialog (IFileOpenDialog on Windows): the copy lege-gui vendors.
+rfd = { path = "../../lege-process/GUI/rfd" }
+# Persistent page-raster workers (thread creation per render is dear on Windows).
+rayon = "1.11"
 
 [dev-dependencies]
 tempfile = "3"

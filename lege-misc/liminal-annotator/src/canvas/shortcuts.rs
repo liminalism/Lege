@@ -30,7 +30,8 @@ pub enum Action {
     ToggleTags,
     ToggleHud,
     CycleCompare,
-    CycleQueue,
+    /// The queue picker.
+    Queues,
     Cancel,
     NextBox,
     PrevBox,
@@ -40,6 +41,8 @@ pub enum Action {
         resize: bool,
     },
     FirstUnreviewed,
+    FirstPage,
+    LastPage,
     JumpBack10,
     JumpFwd10,
     Help,
@@ -47,6 +50,18 @@ pub enum Action {
     PerfOverlay,
     SaveNotice,
     RevertPage,
+    /// The book manager.
+    Books,
+    /// Select the next `abandon` box on the page.
+    NextAbandon,
+    /// The bulk-convert dialog for `abandon` boxes.
+    ConvertAbandon,
+    /// Open a dataset folder (the shell shows the folder dialog).
+    OpenFolder,
+    /// Relabel every box of the book in the selected box's place.
+    MatchSimilar,
+    /// The six-page view, or back from it.
+    Grid,
     SpaceDown,
     SpaceUp,
 }
@@ -152,7 +167,9 @@ pub fn map_key(ev: &KeyEvent, settings: &Resolved) -> Option<Action> {
         KeyInput::Escape => return Some(Action::Cancel),
         KeyInput::Tab if m.shift => return Some(Action::PrevBox),
         KeyInput::Tab => return Some(Action::NextBox),
-        KeyInput::Home => return Some(Action::FirstUnreviewed),
+        KeyInput::Home if ctrl => return Some(Action::FirstUnreviewed),
+        KeyInput::Home => return Some(Action::FirstPage),
+        KeyInput::End => return Some(Action::LastPage),
         KeyInput::PageUp => return Some(Action::JumpBack10),
         KeyInput::PageDown => return Some(Action::JumpFwd10),
         KeyInput::Function(1) => return Some(Action::Help),
@@ -176,6 +193,7 @@ pub fn map_key(ev: &KeyEvent, settings: &Resolved) -> Option<Action> {
             'y' => Some(Action::Redo),
             's' => Some(Action::SaveNotice),
             'c' => Some(Action::RevertPage),
+            'o' => Some(Action::OpenFolder),
             _ => None,
         };
     }
@@ -183,6 +201,10 @@ pub fn map_key(ev: &KeyEvent, settings: &Resolved) -> Option<Action> {
         return None;
     }
     match l {
+        'a' if m.shift => Some(Action::ConvertAbandon),
+        'a' => Some(Action::NextAbandon),
+        'b' => Some(Action::Books),
+        'm' => Some(Action::MatchSimilar),
         'f' => Some(Action::Fit),
         'u' => Some(Action::ToggleIgnore),
         'x' => Some(Action::ToggleExclude),
@@ -191,7 +213,8 @@ pub fn map_key(ev: &KeyEvent, settings: &Resolved) -> Option<Action> {
         't' => Some(Action::ToggleTags),
         'h' => Some(Action::ToggleHud),
         'c' => Some(Action::CycleCompare),
-        'q' => Some(Action::CycleQueue),
+        'q' => Some(Action::Queues),
+        'g' => Some(Action::Grid),
         _ => None,
     }
 }

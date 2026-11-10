@@ -501,6 +501,14 @@ pub fn import_coco(
         ],
     )
     .map_err(|e| e.to_string())?;
+    tx.execute(
+        &format!(
+            "UPDATE pages SET {} WHERE set_name = ?1",
+            database::page_counts_set()
+        ),
+        params![report.set_name],
+    )
+    .map_err(|e| e.to_string())?;
     tx.commit().map_err(|e| e.to_string())?;
     Ok(report)
 }
@@ -613,6 +621,7 @@ pub fn import_predictions(
         }
     }
     tx.commit().map_err(|e| e.to_string())?;
+    database::recount_model_figures(conn)?;
     Ok((n, skipped))
 }
 

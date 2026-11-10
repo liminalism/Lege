@@ -8,20 +8,41 @@ use serde_json::Value;
 
 use crate::annotation::commands::{Annotation, ReviewStatus};
 use crate::annotation::labels::{Group, class};
-use crate::app::{self, AnnotatorApp, AppConfig, percentile};
-use crate::dataset::database::{self, PageFilter};
+use crate::app::{AnnotatorApp, AppConfig, percentile};
+use crate::dataset::database::{self, PageFilter, Queue};
 use crate::dataset::export_coco::{ExportOptions, export};
 use crate::dataset::import_coco::{ImportOptions, import_coco, import_predictions};
+use crate::dataset::import_folder::{self, FolderOptions, Prefill};
 use crate::review::comparison::{Det, match_boxes};
 use crate::review::metrics::Accumulator;
 use crate::review::queue::Signals;
+use crate::shell::{self, ShellConfig};
 
 pub const USAGE: &str = "\
 Liminal Annotator — fast box review for page-layout datasets
 
 USAGE
-  liminal-annotator <project.db> [queue options]          open the editor
-  liminal-annotator open <project.db> [queue options]
+  liminal-annotator                                       reopen the last project, or the start screen
+  liminal-annotator <folder> [--prefill yolo|paddle|none]  open a dataset folder: creates
+        <folder>/annotator.db on first use, imports new detections later, opens the book manager
+  liminal-annotator <project.db> [queue options] [--grid]  open a project on its first page to do
+        (--grid: in the six-page view, six pages of the queue at once; G toggles it)
+  liminal-annotator open [folder|project.db] [queue options] [--grid]
+  liminal-annotator create <folder> [--prefill yolo|paddle|none] [--min-score 0.3] [--layer-min-score 0.3]
+        create or update <folder>/annotator.db without opening the window
+  liminal-annotator books <project.db|folder> [--sort CLASS|paper|pictures|abandon|large|todo|pages|name]
+        [--per-page] [--flagged] [--show excluded|training|needs-work] [--limit N]
+        [--paper (measure paper tone first)]
+  liminal-annotator split <project.db|folder> --book ID --to SPLIT
+  liminal-annotator split <project.db|folder> --assign-new [--dev 0.1] [--test 0.1]
+        [--test-name final_test] [--from new] [--dry-run]
+        whole books of split `new` to train/dev/test by a stable hash of the book id
+  liminal-annotator queues <project.db|folder> [--book ID]   pages in each review queue
+  liminal-annotator flag <project.db|folder> --book ID [--exclude|--include] [--needs-work|--done]
+        a book's flags: excluded books are left out of every export
+        per-book progress and YOLO abandon counts
+  liminal-annotator convert <project.db|folder> --to CLASS [--book ID] [--region top|bottom|margins|large|other]
+        convert abandon boxes in bulk (logged; `convert --undo-last` reverts the last one)
   liminal-annotator import <project.db> <coco.json> [--set NAME] [--images-root DIR]
   liminal-annotator import-dataset <project.db> <data-dir>
         imports regression, dev_gold_prefill, final_test_prefill, manual_queue_prefill
@@ -35,10 +56,22 @@ USAGE
   liminal-annotator bench [--image FILE.jpg] [--frames N]
   liminal-annotator gen-synthetic <project.db> --pages N [--images-dir DIR]
   liminal-annotator screenshot <project.db> <out.png> [--size 1600x1000] [--scale 1.25]
-        [--keys Tab,2,c] [--start PAGE_KEY] [queue options]   render one frame headlessly
+        [--keys Tab,2,c] [--start PAGE_KEY] [--books] [--grid] [queue options]   render one frame
+        headlessly (--books: the book manager; keys then go to it; --grid: the six-page view.
+        Key steps also take hover:X:Y and click:X:Y in image pixels, cell:N to click and
+        hovercell:N to point at page N of the six-page view). Marks the pages it shows as opened
+
+Commands that take a project also accept its folder, and use the last opened project
+when it is left out.
 
 QUEUE OPTIONS
   --set NAME  --split NAME  --book ID  --reason TEXT  --status unseen,opened,...
+  --with abandon (only pages that still have a box of that class)
+  --figure-min PCT (only pages with a figure box covering at least PCT% of the page, e.g. 40)
+  --queue todo|pictures|large-pictures|model-only|abandon|empty|text-sample|attention|excluded|reviewed|all
+        (the review queues of the Q picker: pictures first, text pages last; large-pictures:
+        a figure box of large_figure_percent of the page or more, 40 unless the project's
+        settings file says otherwise)
   --priority (order by review priority, diversified by book)  --start PAGE_KEY
   --pred-threshold 0.3 (prediction overlay score)
 ";
@@ -48,13 +81,25 @@ struct Args {
     flags: Vec<(String, Option<String>)>,
 }
 
-const BOOL_FLAGS: [&str; 6] = [
+const BOOL_FLAGS: [&str; 18] = [
+    "--grid",
+    "--assign-new",
+    "--dry-run",
+    "--exclude",
+    "--include",
+    "--needs-work",
+    "--done",
+    "--paper",
+    "--per-page",
+    "--books",
     "--images",
     "--reviewed-only",
     "--allow-split-leak",
     "--priority",
     "--help",
     "-h",
+    "--flagged",
+    "--undo-last",
 ];
 
 impl Args {
@@ -124,15 +169,121 @@ impl Args {
             statuses,
             reason: self.get("--reason").map(str::to_owned),
             by_priority: self.has("--priority"),
+            has_class: match self.get("--with") {
+                Some(name) => Some(
+                    crate::annotation::labels::class_by_name(name)
+                        .ok_or_else(|| format!("--with: unknown class {name:?}"))?,
+                ),
+                None => None,
+            },
+            queue: match self.get("--queue") {
+                Some(q) => Some(Queue::from_slug(q).ok_or_else(|| {
+                    format!(
+                        "--queue: {q:?} is not one of {}",
+                        Queue::ALL.map(|q| q.slug()).join(", ")
+                    )
+                })?),
+                None => None,
+            },
+            figure_min: match self.get("--figure-min") {
+                Some(v) => {
+                    let pct: f64 = v
+                        .trim_end_matches('%')
+                        .parse()
+                        .map_err(|_| format!("--figure-min: not a number: {v}"))?;
+                    if !(0.0..=100.0).contains(&pct) {
+                        return Err(format!("--figure-min: {v} is not a percentage (0 to 100)"));
+                    }
+                    Some(pct / 100.0)
+                }
+                None => None,
+            },
+            large_figure_share: None,
         })
+    }
+
+    /// [`Args::filter`] with the large-picture share from the project's
+    /// settings file (read, never created).
+    fn filter_for(&self, project: &Path) -> Result<PageFilter, String> {
+        let mut f = self.filter()?;
+        f.large_figure_share = Some(
+            crate::settings::Settings::load(&crate::settings::Settings::path_for(project))
+                .large_figure_share(),
+        );
+        Ok(f)
     }
 }
 
+fn search_roots() -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+    let mut push_ancestors = |start: PathBuf| {
+        let mut cur: Option<&Path> = Some(start.as_path());
+        for _ in 0..4 {
+            let Some(dir) = cur else { break };
+            let owned = dir.to_path_buf();
+            if !roots.contains(&owned) {
+                roots.push(owned);
+            }
+            cur = dir.parent();
+        }
+    };
+    if let Ok(cwd) = std::env::current_dir() {
+        push_ancestors(cwd);
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            push_ancestors(dir.to_path_buf());
+        }
+    }
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    if !roots.contains(&manifest) {
+        roots.push(manifest);
+    }
+    roots
+}
+
+fn resolve_existing_path(p: &Path) -> Option<PathBuf> {
+    if p.exists() {
+        return Some(p.to_path_buf());
+    }
+    if p.is_relative() {
+        for root in search_roots() {
+            let cand = root.join(p);
+            if cand.exists() {
+                return Some(cand);
+            }
+        }
+    }
+    None
+}
+
 fn project_arg(a: &Args, i: usize) -> Result<PathBuf, String> {
-    a.positional
+    let p = a
+        .positional
         .get(i)
         .map(PathBuf::from)
-        .ok_or_else(|| format!("missing project path\n\n{USAGE}"))
+        .ok_or_else(|| format!("missing project path\n\n{USAGE}"))?;
+    let p = resolve_existing_path(&p).unwrap_or(p);
+    Ok(import_folder::project_for(&p))
+}
+
+/// The most recently opened project, for commands given none.
+fn last_project() -> Result<PathBuf, String> {
+    crate::recent::load()
+        .into_iter()
+        .next()
+        .ok_or_else(|| format!("no project given and none opened before\n\n{USAGE}"))
+}
+
+fn folder_options(a: &Args) -> Result<FolderOptions, String> {
+    let mut o = FolderOptions::default();
+    if let Some(p) = a.get("--prefill") {
+        o.prefill = Prefill::parse(p)
+            .ok_or_else(|| format!("--prefill: {p:?} is not yolo, paddle or none"))?;
+    }
+    o.prefill_min_score = a.num("--min-score", o.prefill_min_score)?;
+    o.layer_min_score = a.num("--layer-min-score", o.layer_min_score)?;
+    Ok(o)
 }
 
 /// `data/annotations/x.json` → `data` (COCO `file_name`s are relative to it).
@@ -147,12 +298,12 @@ fn default_images_root(coco: &Path) -> PathBuf {
 
 pub fn main_with(raw: Vec<String>) -> Result<(), String> {
     let a = Args::parse(&raw);
-    if a.has("--help")
-        || a.has("-h")
-        || a.positional.is_empty() && !raw.iter().any(|r| r == "bench")
-    {
+    if a.has("--help") || a.has("-h") {
         print!("{USAGE}");
         return Ok(());
+    }
+    if a.positional.is_empty() {
+        return open(&a);
     }
     let cmd = a.positional[0].as_str();
     let rest = Args {
@@ -160,7 +311,17 @@ pub fn main_with(raw: Vec<String>) -> Result<(), String> {
         flags: a.flags.clone(),
     };
     match cmd {
+        "help" => {
+            print!("{USAGE}");
+            Ok(())
+        }
         "open" => open(&rest),
+        "create" => cmd_create(&rest),
+        "books" => cmd_books(&rest),
+        "convert" => cmd_convert(&rest),
+        "flag" => cmd_flag(&rest),
+        "split" => cmd_split(&rest),
+        "queues" => cmd_queues(&rest),
         "import" => cmd_import(&rest),
         "import-dataset" => cmd_import_dataset(&rest),
         "import-preds" => cmd_import_preds(&rest),
@@ -172,25 +333,372 @@ pub fn main_with(raw: Vec<String>) -> Result<(), String> {
         "gen-synthetic" => cmd_gen_synthetic(&rest),
         "__crash-test" => cmd_crash_test(&rest),
         "screenshot" => cmd_screenshot(&rest),
-        _ if cmd.ends_with(".db") || Path::new(cmd).exists() => open(&a),
+        _ if cmd.ends_with(".db") || resolve_existing_path(Path::new(cmd)).is_some() => open(&a),
         _ => Err(format!("unknown command {cmd:?}\n\n{USAGE}")),
     }
 }
 
-fn open(a: &Args) -> Result<(), String> {
-    let project = project_arg(a, 0)?;
-    if !project.exists() {
-        return Err(format!(
-            "{} does not exist; create it with `import`",
-            project.display()
-        ));
+/// The project a command works on: its first argument (a `.db` or a
+/// dataset folder), else the last project opened.
+fn project_or_default(a: &Args) -> Result<PathBuf, String> {
+    if a.positional.is_empty() {
+        last_project()
+    } else {
+        let p = project_arg(a, 0)?;
+        if !p.exists() {
+            return Err(format!(
+                "{} does not exist; open its folder, or use `create` or `import`",
+                p.display()
+            ));
+        }
+        Ok(p)
     }
-    app::run(AppConfig {
-        project,
+}
+
+/// The window: a folder or project from the command line, or the last one.
+fn open(a: &Args) -> Result<(), String> {
+    let path = match a.positional.first() {
+        Some(p) => {
+            let p = PathBuf::from(p);
+            Some(
+                resolve_existing_path(&p)
+                    .ok_or_else(|| format!("{} does not exist", p.display()))?,
+            )
+        }
+        None => None,
+    };
+    shell::run(ShellConfig {
+        open: path,
         filter: a.filter()?,
         start_at: a.get("--start").map(str::to_owned),
         prediction_threshold: a.num("--pred-threshold", 0.3)?,
+        folder: folder_options(a)?,
+        grid: a.has("--grid"),
     })
+}
+
+fn cmd_create(a: &Args) -> Result<(), String> {
+    let root = a
+        .positional
+        .first()
+        .map(PathBuf::from)
+        .ok_or_else(|| format!("missing folder\n\n{USAGE}"))?;
+    let project = match a.get("--project") {
+        Some(p) => PathBuf::from(p),
+        None => import_folder::project_for(&root),
+    };
+    let kind = import_folder::detect(&root)?;
+    println!("{}: {}", root.display(), kind.describe());
+    let creating = !project.exists();
+    let mut conn = database::open(&project)?;
+    let t = Instant::now();
+    let mut last = Instant::now();
+    let mut shown = String::new();
+    let result = import_folder::sync_folder(
+        &mut conn,
+        &root,
+        &folder_options(a)?,
+        &mut |stage, done, total| {
+            if last.elapsed() >= Duration::from_secs(2) || stage != shown {
+                last = Instant::now();
+                shown = stage.to_owned();
+                match (done * 100).checked_div(total) {
+                    Some(pct) => eprintln!("  {stage}: {pct}%"),
+                    None => eprintln!("  {stage}"),
+                }
+            }
+        },
+    );
+    if result.is_err() && creating {
+        drop(conn);
+        import_folder::remove_project(&project);
+    }
+    let report = result?;
+    println!("{report}  ({:.1}s)", t.elapsed().as_secs_f64());
+    println!("project: {}", project.display());
+    crate::recent::touch(&project);
+    Ok(())
+}
+
+fn cmd_books(a: &Args) -> Result<(), String> {
+    use crate::annotation::labels::{ABANDON, class_by_name};
+    let project = project_or_default(a)?;
+    if a.has("--paper") {
+        let (tx, rx) = std::sync::mpsc::channel::<()>();
+        let wake: std::sync::Arc<dyn Fn() + Send + Sync> = std::sync::Arc::new(move || {
+            let _ = tx.send(());
+        });
+        let threads = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(4);
+        if let Some(job) = crate::dataset::tone::ToneJob::start(&project, threads, wake)? {
+            let t = Instant::now();
+            let total = job.total;
+            while !job.finished() {
+                let _ = rx.recv_timeout(Duration::from_millis(500));
+            }
+            job.wait();
+            eprintln!(
+                "paper tone measured for {} books in {:.1}s",
+                total,
+                t.elapsed().as_secs_f64()
+            );
+        }
+    }
+    let conn = database::open(&project)?;
+    let settings =
+        crate::settings::Settings::load_or_create(&crate::settings::Settings::path_for(&project)).0;
+    let t = Instant::now();
+    let mut books = database::book_stats(&conn)?;
+    let ms = t.elapsed().as_secs_f64() * 1000.0;
+    let flagged = |b: &database::BookStats| {
+        b.abandon_boxes >= settings.abandon_flag_min_boxes.max(1) as i64
+            && b.abandon_per_page() >= settings.abandon_flag_per_page
+    };
+    let per_page = a.has("--per-page");
+    let key = |b: &database::BookStats, c: usize| {
+        if per_page {
+            b.per_page(c)
+        } else {
+            b.class_boxes[c] as f64
+        }
+    };
+    match a.get("--sort") {
+        Some("abandon") => {
+            books.sort_by(|x, y| y.abandon_per_page().total_cmp(&x.abandon_per_page()))
+        }
+        Some("large") => books.sort_by(|x, y| y.large_per_page().total_cmp(&x.large_per_page())),
+        Some("todo") => books.sort_by_key(|b| std::cmp::Reverse(b.todo)),
+        Some("pictures") => books.sort_by_key(|b| std::cmp::Reverse(b.picture_todo)),
+        Some("name") => books.sort_by(|x, y| x.book_id.cmp(&y.book_id)),
+        Some("pages") => books.sort_by_key(|b| std::cmp::Reverse(b.pages)),
+        Some("paper") => books.sort_by(|x, y| {
+            let v = |b: &database::BookStats| b.tone.map_or(f64::NEG_INFINITY, |t| t.yellowness);
+            v(y).total_cmp(&v(x))
+        }),
+        Some(other) => {
+            let c = class_by_name(other).ok_or_else(|| {
+                format!(
+                    "--sort: {other:?} is not abandon, large, todo, pictures, name, pages, paper or a class name"
+                )
+            })? as usize;
+            books.sort_by(|x, y| key(y, c).total_cmp(&key(x, c)));
+        }
+        None => {}
+    }
+    if a.has("--flagged") {
+        books.retain(|b| flagged(b));
+    }
+    match a.get("--show") {
+        Some("excluded") => books.retain(|b| b.excluded),
+        Some("training") => books.retain(|b| !b.excluded),
+        Some("needs-work") => books.retain(|b| b.needs_work),
+        Some(other) => {
+            return Err(format!(
+                "--show: {other:?} is not excluded, training or needs-work"
+            ));
+        }
+        None => {}
+    }
+    let n: usize = a.num("--limit", usize::MAX)?;
+    println!(
+        "{:<40} {:>10} {:>6} {:>5} {:>6} {:>7} {:>7} {:>7} {:>7} {:>7} {:>8} {:>6}  flag",
+        "book",
+        "split",
+        "pages",
+        "done",
+        "to do",
+        "pic.pp",
+        "pic.todo",
+        "paper",
+        "figure",
+        "table",
+        "abandon",
+        "large"
+    );
+    let fmt = |b: &database::BookStats, c: usize| {
+        if per_page {
+            format!("{:.2}", b.per_page(c))
+        } else {
+            b.class_boxes[c].to_string()
+        }
+    };
+    for b in books.iter().take(n) {
+        println!(
+            "{:<40} {:>10} {:>6} {:>4}% {:>6} {:>7} {:>7} {:>7} {:>7} {:>7} {:>8} {:>6}  {}",
+            b.book_id.chars().take(40).collect::<String>(),
+            b.split,
+            b.pages,
+            (b.done * 100).checked_div(b.pages).unwrap_or(0),
+            b.todo,
+            b.picture_pages,
+            b.picture_todo,
+            b.tone
+                .map_or("-".to_owned(), |t| format!("{:.1}", t.yellowness)),
+            fmt(b, 6),
+            fmt(b, 8),
+            fmt(b, ABANDON as usize),
+            b.abandon_large,
+            [
+                if flagged(b) { "ABANDON" } else { "" },
+                if b.excluded { "EXCLUDED" } else { "" },
+                if b.needs_work { "NEEDS-WORK" } else { "" },
+            ]
+            .iter()
+            .filter(|s| !s.is_empty())
+            .copied()
+            .collect::<Vec<_>>()
+            .join(" ")
+        );
+    }
+    println!(
+        "{} books, {} flagged ({}+ abandon boxes left per page and {}+ in all); counted in {ms:.0} ms{}",
+        books.len(),
+        books.iter().filter(|b| flagged(b)).count(),
+        settings.abandon_flag_per_page,
+        settings.abandon_flag_min_boxes,
+        if per_page {
+            "; label counts per page"
+        } else {
+            ""
+        }
+    );
+    println!(
+        "paper = CIE b* of the paper colour: about 0 white or grey, 15+ yellowed (--paper measures missing books)"
+    );
+    Ok(())
+}
+
+fn cmd_split(a: &Args) -> Result<(), String> {
+    let project = project_or_default(a)?;
+    let mut conn = database::open(&project)?;
+    if let Some(book) = a.get("--book") {
+        let to = a.get("--to").ok_or("--book needs --to SPLIT")?;
+        let n = database::set_book_split(&conn, book, to)?;
+        println!("{book}: {n} pages moved to split {to:?}");
+        return Ok(());
+    }
+    if !a.has("--assign-new") {
+        return Err("split: give --book ID --to SPLIT, or --assign-new".into());
+    }
+    let mut plan = database::SplitPlan::default();
+    if let Some(f) = a.get("--from") {
+        plan.from = f.to_owned();
+    }
+    plan.dev.1 = a.num("--dev", plan.dev.1)?;
+    plan.test.1 = a.num("--test", plan.test.1)?;
+    if let Some(n) = a.get("--test-name") {
+        plan.test.0 = n.to_owned();
+    }
+    if !(0.0..=1.0).contains(&(plan.dev.1 + plan.test.1)) {
+        return Err("--dev plus --test must be between 0 and 1".into());
+    }
+    let dry = a.has("--dry-run");
+    let moved = database::assign_splits(&mut conn, &plan, dry)?;
+    let count = |s: &str| moved.iter().filter(|(_, x)| x == s).count();
+    println!(
+        "{} {} books of split {:?}: {} {}, {} {}, {} {}",
+        if dry { "would assign" } else { "assigned" },
+        moved.len(),
+        plan.from,
+        count(&plan.train),
+        plan.train,
+        count(&plan.dev.0),
+        plan.dev.0,
+        count(&plan.test.0),
+        plan.test.0
+    );
+    Ok(())
+}
+
+fn cmd_queues(a: &Args) -> Result<(), String> {
+    let project = project_or_default(a)?;
+    let conn = database::open(&project)?;
+    let f = a.filter_for(&project)?;
+    let counts = database::queue_counts(&conn, &f)?;
+    for (q, n) in Queue::ALL.iter().zip(counts) {
+        println!(
+            "{:<14} {:>8}  {} — {}",
+            q.slug(),
+            n,
+            q.title(f.large_share()),
+            q.help()
+        );
+    }
+    Ok(())
+}
+
+fn cmd_flag(a: &Args) -> Result<(), String> {
+    let project = project_or_default(a)?;
+    let conn = database::open(&project)?;
+    let book = a.get("--book").ok_or("--book ID is required")?;
+    let mut f = database::get_book_flags(&conn, book)?;
+    if a.has("--exclude") {
+        f.excluded = true;
+    }
+    if a.has("--include") {
+        f.excluded = false;
+    }
+    if a.has("--needs-work") {
+        f.needs_work = true;
+    }
+    if a.has("--done") {
+        f.needs_work = false;
+    }
+    database::set_book_flags(&conn, book, f)?;
+    println!(
+        "{book}: {} · {}",
+        if f.excluded {
+            "excluded from training"
+        } else {
+            "for training"
+        },
+        if f.needs_work {
+            "needs work"
+        } else {
+            "no work mark"
+        }
+    );
+    Ok(())
+}
+
+fn cmd_convert(a: &Args) -> Result<(), String> {
+    use crate::annotation::labels::{ABANDON, class_by_name, is_taxonomy};
+    use crate::dataset::database::Region;
+    let project = project_or_default(a)?;
+    let mut conn = database::open(&project)?;
+    if a.has("--undo-last") {
+        let (id, desc, _) = database::last_bulk_op(&conn)?.ok_or("no bulk conversion to undo")?;
+        let n = database::undo_bulk(&mut conn, id)?;
+        println!("undone: {desc} ({n} boxes restored)");
+        return Ok(());
+    }
+    let to_name = a.get("--to").ok_or("--to CLASS is required")?;
+    let to = class_by_name(to_name)
+        .filter(|c| is_taxonomy(*c))
+        .ok_or_else(|| format!("--to: {to_name:?} is not a taxonomy class"))?;
+    let region = match a.get("--region").unwrap_or("all") {
+        "all" => Region::All,
+        "top" => Region::Top,
+        "bottom" => Region::Bottom,
+        "margins" => Region::Margins,
+        "large" => Region::Large,
+        "other" => Region::Other,
+        r => {
+            return Err(format!(
+                "--region: {r:?} is not all, top, bottom, margins, large or other"
+            ));
+        }
+    };
+    let filter = a.filter_for(&project)?;
+    let r = database::convert_class(&mut conn, &filter, region, ABANDON, to)?;
+    println!(
+        "converted {} abandon boxes ({}) on {} pages to {to_name}; `convert --undo-last` reverts it",
+        r.boxes,
+        region.label(),
+        r.pages
+    );
+    Ok(())
 }
 
 fn cmd_import(a: &Args) -> Result<(), String> {
@@ -284,7 +792,7 @@ fn cmd_import_preds(a: &Args) -> Result<(), String> {
 }
 
 fn cmd_export(a: &Args) -> Result<(), String> {
-    let project = project_arg(a, 0)?;
+    let project = project_or_default(a)?;
     let conn = database::open(&project)?;
     let mut sizes: Vec<u32> = Vec::new();
     for s in a.all("--size") {
@@ -302,7 +810,7 @@ fn cmd_export(a: &Args) -> Result<(), String> {
             .map(PathBuf::from)
             .unwrap_or_else(|| project.with_file_name("exports")),
         name: a.get("--name").map(str::to_owned),
-        filter: a.filter()?,
+        filter: a.filter_for(&project)?,
         sizes,
         write_images: a.has("--images"),
         reviewed_only: a.has("--reviewed-only"),
@@ -330,7 +838,7 @@ fn cmd_export(a: &Args) -> Result<(), String> {
 }
 
 fn cmd_stats(a: &Args) -> Result<(), String> {
-    let project = project_arg(a, 0)?;
+    let project = project_or_default(a)?;
     let conn = database::open(&project)?;
     let mut st = conn
         .prepare("SELECT set_name, review_status, COUNT(*) FROM pages GROUP BY set_name, review_status ORDER BY MIN(seq)")
@@ -388,7 +896,7 @@ fn provenance(a: &Annotation) -> Option<Value> {
 }
 
 fn cmd_priority(a: &Args) -> Result<(), String> {
-    let project = project_arg(a, 0)?;
+    let project = project_or_default(a)?;
     let mut conn = database::open(&project)?;
     let model = a.get("--model");
     let keys = database::page_keys(&conn, &PageFilter::default())?;
@@ -517,11 +1025,11 @@ fn cmd_priority(a: &Args) -> Result<(), String> {
 }
 
 fn cmd_compare(a: &Args) -> Result<(), String> {
-    let project = project_arg(a, 0)?;
+    let project = project_or_default(a)?;
     let conn = database::open(&project)?;
     let model = a.get("--model").ok_or("--model NAME is required")?;
     let thr: f64 = a.num("--threshold", 0.35)?;
-    let mut filter = a.filter()?;
+    let mut filter = a.filter_for(&project)?;
     if filter.statuses.is_empty() {
         filter.statuses = vec![ReviewStatus::Reviewed];
     }
@@ -632,7 +1140,8 @@ pub fn generate_synthetic(project: &Path, pages: usize, images_dir: &Path) -> Re
             }
         }
     }
-    tx.commit().map_err(|e| e.to_string())
+    tx.commit().map_err(|e| e.to_string())?;
+    database::recount_pages(&conn, "seq >= ?1", &[&base])
 }
 
 fn cmd_gen_synthetic(a: &Args) -> Result<(), String> {
@@ -916,6 +1425,13 @@ fn cmd_screenshot(a: &Args) -> Result<(), String> {
         prediction_threshold: a.num("--pred-threshold", 0.3)?,
     })?;
     app.wait_for_image(Duration::from_secs(10));
+    if a.has("--books") {
+        app.show_books();
+    }
+    if a.has("--grid") {
+        app.show_grid();
+        app.wait_for_image(Duration::from_secs(20));
+    }
     let mut buf = WindowBuffer::new(w, h);
     app.render(&mut buf, scale);
     for step in a
@@ -925,6 +1441,31 @@ fn cmd_screenshot(a: &Args) -> Result<(), String> {
         .map(str::trim)
         .filter(|s| !s.is_empty())
     {
+        // Page N (1-6) of the six-page view: point at it, or click it.
+        let cell = step
+            .strip_prefix("hovercell:")
+            .map(|n| (n, false))
+            .or_else(|| step.strip_prefix("cell:").map(|n| (n, true)));
+        if let Some((n, click)) = cell {
+            use liminalkit_shell::MouseButton;
+            let i: usize = n
+                .parse()
+                .map_err(|_| format!("{step}: not a page number"))?;
+            let r = app
+                .grid_layout()
+                .and_then(|l| l.cells.get(i.wrapping_sub(1)).copied())
+                .ok_or_else(|| format!("{step}: the six-page view is not showing"))?;
+            app.on_cursor((r.x + r.w / 2) as f32, (r.y + r.h / 2) as f32);
+            app.render(&mut buf, scale);
+            if click {
+                app.on_mouse(MouseButton::Left, true);
+                app.on_mouse(MouseButton::Left, false);
+                app.render(&mut buf, scale);
+                app.wait_for_image(Duration::from_secs(10));
+                app.render(&mut buf, scale);
+            }
+            continue;
+        }
         if let Some(spec) = step
             .strip_prefix("drag:")
             .or_else(|| step.strip_prefix("click:"))
@@ -978,10 +1519,19 @@ fn cmd_screenshot(a: &Args) -> Result<(), String> {
             "Tab" => (KeyInput::Tab, "Tab".to_owned()),
             "Right" => (KeyInput::Right, "ArrowRight".to_owned()),
             "Left" => (KeyInput::Left, "ArrowLeft".to_owned()),
+            "Up" => (KeyInput::Up, "ArrowUp".to_owned()),
+            "Down" => (KeyInput::Down, "ArrowDown".to_owned()),
+            "Enter" => (KeyInput::Enter, "Enter".to_owned()),
+            "Home" => (KeyInput::Home, "Home".to_owned()),
+            "End" => (KeyInput::End, "End".to_owned()),
+            "PgUp" => (KeyInput::PageUp, "PageUp".to_owned()),
+            "PgDn" => (KeyInput::PageDown, "PageDown".to_owned()),
+            f if f.len() > 1 && f.starts_with('F') && f[1..].parse::<u8>().is_ok() => (
+                KeyInput::Function(f[1..].parse().unwrap_or(1)),
+                f.to_owned(),
+            ),
             "Escape" => (KeyInput::Escape, "Escape".to_owned()),
             "Delete" => (KeyInput::Delete, "Delete".to_owned()),
-            "F1" => (KeyInput::Function(1), "F1".to_owned()),
-            "F12" => (KeyInput::Function(12), "F12".to_owned()),
             "+" => (KeyInput::Character('+'), "Equal".to_owned()),
             "-" => (KeyInput::Character('-'), "Minus".to_owned()),
             d if d.len() == 1 && d.chars().all(|c| c.is_ascii_digit()) => (

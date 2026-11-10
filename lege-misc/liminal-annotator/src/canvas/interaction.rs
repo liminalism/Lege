@@ -4,10 +4,16 @@
 //! pointer-up commits exactly one undoable edit. Tentative geometry lives in
 //! the [`ToolState`] and never in the document until release.
 
+use std::time::{Duration, Instant};
+
 use liminalkit_shell::MouseButton;
 
 use crate::annotation::commands::{Annotation, Edit, PageDoc, new_annotation_id};
 use crate::annotation::geometry::{Box2, DragLimits, Handle, Point, apply_drag, apply_edge_drag};
+use crate::annotation::labels::FIGURE;
+
+/// Two clicks on a box closer together than this are a double click.
+const DOUBLE_CLICK: Duration = Duration::from_millis(500);
 
 use super::hit_test::pick;
 use super::pointer::{PointerEvent, PointerPhase};
@@ -98,6 +104,9 @@ pub struct Editor {
     pub params: Params,
     /// Last pointer position (screen).
     pub pointer: Point,
+    /// The last click that only selected a box: its id, where, and when.
+    /// A second one in time makes a figure fill the page.
+    last_click: Option<(String, Point, Instant)>,
 }
 
 impl Editor {
@@ -112,6 +121,7 @@ impl Editor {
             zoom_mode: ZoomMode::Fit,
             params,
             pointer: Point::default(),
+            last_click: None,
         }
     }
 
@@ -124,6 +134,39 @@ impl Editor {
         self.state = ToolState::Idle;
         self.selected = None;
         self.hover = None;
+        self.last_click = None;
+    }
+
+    /// A click (press and release without a drag) on box `id`. The second
+    /// click of a double click on a figure makes it the whole page: a
+    /// full-page picture the detector cut short is one gesture, one undo.
+    /// No other class reacts.
+    fn clicked(&mut self, id: &str, screen: Point, doc: &mut PageDoc) -> bool {
+        let reach = self.params.drag_threshold.max(self.params.slop);
+        let double = self.last_click.take().is_some_and(|(prev, at, when)| {
+            prev == id
+                && when.elapsed() <= DOUBLE_CLICK
+                && (screen.x - at.x).hypot(screen.y - at.y) <= reach
+        });
+        if !double {
+            self.last_click = Some((id.to_owned(), screen, Instant::now()));
+            return false;
+        }
+        let Some(before) = doc.get(id).cloned() else {
+            return false;
+        };
+        let page = Box2 {
+            x0: 0.0,
+            y0: 0.0,
+            x1: doc.width,
+            y1: doc.height,
+        };
+        if before.class_id != FIGURE || before.bbox == page {
+            return false;
+        }
+        let mut after = before.clone();
+        after.bbox = page;
+        doc.apply(Edit::Modify { before, after })
     }
 
     fn limits(&self, doc: &PageDoc, view: &ViewTransform) -> DragLimits {
@@ -325,6 +368,7 @@ impl Editor {
                     ToolState::Drawing {
                         class_id, origin, ..
                     } => {
+                        self.last_click = None;
                         // The release position is authoritative, even if no
                         // move arrived between press and release.
                         let current = view.screen_to_image(screen);
@@ -357,6 +401,7 @@ impl Editor {
                             + (screen.y - screen_start.y).powi(2))
                         .sqrt();
                         if dragging || travel >= self.params.drag_threshold {
+                            self.last_click = None;
                             let now = view.screen_to_image(screen);
                             let delta =
                                 Point::new(now.x - pointer_start.x, now.y - pointer_start.y);
@@ -372,6 +417,8 @@ impl Editor {
                                 after.bbox = finalb;
                                 out.edited = doc.apply(Edit::Modify { before, after });
                             }
+                        } else {
+                            out.edited = self.clicked(&annotation_id, screen, doc);
                         }
                         out.redraw = true;
                     }

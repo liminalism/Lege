@@ -327,6 +327,11 @@ fn render_rows_bilinear(
     }
 }
 
+/// Below this many pixels a region is drawn on the calling thread. With
+/// persistent workers a split pays from about 100k px (a 4K pan strip is
+/// 230k); spawning threads per render, it took 250k.
+const MIN_PARALLEL_PX: usize = 100_000;
+
 /// Row bands per thread. More than one lets a thread that finishes early
 /// take over part of a slower thread's share.
 const BANDS_PER_THREAD: usize = 4;
@@ -349,7 +354,7 @@ fn render_region(
     let lvl = &img.levels[p.level];
     let region = &mut raster.px[r0 * wu..r1 * wu];
     let area = (r1 - r0) * (cols.1 - cols.0);
-    let n = if area < 250_000 {
+    let n = if area < MIN_PARALLEL_PX {
         1
     } else {
         threads.clamp(1, 16)
@@ -369,12 +374,37 @@ fn render_region(
         let Some((i, chunk)) = job else { break };
         render_rows(chunk, wu, r0 + i * rows_per, cols, p, lvl, CANVAS_BG);
     };
-    std::thread::scope(|s| {
+    // Persistent workers: a fresh thread per band set costs 30-80 µs a
+    // spawn on Windows and lands on whatever core is idle (often an E-core
+    // that is still waking up), which showed as a p95 two to three times the
+    // p50. The calling thread works too.
+    pool(n).in_place_scope(|s| {
         for _ in 1..n {
-            s.spawn(work);
+            s.spawn(|_| work());
         }
         work();
     });
+}
+
+/// One render pool per thread count, made on first use and kept.
+fn pool(threads: usize) -> std::sync::Arc<rayon::ThreadPool> {
+    use std::collections::HashMap;
+    use std::sync::{Arc, Mutex, OnceLock};
+    static POOLS: OnceLock<Mutex<HashMap<usize, Arc<rayon::ThreadPool>>>> = OnceLock::new();
+    let pools = POOLS.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut map = pools.lock().unwrap_or_else(|e| e.into_inner());
+    map.entry(threads)
+        .or_insert_with(|| {
+            Arc::new(
+                rayon::ThreadPoolBuilder::new()
+                    // The caller is one of the n workers.
+                    .num_threads(threads.saturating_sub(1).max(1))
+                    .thread_name(|i| format!("annotator-raster-{i}"))
+                    .build()
+                    .expect("render thread pool"),
+            )
+        })
+        .clone()
 }
 
 /// Resample `img` under `view` into `raster` for the canvas at screen

@@ -6,7 +6,7 @@
 use serde::Serialize;
 
 use crate::annotation::commands::Annotation;
-use crate::annotation::labels::{CLASSES, Group, NUM_CLASSES, class};
+use crate::annotation::labels::{CLASSES, Group, NUM_CLASSES, class, is_taxonomy};
 use crate::dataset::database::Prediction;
 
 use super::comparison::{Det, match_boxes};
@@ -77,9 +77,11 @@ impl Accumulator {
             .filter(|a| a.is_ignore)
             .map(|a| a.bbox)
             .collect();
+        // The `abandon` holding class is not a taxonomy class: it is neither
+        // ground truth nor a prediction to score.
         let t: Vec<Det> = truth
             .iter()
-            .filter(|a| !a.is_ignore)
+            .filter(|a| !a.is_ignore && is_taxonomy(a.class_id))
             .map(|a| Det {
                 class_id: a.class_id,
                 bbox: a.bbox,
@@ -88,7 +90,7 @@ impl Accumulator {
             .collect();
         let p: Vec<Det> = preds
             .iter()
-            .filter(|p| p.score >= score_min)
+            .filter(|p| p.score >= score_min && is_taxonomy(p.class_id))
             .filter(|p| {
                 let area = p.bbox.area();
                 area <= 0.0

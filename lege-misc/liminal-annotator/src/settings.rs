@@ -8,7 +8,9 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::annotation::labels::{CLASSES, NUM_CLASSES, class_by_name};
+#[cfg(test)]
+use crate::annotation::labels::NUM_CLASSES;
+use crate::annotation::labels::{ABANDON_CLASS, CLASSES, NUM_LABELS, class_by_name, is_taxonomy};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
@@ -38,6 +40,15 @@ pub struct Settings {
     pub selection_fill_alpha: u8,
     /// Image decode worker threads.
     pub decode_threads: usize,
+    /// Book manager: flag a book when it has at least this many YOLO
+    /// `abandon` boxes left per page (a running head and a page number on
+    /// every page make about 1.5)...
+    pub abandon_flag_per_page: f64,
+    /// ...and at least this many in all.
+    pub abandon_flag_min_boxes: usize,
+    /// The "large pictures" review queue: pages with a figure box covering
+    /// at least this percentage of the page.
+    pub large_figure_percent: f64,
 }
 
 impl Default for Settings {
@@ -66,6 +77,9 @@ impl Default for Settings {
             show_tags: true,
             selection_fill_alpha: 28,
             decode_threads: 2,
+            abandon_flag_per_page: 3.0,
+            abandon_flag_min_boxes: 20,
+            large_figure_percent: 40.0,
         }
     }
 }
@@ -75,7 +89,7 @@ impl Default for Settings {
 pub struct Resolved {
     pub digit: [Option<u8>; 9],
     pub shift_digit: [Option<u8>; 9],
-    pub colors: [u32; NUM_CLASSES],
+    pub colors: [u32; NUM_LABELS],
     pub raw: Settings,
 }
 
@@ -84,6 +98,25 @@ impl Settings {
         let mut name = project.file_name().unwrap_or_default().to_os_string();
         name.push(".settings.json");
         project.with_file_name(name)
+    }
+
+    /// Load without creating anything (command-line tools): defaults when
+    /// the file is missing or malformed.
+    pub fn load(path: &Path) -> Settings {
+        std::fs::read_to_string(path)
+            .ok()
+            .and_then(|text| serde_json::from_str(&text).ok())
+            .unwrap_or_default()
+    }
+
+    /// The large-picture queue's share of the page (0..1).
+    pub fn large_figure_share(&self) -> f64 {
+        let p = self.large_figure_percent;
+        if p.is_finite() && p > 0.0 && p <= 100.0 {
+            p / 100.0
+        } else {
+            crate::dataset::database::DEFAULT_LARGE_FIGURE_SHARE
+        }
     }
 
     /// Load, or write defaults if the file does not exist. A malformed file
@@ -111,7 +144,11 @@ impl Settings {
             let mut out = [None; 9];
             for (i, n) in names.iter().take(9).enumerate() {
                 match class_by_name(n) {
-                    Some(id) => out[i] = Some(id),
+                    Some(id) if is_taxonomy(id) => out[i] = Some(id),
+                    Some(_) => warnings.push(format!(
+                        "{what} key {}: {n:?} is a holding class and cannot be drawn",
+                        i + 1
+                    )),
                     None => warnings.push(format!("{what} key {}: unknown class {n:?}", i + 1)),
                 }
             }
@@ -119,8 +156,14 @@ impl Settings {
         };
         let digit = lookup(&self.digit_keys, "digit");
         let shift_digit = lookup(&self.shift_digit_keys, "shift+digit");
-        let mut colors = [0u32; NUM_CLASSES];
-        for c in CLASSES.iter() {
+        let p = self.large_figure_percent;
+        if !(p.is_finite() && p > 0.0 && p <= 100.0) {
+            warnings.push(format!(
+                "large_figure_percent {p} is not between 0 and 100; using 40"
+            ));
+        }
+        let mut colors = [0u32; NUM_LABELS];
+        for c in CLASSES.iter().chain(std::iter::once(&ABANDON_CLASS)) {
             colors[c.id as usize] = c.color;
         }
         for (name, hex) in &self.colors {

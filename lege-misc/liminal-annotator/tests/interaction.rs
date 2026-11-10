@@ -531,3 +531,87 @@ fn panning_after_a_zoom_shifts_the_raster_and_matches_a_full_render() {
         app.perf.raster_renders
     );
 }
+
+fn click(app: &mut liminal_annotator::app::AnnotatorApp, x: f64, y: f64) {
+    let (sx, sy) = screen_of(app, x, y);
+    app.on_cursor(sx, sy);
+    app.on_mouse(MouseButton::Left, true);
+    app.on_mouse(MouseButton::Left, false);
+}
+
+#[test]
+fn double_click_makes_a_figure_the_whole_page_in_one_undo_step() {
+    let f = fixture(1);
+    let mut app = open_app(&f);
+    let mut s = Screen::new(1280, 900, 1.0);
+    s.frame(&mut app);
+    let before = boxes(&app);
+    let (w, h) = {
+        let doc = app.doc.as_ref().unwrap();
+        assert_eq!(
+            doc.annotations[3].class_id, 6,
+            "box 3 of the fixture is a figure"
+        );
+        (doc.width, doc.height)
+    };
+    click(&mut app, 400.0, 570.0); // inside box 3
+    s.frame(&mut app);
+    assert_eq!(boxes(&app), before, "one click only selects");
+    click(&mut app, 400.0, 570.0);
+    s.frame(&mut app);
+    let after = boxes(&app);
+    assert_eq!(
+        after[3],
+        Box2 {
+            x0: 0.0,
+            y0: 0.0,
+            x1: w,
+            y1: h
+        }
+    );
+    for i in (0..before.len()).filter(|i| *i != 3) {
+        assert_eq!(after[i], before[i], "box {i} is untouched");
+    }
+    assert_eq!(app.doc.as_ref().unwrap().annotations[3].class_id, 6);
+    key(
+        &mut app,
+        KeyInput::Character('z'),
+        "KeyZ",
+        Modifiers {
+            control: true,
+            ..Default::default()
+        },
+    );
+    assert_eq!(boxes(&app), before, "one undo restores the box");
+    assert!(!app.doc.as_ref().unwrap().history.can_undo());
+}
+
+#[test]
+fn double_click_leaves_other_classes_and_slow_clicks_alone() {
+    let f = fixture(1);
+    let mut app = open_app(&f);
+    let mut s = Screen::new(1280, 900, 1.0);
+    s.frame(&mut app);
+    let before = boxes(&app);
+    assert_ne!(app.doc.as_ref().unwrap().annotations[0].class_id, 6);
+    // A text box: both clicks land in one frame.
+    click(&mut app, 400.0, 150.0);
+    click(&mut app, 400.0, 150.0);
+    s.frame(&mut app);
+    assert_eq!(boxes(&app), before);
+    // The figure, but the second click comes too late.
+    click(&mut app, 400.0, 570.0);
+    s.frame(&mut app);
+    std::thread::sleep(std::time::Duration::from_millis(650));
+    click(&mut app, 400.0, 570.0);
+    s.frame(&mut app);
+    assert_eq!(boxes(&app), before);
+    // A click on the figure, then one on another box, then the figure again.
+    std::thread::sleep(std::time::Duration::from_millis(650));
+    click(&mut app, 400.0, 570.0);
+    click(&mut app, 400.0, 150.0);
+    click(&mut app, 400.0, 570.0);
+    s.frame(&mut app);
+    assert_eq!(boxes(&app), before);
+    assert!(!app.doc.as_ref().unwrap().history.can_undo());
+}

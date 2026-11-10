@@ -27,7 +27,7 @@ use super::manifest::{fnv1a_file, timestamp_compact, timestamp_iso};
 use super::resizing::stretch_image;
 use crate::annotation::commands::{Annotation, ReviewStatus};
 use crate::annotation::geometry::{Box2, coco_polygon, coco_xywh, stretch_box};
-use crate::annotation::labels::{CLASSES, class};
+use crate::annotation::labels::{CLASSES, class, is_taxonomy};
 use crate::review::comparison::{Change, diff};
 
 #[derive(Clone, Debug)]
@@ -75,6 +75,12 @@ pub struct ExportReport {
     pub images_written: usize,
     pub image_errors: Vec<String>,
     pub split_leaks: Vec<String>,
+    /// Pages left out because they still hold `abandon` boxes, which are not
+    /// a training class: convert them first.
+    pub unresolved_abandon_pages: usize,
+    /// Pages of books marked "exclude from training", and those books.
+    pub excluded_book_pages: usize,
+    pub excluded_books: Vec<String>,
 }
 
 struct ExportPage {
@@ -453,6 +459,9 @@ fn export_into(
     let mut image_id: i64 = 0;
     let mut split_counts: BTreeMap<String, (usize, usize)> = BTreeMap::new();
 
+    let excluded_books = database::excluded_books(conn)?;
+    report.excluded_books = excluded_books.iter().cloned().collect();
+    report.excluded_books.sort();
     for key in &keys {
         let page = load_page(conn, key)?;
         let d = diff(&page.annotations, &page.imported);
@@ -463,6 +472,14 @@ fn export_into(
         }
         if opts.reviewed_only && page.status != ReviewStatus::Reviewed {
             report.skipped_unreviewed += 1;
+            continue;
+        }
+        if excluded_books.contains(&page.book_id) {
+            report.excluded_book_pages += 1;
+            continue;
+        }
+        if page.annotations.iter().any(|a| !is_taxonomy(a.class_id)) {
+            report.unresolved_abandon_pages += 1;
             continue;
         }
         image_id += 1;
@@ -676,6 +693,9 @@ fn export_into(
             "dropped_boxes": report.dropped_boxes,
             "splits": split_counts.iter().map(|(k, (p, b))| (k.clone(), json!({"pages": p, "boxes": b}))).collect::<Map<String, Value>>(),
             "split_leaks": report.split_leaks,
+            "unresolved_abandon_pages": report.unresolved_abandon_pages,
+            "excluded_book_pages": report.excluded_book_pages,
+            "excluded_books": report.excluded_books,
             "conventions": {
                 "category_id": "taxonomy_id + 1",
                 "iscrowd": "1 = ignore region",

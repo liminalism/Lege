@@ -7,6 +7,19 @@
 
 pub const NUM_CLASSES: usize = 14;
 
+/// The picture class (`CLASSES[6]`).
+pub const FIGURE: u8 = 6;
+
+/// DocLayout-YOLO's `abandon`: page furniture (running heads, page numbers),
+/// footnotes, marginal notes, or noise. It is a *holding* class, outside the training taxonomy:
+/// imported boxes keep it until a reviewer converts them (one at a time, or
+/// in bulk), and the export leaves out every page that still has one.
+pub const ABANDON: u8 = 14;
+
+/// Every class id a box can carry: the taxonomy plus [`ABANDON`]. Size of
+/// per-class display tables (colours).
+pub const NUM_LABELS: usize = NUM_CLASSES + 1;
+
 /// Review grouping. Display/evaluation only; annotations keep full classes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Group {
@@ -169,12 +182,35 @@ pub const CLASSES: [ClassInfo; NUM_CLASSES] = [
     },
 ];
 
+/// The holding class; see [`ABANDON`]. Its export id is never used.
+pub const ABANDON_CLASS: ClassInfo = ClassInfo {
+    id: ABANDON,
+    name: "abandon",
+    short: "Abandon",
+    supercategory: "unresolved",
+    group: Group::Furniture,
+    pp23_export_id: 255,
+    color: 0xff2bd6,
+};
+
 pub fn class(id: u8) -> &'static ClassInfo {
+    if id == ABANDON {
+        return &ABANDON_CLASS;
+    }
     &CLASSES[(id as usize).min(NUM_CLASSES - 1)]
 }
 
+/// A taxonomy class by name, or `"abandon"`.
 pub fn class_by_name(name: &str) -> Option<u8> {
+    if name == ABANDON_CLASS.name {
+        return Some(ABANDON);
+    }
     CLASSES.iter().find(|c| c.name == name).map(|c| c.id)
+}
+
+/// Whether `id` is a training class (exportable), not the holding class.
+pub fn is_taxonomy(id: u8) -> bool {
+    (id as usize) < NUM_CLASSES
 }
 
 /// The colour ignore regions are drawn in, whatever their class.
@@ -190,5 +226,8 @@ mod tests {
             assert_eq!(c.id as usize, i);
         }
         assert_eq!(class_by_name("caption"), Some(7));
+        assert_eq!(class_by_name("abandon"), Some(ABANDON));
+        assert_eq!(class(ABANDON).name, "abandon");
+        assert!(!is_taxonomy(ABANDON) && is_taxonomy(13));
     }
 }
