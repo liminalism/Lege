@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this project is
 
-Lege is a fully-automatic PDF processor for E-Ink ebook readers. It renders PDF pages, runs YOLO layout detection to classify regions (text, image, table, noise), then re-encodes each page with region-aware compression (JBIG2 for text, JPEG2000/JPEG for images) and writes a new PDF or DJVU file. There is both a CLI (`lege`) and a GUI (`lege-gui`) binary.
+Lege is a fully-automatic PDF processor for E-Ink ebook readers. It renders PDF pages, runs layout detection (an embedded RF-DETR-S model) to classify regions (text, image, table, page furniture), then re-encodes each page with region-aware compression (JBIG2 for text, JPEG2000/JPEG for images) and writes a new PDF or DJVU file. There is both a CLI (`lege`) and a GUI (`lege-gui`) binary.
 
 ## Workspace layout
 
@@ -131,7 +131,7 @@ Both pipelines share the same stage structure:
 
 ```
 PdfPageSource (render pages at high-res + 1024×1024 inference size)
-  → inference_stage_parallel (YOLO layout detection via InferenceActor)
+  → inference_stage_parallel (layout detection via InferenceActor)
   → page processing (classify_page, region masking, binarization, encoding)
   → spawn_pdf_writer_actor (assembles output PDF/DJVU with hOCR text layer)
 ```
@@ -142,7 +142,7 @@ Key files per concern:
 |---|---|
 | Pipeline orchestration | `lege-process/pipeline/pdf_tokio_pipeline.rs`, `djvu_pipeline.rs` |
 | Config / shared types | `lege-process/pipeline/config.rs` |
-| YOLO inference actor (batching) | `lege-process/pipeline/inference.rs` |
+| Layout inference actor (batching) | `lege-process/pipeline/inference.rs` |
 | Page classification & blank detection | `lege-process/pipeline/page_analysis.rs` |
 | Region/resize policies | `lege-process/pipeline/policies.rs` |
 | Margin analysis | `lege-process/core/margin.rs` |
@@ -153,7 +153,9 @@ Key files per concern:
 
 `lege-process/core/engine.rs` is a thin `include!("engine_impl.rs")` redirect to
 `lege-process/core/engine_impl.rs` (the `LayoutEngine` wrapping
-`lege_gpu::vision::LayoutDetector`, PP-DocLayout PicoDet on wgpu).
+`lege_gpu::vision::LayoutDetector` on wgpu). The embedded model is RF-DETR-S v2
+(`lege-process/models/layout-rfdetr-s.md`), exported to the PP-DocLayout contract (23 class ids).
+Its boxes are used as detected: there is no geometric correction step.
 
 `ContentCategory` (in `lege-process/core/types.rs`) is the single source of truth for what a detection means downstream — never use raw layout class IDs outside of `types.rs`.
 
@@ -171,7 +173,9 @@ WGSL shaders are either embedded at compile time (`include_str!`) or, with the `
 encoders. Choose an encoder with the `EncodingSettings` variants `Jpeg`,
 `Jp2Lam`, `Jbig2`, and `Ccitt4`.
 
-JBIG2 has two modes (`Jbig2Mode`): `Symbol` (symbol-substitution, best for clean text) and `Generic` (bitplane, required when `ContentCategory::Abandon` is present on a page).
+JBIG2 has two modes (`Jbig2Mode`): `Symbol` (symbol-substitution, best for clean text) and `Generic` (bitplane, the default).
+
+`ContentCategory::Abandon` is page furniture (running headers, footers, page numbers): left out of margin crops and reflow, not OCR'd in best mode.
 
 ## DjVu encoding
 
