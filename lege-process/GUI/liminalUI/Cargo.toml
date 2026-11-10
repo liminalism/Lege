@@ -20,8 +20,9 @@ debug-logging = []
 dark-mode = []
 
 [dependencies]
-# liminalkit comes from its GitHub repository; Cargo.lock pins the commit
-# (`cargo update -p liminalkit-ui` moves it). To build against a local checkout
+# liminalkit comes from the main branch of its GitHub repository; Cargo.lock
+# records the commit last built with, and `cargo latest` moves it to the
+# newest one before building. To build against a local checkout
 # instead, override in an untracked `.cargo/config.toml`:
 #   [patch."https://github.com/liminalism/liminalkit"]
 #   liminalkit-ui = { path = "../liminalkit/crates/liminalkit-ui" }   # etc.

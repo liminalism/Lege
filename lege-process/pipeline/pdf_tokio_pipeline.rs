@@ -833,10 +833,8 @@ fn process_page_cpu_work(input: PageProcessingInput) -> Result<PageProcessingOut
     // False image detections over substantive text must not become raster
     // overlays. Besides covering a cleaned MRC background, they create the
     // conspicuous "half a text column in color" seam in ordinary bilevel mode.
-    // Line art (diagrams, music, schematics) is also dropped so it is
-    // binarized with the page or carried by the MRC JBIG2 mask. The
-    // variance/orientation classifier from bpg-rs keeps maps, engravings,
-    // and photographs as overlays.
+    // Every other image box is kept: what the model calls a picture is
+    // overlaid as one, drawings and maps included.
     if config.text_format() != "jpeg" {
         let all_detections = adjusted_detections.clone();
         adjusted_detections.retain(|det| {
@@ -845,7 +843,7 @@ fn process_page_cpu_work(input: PageProcessingInput) -> Result<PageProcessingOut
             }
             if !should_keep_image_overlay(det, &all_detections, classifier) {
                 crate::bbox_trace!(
-                    "PAGE {}: dropping image region (text overlap or line art) ({:.0},{:.0},{:.0},{:.0})",
+                    "PAGE {}: dropping image region (text overlap) ({:.0},{:.0},{:.0},{:.0})",
                     page_index,
                     det.bbox[0],
                     det.bbox[1],
@@ -3291,8 +3289,8 @@ fn scale_detections_to_output(
     let sx = output_width as f32 / source_width.max(1) as f32;
     let sy = output_height as f32 / source_height.max(1) as f32;
     let mut detections = inference_data.inference_result.detections.clone();
-    // Geometry only. Line-art vs photo is decided later on the output raster
-    // (see should_keep_image_overlay), after boxes are scaled.
+    // Geometry only. Whether an image box becomes an overlay is decided
+    // later (see should_keep_image_overlay), after boxes are scaled.
     for detection in &mut detections {
         detection.scale_bbox(sx, sy);
     }
@@ -4759,8 +4757,7 @@ mod phase4_ocr_baseline_tests {
         config.set_enable_ocr(false);
         let config = Arc::new(config);
         // A textured colour photo in the page's upper half (noise over a
-        // gradient: the overlay classifier drops flat or line-art crops), over
-        // a text page.
+        // gradient), over a text page.
         let source = Arc::new(RgbImage::from_fn(800, 1200, |x, y| {
             if y < 560 {
                 let h = (x.wrapping_mul(2_654_435_761) ^ y.wrapping_mul(40_503)) >> 8;

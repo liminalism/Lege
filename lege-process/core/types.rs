@@ -19,9 +19,8 @@ pub enum ContentCategory {
     Image,
     /// Tabular content.  Treated as text-like for binarization (no dithering).
     Table,
-    /// Page furniture / clutter (headers, footers, page numbers).
-    /// Treated as text-like but forces JBIG2 Generic encoding on the page
-    /// to avoid Symbol-mode corruption of noisy pixels.
+    /// Page furniture (running headers, footers, page numbers). Binarized
+    /// with the text; left out of margin crops and reflow.
     Abandon,
 }
 

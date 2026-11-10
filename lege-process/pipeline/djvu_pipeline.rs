@@ -1027,8 +1027,7 @@ fn process_djvu_cpu_intensive_work(
         );
     }
 
-    // Drop false image boxes over substantive text, and line-art boxes that
-    // should stay in the bilevel / MRC mask path (mirrors the PDF pipeline).
+    // Drop false image boxes over substantive text (mirrors the PDF pipeline).
     if config.text_format() != "jpeg" {
         let all_detections = adjusted_detections.clone();
         adjusted_detections.retain(|det| {

@@ -1,5 +1,8 @@
 [alias]
 appimage = "run --package xtask -- appimage"
+# Refresh the git dependencies in Cargo.lock, then build lege + lege-gui:
+# `cargo latest`, `cargo latest --release`.
+latest = "run --package xtask -- latest"
 fmt-all = "fmt --all"
 fmt-all-check = "fmt --all -- --check"
 

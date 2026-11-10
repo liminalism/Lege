@@ -54,6 +54,7 @@ Liminaldoc has its own Cargo workspace:
 cargo cli                 # CLI only          -> lege
 cargo gui                 # CLI + liminalUI GUI -> lege, lege-gui   (the default)
 cargo viewer              # Liminaldoc reader -> liminaldoc-reader
+cargo latest              # move git dependencies (liminalkit) in Cargo.lock to their newest commit, then build
 cargo liminaldoc          # all Liminaldoc binaries
 
 # Standard release build (CLI + liminalUI GUI, via workspace default-members)

@@ -102,7 +102,7 @@ image = { version = "0.25.10", default-features = false, features = [
     "webp",
     "rayon",
 ] }
-jpeg-encoder = { version = "=0.7.1", features = ["simd"] }
+jpeg-encoder = { version = "0.7.1", features = ["simd"] }
 # Single PNG version for the whole workspace: `lege-process/colorquant` needs
 # the palette/`ColorType::Indexed` encoder that `image` does not expose, and the
 # exprim's page export writes PNGs directly. Pinning it here stops 0.17 and 0.18

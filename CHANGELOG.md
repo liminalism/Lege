@@ -45,6 +45,9 @@
   checkout of it.
 - Direct3D 12 is no longer used on Windows; Lege runs on Vulkan, which is also what reaches the
   GPU's tensor cores.
+- Dependencies are current as of the release, and none of Lege's own (exprim, the codecs,
+  LiminalKit) is pinned to a commit. `cargo latest` moves LiminalKit to its newest commit and
+  builds.
 - `lege-titler` (in `lege-misc/pdf-titler`) fills in missing PDF titles and authors from page 1.
 - Liminal Annotator (in `lege-misc/liminal-annotator`), the tool the layout set was reviewed in.
 

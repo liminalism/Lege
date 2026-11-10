@@ -45,7 +45,8 @@ The native reader and writer build from the sibling `../liminaldoc` checkout. Th
 From this directory:
 
 ```sh
-cargo build          # lege CLI + lege-gui
+cargo build          # lege CLI + lege-gui, with the commits Cargo.lock records
+cargo latest         # the same, after moving the git dependencies to their newest commit
 cargo cli            # CLI only
 cargo gui            # CLI + liminalUI GUI
 cargo document-ocr   # batch OCR CLI

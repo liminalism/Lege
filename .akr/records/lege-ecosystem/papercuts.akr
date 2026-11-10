@@ -2992,6 +2992,17 @@ record lege-ecosystem.papercut.during-the-pinned-upstream-arithmetic-license/2 :
     created_at 2026-11-01
 }
 
+record lege-ecosystem.papercut.during-the-refreshed-processor-build-rustc/1 : papercut {
+    title "During the refreshed processor build, rustc could not finalize…"
+    state verified
+    statement """
+        During the refreshed processor build, rustc could not finalize incremental compilation directories on Windows (access denied, OS error 5); subsequent builds cannot reuse those sessions.
+        """
+    observed_at git:7808456a8f767c1069604d1766130a32a18d8200
+    author "codex"
+    created_at 2026-11-10
+}
+
 record lege-ecosystem.papercut.eagerly-creating-and-tearing-down-a-winrt/1 : papercut {
     title "Eagerly creating and tearing down a WinRT OcrEngine during backend…"
     state superseded

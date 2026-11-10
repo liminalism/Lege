@@ -29,7 +29,14 @@ cd lege
 cargo build --release
 ```
 
-The same `cargo build --release` command also builds both binaries when run from `lege-process/`. Output is in the workspace's `target/release/` directory. The GUI takes liminalkit from its GitHub repository (`github.com/liminalism/liminalkit`, pinned in `Cargo.lock`); no sibling checkout is needed.
+The same command builds both binaries when run from `lege-process/`. Output is in the workspace's `target/release/` directory.
+
+Lege's own dependencies are never pinned to a commit in the manifests:
+
+- The PDF engine and the codecs come from the sibling `../exprim` checkout and are built as that checkout stands.
+- LiminalKit (the GUI toolkit) comes from the `main` branch of `github.com/liminalism/liminalkit`; no sibling checkout is needed. `Cargo.lock` records the commit it was last built with, and a plain `cargo build` keeps using that commit.
+
+`cargo latest --release` moves the git dependencies in `Cargo.lock` to the newest commit of their branch and then builds. It leaves crates.io versions where the lockfile has them. It needs network access.
 
 The default build embeds PP-OCR, layout detection, and JPEG 2000. It does not need a system Tesseract install. The legacy Tesseract backend is opt-in (`--features tesseract-ocr`) and then needs `tesseract-ocr`, `libtesseract-dev`, and `libleptonica-dev`.
 
