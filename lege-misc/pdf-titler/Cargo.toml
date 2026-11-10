@@ -1,0 +1,26 @@
+[package]
+name = "lege-pdf-titler"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+description = "Guess each PDF's title and author from page-1 OCR and write them into its metadata"
+
+[[bin]]
+name = "lege-titler"
+path = "src/main.rs"
+
+[dependencies]
+clap = { workspace = true }
+exprim = { workspace = true }
+lege-docir = { path = "../../lege-document-ocr/crates/docir" }
+lege-document-pipeline = { path = "../../lege-document-ocr/crates/pipeline" }
+lege-pdf-write = { path = "../../lege-pdf/write" }
+tempfile = { workspace = true }
+
+[dev-dependencies]
+exprim = { workspace = true, features = ["test-support"] }
+
+[lints]
+workspace = true
