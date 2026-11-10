@@ -629,8 +629,7 @@ pub fn analyze_document_margins(
 
     // First pass: analyze each page individually
     for page_input in all_page_data {
-        let (page_margin_data, baseline_page_data) =
-            analyze_single_page_margins(page_input, config);
+        let (page_margin_data, baseline_page_data) = analyze_single_page_margins(page_input);
 
         // Prefer pages after the front matter, but keep an early-page fallback for
         // short documents or selected page ranges.
@@ -737,18 +736,8 @@ pub fn analyze_document_margins(
 }
 
 /// Analyzes margins for a single page
-fn analyze_single_page_margins(
-    page: &PageMarginInput,
-    config: &crate::pipeline::config::PipelineConfig,
-) -> (PageMarginData, PageMarginData) {
-    let mut detections = page.detections.clone();
-    crate::pipeline::page_analysis::maybe_apply_full_page_detection(
-        &mut detections,
-        page.page_width,
-        page.page_height,
-        config,
-        &crate::types::LABEL_CLASSIFIER,
-    );
+fn analyze_single_page_margins(page: &PageMarginInput) -> (PageMarginData, PageMarginData) {
+    let detections = page.detections.clone();
 
     let classification = crate::pipeline::page_analysis::classify_page(
         &detections,

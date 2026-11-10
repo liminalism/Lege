@@ -337,8 +337,7 @@ pub async fn create_and_run_epub_pipeline(
     let synthetic_outline = outline_from_page_text(&pages);
     let source_outline = if let Some(session) = source.document_session() {
         let bookmarks =
-            crate::runtime_stats::spawn_blocking(move || exprim::extract_outline(&session))
-                .await?;
+            crate::runtime_stats::spawn_blocking(move || exprim::extract_outline(&session)).await?;
         let source_to_output = (page_start..page_end)
             .enumerate()
             .map(|(output, source)| (source, output))

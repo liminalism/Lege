@@ -47,7 +47,7 @@ pub use inference::InferenceHandle;
 pub use page_analysis::{
     BLANK_PAGE_FALLBACK_THRESHOLD, PageClassification, classify_page,
     compute_pixel_bounds_for_margin, detections_bbox_area_fraction, is_full_page_image,
-    is_visually_blank_page, maybe_apply_full_page_detection, should_force_blank_page_threshold,
+    is_visually_blank_page, should_force_blank_page_threshold,
 };
 pub use pdf_tokio_pipeline::{
     PdfInferenceData,

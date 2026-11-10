@@ -22,18 +22,17 @@ use crate::pipeline::margin_pipeline::{
     perform_document_margin_analysis,
 };
 use crate::pipeline::page_analysis::{
-    BLANK_PAGE_FALLBACK_THRESHOLD, is_visually_blank_page, maybe_apply_full_page_detection,
-    should_force_blank_page_threshold,
+    BLANK_PAGE_FALLBACK_THRESHOLD, is_visually_blank_page, should_force_blank_page_threshold,
 };
 use crate::pipeline::runtime_limits::PipelineRuntimeLimits;
 use crate::pipeline::source::{PageSource, PdfPageSource, source_stage};
 use crate::progress::ProgressTracker;
 use crate::{info_log, warn_log};
 use anyhow::{Result, anyhow};
+use exprim::RenderSession;
 use futures_util::future::BoxFuture;
 use futures_util::stream::{FuturesUnordered, StreamExt};
 use image::RgbImage;
-use exprim::RenderSession;
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -637,8 +636,7 @@ pub async fn create_and_run_djvu_source_pipeline(
         crate::toc::build_outline_with_contents(candidates, &stats, total_pages, &printed_contents);
     let source_outline = if let Some(session) = document_session.clone() {
         let bookmarks =
-            crate::runtime_stats::spawn_blocking(move || exprim::extract_outline(&session))
-                .await?;
+            crate::runtime_stats::spawn_blocking(move || exprim::extract_outline(&session)).await?;
         let source_to_output = (0..total_pages)
             .map(|local| (page_index_offset + local, local))
             .collect::<std::collections::HashMap<_, _>>();
@@ -1021,13 +1019,6 @@ fn process_djvu_cpu_intensive_work(
     let classifier = &crate::types::LABEL_CLASSIFIER;
 
     if config.enable_layout_detection() {
-        maybe_apply_full_page_detection(
-            &mut adjusted_detections,
-            width as u32,
-            height as u32,
-            &config,
-            classifier,
-        );
         merge_overlapping_image_detections(
             &mut adjusted_detections,
             classifier,

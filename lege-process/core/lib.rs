@@ -78,7 +78,6 @@ pub mod glyphless_font; // Minimal glyphless TTF for the invisible OCR text laye
 pub mod hocr; // hOCR parsing + line grouping (moved out of accumulator)
 pub mod icon;
 #[cfg(feature = "layout-detection")]
-pub mod layout_correct;
 #[cfg(feature = "layout-detection")]
 pub mod layout_visualize;
 #[cfg(not(feature = "layout-detection"))]

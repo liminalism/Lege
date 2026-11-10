@@ -548,9 +548,7 @@ pub fn run_layout_visualize_mode(
             &model_path
         }
     );
-    // Use LayoutEngine so visualize applies the same NMS + underdetection
-    // correction as the production pipeline (vertical bands from DocLayout,
-    // horizontal extent from OCR-det / ink).
+    // Use LayoutEngine so visualize shows the boxes the pipeline works with.
     let mut detector = LayoutEngine::new(
         &model_path,
         LayoutEngineConfig::new(

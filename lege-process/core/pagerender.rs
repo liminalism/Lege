@@ -49,10 +49,7 @@ impl PdfRenderer {
     /// Wrap a session that is already open. The processing pipeline opens the
     /// document once to count pages and hands that session on, so the file is
     /// parsed (xref walk, page tree) a single time per job.
-    pub fn from_session(
-        document: Arc<exprim::RenderSession>,
-        raster_config: RasterConfig,
-    ) -> Self {
+    pub fn from_session(document: Arc<exprim::RenderSession>, raster_config: RasterConfig) -> Self {
         Self {
             document,
             raster_config,

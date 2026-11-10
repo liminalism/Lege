@@ -511,9 +511,6 @@ pub struct PipelineConfig {
     pub(crate) inference_size: u32,
     // Keep original image quality for detected image regions
     pub(crate) keep_original_images: bool,
-    /// Expand near–full-page figure boxes to the full raster (fixes layout under-segmentation).
-    /// Overlap-merge skips full-page vs small inset pairs to avoid collapsing distinct figures.
-    pub(crate) expand_full_bleed_figure_bboxes: bool,
     // DjVu IW44 quality (0-100 scale, maps to slices)
     pub(crate) djvu_iw44_quality: u8,
     /// Use the slow line-segmentation OCR pipeline instead of the fast region/tile path.
@@ -622,7 +619,6 @@ impl PipelineConfig {
             // while remaining substantially cheaper than 1024 inference.
             inference_size: 800,
             keep_original_images: true,
-            expand_full_bleed_figure_bboxes: true,
             djvu_iw44_quality: 75, // Default to good quality
             slow_ocr: false,
             page_mode: PageMode::Binarized,
@@ -939,9 +935,6 @@ impl PipelineConfig {
     pub fn keep_original_images(&self) -> bool {
         self.keep_original_images
     }
-    pub fn expand_full_bleed_figure_bboxes(&self) -> bool {
-        self.expand_full_bleed_figure_bboxes
-    }
     pub fn djvu_iw44_quality(&self) -> u8 {
         self.djvu_iw44_quality
     }
@@ -1175,9 +1168,6 @@ impl PipelineConfig {
     }
     pub fn set_keep_original_images(&mut self, keep: bool) {
         self.keep_original_images = keep;
-    }
-    pub fn set_expand_full_bleed_figure_bboxes(&mut self, enable: bool) {
-        self.expand_full_bleed_figure_bboxes = enable;
     }
     pub fn set_heavy_sauvola_concurrency(&mut self, concurrency: usize) -> Result<()> {
         if concurrency == 0 {

@@ -95,6 +95,28 @@ pub fn region_is_line_art(rgb: &[u8], width: usize, height: usize, bbox: [f32; 4
     classify_image_region(rgb, width, height, bbox).is_line_art
 }
 
+/// Treat layout image boxes that are line art as text, so they are binarized
+/// with the page instead of being overlaid as photographs. The model's class
+/// id and name are kept (visualize and traces still say "image"); only the
+/// category changes. Needs the RGB page so chroma can veto maps and colour
+/// plates.
+pub fn demote_line_art_images(
+    detections: &mut [crate::engine::Detection],
+    image: &image::RgbImage,
+) {
+    let rgb = image.as_raw();
+    let width = image.width() as usize;
+    let height = image.height() as usize;
+    for det in detections.iter_mut() {
+        if !crate::types::LABEL_CLASSIFIER.is_image_label(det) {
+            continue;
+        }
+        if region_is_line_art(rgb, width, height, det.bbox) {
+            det.category = crate::types::ContentCategory::Text;
+        }
+    }
+}
+
 /// Classify a crop and return the shares used by the keep/skip rule.
 pub fn classify_image_region(
     rgb: &[u8],

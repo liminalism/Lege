@@ -109,14 +109,7 @@ impl LayoutEngine {
     pub fn detect_single_blocking(&mut self, image: &RgbImage) -> Result<Vec<Detection>> {
         let detections = self.detector.detect_rgb(image)?;
         let mut detections = self.finalize_detections(detections, image.width(), image.height());
-        if crate::layout_correct::should_redetect_images(&detections, image) {
-            let inverted = crate::layout_correct::invert_rgb(image);
-            if let Ok(extra) = self.detector.detect_rgb(&inverted) {
-                let extra = self.finalize_detections(extra, image.width(), image.height());
-                crate::layout_correct::merge_image_redetects(&mut detections, &extra, image);
-            }
-        }
-        crate::layout_correct::correct_layout_detections(&mut detections, image);
+        crate::content_class::demote_line_art_images(&mut detections, image);
         Ok(detections)
     }
 

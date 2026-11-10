@@ -15,8 +15,7 @@ use crate::pipeline::margin_pipeline::{
     perform_document_margin_analysis,
 };
 use crate::pipeline::page_analysis::{
-    compute_pixel_bounds_for_margin, is_visually_blank_page, maybe_apply_full_page_detection,
-    should_force_blank_page_threshold,
+    compute_pixel_bounds_for_margin, is_visually_blank_page, should_force_blank_page_threshold,
 };
 use crate::pipeline::policies::{
     LayoutRegions, MarginCorrection, MarginStandardizeAndCenter, NoLayoutFullPage, RegionPolicy,
@@ -308,15 +307,6 @@ async fn process_single_page(
         crate::toc::PageTocData::default()
     };
 
-    // If any region on this page is Abandon and we're using JBIG2 Symbol mode,
-    // force the base layer to Generic to avoid Symbol-mode corruption of noisy pixels.
-    let force_jbig2_generic = matches!(
-        config.text_format(),
-        "jbig2" | crate::pipeline::config::TRUETYPING
-    ) && adjusted_detections
-        .iter()
-        .any(|d| d.category.force_generic_jbig2());
-
     // Encode base layer.
     // - "jpeg" mode: encode the full RGB image (binarized held only the OCR luma above).
     // - Deferred path: binarize+encode are fused inside one spawn_blocking so GPU mapped
@@ -333,9 +323,6 @@ async fn process_single_page(
 
     // The prepared variant owns exactly the buffers needed by its encoder.
     // No configuration flag is needed to reinterpret an optional payload.
-    let mask_force_generic = adjusted_detections
-        .iter()
-        .any(|d| d.category.force_generic_jbig2());
     let (base_layer, ink_layer) = match base {
         PreparedBase::Cover {
             encoded: (data, format, pixel_width, pixel_height),
@@ -358,18 +345,12 @@ async fn process_single_page(
             )
         }
         PreparedBase::GrayMrc { gray, ink } => {
-            let (background, ink) = encode_mrc_base_layer(
-                gray,
-                ink,
-                width,
-                height,
-                &config,
-                page_index,
-                mask_force_generic,
-                glyph_session,
-            )
-            .await
-            .map_err(|error| anyhow!("MRC base layer failed on page {page_index}: {error}"))?;
+            let (background, ink) =
+                encode_mrc_base_layer(gray, ink, width, height, &config, page_index, glyph_session)
+                    .await
+                    .map_err(|error| {
+                        anyhow!("MRC base layer failed on page {page_index}: {error}")
+                    })?;
             (background, Some(ink))
         }
         PreparedBase::PreservedMrc { rgb, ink } => {
@@ -398,23 +379,13 @@ async fn process_single_page(
                 height,
                 &config,
                 page_index,
-                force_jbig2_generic,
                 glyph_session,
             )
             .await?,
             None,
         ),
         PreparedBase::Bilevel(ink) => (
-            encode_base_layer(
-                ink,
-                width,
-                height,
-                &config,
-                page_index,
-                force_jbig2_generic,
-                glyph_session,
-            )
-            .await?,
+            encode_base_layer(ink, width, height, &config, page_index, glyph_session).await?,
             None,
         ),
     };
@@ -815,17 +786,10 @@ fn process_page_cpu_work(input: PageProcessingInput) -> Result<PageProcessingOut
     let height = adjusted_image.height() as usize;
     checkpoint(&cancellation, "after output resize")?;
 
-    // Use raw post-NMS YOLO bboxes (no full-page expansion).
-    // We still merge overlaps to prevent double-encodes.
+    // The model's boxes are used as they are; overlapping image boxes are
+    // merged so no region is encoded twice.
     if config.enable_layout_detection() {
         let classifier = &crate::types::LABEL_CLASSIFIER;
-        maybe_apply_full_page_detection(
-            &mut adjusted_detections,
-            width as u32,
-            height as u32,
-            &config,
-            classifier,
-        );
         merge_overlapping_image_detections(
             &mut adjusted_detections,
             classifier,
@@ -833,11 +797,10 @@ fn process_page_cpu_work(input: PageProcessingInput) -> Result<PageProcessingOut
             height as u32,
         );
         crate::bbox_trace!(
-            "PAGE {} [layout] page={}x{} expand_full_bleed={} keep_original={} premask_figures={} image_labels={}",
+            "PAGE {} [layout] page={}x{} keep_original={} premask_figures={} image_labels={}",
             page_index,
             width,
             height,
-            config.expand_full_bleed_figure_bboxes(),
             config.keep_original_images(),
             config.enable_layout_detection()
                 && config.text_format() != "jpeg"
@@ -1852,10 +1815,7 @@ fn bilevel_source_height(
 /// [`exprim::CompiledDocumentPage::bilevel_raster_height`]). Such a
 /// page is original text: truetyping leaves it as JBIG2 instead of tracing
 /// it, and a source mask passes through untouched.
-fn page_ink_is_bilevel(
-    session: Option<&Arc<exprim::RenderSession>>,
-    page_index: usize,
-) -> bool {
+fn page_ink_is_bilevel(session: Option<&Arc<exprim::RenderSession>>, page_index: usize) -> bool {
     session
         .and_then(|session| session.compile(page_index as u32).ok())
         .is_some_and(|page| page.bilevel_raster_height().is_some())
@@ -1933,12 +1893,7 @@ async fn extract_pdf_text(
     let source_height = text_transform.source_height;
     let renderer_words =
         crate::runtime_stats::spawn_blocking_stage(crate::runtime_stats::Stage::Ocr, move || {
-            exprim::positioned_words(
-                &session,
-                page_index as u32,
-                source_width,
-                source_height,
-            )
+            exprim::positioned_words(&session, page_index as u32, source_width, source_height)
         })
         .await
         .map_err(|error| anyhow!("Renderer text task panicked: {error}"))?;
@@ -2086,7 +2041,6 @@ async fn encode_mrc_base_layer(
     height: usize,
     config: &Arc<PipelineConfig>,
     page_index: usize,
-    force_generic: bool,
     glyph_session: Option<Arc<GlyphFontSession>>,
 ) -> Result<(
     crate::accumulator::ContentType,
@@ -2096,9 +2050,6 @@ async fn encode_mrc_base_layer(
     let subsample_override = config.mrc_bg_subsample_override();
     let adaptive_mask = config.mrc_adaptive_mask();
     // See the doc comment: Generic is the compatible ImageMask representation.
-    // `force_generic` is kept in the signature so the Abandon-region rule stays
-    // wired for the day symbol becomes usable here.
-    let _ = force_generic;
     // Glyph-font output keeps the JP2 background and draws the ink layer as
     // text instead of a JBIG2 stencil. A truetyping page without a session
     // is one whose ink was already one bit, and it keeps the stencil.
@@ -2383,14 +2334,12 @@ async fn encode_preserved_mrc_base_layer(
 
 /// Encode base layer (binarized image) using the full encoding pipeline
 /// Supports JBIG2, CCITT4, and JPEG formats with proper settings.
-/// `force_jbig2_generic` overrides Symbol/SymUnify → Generic when abandon regions are present.
 async fn encode_base_layer(
     binarized: Vec<u8>,
     width: usize,
     height: usize,
     config: &PipelineConfig,
     page_index: usize,
-    force_jbig2_generic: bool,
     glyph_session: Option<Arc<GlyphFontSession>>,
 ) -> Result<crate::accumulator::ContentType> {
     use crate::accumulator::ContentType;
@@ -2412,11 +2361,7 @@ async fn encode_base_layer(
     };
 
     // Determine encoding settings
-    let jbig2_mode = if force_jbig2_generic {
-        crate::encoding::Jbig2Mode::Generic
-    } else {
-        config.jbig2_mode()
-    };
+    let jbig2_mode = config.jbig2_mode();
     let (encoding_settings, base_format) = match text_format {
         "jbig2" => (
             EncodingSettings::Jbig2(Jbig2Settings {
@@ -2646,7 +2591,6 @@ async fn encode_base_layer_fused(
     height: usize,
     config: &PipelineConfig,
     page_index: usize,
-    force_jbig2_generic: bool,
     glyph_session: Option<Arc<GlyphFontSession>>,
 ) -> Result<crate::accumulator::ContentType> {
     use crate::accumulator::ContentType;
@@ -2694,11 +2638,7 @@ async fn encode_base_layer_fused(
         });
     }
 
-    let jbig2_mode = if force_jbig2_generic {
-        crate::encoding::Jbig2Mode::Generic
-    } else {
-        config.jbig2_mode()
-    };
+    let jbig2_mode = config.jbig2_mode();
     let (encoding_settings, base_format) = match config.text_format() {
         "jbig2" => (
             EncodingSettings::Jbig2(Jbig2Settings {
@@ -3788,12 +3728,6 @@ async fn process_planned_pdf_products(
         page_index + 1,
         region_count
     );
-    let force_jbig2_generic = matches!(
-        config.text_format(),
-        "jbig2" | crate::pipeline::config::TRUETYPING
-    ) && detections
-        .iter()
-        .any(|detection| detection.category.force_generic_jbig2());
     if let Some(mask) = preserved_mask {
         let coverage = working_coverage.expect("preserved mask has working coverage");
         let (background, foreground) = encode_preserved_mrc_base_layer(
@@ -3836,7 +3770,6 @@ async fn process_planned_pdf_products(
             height as usize,
             &config,
             page_index,
-            force_jbig2_generic,
             glyph_session,
         )
         .await?;

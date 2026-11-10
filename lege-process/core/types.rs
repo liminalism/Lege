@@ -35,12 +35,6 @@ impl ContentCategory {
     pub fn is_text_like(&self) -> bool {
         !self.is_image()
     }
-
-    /// Should the presence of this category on a page force
-    /// JBIG2 Generic encoding for the base layer?
-    pub fn force_generic_jbig2(&self) -> bool {
-        matches!(self, Self::Abandon)
-    }
 }
 
 /// Legacy alias kept for any remaining references.

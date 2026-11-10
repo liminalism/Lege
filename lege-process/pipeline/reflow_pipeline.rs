@@ -1164,8 +1164,7 @@ pub(crate) async fn run_raster_reflow_djvu_pipeline(
         crate::toc::build_outline_with_contents(candidates, &stats, total_out_pages, &contents);
     let source_outline = if let Some(session) = source.document_session() {
         let bookmarks =
-            crate::runtime_stats::spawn_blocking(move || exprim::extract_outline(&session))
-                .await?;
+            crate::runtime_stats::spawn_blocking(move || exprim::extract_outline(&session)).await?;
         let mut source_to_output = std::collections::HashMap::new();
         for placement in &doc.source_map.placements {
             source_to_output
