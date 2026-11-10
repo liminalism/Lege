@@ -32,9 +32,10 @@
 #       RUSTUP_TOOLCHAIN=1.97.0 bash -lc "cd /workspace && lege-process/scripts/build-macos-app-silicon.sh"'
 #
 # Inputs / env:
-#   SAUVOLA_ONNX  path to sauvola.onnx      (default:
-#                 lege-process/packaging/macos/sauvola.onnx; required — the
-#                 --binarization heavy mode loads it at runtime)
+#   SAUVOLA_ONNX  optional path to sauvola.onnx. Not bundled by default: heavy
+#                 binarization runs the embedded tileable binarizer. When set,
+#                 the file is copied into Resources and becomes the CPU model
+#                 of --binarization heavy.
 #   OUT_DIR       output directory (defaults to <workspace>/target/macos-silicon
 #                 or <workspace>/target/macos-intel according to architecture)
 #   CODESIGN_ID   codesign identity — macOS only (default: "-" = ad-hoc)
@@ -49,15 +50,14 @@
 #   * The liminalUI GUI (binary lege-gui) drives the bundled `lege` CLI as
 #     a subprocess; the CLI is where OCR, layout detection and binarization run.
 #     The CLI is built with the pure-Rust PP-OCR backend (paddle-ocr) so OCR
-#     works on macOS without any Tesseract native dependency. sauvola.onnx IS
-#     bundled in Resources because "heavy" binarization loads it at runtime.
-#     PP-DocLayout-M is embedded by layout-detection and is NOT copied into the
-#     application bundle as a separate model file.
+#     works on macOS without any Tesseract native dependency. The layout model
+#     and the heavy binarizer are embedded in the executable; no model file is
+#     copied into the application bundle unless SAUVOLA_ONNX is set.
 #   * --cli skips the lege-gui GUI entirely (the GUI is where untestable-from-Linux
 #     macOS edge cases tend to live) and produces the same "Lege.app" structure
 #     with the CLI as its main executable: launching the app from Finder opens
 #     the `lege` CLI in a Terminal window. Everything else is bundled the same
-#     way — sauvola.onnx, docs and icon.
+#     way — docs and icon.
 #   * DjVu encoding is linked into the AGPL application; no helper executable
 #     is built or bundled.
 #   * Gatekeeper: an ad-hoc signature seals the bundle but does not establish a
@@ -158,7 +158,7 @@ case "$TARGET" in
 esac
 
 OUT_DIR="${OUT_DIR:-$DEFAULT_OUT_DIR}"
-SAUVOLA_ONNX="${SAUVOLA_ONNX:-$PROCESS_DIR/packaging/macos/sauvola.onnx}"
+SAUVOLA_ONNX="${SAUVOLA_ONNX:-}"
 CODESIGN_ID="${CODESIGN_ID:--}"
 SKIP_BUILD="${SKIP_BUILD:-0}"
 SKIP_CLI_BUILD="${SKIP_CLI_BUILD:-0}"
@@ -265,9 +265,8 @@ if [[ "$(uname -s)" != "Darwin" \
   exit 0
 fi
 
-if [[ -z "$SAUVOLA_ONNX" || ! -f "$SAUVOLA_ONNX" ]]; then
-  echo "Set SAUVOLA_ONNX to the sauvola.onnx model (or place it at lege-process/packaging/macos/sauvola.onnx)." >&2
-  echo "The --binarization heavy mode loads it at runtime from Contents/Resources." >&2
+if [[ -n "$SAUVOLA_ONNX" && ! -f "$SAUVOLA_ONNX" ]]; then
+  echo "SAUVOLA_ONNX is set but is not a file: $SAUVOLA_ONNX" >&2
   exit 1
 fi
 
@@ -387,7 +386,9 @@ install -m644 "$MISC_DIR/docs/documentation.html" \
   "$RES_DIR/docs/documentation.html"
 install -m644 "$MISC_DIR/docs/licenses.html" "$RES_DIR/docs/licenses.html"
 ln -s ../Resources/docs "$MACOS_DIR/docs"
-install -m644 "$SAUVOLA_ONNX" "$RES_DIR/sauvola.onnx"
+if [[ -n "$SAUVOLA_ONNX" ]]; then
+  install -m644 "$SAUVOLA_ONNX" "$RES_DIR/sauvola.onnx"
+fi
 
 # Icon: on macOS generate an icns from lege-misc/assets/icon.png; elsewhere
 # copy the pre-made one from lege-process/packaging/macos/lege.icns.

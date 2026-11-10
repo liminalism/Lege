@@ -5,7 +5,7 @@ build {
     tool "akr 0.6.5"
     grammar "0.1"
     vocabulary "0.2"
-    source_graph "sha256:dfbb08297d86c8c3c512f2fa7075ed234a6f673b180ec46bda2967c54f7d83ac"
+    source_graph "sha256:05105447b7c849b561066e7abfe3b92c7c46aa851efa8782273baba519728806"
 }
 
 source ".akr/project.akr" {
@@ -59,8 +59,8 @@ source ".akr/records/lege-ecosystem/assessments.akr" {
 }
 
 source ".akr/records/lege-ecosystem/decisions.akr" {
-    hash "sha256:4bda93a378646a36e35405ce308ad97d7222368acaeb094ac9ab85e577f51436"
-    records 25
+    hash "sha256:d88d94b30f6725e509824727aa9bb79196a40c9b535aa8743f13239808e3ec47"
+    records 26
 }
 
 source ".akr/records/lege-ecosystem/evidence.akr" {
@@ -79,8 +79,8 @@ source ".akr/records/lege-ecosystem/observations.akr" {
 }
 
 source ".akr/records/lege-ecosystem/papercuts.akr" {
-    hash "sha256:76fb48329238b0d7db1caac8d4a516c61991047cd1365856c2061ae52ecccc0f"
-    records 338
+    hash "sha256:843ed016ca9d98768043c2bce52f557fb21eeeb66a792974e7249cb6067b34b6"
+    records 339
 }
 
 source ".akr/records/lege-ecosystem/policies.akr" {
@@ -167,6 +167,12 @@ resolution @lege-ecosystem.decision.renderer-extracted-as-exprim/1 {
     slot supported_by
     to @lege-ecosystem.observation.renderer-crates-io-readiness-20261109/1
     hash "sha256:0809ecdb4576c2cb73ea7b6c2fd8b91f11556de6a8e026b9651464b7d887b5e8"
+}
+
+resolution @lege-ecosystem.decision.sauvola-model-out-of-default-build/1 {
+    slot supported_by
+    to @lege-ecosystem.evidence.tileable-heavy-binarizer-20261107/1
+    hash "sha256:f6dea29330e1ee6bc153ac648bade0ecf73acdc83c80c1229399b1de18194fd2"
 }
 
 resolution @lege-ecosystem.decision.sideways-pages-are-turned-upright-with-rotate/1 {
@@ -3595,6 +3601,11 @@ seal @lege-ecosystem.papercut.during-the-pinned-upstream-arithmetic-license/1 {
 seal @lege-ecosystem.papercut.during-the-pinned-upstream-arithmetic-license/2 {
     state verified
     hash "sha256:859b808789620dac65c65324b2412567c12b75fd1047ee5ea446c467ed5794b6"
+}
+
+seal @lege-ecosystem.papercut.during-the-refreshed-processor-build-rustc/1 {
+    state verified
+    hash "sha256:5a07389af79466985ca86f8ff52d19b063410905e602ac741f09a0218a108165"
 }
 
 seal @lege-ecosystem.papercut.eagerly-creating-and-tearing-down-a-winrt/1 {

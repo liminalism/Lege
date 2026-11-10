@@ -168,7 +168,7 @@ Lege can run GPU-accelerated layout detection to segment a page into regions and
 
 * **Text-like regions** are typically converted to **1-bit** (bi-level) using adaptive binarization logic in the encoding layer.
 * **Image-like regions** can be preserved/encoded separately and overlaid onto the output (so photos/diagrams don't get crushed into 1-bit).
-* **Heavy neural binarization** (optional): the Sauvola ONNX model runs on CPU with global instance-normalization statistics, giving high quality results on degraded or difficult pages without GPU tiling artifacts.
+* **Heavy neural binarization** (optional): a small tileable network, distilled from the Sauvola model and DIBCO, for degraded or difficult pages. It runs on the GPU, and on the CPU when the GPU is off.
 
 ## OCR and text layers
 

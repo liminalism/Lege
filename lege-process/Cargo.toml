@@ -132,6 +132,11 @@ android = [
 debug-logging = ["lege-gpu/debug-logging", "lege-gui-liminalui?/debug-logging"]
 jp2-lam = ["dep:jp2lam"]
 layout-detection = ["lege-gpu/layout-detection"]
+# Embed the DIBCO Sauvola model as the CPU fallback of heavy binarization.
+# The default build falls back to the tileable binarizer on the CPU instead;
+# the two give the same kind of mask, and the tileable one is the model the
+# GPU path runs anyway. A `sauvola.onnx` runtime asset works without this.
+sauvola-model = []
 # Embed PP-DocLayout-M instead of the default RF-DETR-S book layout model
 # (comparison builds only; not in any default feature set).
 doclayout-m = ["layout-detection"]

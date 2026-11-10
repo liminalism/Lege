@@ -39,18 +39,21 @@ pub static EMBEDDED_LAYOUT_MODEL: &[u8] = include_bytes!("../models/layout-rfdet
 #[cfg(all(feature = "layout-detection", feature = "doclayout-m"))]
 pub static EMBEDDED_LAYOUT_MODEL: &[u8] = include_bytes!("../models/doclayout.onnx");
 
-/// Heavy-binarization Sauvola model embedded in every full Lege executable.
-/// A `sauvola.prepared.onnx` or `sauvola.onnx` runtime asset still overrides
-/// this payload for development and model rollouts.
+/// The DIBCO Sauvola model, the heavy binarizer before the tileable one.
+/// Embedded only with the `sauvola-model` feature, as the CPU fallback of
+/// heavy binarization; a `sauvola.prepared.onnx` or `sauvola.onnx` runtime
+/// asset is used for that in any build.
+#[cfg(feature = "sauvola-model")]
 pub static EMBEDDED_SAUVOLA_MODEL: &[u8] = include_bytes!("../models/sauvola.onnx");
 
 /// Tileable heavy binarizer (TileNet v1, 409k parameters), distilled from the
-/// Sauvola model above plus DIBCO 2009-2016 on Colab (2026-11-07). Same I/O
+/// Sauvola model plus DIBCO 2009-2016 on Colab (2026-11-07). Same I/O
 /// contract as `sauvola.onnx` (`img01_inp` NHWC grey/255 in, >0.5 = paper out),
 /// but fully convolutional with no global statistics, so it runs on the wgpu
-/// executor. Spatial dims must be a multiple of 8. A `binarizer-tilenet.onnx`
-/// runtime asset overrides it; `LEGE_HEAVY_BINARIZER=sauvolanet` restores the
-/// Sauvola model.
+/// executor, and on the CPU executor when the GPU is off or fails. Spatial
+/// dims must be a multiple of 8. A `binarizer-tilenet.onnx` runtime asset
+/// overrides it; `LEGE_HEAVY_BINARIZER=sauvolanet` keeps heavy binarization
+/// off the GPU.
 pub static EMBEDDED_TILENET_BINARIZER: &[u8] = include_bytes!("../models/binarizer-tilenet.onnx");
 
 pub mod accumulator;

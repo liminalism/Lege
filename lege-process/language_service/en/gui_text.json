@@ -36,7 +36,7 @@
       "image_output_original": "Keep image regions original.",
       "image_output_dithered": "Dither image regions to 1 bit.",
       "layout_detection": "GPU accelerated layout detection also preserves image areas from binarization.",
-      "heavy_model": "Heavy Sauvola AI model (ONNX) for degraded pages. benefits from layout detection.",
+      "heavy_model": "Heavy AI binarization model for degraded pages. Benefits from layout detection.",
       "inverted_colors": "For digitally created documents with dark background and light text. Will convert to white background, black text",
       "jpeg_compatibility": "Maximum-compatibility encoders: JPEG for image regions, CCITT4 for binarized text (instead of JPEG2000 and JBIG2). Binarized mode only.",
       "ocr_text_layer": "runs OCR to generate search overlay, TOC, and metadata",

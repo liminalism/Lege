@@ -120,6 +120,7 @@ cargo test --features debug-logging -- --nocapture
 | `jp2-lam` (default) | Enables JPEG2000 encoding via the `jp2lam` library |
 | `profiling` | Inherits `debug-logging`; use with `--profile profiling` for flamegraph-compatible builds |
 | `debug-layers` | Propagated to `lege-gpu` for wgpu validation layer diagnostics |
+| `sauvola-model` | Embeds the Sauvola model as the CPU fallback of heavy binarization (default: the tileable binarizer on the CPU) |
 
 ## Architecture: PDF processing pipeline
 
@@ -197,8 +198,11 @@ no manifest/page staging files and no runtime helper discovery.
 ONNX models are found at runtime via `runtime_asset_path` /
 `runtime_asset_path_if_exists` in `lege-process/pipeline/config.rs`. Search order: exe
 directory → `models/` subdirectory → `LEGE_DATA_DIR` / `LEGE_ASSET_DIR` env
-vars → `/usr/share/lege/models` (Linux). Models required:
-`yolo-layout.onnx`, `sauvola.onnx`.
+vars → `/usr/share/lege/models` (Linux). No model file is required: the
+layout model and the tileable binarizer (`binarizer-tilenet.onnx`) are embedded;
+a file of the same name found there overrides the embedded one. The Sauvola
+model is embedded only with the `sauvola-model` feature; a `sauvola.onnx`
+runtime asset becomes the CPU model of heavy binarization in any build.
 
 ## Platform notes
 

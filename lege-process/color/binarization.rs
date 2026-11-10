@@ -16,16 +16,11 @@ thread_local! {
     static HEAVY_SAUVOLA_RGB_ARENA: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
 }
 
-/// Executes the sauvola model on the CPU through lege-vision. The model uses
-/// global instance normalization, so it must see the whole region at once —
-/// tiling would normalize each tile independently and break consistency across
-/// the page. CPU (whole-image, RAM-bounded, no VRAM ceiling) matches the
-/// original onnxruntime behavior; the model is sequential/memory-bound so it
-/// gains nothing from the GPU. Uses the dynamic-resolution prepared model
-/// (sauvola.prepared.onnx) at the region's native resolution, no resize.
+/// Heavy (neural) binarization. The tileable binarizer runs on the GPU; when
+/// the GPU is off, disabled or fails, a CPU model takes the page.
 /// Output convention: 255 = foreground (text), 0 = background (paper).
 pub struct HeavySauvolaProcessor {
-    processor: lege_gpu::vision::SauvolaCpuProcessor,
+    cpu: CpuBinarizer,
     /// Tileable student binarizer on the wgpu executor; `None` when disabled by
     /// `LEGE_HEAVY_BINARIZER=sauvolanet` or when it failed to load.
     student: Option<lege_gpu::vision::SauvolaProcessor>,
@@ -33,9 +28,79 @@ pub struct HeavySauvolaProcessor {
     student_failed: std::sync::atomic::AtomicBool,
 }
 
-/// Spatial multiple the student's input is padded to: its stride is 8, and a
-/// coarser multiple lets nearby page sizes share one compiled wgpu graph.
+/// The CPU model behind the GPU student.
+enum CpuBinarizer {
+    /// The DIBCO Sauvola model, from a `sauvola.onnx` runtime asset or the
+    /// `sauvola-model` feature. It uses global instance normalization, so it
+    /// must see the whole region at once and unpadded: tiling or padding
+    /// would shift its statistics.
+    Sauvola(lege_gpu::vision::SauvolaCpuProcessor),
+    /// The tileable binarizer on the CPU executor: the default. No global
+    /// statistics, so the region is padded to the model's stride and the
+    /// mask cropped back.
+    Tileable(lege_gpu::vision::SauvolaCpuProcessor),
+}
+
+impl CpuBinarizer {
+    fn binarize(&self, img: &RgbImage) -> Result<GrayImage> {
+        match self {
+            CpuBinarizer::Sauvola(model) => Ok(model.binarize_rgb(img)?),
+            CpuBinarizer::Tileable(model) => {
+                let (width, height) = img.dimensions();
+                let pw = width.div_ceil(TILEABLE_STRIDE) * TILEABLE_STRIDE;
+                let ph = height.div_ceil(TILEABLE_STRIDE) * TILEABLE_STRIDE;
+                if (pw, ph) == (width, height) {
+                    return Ok(model.binarize_rgb(img)?);
+                }
+                // Edge pixels repeated, as the GPU path pads.
+                let padded = RgbImage::from_fn(pw, ph, |x, y| {
+                    *img.get_pixel(x.min(width - 1), y.min(height - 1))
+                });
+                let mask = model.binarize_rgb(&padded)?;
+                Ok(image::imageops::crop_imm(&mask, 0, 0, width, height).to_image())
+            }
+        }
+    }
+}
+
+/// Stride of the tileable binarizer: its input sides must be multiples of it.
+const TILEABLE_STRIDE: u32 = 8;
+
+/// Spatial multiple the student's input is padded to on the GPU: a coarser
+/// multiple than the stride lets nearby page sizes share one compiled wgpu graph.
 const STUDENT_PAD_MULTIPLE: u32 = 64;
+
+fn load_cpu_binarizer() -> Result<CpuBinarizer> {
+    use lege_gpu::vision::SauvolaCpuProcessor;
+    // Runtime assets remain deliberate model-rollout overrides.
+    if let Some(path) = crate::runtime_asset_path_if_exists("sauvola.prepared.onnx")
+        .or_else(|| crate::runtime_asset_path_if_exists("sauvola.onnx"))
+    {
+        #[cfg(feature = "debug-logging")]
+        crate::encoding::streamline::log_debug_message(&format!(
+            "Loading DIBCO Sauvola model override: {}",
+            path.display()
+        ));
+        return SauvolaCpuProcessor::from_model_path(&path)
+            .map(CpuBinarizer::Sauvola)
+            .map_err(|e| anyhow!("Failed to load sauvola model via lege-vision: {e}"));
+    }
+    #[cfg(feature = "sauvola-model")]
+    {
+        SauvolaCpuProcessor::from_model_bytes(crate::EMBEDDED_SAUVOLA_MODEL)
+            .map(CpuBinarizer::Sauvola)
+            .map_err(|e| anyhow!("Failed to load sauvola model via lege-vision: {e}"))
+    }
+    #[cfg(not(feature = "sauvola-model"))]
+    {
+        match crate::runtime_asset_path_if_exists("binarizer-tilenet.onnx") {
+            Some(path) => SauvolaCpuProcessor::from_model_path(&path),
+            None => SauvolaCpuProcessor::from_model_bytes(crate::EMBEDDED_TILENET_BINARIZER),
+        }
+        .map(CpuBinarizer::Tileable)
+        .map_err(|e| anyhow!("Failed to load the tileable binarizer for the CPU: {e}"))
+    }
+}
 
 fn load_student_binarizer() -> Option<lege_gpu::vision::SauvolaProcessor> {
     if std::env::var("LEGE_HEAVY_BINARIZER")
@@ -55,41 +120,15 @@ fn load_student_binarizer() -> Option<lege_gpu::vision::SauvolaProcessor> {
 
 impl HeavySauvolaProcessor {
     pub fn new() -> Result<Self> {
-        // Runtime assets remain deliberate model-rollout overrides. Normal
-        // packaged execution falls back to the model embedded in the binary.
-        let model_path = crate::runtime_asset_path_if_exists("sauvola.prepared.onnx")
-            .or_else(|| crate::runtime_asset_path_if_exists("sauvola.onnx"));
-        let processor = if let Some(model_path) = model_path {
-            #[cfg(feature = "debug-logging")]
-            {
-                if let Ok(metadata) = std::fs::metadata(&model_path) {
-                    crate::encoding::streamline::log_debug_message(&format!(
-                        "Loading DIBCO Sauvola model override: {} ({:.1} KB)",
-                        model_path.display(),
-                        metadata.len() as f64 / 1024.0
-                    ));
-                }
-            }
-            lege_gpu::vision::SauvolaCpuProcessor::from_model_path(&model_path)
-        } else {
-            #[cfg(feature = "debug-logging")]
-            crate::encoding::streamline::log_debug_message(&format!(
-                "Loading embedded DIBCO Sauvola model ({:.1} KB)",
-                crate::EMBEDDED_SAUVOLA_MODEL.len() as f64 / 1024.0
-            ));
-            lege_gpu::vision::SauvolaCpuProcessor::from_model_bytes(crate::EMBEDDED_SAUVOLA_MODEL)
-        }
-        .map_err(|e| anyhow!("Failed to load sauvola model via lege-vision: {e}"))?;
-
         Ok(Self {
-            processor,
+            cpu: load_cpu_binarizer()?,
             student: load_student_binarizer(),
             student_failed: std::sync::atomic::AtomicBool::new(false),
         })
     }
 
     /// Runs the tileable student on the GPU when it is available and allowed.
-    /// Returns `None` to fall back to the whole-page CPU Sauvola model.
+    /// Returns `None` to fall back to the CPU model.
     fn student_mask(&self, img: &RgbImage, opt: &BinarizationOptions) -> Option<GrayImage> {
         use std::sync::atomic::Ordering;
         let student = self.student.as_ref()?;
@@ -102,7 +141,7 @@ impl HeavySauvolaProcessor {
                 self.student_failed.store(true, Ordering::Relaxed);
                 #[cfg(feature = "debug-logging")]
                 crate::encoding::streamline::log_debug_message(&format!(
-                    "Tileable binarizer failed on the GPU, using the CPU Sauvola model: {_e:#}"
+                    "Tileable binarizer failed on the GPU, using the CPU model: {_e:#}"
                 ));
                 None
             }
@@ -161,7 +200,7 @@ impl HeavySauvolaProcessor {
 
         let mut mask = match self.student_mask(&img, opt) {
             Some(mask) => mask,
-            None => self.processor.binarize_rgb(&img)?,
+            None => self.cpu.binarize(&img)?,
         };
         let mut recycled = img.into_raw();
         recycled.clear();
@@ -1156,6 +1195,41 @@ mod tests {
     use super::{dilate_square_reflect, try_gpu_binarize_gray_raw};
     use crate::color::BinarizationOptions;
 
+    /// The default CPU fallback: the tileable binarizer on the CPU executor,
+    /// at a size that is not a multiple of its stride.
+    #[test]
+    fn tileable_binarizer_runs_on_the_cpu_at_an_odd_size() {
+        let model = lege_gpu::vision::SauvolaCpuProcessor::from_model_bytes(
+            crate::EMBEDDED_TILENET_BINARIZER,
+        )
+        .expect("the tileable binarizer loads on the CPU executor");
+        let (w, h) = (203u32, 141u32);
+        let img = image::RgbImage::from_fn(w, h, |x, y| {
+            let ink = (60..140).contains(&x) && (50..90).contains(&y) && (x / 6 + y / 6) % 2 == 0;
+            if ink {
+                image::Rgb([20, 20, 20])
+            } else {
+                image::Rgb([225, 215, 190])
+            }
+        });
+        let mask = super::CpuBinarizer::Tileable(model)
+            .binarize(&img)
+            .expect("the tileable binarizer runs on the CPU");
+        assert_eq!(mask.dimensions(), (w, h));
+        assert!(mask.iter().all(|&v| v == 0 || v == 255));
+        assert_eq!(
+            mask.get_pixel(5, 5).0[0],
+            255,
+            "paper corner must stay paper"
+        );
+        let ink = mask.iter().filter(|&&v| v == 0).count();
+        assert!(
+            ink > 200,
+            "the dark checker block must produce ink, got {ink} pixels"
+        );
+    }
+
+    #[cfg(feature = "sauvola-model")]
     #[test]
     fn embedded_sauvola_model_loads_from_bytes() {
         lege_gpu::vision::SauvolaCpuProcessor::from_model_bytes(crate::EMBEDDED_SAUVOLA_MODEL)

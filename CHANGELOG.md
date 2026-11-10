@@ -48,6 +48,10 @@
   checkout of it.
 - Direct3D 12 is no longer used on Windows; Lege runs on Vulkan, which is also what reaches the
   GPU's tensor cores.
+- The Sauvola model is no longer in the executable (0.4 MB). Heavy binarization runs the tileable
+  binarizer, on the GPU as before and now also on the CPU when the GPU is off or fails. The
+  `sauvola-model` feature embeds the old model again, and a `sauvola.onnx` beside the executable
+  is still used as the CPU model.
 - Dependencies are current as of the release, and none of Lege's own (exprim, the codecs,
   LiminalKit) is pinned to a commit. `cargo latest` moves LiminalKit to its newest commit and
   builds.

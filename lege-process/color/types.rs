@@ -54,7 +54,7 @@ pub struct BinarizationConfig {
     pub invert: bool,
     /// Invert input grayscale before thresholding (for inverted documents).
     pub invert_input: bool,
-    /// Use heavy duty Sauvola (requires sauvola.onnx model).
+    /// Use the heavy (neural) binarizer.
     pub use_heavy_duty: bool,
     /// No-op: the heavy (ONNX) path is always whole-image now; patching was removed.
     /// Retained only for config/serde compatibility.

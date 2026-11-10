@@ -382,7 +382,7 @@ struct CliOptions {
     binarization: Option<String>, // --binarization adaptive|fixed|heavy
     threshold: Option<u8>,        // --threshold 200
     sauvola_k: Option<f32>,       // --sauvola-k 0.3
-    heavy: bool,                  // --heavy / --heavy-sauvola (ONNX Sauvola)
+    heavy: bool,                  // --heavy / --heavy-sauvola (neural binarizer)
 
     // --- Quality ---
     djvu_quality: Option<u8>, // --djvu-quality 100
@@ -554,11 +554,11 @@ fn extract_cli_options(args: Vec<String>) -> Result<(Vec<String>, CliOptions)> {
                 let normalized = val.trim().to_ascii_lowercase();
                 match normalized.as_str() {
                     // `fixed` is the legacy spelling of `threshold`, still accepted.
-                    // `sauvola-ai` / `onnx` are aliases for the heavy ONNX Sauvola model.
+                    // `sauvola-ai` / `onnx` are aliases for the heavy neural binarizer.
                     "adaptive" | "threshold" | "fixed" | "heavy" | "sauvola-ai" | "sauvola_ai"
                     | "onnx" => {}
                     _ => bail!(
-                        "Invalid --binarization '{}'. Use: adaptive, threshold, or heavy (ONNX Sauvola)",
+                        "Invalid --binarization '{}'. Use: adaptive, threshold, or heavy (neural binarizer)",
                         val
                     ),
                 }
@@ -4146,7 +4146,7 @@ fn parse_binarization_method(input: &str) -> Result<String> {
         "g" | "grayscale" | "gray" | "4" => return Ok("grayscale".to_string()),
         other => {
             return Err(anyhow!(
-                "Invalid choice: {}. Use 1 (Adaptive), 2 (Threshold), 3 (Heavy Sauvola), or g (Grayscale/MRC)",
+                "Invalid choice: {}. Use 1 (Adaptive), 2 (Threshold), 3 (Heavy model), or g (Grayscale/MRC)",
                 other
             ));
         }

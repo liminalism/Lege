@@ -133,16 +133,16 @@
     <ul>
       <li><code>ppocr-det.onnx</code> &mdash; PP-OCRv6 text detection</li>
       <li><code>ppocr-rec.onnx</code> and <code>ppocr-dict.txt</code> &mdash; PP-OCRv6 text recognition</li>
-      <li><code>doclayout.onnx</code> &mdash; document layout analysis</li>
-      <li><code>sauvola.onnx</code> &mdash; optional heavy document binarization</li>
+      <li><code>layout-rfdetr-s.onnx</code> &mdash; document layout analysis</li>
+      <li><code>binarizer-tilenet.onnx</code> &mdash; optional heavy document binarization</li>
     </ul>
-    <p>Model files are copyrightable assets separate from the Rust code. The PaddleOCR provenance is identified above. Exact source revisions, conversion recipes, checksums, and redistribution terms for the layout and Sauvola models should remain part of the release audit rather than being inferred from the Rust dependencies.</p>
+    <p>Model files are copyrightable assets separate from the Rust code. The PaddleOCR provenance is identified above. Exact source revisions, conversion recipes, checksums, and redistribution terms for the layout and binarization models should remain part of the release audit rather than being inferred from the Rust dependencies.</p>
 
     <h2>Research Citations and Attribution</h2>
     <p>These acknowledgements credit research or prior implementations that influenced Lege. They are not assertions that the cited projects are linked dependencies.</p>
 
     <h3>Heavy Sauvola Model</h3>
-    <p>The <code>sauvola.onnx</code> heavy binarization model is attributed to:</p>
+    <p>The heavy binarization model, <code>binarizer-tilenet.onnx</code>, was distilled from the SauvolaNet model (<code>sauvola.onnx</code>, no longer embedded by default), which is attributed to:</p>
     <p>Li, Deng and Wu, Yue and Zhou, Yicong.<br>&ldquo;SauvolaNet: Learning Adaptive Sauvola Network for Degraded Document Binarization.&rdquo;<br>In: The 16th International Conference on Document Analysis and Recognition (ICDAR), 2021, pp. 538-553.<br>DOI: <a href="https://doi.org/10.1007/978-3-030-86337-1_36">https://doi.org/10.1007/978-3-030-86337-1_36</a></p>
 
     <h3>Adaptive Binarization Inspiration</h3>
