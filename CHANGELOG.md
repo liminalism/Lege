@@ -37,6 +37,9 @@
 - Option tooltips appear in a free band clear of the buttons; the chosen output folder is the
   Output Directory button's label; a small label beside the cursor gives a file tile's full path.
 - The options answer at once after a file is added, without waiting for its page count.
+- Files can be added one after another: Add File, Add Folder, Output Directory and a drop no
+  longer wait for the page count of the file added before. Process, which does need the page
+  counts, says "Reading page counts" for the moment it has to wait.
 
 ### Under the hood
 

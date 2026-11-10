@@ -141,6 +141,7 @@
       "cancelled": "Cancelled",
       "failed": "Failed",
       "more": "More",
+      "reading_page_counts": "Reading page counts. Process will be ready in a moment.",
       "tile_pdfs": "{n} PDFs",
       "tile_zips": "{n} ZIP files",
       "tile_folders": "{n} folders",

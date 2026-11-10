@@ -670,6 +670,9 @@ pub struct DocumentItem {
     pub file_name: String,
     pub input_kind: InputKind,
     pub page_count: Option<u32>,
+    /// Which add (dialog or drop) brought the file in. Adds are read side by
+    /// side; the queue keeps them in the order they were made.
+    pub batch: u64,
 }
 
 impl DocumentItem {
@@ -687,6 +690,7 @@ impl DocumentItem {
             file_name,
             input_kind,
             page_count: None,
+            batch: 0,
         }
     }
 }

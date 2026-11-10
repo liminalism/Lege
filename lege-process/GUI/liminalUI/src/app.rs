@@ -56,10 +56,14 @@ struct InputTask {
     _owner: flume::Sender<()>,
 }
 
-enum InputFlow {
-    Idle,
-    Selecting(InputTask),
-    Probing(InputTask),
+/// What the window is waiting on for its inputs: at most one open file
+/// dialog, and any number of batches of added files whose page counts are
+/// still being read. Files can be added one after another without waiting
+/// for the earlier ones.
+#[derive(Default)]
+struct InputFlow {
+    selecting: Option<InputTask>,
+    probing: Vec<InputTask>,
 }
 
 enum ResolutionEdit {
@@ -68,11 +72,12 @@ enum ResolutionEdit {
 }
 
 impl InputFlow {
-    fn id(&self) -> Option<u64> {
-        match self {
-            Self::Idle => None,
-            Self::Selecting(task) | Self::Probing(task) => Some(task.id),
-        }
+    /// A result with this id is still wanted.
+    fn active(&self, id: u64) -> bool {
+        self.selecting_id() == Some(id) || self.probing.iter().any(|task| task.id == id)
+    }
+    fn selecting_id(&self) -> Option<u64> {
+        self.selecting.as_ref().map(|task| task.id)
     }
 }
 
@@ -529,7 +534,7 @@ impl Dashboard {
             log: crate::logging::load_log_entries().unwrap_or_default(),
             theme_index: 0,
             modal_error: None,
-            input_flow: InputFlow::Idle,
+            input_flow: InputFlow::default(),
             input_generation: 0,
             sender,
             receiver,
@@ -537,19 +542,23 @@ impl Dashboard {
         }
     }
     fn notice(&mut self, text: impl Into<String>, seconds: u64) {
+        let text = text.into();
+        let until = Instant::now() + Duration::from_secs(seconds);
+        // The same message again (a repeated click) keeps its one popup up.
+        if let Some(shown) = self.notices.iter_mut().find(|notice| notice.text == text) {
+            shown.until = until;
+            return;
+        }
         while self.notices.len() >= 2 {
             self.notices.pop_front();
         }
-        self.notices.push_back(Notice {
-            text: text.into(),
-            until: Instant::now() + Duration::from_secs(seconds),
-        });
+        self.notices.push_back(Notice { text, until });
     }
     fn poll(&mut self) {
         while let Ok(message) = self.receiver.try_recv() {
             match message {
                 Message::Inputs(id, paths) => {
-                    if self.input_flow.id() != Some(id) {
+                    if !self.input_flow.active(id) {
                         continue;
                     }
                     if !self.running() {
@@ -575,12 +584,20 @@ impl Dashboard {
                         }
                         let mut item = DocumentItem::new(path);
                         item.page_count = pages;
-                        self.queue.push_back(item);
+                        item.batch = id;
+                        // A later add can be read first; it still queues
+                        // after the files added before it.
+                        let at = self
+                            .queue
+                            .iter()
+                            .position(|queued| queued.batch > id)
+                            .unwrap_or(self.queue.len());
+                        self.queue.insert(at, item);
                         self.ocr_notice(has_ocr);
                     }
                 }
                 Message::InputMetadata(id, path, pages, has_ocr) => {
-                    if self.input_flow.id() != Some(id) {
+                    if !self.input_flow.active(id) {
                         continue;
                     }
                     // Metadata enriches an admitted item; it must never add
@@ -591,7 +608,7 @@ impl Dashboard {
                     }
                 }
                 Message::Output(id, path) => {
-                    if self.input_flow.id() != Some(id) {
+                    if self.input_flow.selecting_id() != Some(id) {
                         continue;
                     }
                     self.options.output_path = Some(path);
@@ -599,18 +616,19 @@ impl Dashboard {
                 }
                 Message::Notice(text) => self.notice(text, 8),
                 Message::ProbeStarted(id) => {
-                    if self.input_flow.id() == Some(id) {
-                        self.input_flow =
-                            match std::mem::replace(&mut self.input_flow, InputFlow::Idle) {
-                                InputFlow::Selecting(task) => InputFlow::Probing(task),
-                                state => state,
-                            };
+                    // The dialog has closed with a choice: the files are now
+                    // being read, and another dialog may open.
+                    if self.input_flow.selecting_id() == Some(id)
+                        && let Some(task) = self.input_flow.selecting.take()
+                    {
+                        self.input_flow.probing.push(task);
                     }
                 }
                 Message::DialogClosed(id) => {
-                    if self.input_flow.id() == Some(id) {
-                        self.input_flow = InputFlow::Idle;
+                    if self.input_flow.selecting_id() == Some(id) {
+                        self.input_flow.selecting = None;
                     }
+                    self.input_flow.probing.retain(|task| task.id != id);
                 }
                 Message::Started(generation, infos, handles) => {
                     if generation != self.generation || !self.running() {
@@ -680,16 +698,16 @@ impl Dashboard {
         self.notices.retain(|notice| notice.until > Instant::now());
     }
     /// Check the files dropped since the last frame as one batch. A drop
-    /// while a run is going is ignored, as the Add buttons are; one while an
-    /// earlier batch is still being checked waits for it, rather than being
-    /// lost.
+    /// while a run is going is ignored, as the Add buttons are; one while a
+    /// file dialog is open waits for it, rather than being lost. Earlier
+    /// batches still being read do not hold it up.
     fn check_dropped(&mut self) {
         if self.dropped.is_empty() {
             return;
         }
         if self.running() {
             self.dropped.clear();
-        } else if !self.input_busy() {
+        } else if self.input_flow.selecting.is_none() {
             let paths = std::mem::take(&mut self.dropped);
             self.probe_paths(paths);
         }
@@ -809,8 +827,10 @@ impl Dashboard {
             );
         }
     }
+    /// A file dialog is open or page counts are still being read.
+    #[cfg(test)]
     fn input_busy(&self) -> bool {
-        !matches!(self.input_flow, InputFlow::Idle)
+        self.input_flow.selecting.is_some() || !self.input_flow.probing.is_empty()
     }
 
     fn begin_input(&mut self, selecting: bool) -> (u64, flume::Receiver<()>) {
@@ -818,16 +838,18 @@ impl Dashboard {
         let id = self.input_generation;
         let (owner, stop) = flume::bounded(1);
         let task = InputTask { id, _owner: owner };
-        self.input_flow = if selecting {
-            InputFlow::Selecting(task)
+        if selecting {
+            self.input_flow.selecting = Some(task);
         } else {
-            InputFlow::Probing(task)
-        };
+            self.input_flow.probing.push(task);
+        }
         (id, stop)
     }
 
     fn dialog(&mut self, kind: FileDialogKind) {
-        if self.running() || self.input_busy() {
+        // One dialog at a time. Files added earlier may still be having
+        // their page counts read; that does not stop the next ones.
+        if self.running() || self.input_flow.selecting.is_some() {
             return;
         }
         let (id, stop) = self.begin_input(true);
@@ -866,7 +888,7 @@ impl Dashboard {
         });
     }
     fn probe_paths(&mut self, paths: Vec<PathBuf>) {
-        if self.running() || self.input_busy() {
+        if self.running() {
             return;
         }
         let (id, stop) = self.begin_input(false);
@@ -879,7 +901,7 @@ impl Dashboard {
         });
     }
     fn cancel(&mut self) {
-        self.input_flow = InputFlow::Idle;
+        self.input_flow = InputFlow::default();
         if self.running() {
             self.batch = BatchState::Cancelling;
             self.status.0 = GUI_TEXT.interactive.status.cancelling.clone();
@@ -893,7 +915,13 @@ impl Dashboard {
             self.cancel();
             return;
         }
-        if self.input_busy() {
+        if self.input_flow.selecting.is_some() {
+            return;
+        }
+        if !self.input_flow.probing.is_empty() {
+            // The page range is checked against the page counts, so a run
+            // waits for them; say so instead of ignoring the click.
+            self.notice(tr("reading_page_counts"), 4);
             return;
         }
         if self.queue.is_empty() {
@@ -1473,7 +1501,7 @@ impl Dashboard {
         // An open file dialog freezes them too; the page-count probe of a
         // newly added file does not, or every control would be dead for as
         // long as a large scan takes to open.
-        let frozen = self.running() || matches!(self.input_flow, InputFlow::Selecting(_));
+        let frozen = self.running() || self.input_flow.selecting.is_some();
         let saved_input = frozen.then(|| std::mem::take(ui.input));
         let files = card(ui, bands.files);
         let gap = ui.px(6);
@@ -2806,13 +2834,86 @@ mod tests {
     }
 
     #[test]
+    fn a_file_can_be_added_while_an_earlier_one_is_still_being_read() {
+        let mut dashboard = Dashboard::new();
+        let (first, _first_stop) = dashboard.begin_input(false);
+        // The second add: its dialog opens although the first is being read.
+        let (second, _second_stop) = dashboard.begin_input(true);
+        dashboard
+            .sender
+            .send(Message::ProbeStarted(second))
+            .unwrap();
+        dashboard.poll();
+        assert!(dashboard.input_flow.selecting.is_none());
+        assert!(dashboard.input_flow.active(first) && dashboard.input_flow.active(second));
+        // The later file is read first; the queue keeps the order of adding.
+        for (id, name) in [(second, "b.pdf"), (first, "a.pdf")] {
+            dashboard
+                .sender
+                .send(Message::Inputs(id, vec![(PathBuf::from(name), None, None)]))
+                .unwrap();
+        }
+        dashboard
+            .sender
+            .send(Message::InputMetadata(
+                first,
+                PathBuf::from("a.pdf"),
+                Some(12),
+                None,
+            ))
+            .unwrap();
+        dashboard.sender.send(Message::DialogClosed(first)).unwrap();
+        dashboard.poll();
+        let queued: Vec<_> = dashboard
+            .queue
+            .iter()
+            .map(|item| (item.file_name.as_str(), item.page_count))
+            .collect();
+        assert_eq!(queued, [("a.pdf", Some(12)), ("b.pdf", None)]);
+        assert!(
+            dashboard.input_busy(),
+            "the second file is still being read"
+        );
+        dashboard
+            .sender
+            .send(Message::InputMetadata(
+                second,
+                PathBuf::from("b.pdf"),
+                Some(3),
+                None,
+            ))
+            .unwrap();
+        dashboard
+            .sender
+            .send(Message::DialogClosed(second))
+            .unwrap();
+        dashboard.poll();
+        assert_eq!(dashboard.queue[1].page_count, Some(3));
+        assert!(!dashboard.input_busy());
+    }
+
+    #[test]
+    fn process_says_it_is_reading_page_counts_instead_of_ignoring_the_click() {
+        let mut dashboard = Dashboard::new();
+        let (_id, _stop) = dashboard.begin_input(false);
+        dashboard.notices.clear();
+        dashboard.start();
+        dashboard.start();
+        let shown: Vec<_> = dashboard.notices.iter().map(|n| n.text.as_str()).collect();
+        assert_eq!(shown, [tr("reading_page_counts")], "one popup, not two");
+        assert_ne!(tr("reading_page_counts"), "reading_page_counts");
+        assert!(!dashboard.running());
+    }
+
+    #[test]
     fn lifecycle_input_flow_ignores_late_results_and_cancels_on_owner_drop() {
         let mut dashboard = Dashboard::new();
         let (old, old_stop) = dashboard.begin_input(true);
         dashboard.sender.send(Message::ProbeStarted(old)).unwrap();
         dashboard.poll();
-        assert!(matches!(dashboard.input_flow, InputFlow::Probing(_)));
-        dashboard.input_flow = InputFlow::Idle;
+        assert!(dashboard.input_flow.selecting.is_none());
+        assert!(dashboard.input_flow.active(old));
+        dashboard.input_flow = InputFlow::default();
         assert!(old_stop.is_disconnected());
         let (current, _stop) = dashboard.begin_input(false);
         dashboard
@@ -2825,7 +2926,7 @@ mod tests {
         dashboard.sender.send(Message::DialogClosed(old)).unwrap();
         dashboard.poll();
         assert!(dashboard.queue.is_empty());
-        assert_eq!(dashboard.input_flow.id(), Some(current));
+        assert!(dashboard.input_flow.active(current) && !dashboard.input_flow.active(old));
         dashboard
             .sender
             .send(Message::Inputs(
@@ -3496,7 +3597,8 @@ mod tests {
             app.on_file_drop(folder.clone());
         }
         app.dashboard.poll();
-        // A further drop while those are still being checked waits for them.
+        // A further drop while those are still being checked is read
+        // alongside them and queues after them.
         app.on_file_drop(folders[3].clone());
         wait_for(&mut app, 4);
         let queued: Vec<_> = app.dashboard.queue.iter().map(|i| &i.file_path).collect();

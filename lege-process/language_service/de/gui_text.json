@@ -141,6 +141,7 @@
       "cancelled": "Abgebrochen",
       "failed": "Fehlgeschlagen",
       "more": "Mehr",
+      "reading_page_counts": "Seitenzahlen werden gelesen. Verarbeiten ist gleich bereit.",
       "tile_pdfs": "{n} PDFs",
       "tile_zips": "{n} ZIP-Dateien",
       "tile_folders": "{n} Ordner",
