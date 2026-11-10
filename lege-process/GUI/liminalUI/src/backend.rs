@@ -200,7 +200,21 @@ pub fn get_image_files_in_directory(dir: &PathBuf) -> Result<Vec<PathBuf>> {
     Ok(image_files)
 }
 
-/// Quickly count the number of pages/images for a queue item via `lege --probe-json`.
+/// A bounded readability check for admission to the GUI queue. Parsing and
+/// page counting belong to the background probe, after the file tile is shown.
+/// Do not require a header at byte zero: the PDF reader also repairs files
+/// with leading garbage, and ZIPs may have a self-extracting prefix.
+pub fn check_input_readable(path: &std::path::Path) -> Result<()> {
+    use std::io::Read;
+
+    let mut file = std::fs::File::open(path)?;
+    anyhow::ensure!(file.metadata()?.is_file(), "Not a regular file");
+    let mut prefix = [0; 1024];
+    anyhow::ensure!(file.read(&mut prefix)? > 0, "File is empty");
+    Ok(())
+}
+
+/// Count the number of pages/images for a queue item via `lege --probe-json`.
 pub async fn precheck_page_count(path: PathBuf) -> Option<u32> {
     if path.is_dir() {
         // Fast local count for image directories — no subprocess needed.

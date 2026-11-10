@@ -227,6 +227,17 @@ pub enum ShelfAction {
     Open(PathBuf),
 }
 
+/// What the pointer is doing over the shelf after a frame, for the window's
+/// cursor: an open hand over a tile says it can be picked up and dragged out,
+/// a closed hand while a press on one has not yet become the shell's drag.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ShelfPointer {
+    #[default]
+    Elsewhere,
+    OverTile,
+    HoldingTile,
+}
+
 struct Press {
     paths: Vec<PathBuf>,
     x: i32,
@@ -249,6 +260,8 @@ pub struct Shelf {
     /// The last files dragged out, and when: a drop of one of them back onto
     /// this window is the drag ending where it began, not a new input.
     pub recent_drag: Option<(Vec<PathBuf>, Instant)>,
+    /// The pointer over the shelf as of the last frame drawn.
+    pub pointer: ShelfPointer,
 }
 
 impl Shelf {
@@ -273,6 +286,7 @@ impl Shelf {
         let outputs = group(outputs);
         let plan = layout(left, right, ui.scale, inputs.len(), outputs.len());
         self.drawn.clear();
+        self.pointer = ShelfPointer::Elsewhere;
         let mut action = None;
         for (rect, group) in plan
             .inputs
@@ -294,6 +308,9 @@ impl Shelf {
             }
         }
         self.follow_press(ui);
+        if self.press.is_some() {
+            self.pointer = ShelfPointer::HoldingTile;
+        }
         let drawn = &self.drawn;
         self.icons.retain(|key, _| drawn.contains(key));
         action
@@ -308,6 +325,11 @@ impl Shelf {
         } else if ui.input.hovering(rect) {
             let fill = ui.theme.hover;
             ui.fill_rounded(rect, radius, fill);
+        }
+        // Recorded whatever the press state: on the frame a press ends, the
+        // tile still draws as pressed, and the hand must not drop to an arrow.
+        if ui.input.hovering(rect) {
+            self.pointer = ShelfPointer::OverTile;
         }
         let first = &group.paths[0];
         let icon_rect = icon_rect(ui, rect);
@@ -622,6 +644,51 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn the_pointer_is_a_hand_over_a_tile_and_a_closed_hand_while_holding_it() {
+        let mut buffer = liminalkit_raster::WindowBuffer::new(800, 300);
+        let mut text = liminalkit_text::TextCache::new(crate::theme::fonts());
+        let mut kernel = liminalkit_raster::RasterKernel::new();
+        let mut input = liminalkit_shell::Input::new();
+        let left = Rect::new(0, 100, 300, 110);
+        let right = Rect::new(500, 100, 300, 110);
+        let outputs = vec![PathBuf::from("Z:/no/such/book_out.pdf")];
+        let mut shelf = Shelf::default();
+        let mut frame = |shelf: &mut Shelf, input: &mut liminalkit_shell::Input| {
+            let mut ui = Ui::new(
+                liminalkit_raster::Painter::new(&mut buffer),
+                &mut text,
+                input,
+                liminalkit_ui::Theme::default(),
+                Scale(1.0),
+                &mut kernel,
+            );
+            shelf.draw(&mut ui, left, right, &[], &outputs);
+            ui.input.end_frame();
+        };
+        let tile = layout(left, right, Scale(1.0), 0, 1).outputs[0];
+        let (cx, cy) = (tile.x + tile.w / 2, tile.y + tile.h / 2);
+        // Away from the tiles: no hand.
+        input.cursor_moved(10.0, 10.0);
+        frame(&mut shelf, &mut input);
+        assert_eq!(shelf.pointer, ShelfPointer::Elsewhere);
+        // Over the finished output: an open hand.
+        input.cursor_moved(cx as f32, cy as f32);
+        frame(&mut shelf, &mut input);
+        assert_eq!(shelf.pointer, ShelfPointer::OverTile);
+        // Pressed on it: a closed hand until the drag begins or the button lifts.
+        input.mouse(liminalkit_shell::MouseButton::Left, true);
+        frame(&mut shelf, &mut input);
+        frame(&mut shelf, &mut input);
+        assert_eq!(shelf.pointer, ShelfPointer::HoldingTile);
+        input.mouse(liminalkit_shell::MouseButton::Left, false);
+        frame(&mut shelf, &mut input);
+        assert_eq!(shelf.pointer, ShelfPointer::OverTile);
+        input.cursor_left();
+        frame(&mut shelf, &mut input);
+        assert_eq!(shelf.pointer, ShelfPointer::Elsewhere);
     }
 
     #[test]

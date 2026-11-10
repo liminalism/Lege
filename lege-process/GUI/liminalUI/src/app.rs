@@ -7,7 +7,7 @@ use liminalkit_raster::{FillRule, Painter, Path, RasterKernel, Rect, WindowBuffe
 use liminalkit_shell::{Input, KeyInput, Modifiers, MouseButton, Scale};
 use liminalkit_text::{Align, Hinting, TextCache, TextRendering, TextStyle};
 use liminalkit_ui::{Focus, ScrollState, TextFieldState, Ui};
-use liminalkit_windowing::{ImeCursorArea, ImeEvent, PixelApp, Waker};
+use liminalkit_windowing::{CursorShape, ImeCursorArea, ImeEvent, PixelApp, Waker};
 
 use crate::appearance::{self, ThemeChoice};
 use crate::backend;
@@ -78,6 +78,7 @@ impl InputFlow {
 
 enum Message {
     Inputs(u64, Vec<(PathBuf, Option<u32>, Option<bool>)>),
+    InputMetadata(u64, PathBuf, Option<u32>, Option<bool>),
     Output(u64, PathBuf),
     ProbeStarted(u64),
     Notice(String),
@@ -234,6 +235,8 @@ const STEM_DARKENING: f32 = 1.0;
 impl PixelApp for LegeApp {
     fn render(&mut self, buffer: &mut WindowBuffer, scale: Scale) {
         self.dashboard.poll();
+        // Set again by the shelf if it is drawn and the pointer is on a tile.
+        self.dashboard.shelf.pointer = crate::file_tiles::ShelfPointer::Elsewhere;
         let palette = appearance::active_palette();
         let theme = crate::theme::theme(palette);
         let bands = Bands::new(buffer.width as i32, buffer.height as i32, scale);
@@ -289,6 +292,15 @@ impl PixelApp for LegeApp {
     }
     fn attach(&mut self, waker: Waker) {
         self.dashboard.waker = waker;
+    }
+    /// An open hand over a file tile, a closed one while pressing it: the
+    /// tiles (finished outputs especially) are dragged out to other programs.
+    fn cursor_shape(&self) -> CursorShape {
+        match self.dashboard.shelf.pointer {
+            crate::file_tiles::ShelfPointer::OverTile => CursorShape::Grab,
+            crate::file_tiles::ShelfPointer::HoldingTile => CursorShape::Grabbing,
+            crate::file_tiles::ShelfPointer::Elsewhere => CursorShape::Default,
+        }
     }
     fn on_layout_changed(&mut self) {
         self.focus.clear();
@@ -564,16 +576,18 @@ impl Dashboard {
                         let mut item = DocumentItem::new(path);
                         item.page_count = pages;
                         self.queue.push_back(item);
-                        if let Some(found) = has_ocr {
-                            self.notice(
-                                if found {
-                                    GUI_TEXT.interactive.popups.ocr_detected.clone()
-                                } else {
-                                    GUI_TEXT.interactive.popups.no_ocr_detected.clone()
-                                },
-                                6,
-                            );
-                        }
+                        self.ocr_notice(has_ocr);
+                    }
+                }
+                Message::InputMetadata(id, path, pages, has_ocr) => {
+                    if self.input_flow.id() != Some(id) {
+                        continue;
+                    }
+                    // Metadata enriches an admitted item; it must never add
+                    // a second tile or resurrect a removed/cancelled input.
+                    if let Some(item) = self.queue.iter_mut().find(|item| item.file_path == path) {
+                        item.page_count = pages;
+                        self.ocr_notice(has_ocr);
                     }
                 }
                 Message::Output(id, path) => {
@@ -734,8 +748,14 @@ impl Dashboard {
         }
         match event {
             WorkerProgressUpdate::Status { status, .. } => {
-                if !self.cancelling() {
-                    self.status = status.to_gui_display_lines();
+                // A page-appended notice (`PdfAppend`) arrives for every
+                // finished page and has no text of its own: the counters live
+                // in the progress statuses. Keep the last lines rather than
+                // blank them until the next progress event, which flickered.
+                let lines = status.to_gui_display_lines();
+                let blank = lines.0.is_empty() && lines.1.is_empty() && lines.2.is_empty();
+                if !self.cancelling() && !blank {
+                    self.status = lines;
                 }
                 if self.rows[index].state == DocumentRunState::Queued {
                     self.rows[index].state = DocumentRunState::Processing {
@@ -775,6 +795,18 @@ impl Dashboard {
                     self.notice(error, 8);
                 }
             }
+        }
+    }
+    fn ocr_notice(&mut self, has_ocr: Option<bool>) {
+        if let Some(found) = has_ocr {
+            self.notice(
+                if found {
+                    GUI_TEXT.interactive.popups.ocr_detected.clone()
+                } else {
+                    GUI_TEXT.interactive.popups.no_ocr_detected.clone()
+                },
+                6,
+            );
         }
     }
     fn input_busy(&self) -> bool {
@@ -1115,7 +1147,26 @@ fn probe(
     else {
         return;
     };
+    probe_with_metadata(tx, wake, paths, id, stop, |path, stop| {
+        runtime.block_on(async {
+            tokio::select! {
+                result = crate::worker_process::probe_file_json(path) => result.ok(),
+                _ = stop.recv_async() => None,
+            }
+        })
+    });
+}
+
+fn probe_with_metadata(
+    tx: SyncSender<Message>,
+    wake: Waker,
+    paths: Vec<PathBuf>,
+    id: u64,
+    stop: flume::Receiver<()>,
+    mut metadata: impl FnMut(&PathBuf, &flume::Receiver<()>) -> Option<serde_json::Value>,
+) {
     let mut accepted = Vec::new();
+    let mut deferred = Vec::new();
     for path in paths {
         if stop.is_disconnected() || stop.try_recv().is_ok() {
             return;
@@ -1137,25 +1188,16 @@ fn probe(
                 }
             }
         } else if backend::is_pdf_file(&path) || backend::is_zip_file(&path) {
-            let data = runtime.block_on(async {
-                tokio::select! {
-                    result = crate::worker_process::probe_file_json(&path) => Some(result.ok()),
-                    _ = stop.recv_async() => None,
+            match backend::check_input_readable(&path) {
+                Ok(()) => {
+                    deferred.push(path.clone());
+                    accepted.push((path, None, None));
                 }
-            });
-            let Some(data) = data else {
-                return;
-            };
-            let pages = data
-                .as_ref()
-                .and_then(|v| v.get("pages"))
-                .and_then(|v| v.as_u64())
-                .and_then(|v| u32::try_from(v).ok());
-            let ocr = data
-                .as_ref()
-                .and_then(|v| v.get("has_ocr"))
-                .and_then(|v| v.as_bool());
-            accepted.push((path, pages, ocr));
+                Err(error) => {
+                    let _ = tx.send(Message::Notice(format!("{}: {error}", path.display())));
+                    wake.wake();
+                }
+            }
         } else {
             let _ = tx.send(Message::Notice(
                 GUI_TEXT.interactive.tooltips.add_file_or_folder.clone(),
@@ -1163,8 +1205,38 @@ fn probe(
             wake.wake();
         }
     }
-    let _ = tx.send(Message::Inputs(id, accepted));
+    // Publish every file before spawning even the first metadata subprocess.
+    // In particular, a cold CLI launch or a large book cannot hide its tile
+    // or any of the other PDFs selected/dropped in the same batch.
+    if tx.send(Message::Inputs(id, accepted)).is_err() {
+        return;
+    }
     wake.wake();
+    for path in deferred {
+        if stop.is_disconnected() || stop.try_recv().is_ok() {
+            return;
+        }
+        let data = metadata(&path, &stop);
+        if stop.is_disconnected() || stop.try_recv().is_ok() {
+            return;
+        }
+        let pages = data
+            .as_ref()
+            .and_then(|v| v.get("pages"))
+            .and_then(|v| v.as_u64())
+            .and_then(|v| u32::try_from(v).ok());
+        let ocr = data
+            .as_ref()
+            .and_then(|v| v.get("has_ocr"))
+            .and_then(|v| v.as_bool());
+        if tx
+            .send(Message::InputMetadata(id, path, pages, ocr))
+            .is_err()
+        {
+            return;
+        }
+        wake.wake();
+    }
 }
 
 fn parse_resolution(value: &str) -> Option<(u32, Option<u32>)> {
@@ -2557,6 +2629,40 @@ mod tests {
     }
 
     #[test]
+    fn a_finished_page_keeps_the_page_counters_on_screen() {
+        let mut dashboard = active_batch();
+        dashboard.worker_event(WorkerProgressUpdate::Status {
+            task_id: 0,
+            status: WorkerProcessingStatus::NoLayoutProgress {
+                rendered: 4,
+                encoded: 3,
+                total: 10,
+                eta: None,
+            },
+            metrics: Some(metrics(3)),
+        });
+        let shown = dashboard.status.clone();
+        assert!(shown.1.contains("Encode 3/10"));
+        for status in [
+            WorkerProcessingStatus::PdfAppend {
+                current: 3,
+                total: 10,
+            },
+            WorkerProcessingStatus::PdfAppendMargin {
+                current: 3,
+                total: 10,
+            },
+        ] {
+            dashboard.worker_event(WorkerProgressUpdate::Status {
+                task_id: 0,
+                status,
+                metrics: Some(metrics(3)),
+            });
+            assert_eq!(dashboard.status, shown);
+        }
+    }
+
+    #[test]
     fn lifecycle_progress_waits_for_downstream_stages() {
         let mut no_layout = metrics(0);
         no_layout.rendered = no_layout.pages_total;
@@ -2713,6 +2819,211 @@ mod tests {
         }
         assert!(done);
         thread.join().unwrap();
+    }
+    #[test]
+    fn readable_files_get_tiles_before_the_first_metadata_probe_finishes() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths: Vec<_> = ["large.PDF", "second.pdf", "archive.zip"]
+            .map(|name| dir.path().join(name))
+            .into();
+        for path in &paths {
+            // Intentionally not parseable: admission is a readability check,
+            // and must not open the full document or reject repairable files.
+            std::fs::write(path, b"leading garbage before a document header").unwrap();
+        }
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(&paths[0])
+            .unwrap()
+            .set_len(179_181_113)
+            .unwrap();
+        let mut dashboard = Dashboard::new();
+        let (id, stop) = dashboard.begin_input(false);
+        let tx = dashboard.sender.clone();
+        let inputs = paths.clone();
+        let (started_tx, started_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let thread = std::thread::spawn(move || {
+            probe_with_metadata(tx, Waker::detached(), inputs, id, stop, |path, _| {
+                started_tx.send(path.clone()).unwrap();
+                release_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+                Some(serde_json::json!({"pages": 7}))
+            });
+        });
+        assert_eq!(
+            started_rx.recv_timeout(Duration::from_secs(5)).unwrap(),
+            paths[0]
+        );
+        // The first metadata operation is still held. Every selected file
+        // already supplies the shelf's icon path, with no count yet.
+        dashboard.poll();
+        assert_eq!(dashboard.shelf_inputs(), paths);
+        assert!(dashboard.queue.iter().all(|item| item.page_count.is_none()));
+        assert!(dashboard.input_busy());
+        let item_id = dashboard.queue[0].id.clone();
+        release_tx.send(()).unwrap();
+        assert_eq!(
+            started_rx.recv_timeout(Duration::from_secs(5)).unwrap(),
+            paths[1]
+        );
+        dashboard.poll();
+        assert_eq!(dashboard.queue[0].page_count, Some(7));
+        assert_eq!(dashboard.queue[0].id, item_id);
+        assert_eq!(dashboard.queue.len(), 3);
+        release_tx.send(()).unwrap();
+        assert_eq!(
+            started_rx.recv_timeout(Duration::from_secs(5)).unwrap(),
+            paths[2]
+        );
+        release_tx.send(()).unwrap();
+        thread.join().unwrap();
+        dashboard.sender.send(Message::DialogClosed(id)).unwrap();
+        dashboard.poll();
+        assert!(!dashboard.input_busy());
+        assert_eq!(dashboard.shelf_inputs(), paths);
+        assert!(
+            dashboard
+                .queue
+                .iter()
+                .all(|item| item.page_count == Some(7))
+        );
+    }
+    #[test]
+    fn failed_and_cancelled_metadata_do_not_remove_or_resurrect_inputs() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("readable.pdf");
+        std::fs::write(&path, b"%PDF-1.7").unwrap();
+        let mut dashboard = Dashboard::new();
+        let (id, stop) = dashboard.begin_input(false);
+        probe_with_metadata(
+            dashboard.sender.clone(),
+            Waker::detached(),
+            vec![path.clone()],
+            id,
+            stop,
+            |_, _| None,
+        );
+        dashboard.poll();
+        assert_eq!(dashboard.shelf_inputs(), vec![path.clone()]);
+        assert_eq!(dashboard.queue[0].page_count, None);
+        dashboard.cancel();
+        dashboard.queue.clear();
+        let (_current, _stop) = dashboard.begin_input(false);
+        dashboard
+            .sender
+            .send(Message::InputMetadata(
+                id,
+                path.clone(),
+                Some(99),
+                Some(true),
+            ))
+            .unwrap();
+        dashboard.sender.send(Message::DialogClosed(id)).unwrap();
+        dashboard.poll();
+        assert!(dashboard.queue.is_empty());
+        assert!(dashboard.input_busy());
+        // Even a current-generation result only updates an existing item.
+        dashboard
+            .sender
+            .send(Message::InputMetadata(
+                dashboard.input_generation,
+                path,
+                Some(99),
+                None,
+            ))
+            .unwrap();
+        dashboard.poll();
+        assert!(dashboard.queue.is_empty());
+    }
+    #[test]
+    fn admission_rejects_missing_empty_and_unsupported_files_without_probing() {
+        let dir = tempfile::tempdir().unwrap();
+        let empty = dir.path().join("empty.pdf");
+        std::fs::write(&empty, []).unwrap();
+        let paths = vec![
+            dir.path().join("missing.pdf"),
+            empty,
+            dir.path().join("other.txt"),
+        ];
+        let (tx, rx) = mpsc::sync_channel(8);
+        let (_owner, stop) = flume::bounded(1);
+        probe_with_metadata(tx, Waker::detached(), paths, 1, stop, |_, _| {
+            panic!("unreadable or unsupported input reached the metadata probe");
+        });
+        let mut notices = 0;
+        for message in rx.try_iter() {
+            match message {
+                Message::Inputs(_, inputs) => assert!(inputs.is_empty()),
+                Message::Notice(_) => notices += 1,
+                _ => panic!("unexpected probe event"),
+            }
+        }
+        assert_eq!(notices, 3);
+    }
+    #[test]
+    #[ignore = "requires built lege on PATH and LEGE_GUI_PROBE_INPUT_DIR; prints admission/probe timings"]
+    fn real_input_admission_latency() {
+        let dir = PathBuf::from(
+            std::env::var_os("LEGE_GUI_PROBE_INPUT_DIR").expect("explicit PDF directory"),
+        )
+        .canonicalize()
+        .unwrap();
+        let mut paths: Vec<_> = std::fs::read_dir(dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .filter(|path| backend::is_pdf_file(path))
+            .collect();
+        paths.sort();
+        assert!(!paths.is_empty());
+        let count = paths.len();
+        let (tx, rx) = mpsc::sync_channel(128);
+        let (_owner, stop) = flume::bounded(1);
+        let started = Instant::now();
+        let thread = std::thread::spawn(move || probe(tx, Waker::detached(), paths, 1, stop));
+        let mut metadata = 0;
+        let mut admitted = false;
+        while let Ok(message) = rx.recv_timeout(Duration::from_secs(35)) {
+            match message {
+                Message::Inputs(_, inputs) => {
+                    println!(
+                        "admitted {} files in {:.3} ms",
+                        inputs.len(),
+                        started.elapsed().as_secs_f64() * 1000.0
+                    );
+                    assert_eq!(inputs.len(), count);
+                    assert_eq!(metadata, 0);
+                    assert!(inputs.iter().all(|(_, pages, _)| pages.is_none()));
+                    admitted = true;
+                    #[cfg(windows)]
+                    {
+                        assert!(crate::shell_files::file_icon(&inputs[0].0, 56).is_some());
+                        println!(
+                            "first shell icon ready at {:.3} ms",
+                            started.elapsed().as_secs_f64() * 1000.0
+                        );
+                    }
+                }
+                Message::InputMetadata(_, path, pages, _) => {
+                    assert!(admitted);
+                    assert!(
+                        pages.is_some(),
+                        "metadata unavailable for {}",
+                        path.display()
+                    );
+                    println!(
+                        "metadata {}: {pages:?} at {:.3} ms",
+                        path.display(),
+                        started.elapsed().as_secs_f64() * 1000.0
+                    );
+                    metadata += 1;
+                }
+                Message::Notice(notice) => panic!("{notice}"),
+                _ => panic!("unexpected probe event"),
+            }
+        }
+        thread.join().unwrap();
+        assert!(admitted);
+        assert_eq!(metadata, count);
     }
     #[test]
     fn queued_startup_handles_cancel_when_the_window_discards_the_event() {
