@@ -61,11 +61,8 @@ pub fn run() -> anyhow::Result<()> {
         if args.iter().any(|s| s == "--preserve") {
             app.dashboard.options.set_preserve_mode(true);
         }
-        if args.iter().any(|s| s == "--threshold") {
-            app.dashboard.select_binarization(1);
-        }
-        if args.iter().any(|s| s == "--heavy") {
-            app.dashboard.select_binarization(2);
+        if args.iter().any(|s| s == "--flatten") {
+            app.dashboard.options.flatten_pages = true;
         }
         if args.iter().any(|s| s == "--dark") {
             appearance::set_theme_preview(Some(appearance::ThemeChoice::Sanzo {

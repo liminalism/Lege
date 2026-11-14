@@ -1,5 +1,5 @@
 //! Shared wgpu backend/instance policy for every lege-gpu compute path
-//! (vision/YOLO, resize, binarization).
+//! (vision inference, resize, binarization).
 //!
 //! Production policy: **Vulkan** on Windows, Linux and Android; Metal on macOS.
 //! Direct3D 12 was dropped on 2026-11-08: on the owner's RTX 4060 Laptop Vulkan

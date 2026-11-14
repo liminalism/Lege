@@ -36,7 +36,7 @@ the final positional value is the display scale:
 ```sh
 target/debug/lege-gui --snapshot /tmp/lege-preview.png 940 700 1
 target/debug/lege-gui --snapshot /tmp/lege-preserve.png 1410 1050 1.5 --preserve --dark
-target/debug/lege-gui --snapshot /tmp/lege-heavy.png 940 700 1 --threshold --heavy
+target/debug/lege-gui --snapshot /tmp/lege-flatten.png 940 700 1 --flatten
 ```
 
 The two ignored worker smoke tests require an explicit input PDF, an output

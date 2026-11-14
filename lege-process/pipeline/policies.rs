@@ -583,8 +583,9 @@ pub(crate) fn remap_detections_to_page(
 
 /// Build `BinarizationOptions` from the pipeline config.
 ///
-/// When `force_blank_threshold` is set, overrides to a fixed high threshold
-/// so blank pages binarize to all-white rather than all-noise.
+/// When `force_blank_threshold` is set, a fixed high threshold replaces the
+/// binarizer so a blank page comes out all white rather than all noise. Only
+/// the CPU fallback asks for it (see `should_force_blank_page_threshold`).
 pub fn binarize_options_for(
     config: &PipelineConfig,
     force_blank_threshold: bool,
@@ -594,31 +595,13 @@ pub fn binarize_options_for(
     if want_invert_input && want_invert_output {
         want_invert_output = false;
     }
-    let (use_fixed_threshold, fixed_threshold) = if force_blank_threshold {
-        (
-            true,
-            crate::pipeline::page_analysis::BLANK_PAGE_FALLBACK_THRESHOLD,
-        )
-    } else {
-        (
-            config.binarization().use_fixed_threshold,
-            config.binarization().fixed_threshold,
-        )
-    };
     crate::color::BinarizationOptions {
         invert: want_invert_output,
         invert_input: want_invert_input,
-        k_factor: config.binarization().k_factor,
-        use_heavy_duty: config.binarization().use_heavy_duty && !use_fixed_threshold,
-        patch_percentage: config.binarization().patch_percentage,
-        no_patch: config.binarization().no_patch,
-        use_fixed_threshold,
-        fixed_threshold,
-        // GPU binarization is safe in crop mode again: the black-page cause (Otsu
-        // computed on the raw rather than bg-normalized histogram) is fixed, and the
-        // GPU fused output is now bit-exact to the CPU path in the interior (see
-        // gpu_fused_parity_debug0). Previously forced CPU via `config.crop_free_aspect()`.
-        disable_gpu: false,
+        blank_threshold: force_blank_threshold
+            .then_some(crate::pipeline::page_analysis::BLANK_PAGE_FALLBACK_THRESHOLD),
+        disable_gpu: config.binarization().force_cpu,
+        adaptive: config.binarization().fast,
     }
 }
 

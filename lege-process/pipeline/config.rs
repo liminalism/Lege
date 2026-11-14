@@ -453,6 +453,11 @@ pub enum PageMode {
     Preserved,
 }
 
+/// IW44 quality that "High quality" raises a DjVu to (the default is 75).
+/// On 16 pages of a scanned book it grows a grayscale DjVu by about 80 %,
+/// in line with what the option does to a PDF.
+pub const DJVU_HIGH_QUALITY_IW44: u8 = 92;
+
 #[derive(Clone, Debug)]
 pub struct PipelineConfig {
     pub(crate) model_path: String,
@@ -544,6 +549,10 @@ pub struct PipelineConfig {
     /// faintest customer songbook). The cleaned gray still supplies the JP2/IW44
     /// background halo.
     pub(crate) mrc_adaptive_mask: bool,
+    /// "Flatten page": flatten photographed pages of folder and ZIP input
+    /// before anything else sees them, with these settings. `None` is off.
+    /// A photographed spread becomes two pages.
+    pub(crate) flatten: Option<crate::dewarp::Settings>,
     /// Resolution multiplier applied to `target_height` when slow OCR is enabled,
     /// determining the PDF render height ("render high, resize low"). The
     /// high-res raster feeds OCR; the encode path is resized back down to
@@ -629,6 +638,7 @@ impl PipelineConfig {
             mrc_bg_subsample: 0,    // auto (content-aware)
             mrc_ink_threshold: 180, // matches the validated fixed-180 stroke weight
             mrc_adaptive_mask: false,
+            flatten: None,
             slow_ocr_scale: 2.5,
         };
 
@@ -642,20 +652,6 @@ impl PipelineConfig {
         cfg.set_image_format(CoverFormat::Jpeg);
         cfg.set_target_height(1200)?;
         cfg.set_high_res_render_height(1200)?;
-        let bin = BinarizationConfig {
-            k_factor: crate::DEFAULT_K_FACTOR,
-            invert: false,
-            invert_input: false,
-            use_heavy_duty: false,
-            patch_percentage: 0.0,
-            no_patch: false,
-            // Adaptive (Sauvola + background-normalised Otsu) is the documented
-            // default. A fixed 180 cut turns any page whose paper renders darker
-            // than that -- yellowed scans sit near 150 -- into solid ink.
-            use_fixed_threshold: false,
-            fixed_threshold: 180,
-        };
-        cfg.set_binarization(bin);
         // Simple mode: keep figure regions as encoded originals (cover format, default JPEG)
         // unless the user passes `--dither` / `--halftone` (handled in main).
         cfg.set_dither_images(false);
@@ -815,6 +811,12 @@ impl PipelineConfig {
     pub fn set_mrc_adaptive_mask(&mut self, enabled: bool) {
         self.mrc_adaptive_mask = enabled;
     }
+    pub fn flatten(&self) -> Option<&crate::dewarp::Settings> {
+        self.flatten.as_ref()
+    }
+    pub fn set_flatten(&mut self, settings: Option<crate::dewarp::Settings>) {
+        self.flatten = settings;
+    }
     pub fn set_mrc_bg_quality(&mut self, q: u8) {
         self.mrc_bg_quality = q.clamp(1, 100);
     }
@@ -935,8 +937,17 @@ impl PipelineConfig {
     pub fn keep_original_images(&self) -> bool {
         self.keep_original_images
     }
+    /// IW44 quality of DjVu picture and background layers. "High quality"
+    /// raises it to at least [`DJVU_HIGH_QUALITY_IW44`]: until 2026-11-14 the
+    /// option changed nothing in a DjVu (the PDF encoders read it, the DjVu
+    /// path only read this number), so the same 16 pages came out byte for
+    /// byte the same with it on or off.
     pub fn djvu_iw44_quality(&self) -> u8 {
-        self.djvu_iw44_quality
+        if self.high_quality_output {
+            self.djvu_iw44_quality.max(DJVU_HIGH_QUALITY_IW44)
+        } else {
+            self.djvu_iw44_quality
+        }
     }
     pub fn slow_ocr_enabled(&self) -> bool {
         self.slow_ocr && cfg!(feature = "ocr")

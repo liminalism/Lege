@@ -25,9 +25,9 @@ class LegeParams {
     var outputFormat: String = "pdf"
 
     /**
-     * Run YOLO layout detection. Requires a working Vulkan device; if the GPU
-     * is unusable the pipeline logs a warning, turns this off for the run, and
-     * continues rather than failing.
+     * Run layout detection (the embedded RF-DETR model). Requires a working
+     * Vulkan device; if the GPU is unusable the pipeline logs a warning, turns
+     * this off for the run, and continues rather than failing.
      */
     @JvmField
     var enableLayoutDetection: Boolean = true
@@ -61,17 +61,13 @@ class LegeParams {
     @JvmField
     var ditherImages: Boolean = false
 
-    /** `"default"`, `"adaptive"`, `"threshold"`, or `"sauvola"`. */
+    /**
+     * Flatten page: straighten photographed pages and split two-page spreads
+     * with the embedded page-flattening model. Needs a hardware GPU; without
+     * one the pipeline skips it. Flat scans are left alone.
+     */
     @JvmField
-    var binarizationMode: String = "default"
-
-    /** Adaptive Sauvola sensitivity; valid range is 0.0–1.0. */
-    @JvmField
-    var sauvolaK: Float = 0.05f
-
-    /** Fixed global threshold; valid range is 0–255. */
-    @JvmField
-    var fixedThreshold: Int = 180
+    var flattenPage: Boolean = false
 
     /** Filesystem destination for the optional EPUB companion file. */
     @JvmField

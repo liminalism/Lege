@@ -80,7 +80,7 @@ pub fn create_djvu_pipeline_config(
     let crop_active = matches!(margin_setting, crate::margin::MarginSettings::CropAndResize);
     let djvu_config = DjvuConfig {
         dpi: config.output_dpi(),
-        clean: config.binarization().use_heavy_duty,
+        clean: true,
         lossy: None,
         iw44_quality: config.djvu_iw44_quality(), // Use quality from pipeline config
         work_dir,

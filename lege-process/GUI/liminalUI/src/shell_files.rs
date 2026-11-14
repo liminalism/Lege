@@ -34,7 +34,8 @@ pub fn file_icon(path: &Path, size: u32) -> Option<Bitmap> {
 /// How a drag out of the window ended.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DragOutcome {
-    /// A target accepted the file (it was copied there).
+    /// A target accepted the files: copied, moved or linked, as the target
+    /// and the modifier keys decided.
     Dropped,
     /// Released over nothing that takes files, or cancelled with Escape.
     Cancelled,
@@ -42,17 +43,22 @@ pub enum DragOutcome {
     Unavailable,
 }
 
-/// Drag `paths` out of the window `hwnd` together, offering a copy. Blocks
-/// in the shell's modal drag loop until the button is released; window
-/// messages keep being pumped meanwhile, so the window stays responsive.
-pub fn drag_out(hwnd: isize, paths: &[PathBuf]) -> DragOutcome {
+/// Drag `paths` out of the window `hwnd` together, offering a copy, a
+/// shortcut and, with `allow_move`, a move. Which one happens is the drop
+/// target's choice by the standard rules: in Explorer a drop on the same
+/// drive moves and on another drive copies, Ctrl copies, Shift moves, and Alt
+/// (or Ctrl+Shift) makes a shortcut. A move is carried out by the target, so
+/// the caller checks afterwards which files are still there. Blocks in the
+/// shell's modal drag loop until the button is released; window messages keep
+/// being pumped meanwhile, so the window stays responsive.
+pub fn drag_out(hwnd: isize, paths: &[PathBuf], allow_move: bool) -> DragOutcome {
     #[cfg(windows)]
     {
-        windows_impl::drag_out(hwnd, paths)
+        windows_impl::drag_out(hwnd, paths, allow_move)
     }
     #[cfg(not(windows))]
     {
-        let _ = (hwnd, paths);
+        let _ = (hwnd, paths, allow_move);
         DragOutcome::Unavailable
     }
 }
@@ -69,7 +75,7 @@ mod windows_impl {
         DeleteObject, GetDIBits, GetObjectW, HBITMAP, HGDIOBJ,
     };
     use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx, IDataObject};
-    use windows::Win32::System::Ole::DROPEFFECT_COPY;
+    use windows::Win32::System::Ole::{DROPEFFECT_COPY, DROPEFFECT_LINK, DROPEFFECT_MOVE};
     use windows::Win32::UI::Shell::{
         BHID_DataObject, ILCreateFromPathW, ILFree, IShellItem, IShellItemArray,
         IShellItemImageFactory, SHCreateItemFromParsingName, SHCreateShellItemArrayFromIDLists,
@@ -260,15 +266,22 @@ mod windows_impl {
         data
     }
 
-    pub(super) fn drag_out(hwnd: isize, paths: &[PathBuf]) -> DragOutcome {
+    pub(super) fn drag_out(hwnd: isize, paths: &[PathBuf], allow_move: bool) -> DragOutcome {
         let Some(data) = data_object(paths) else {
             return DragOutcome::Unavailable;
         };
         let window = HWND(hwnd as *mut core::ffi::c_void);
-        // Copy only: a drop on Explorer must never move a file away from
-        // where the queue and the output list say it is. A null drop source
-        // makes the shell supply its own, and the drag image with it.
-        match unsafe { SHDoDragDrop(Some(window), &data, None, DROPEFFECT_COPY) } {
+        // Copy and shortcut always; move unless the caller still needs the
+        // files where they are. A null drop source makes the shell supply
+        // its own, and the drag image with it.
+        let effects = if allow_move {
+            DROPEFFECT_COPY | DROPEFFECT_LINK | DROPEFFECT_MOVE
+        } else {
+            DROPEFFECT_COPY | DROPEFFECT_LINK
+        };
+        // SAFETY: `window` is this application's live window and `data` a
+        // live shell data object; the call returns when the drag ends.
+        match unsafe { SHDoDragDrop(Some(window), &data, None, effects) } {
             Ok(effect) if effect.0 != 0 => DragOutcome::Dropped,
             Ok(_) => DragOutcome::Cancelled,
             Err(_) => DragOutcome::Unavailable,

@@ -16,6 +16,7 @@ pub(crate) mod session;
 
 mod api;
 
+pub use api::{DEWARP_PORTRAIT, DEWARP_STRIDE, DewarpNet, DewarpOutput, hardware_gpu_available};
 pub use api::{
     Detector, RecLine, RecRecognizer, RecWord, SauvolaConfig, SauvolaCpuProcessor,
     SauvolaProcessor, TextBox, TokenRecognizer, TokenRecognizerConfig, TokenSequence,

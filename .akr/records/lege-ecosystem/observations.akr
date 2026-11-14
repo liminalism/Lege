@@ -317,6 +317,28 @@ record lege-ecosystem.observation.bpg-variance-separates-line-art/3 : observatio
     author "GitHub Uploader"
 }
 
+record lege-ecosystem.observation.dewarp-models-move-flat-pages-20261112/1 : observation {
+    title "Paddle UVDoc, flattener and DocScanner all move already-flat pages; DocScanner matches them on curved spreads but is non-commercial and does not load in lege-gpu"
+    state verified
+    scope [ path "lege-gpu/**" ]
+    statement """
+        Measured 2026-11-12 with the same standalone Rust tester as the flattener observation. Flat-page test: six pages that need no correction (one 968x1400 full-frame scan; five pages of a processed PDF rendered 2400 px tall on a black border) through each model, comparing the model's backward map with the identity. None of the three leaves a flat page alone: each zooms in by 6-11 % (zoom 0.89-0.94 of the page extent) and bends the content. On the full-frame scan: Paddle UVDoc export mean move 37.6 px, bend (what remains after the best shift, zoom and rotation) max 25.7 px, zoom 0.924; flattener 1.1.0 mean 37.4 px, bend max 63.8 px, zoom 0.983; DocScanner-L mean 49.4 px, bend max 24.8 px, zoom 0.891. On a flat sheet-music page DocScanner bent by up to 118 px of 2400 and curved the staff lines visibly; Paddle 14.3 px, flattener 10.5 px. flattener's page gate took a small region of a colour cover for the page (zoom 0.249) and found no page on an almost entirely black page. DocScanner-L (fh2019ustc/DocScanner at commit 54f6063, 8.5 M parameters with its mask net, exported to a static 288x288 ONNX graph that matches PyTorch to 1e-6): on the 26 curved book spreads text-line tilt 1.20 deg, angle spread 1.72 deg, bow 0.333 % of line length (Paddle 1.17 / 1.38 / 0.363; flattener with every spread split 1.33 / 1.49 / 0.313; cropped photo 3.88 / 4.28 / 0.571); 0.82 s per page on ONNX Runtime CPU. lege-gpu rejects the export: InstanceNormalization, Tanh, Greater and Range are unsupported. Its licence allows non-commercial use only.
+        """
+    observed_at git:1c97cfa12404e888dc0aa49090a784a07320db99
+    method instrumented
+    watches [ "lege-gpu/src/vision/onnx/load.rs" ]
+    derived_from [ @lege-ecosystem.observation.flattener-dewarp-models-run-in-lege-gpu ]
+    author "dk"
+    source {
+        kind external
+        role evidence
+        url "https://github.com/fh2019ustc/DocScanner"
+        use """
+            DocScanner-L weights and code at commit 54f6063a61a52e4ce4012832e943d1871a9c3c66, evaluated only; nothing adopted (non-commercial licence).
+            """
+    }
+}
+
 record lege-ecosystem.observation.doclayout-m-underdetects-text-and-images/1 : observation {
     title "DocLayout-M underdetects text and some images"
     state superseded
@@ -367,6 +389,35 @@ record lege-ecosystem.observation.doclayout-m-underdetects-text-and-images/3 : o
     review_after 2026-11-13
     supersedes [ @lege-ecosystem.observation.doclayout-m-underdetects-text-and-images/2 ]
     verified_by [ @lege-ecosystem.evidence.stale-observation-requeue-20260908/1 ]
+}
+
+record lege-ecosystem.observation.flattener-dewarp-models-run-in-lege-gpu/1 : observation {
+    title "flattener 1.1.0 dewarp and page-gate models run in lege-gpu after a preparation step; its orientation model does not load"
+    state verified
+    scope [ path "lege-gpu/**" ]
+    statement """
+        Measured 2026-11-12 with a standalone Rust tester outside this repository (path dependency on lege-gpu, RTX 4060 Laptop, Vulkan), on 26 hand-held photos of curved two-page book spreads. deveworld/flattener models v1.1.0 (Apache-2.0): dewarp.onnx (UVDoc architecture, input `image` 1x3x712x488, output a 45x31 grid) and gate.onnx (page mask, 1x3x192x144) are rejected by lege-gpu as exported (shape inference is not implemented for `Constant`; gate also has AveragePool count_include_pad=1). After ONNX Runtime basic-level constant folding and rewriting count_include_pad to 0 on the unpadded pools, both load under the existing `image` target with no new operators, and their ONNX Runtime outputs are unchanged. On real inputs lege-gpu matches ONNX Runtime: dewarp grid nodes within 0.0006 px of the model view, gate probabilities within 1e-5 with identical masks; the CPU reference executor agrees. Warm latency: dewarp 38 ms, gate 4 ms (ONNX Runtime CPU dewarp: 155 ms). orient.onnx is rejected: it has two inputs (`global_view` 1x1x256x256 and rank-5 `patches` 1x4x1x128x128) and no input matches a registered model target. A Rust port of flattener's scan path on lege-gpu reproduced the official Python scanner on all 26 photos (same page box, same split decision, grids 1.65 px apart on average in a 3936 px photo; 0.0 px on identical decoded pixels with ONNX Runtime) at 0.43 s per photo. Text-line straightness by a DBNet tracer, means over the 26 photos (tilt deg / angle spread deg / bow % of line length): cropped photo 3.88 / 4.28 / 0.571; Paddle UVDoc export in one pass 1.17 / 1.38 / 0.363; flattener 1.54 / 1.64 / 0.382; flattener with every spread split 1.33 / 1.49 / 0.313. flattener's fold detection found no fold in 11 of the 26 spreads. `OnnxSession::run_gpu` compiles the graph on every call; the tester kept one compiled graph resident by feeding `run_gpu_each` from a channel. yb85/aglaia has no learned dewarp model: its curvature correction is the page-dewarp cubic-sheet fit, and its trained geometry models are two text detectors (PP-OCRv4 det and EAST).
+        """
+    observed_at git:1c97cfa12404e888dc0aa49090a784a07320db99
+    method instrumented
+    watches [ "lege-gpu/src/vision/onnx/**", "lege-gpu/src/vision/session.rs" ]
+    author "dk"
+    source {
+        kind external
+        role origin
+        url "https://github.com/deveworld/flattener"
+        use """
+            Models v1.1.0 from huggingface.co/DevWorld/flattener and the scan pipeline at commit 5c40b4ad030fd428c809040ead30a5fa33389dbe; nothing adopted into this repository yet.
+            """
+    }
+    source {
+        kind external
+        role evidence
+        url "https://github.com/yb85/aglaia"
+        use """
+            Commit 530f67868e1a2cdcfbdf2440775c595f565823d3 read to establish which trained models it uses; nothing adopted.
+            """
+    }
 }
 
 record lege-ecosystem.observation.freya-main-removed/1 : observation {

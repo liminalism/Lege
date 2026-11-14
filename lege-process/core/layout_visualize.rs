@@ -637,18 +637,10 @@ pub fn run_image_debug_mode(
     let output_dir = output_dir.unwrap_or_else(|| dated_debug_dir(&image_path, "image_debug"));
     std::fs::create_dir_all(&output_dir)?;
 
-    let method = if binarization
-        .as_ref()
-        .is_some_and(|cfg| cfg.use_heavy_duty && !cfg.use_fixed_threshold)
-    {
-        "heavy Sauvola (ONNX)"
-    } else if binarization
-        .as_ref()
-        .is_some_and(|cfg| cfg.use_fixed_threshold)
-    {
-        "fixed threshold"
+    let method = if crate::color::binarizes_on_gpu() {
+        "binarizer model (GPU)"
     } else {
-        "adaptive Sauvola/Otsu"
+        "adaptive Sauvola/Otsu (CPU fallback)"
     };
 
     info_println!("Image Debug Mode");
@@ -671,13 +663,9 @@ pub fn run_image_debug_mode(
     let options = crate::color::BinarizationOptions {
         invert: bin_cfg.invert,
         invert_input: bin_cfg.invert_input,
-        k_factor: bin_cfg.k_factor,
-        use_heavy_duty: bin_cfg.use_heavy_duty && !bin_cfg.use_fixed_threshold,
-        patch_percentage: bin_cfg.patch_percentage,
-        no_patch: bin_cfg.no_patch,
-        use_fixed_threshold: bin_cfg.use_fixed_threshold,
-        fixed_threshold: bin_cfg.fixed_threshold,
-        disable_gpu: false,
+        blank_threshold: None,
+        disable_gpu: bin_cfg.force_cpu,
+        adaptive: bin_cfg.fast,
     };
     let width = img.width() as usize;
     let height = img.height() as usize;

@@ -1006,6 +1006,13 @@ fn file_image_dimensions(path: &Path) -> Option<(u32, u32)> {
 }
 
 fn decode_zip_image(zip_path: &Path, selected: &ZipImageEntry) -> Result<RgbImage> {
+    let bytes = read_zip_entry(zip_path, selected)?;
+    decode_image_bytes(Path::new(&selected.name), &bytes)
+        .with_context(|| format!("Failed to decode ZIP image: {}", selected.name))
+}
+
+/// One ZIP entry's bytes, extracted into memory under the size limit.
+fn read_zip_entry(zip_path: &Path, selected: &ZipImageEntry) -> Result<Vec<u8>> {
     if selected.uncompressed_size > MAX_ZIP_IMAGE_BYTES {
         return Err(anyhow!(
             "ZIP image is too large to extract safely ({} bytes, limit {}): {}",
@@ -1037,8 +1044,7 @@ fn decode_zip_image(zip_path: &Path, selected: &ZipImageEntry) -> Result<RgbImag
             selected.name
         ));
     }
-    decode_image_bytes(Path::new(&selected.name), &bytes)
-        .with_context(|| format!("Failed to decode ZIP image: {}", selected.name))
+    Ok(bytes)
 }
 
 fn decode_image_bytes(name: &Path, bytes: &[u8]) -> Result<RgbImage> {
@@ -1118,6 +1124,425 @@ fn compare_image_names(a: &Path, b: &Path) -> CmpOrdering {
         (Some(_), None) => CmpOrdering::Less,
         (None, Some(_)) => CmpOrdering::Greater,
         (None, None) => a.cmp(b),
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════════════
+// Flatten page: photographed pages, flattened before anything else sees them
+// ════════════════════════════════════════════════════════════════════════════════
+
+/// One decoded photo, upright (its EXIF orientation applied), at native size.
+pub struct Photo {
+    pub image: RgbImage,
+    /// 35 mm equivalent focal length from EXIF, for the page aspect estimate.
+    pub focal_length_35mm: Option<f64>,
+}
+
+/// The photos behind a flattened source: a folder's files or a ZIP's entries.
+pub trait PhotoSet: Send + Sync {
+    fn len(&self) -> usize;
+    /// Header-only pixel dimensions, as [`PageSource::native_page_size`].
+    fn dimensions(&self, index: usize) -> Option<(u32, u32)>;
+    /// Decode one photo. Blocking.
+    fn decode(&self, index: usize) -> Result<Photo>;
+    /// Page points per pixel of the decoded photo. Image files have no
+    /// physical size, so a pixel is a point; a rendered PDF page keeps its own.
+    fn points_per_pixel(&self, index: usize) -> f32 {
+        let _ = index;
+        1.0
+    }
+}
+
+/// The pages of a PDF as photos: a PDF whose pages are photographs (a phone
+/// scan, a camera book scan) is flattened like a folder of them. Each page is
+/// rendered above the target height so the one resampling of the flatten
+/// render has pixels to work with.
+pub struct PdfPhotos {
+    renderer: PdfRenderer,
+    /// Zero-based document pages, in order: the job's page range.
+    pages: Vec<u32>,
+    render_height: u32,
+}
+
+impl PdfPhotos {
+    /// `page_range` is the job's one-based inclusive range; the photos are
+    /// its pages, so the job has no further range to apply.
+    pub fn open(
+        pdf_bytes: Arc<[u8]>,
+        page_range: Option<&crate::pipeline::config::PageRange>,
+        render_height: u32,
+    ) -> Result<Self> {
+        let document = Arc::new(
+            RenderSession::open(pdf_bytes, None)
+                .map_err(|error| anyhow!("Failed to read PDF document: {error}"))?,
+        );
+        let mut raster_cfg = PdfRasterConfig::default();
+        raster_cfg.render_forms = false;
+        let renderer = PdfRenderer::from_session(document, raster_cfg);
+        let count = renderer.page_count();
+        let pages: Vec<u32> = match page_range {
+            Some(range) => {
+                (range.start.saturating_sub(1) as u32..(range.end as u32).min(count)).collect()
+            }
+            None => (0..count).collect(),
+        };
+        if pages.is_empty() {
+            return Err(anyhow!("No pages to process in the PDF"));
+        }
+        Ok(Self {
+            renderer,
+            pages,
+            render_height: render_height.max(1),
+        })
+    }
+
+    /// (width, height) in points of the page as displayed.
+    fn display_size(&self, index: usize) -> Option<(f32, f32)> {
+        let page = *self.pages.get(index)?;
+        let geometry = self.renderer.document_session().page_geometry(page).ok()?;
+        let (width, height) = (
+            geometry.display_width() as f32,
+            geometry.display_height() as f32,
+        );
+        (width > 0.0 && height > 0.0).then_some((width, height))
+    }
+}
+
+impl PhotoSet for PdfPhotos {
+    fn len(&self) -> usize {
+        self.pages.len()
+    }
+    fn dimensions(&self, index: usize) -> Option<(u32, u32)> {
+        let (width, height) = self.display_size(index)?;
+        Some((
+            ((self.render_height as f32 * width / height).round() as u32).max(1),
+            self.render_height,
+        ))
+    }
+    fn decode(&self, index: usize) -> Result<Photo> {
+        let page = *self
+            .pages
+            .get(index)
+            .ok_or_else(|| anyhow!("PDF page index {index} out of bounds"))?;
+        let rendered = self
+            .renderer
+            .render_page_rgb_sync(page, self.render_height, None)
+            .map_err(|error| anyhow!("Failed to render page {}: {error}", page + 1))?;
+        let image = RgbImage::from_raw(rendered.width, rendered.height, rendered.data)
+            .ok_or_else(|| anyhow!("Rendered page {} has an invalid buffer", page + 1))?;
+        Ok(Photo {
+            image,
+            focal_length_35mm: None,
+        })
+    }
+    fn points_per_pixel(&self, index: usize) -> f32 {
+        self.display_size(index)
+            .map(|(_, height)| height / self.render_height as f32)
+            .unwrap_or(1.0)
+    }
+}
+
+/// The photos as pages with nothing flattened: what a flattened source falls
+/// back to when the model cannot run.
+pub fn unflattened_photos(
+    photos: Arc<dyn PhotoSet>,
+    concurrency: usize,
+    target_height: u32,
+    target_width: Option<u32>,
+) -> Arc<dyn PageSource> {
+    let plans = (0..photos.len())
+        .map(|_| (crate::dewarp::PhotoPlan::Untouched, None))
+        .collect();
+    Arc::new(FlattenedPageSource::from_plans(
+        photos,
+        plans,
+        concurrency,
+        target_height,
+        target_width,
+    ))
+}
+
+struct FolderPhotos(Arc<Vec<PathBuf>>);
+
+impl PhotoSet for FolderPhotos {
+    fn len(&self) -> usize {
+        self.0.len()
+    }
+    fn dimensions(&self, index: usize) -> Option<(u32, u32)> {
+        file_image_dimensions(self.0.get(index)?)
+    }
+    fn decode(&self, index: usize) -> Result<Photo> {
+        let path = self
+            .0
+            .get(index)
+            .ok_or_else(|| anyhow!("Image index {index} out of bounds"))?;
+        let is_jp2 = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("jp2"));
+        if is_jp2 {
+            return Ok(Photo {
+                image: decode_folder_image(path)?,
+                focal_length_35mm: None,
+            });
+        }
+        let reader = image::ImageReader::open(path)
+            .with_context(|| format!("Failed to open image: {}", path.display()))?;
+        decode_upright(reader).with_context(|| format!("Failed to decode: {}", path.display()))
+    }
+}
+
+struct ZipPhotos {
+    zip_path: PathBuf,
+    entries: Arc<Vec<ZipImageEntry>>,
+}
+
+impl PhotoSet for ZipPhotos {
+    fn len(&self) -> usize {
+        self.entries.len()
+    }
+    fn dimensions(&self, index: usize) -> Option<(u32, u32)> {
+        zip_image_dimensions(&self.zip_path, self.entries.get(index)?)
+    }
+    fn decode(&self, index: usize) -> Result<Photo> {
+        let entry = self
+            .entries
+            .get(index)
+            .ok_or_else(|| anyhow!("ZIP image index {index} out of bounds"))?;
+        let is_jp2 = Path::new(&entry.name)
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("jp2"));
+        if is_jp2 {
+            return Ok(Photo {
+                image: decode_zip_image(&self.zip_path, entry)?,
+                focal_length_35mm: None,
+            });
+        }
+        let bytes = read_zip_entry(&self.zip_path, entry)?;
+        decode_upright(image::ImageReader::new(std::io::Cursor::new(bytes)))
+            .with_context(|| format!("Failed to decode ZIP image: {}", entry.name))
+    }
+}
+
+/// Decode upright (EXIF orientation applied), keeping the focal length.
+fn decode_upright<R: std::io::BufRead + std::io::Seek>(
+    reader: image::ImageReader<R>,
+) -> Result<Photo> {
+    let (image, focal_length_35mm) = crate::dewarp::decode_upright(reader)?;
+    Ok(Photo {
+        image,
+        focal_length_35mm,
+    })
+}
+
+impl ImageFolderPageSource {
+    /// The folder's files as photos for [`flatten_photos`].
+    pub fn photos(&self) -> Arc<dyn PhotoSet> {
+        Arc::new(FolderPhotos(Arc::clone(&self.files)))
+    }
+}
+
+impl ZipImagePageSource {
+    /// The ZIP's entries as photos for [`flatten_photos`].
+    pub fn photos(&self) -> Arc<dyn PhotoSet> {
+        Arc::new(ZipPhotos {
+            zip_path: self.zip_path.clone(),
+            entries: Arc::clone(&self.entries),
+        })
+    }
+}
+
+/// A source whose pages are the flattened pages of a set of photos.
+///
+/// One photographed spread becomes two pages, while [`PageSource`] promises
+/// a fixed page count. So every photo is surveyed at construction: decoded,
+/// run through the model's passes, and reduced to its plan (untouched, or one
+/// or two small grids); the pixels are dropped. `load_page` decodes the photo
+/// again and renders that one page from its stored grid, at the photo's own
+/// resolution, before the resize to the target height.
+pub struct FlattenedPageSource {
+    photos: Arc<dyn PhotoSet>,
+    plans: Arc<Vec<(crate::dewarp::PhotoPlan, Option<f64>)>>,
+    /// Output page -> (photo, page of that photo).
+    pages: Vec<(usize, usize)>,
+    /// The last photo decoded for a spread: its two pages are asked for back
+    /// to back, so the second one is usually served from here.
+    last_photo: Arc<std::sync::Mutex<Option<(usize, Arc<Photo>)>>>,
+    concurrency: usize,
+    target_height: u32,
+    target_width: Option<u32>,
+}
+
+impl FlattenedPageSource {
+    fn from_plans(
+        photos: Arc<dyn PhotoSet>,
+        plans: Vec<(crate::dewarp::PhotoPlan, Option<f64>)>,
+        concurrency: usize,
+        target_height: u32,
+        target_width: Option<u32>,
+    ) -> Self {
+        let pages = plans
+            .iter()
+            .enumerate()
+            .flat_map(|(photo, (plan, _))| (0..plan.page_count()).map(move |page| (photo, page)))
+            .collect();
+        Self {
+            photos,
+            plans: Arc::new(plans),
+            pages,
+            last_photo: Arc::new(std::sync::Mutex::new(None)),
+            concurrency: concurrency.max(1),
+            target_height,
+            target_width,
+        }
+    }
+
+    /// (photos, photos left as they came, photos that became two pages).
+    fn summary(&self) -> (usize, usize, usize) {
+        let untouched = self
+            .plans
+            .iter()
+            .filter(|(plan, _)| matches!(plan, crate::dewarp::PhotoPlan::Untouched))
+            .count();
+        let spreads = self
+            .plans
+            .iter()
+            .filter(|(plan, _)| plan.page_count() == 2)
+            .count();
+        (self.plans.len(), untouched, spreads)
+    }
+}
+
+/// Wrap a folder or ZIP source so that its photographed pages come out flat
+/// ("Flatten page"). Surveys every photo first; that is one extra decode per
+/// photo and its model calls before the first page appears.
+///
+/// Flattening needs a hardware GPU and the model. Without them the step
+/// switches itself off: one line says so and `plain` is returned unchanged.
+pub fn flatten_photos(
+    plain: Arc<dyn PageSource>,
+    photos: Arc<dyn PhotoSet>,
+    settings: &crate::dewarp::Settings,
+    concurrency: usize,
+    target_height: u32,
+    target_width: Option<u32>,
+    progress: Option<&ProgressTracker>,
+) -> Result<Arc<dyn PageSource>> {
+    let message = |text: String| {
+        if let Some(tracker) = progress {
+            tracker.update(crate::progress::ProcessingStatus::PipelineMessage {
+                stage: "Flatten page".to_string(),
+                message: text,
+            });
+        }
+    };
+    message("Loading the flatten model onto the GPU...".to_string());
+    let flattener = match crate::dewarp::Flattener::shared() {
+        Ok(flattener) => flattener,
+        Err(reason) => {
+            let text = format!("Flatten page is skipped, pages are used as they are: {reason}");
+            eprintln!("{text}");
+            message(text);
+            return Ok(plain);
+        }
+    };
+    let count = photos.len();
+    let mut plans = Vec::with_capacity(count);
+    for index in 0..count {
+        crate::progress::cancellation_checkpoint("while flattening pages")?;
+        message(format!("Looking at photo {} of {count}", index + 1));
+        let photo = photos.decode(index)?;
+        let plan = flattener.survey(&photo.image, photo.focal_length_35mm, settings);
+        plans.push((plan, photo.focal_length_35mm));
+    }
+    let source =
+        FlattenedPageSource::from_plans(photos, plans, concurrency, target_height, target_width);
+    let (photos, untouched, spreads) = source.summary();
+    let text = format!(
+        "Flatten page: {photos} photos, {} pages ({untouched} left as they are, {spreads} spreads)",
+        source.pages.len()
+    );
+    crate::info_println!("{text}");
+    message(text);
+    Ok(Arc::new(source))
+}
+
+#[async_trait]
+impl PageSource for FlattenedPageSource {
+    fn page_count(&self) -> usize {
+        self.pages.len()
+    }
+
+    fn source_concurrency(&self) -> usize {
+        self.concurrency
+    }
+
+    fn native_page_size(&self, page_index: usize) -> Option<(u32, u32)> {
+        // The photo's size: its decode is the peak allocation of a page.
+        let (photo, _) = *self.pages.get(page_index)?;
+        self.photos.dimensions(photo)
+    }
+
+    fn decodes_at_native_size(&self) -> bool {
+        true
+    }
+
+    async fn load_page(&self, page_index: usize) -> Result<SourcePage> {
+        let (photo_index, side) = *self
+            .pages
+            .get(page_index)
+            .ok_or_else(|| anyhow!("Flattened page index {} out of bounds", page_index))?;
+        let photos = Arc::clone(&self.photos);
+        let plans = Arc::clone(&self.plans);
+        let last_photo = Arc::clone(&self.last_photo);
+        let points_per_pixel = self.photos.points_per_pixel(photo_index);
+        let image = crate::runtime_stats::spawn_blocking(move || -> Result<RgbImage> {
+            let (plan, focal) = &plans[photo_index];
+            let crate::dewarp::PhotoPlan::Pages(grids) = plan else {
+                return Ok(photos.decode(photo_index)?.image);
+            };
+            let cached = last_photo
+                .lock()
+                .ok()
+                .and_then(|mut slot| match slot.as_ref() {
+                    Some((index, _)) if *index == photo_index => slot.take().map(|(_, p)| p),
+                    _ => None,
+                });
+            let photo = match cached {
+                Some(photo) => photo,
+                None => Arc::new(photos.decode(photo_index)?),
+            };
+            let page = crate::dewarp::render_page(&photo.image, &grids[side], *focal);
+            if side + 1 < grids.len() {
+                if let Ok(mut slot) = last_photo.lock() {
+                    *slot = Some((photo_index, Arc::clone(&photo)));
+                }
+            }
+            match page {
+                Some(page) => Ok(page),
+                // The survey ruled this out; a page is never failed for it.
+                None => Ok(Arc::try_unwrap(photo)
+                    .map(|photo| photo.image)
+                    .unwrap_or_else(|shared| shared.image.clone())),
+            }
+        })
+        .await
+        .map_err(|e| anyhow!("Flatten task panicked: {}", e))??;
+        // The flattened page is what is normalised to the target height, and
+        // its size, not the photo's, is the page's.
+        let (width, height) = image.dimensions();
+        let image = normalize_folder_image_to_target(
+            image,
+            self.target_height,
+            self.target_width,
+            page_index,
+        )?;
+        Ok(SourcePage {
+            image,
+            original_width_pts: width as f32 * points_per_pixel,
+            original_height_pts: height as f32 * points_per_pixel,
+        })
     }
 }
 
@@ -1350,5 +1775,90 @@ mod tests {
         assert_eq!(page.image.get_pixel(0, 0).0, [1, 20, 30]);
 
         std::fs::remove_dir_all(zip_path.parent().unwrap()).ok();
+    }
+
+    struct TestPhotos(Vec<RgbImage>);
+
+    impl PhotoSet for TestPhotos {
+        fn len(&self) -> usize {
+            self.0.len()
+        }
+        fn dimensions(&self, index: usize) -> Option<(u32, u32)> {
+            self.0.get(index).map(|image| image.dimensions())
+        }
+        fn decode(&self, index: usize) -> Result<Photo> {
+            Ok(Photo {
+                image: self.0[index].clone(),
+                focal_length_35mm: None,
+            })
+        }
+    }
+
+    /// An identity grid over the columns `low..high` (-1 to 1) of a photo.
+    fn column_grid(low: f64, high: f64) -> crate::dewarp::geom::Grid {
+        let (rows, cols) = (9usize, 7usize);
+        let mut nodes = Vec::new();
+        for i in 0..rows {
+            for j in 0..cols {
+                nodes.push([
+                    low + (high - low) * j as f64 / (cols - 1) as f64,
+                    i as f64 / (rows - 1) as f64 * 2.0 - 1.0,
+                ]);
+            }
+        }
+        crate::dewarp::geom::Grid { rows, cols, nodes }
+    }
+
+    /// A flat scan, a spread and a single curved page: the document has four
+    /// pages in source order, the spread as its left then its right half, and
+    /// each page reports its own size.
+    #[test]
+    fn a_spread_becomes_two_pages_in_source_order() {
+        use crate::dewarp::PhotoPlan;
+        let photo = |w: u32, h: u32, left: u8, right: u8| {
+            RgbImage::from_fn(w, h, |x, _| {
+                let v = if x < w / 2 { left } else { right };
+                image::Rgb([v, v, v])
+            })
+        };
+        let photos = Arc::new(TestPhotos(vec![
+            photo(40, 60, 10, 10),
+            photo(120, 80, 100, 200),
+            photo(40, 64, 30, 30),
+        ]));
+        let plans = vec![
+            (PhotoPlan::Untouched, None),
+            (
+                PhotoPlan::Pages(vec![column_grid(-1.0, 0.0), column_grid(0.0, 1.0)]),
+                None,
+            ),
+            (PhotoPlan::Pages(vec![column_grid(-1.0, 1.0)]), None),
+        ];
+        // Target height 0 keeps every page at its flattened size.
+        let source = FlattenedPageSource::from_plans(photos, plans, 2, 0, None);
+        assert_eq!(source.page_count(), 4);
+        assert_eq!(source.summary(), (3, 1, 1));
+        assert_eq!(source.native_page_size(1), Some((120, 80)));
+        assert_eq!(source.native_page_size(2), Some((120, 80)));
+        assert!(source.decodes_at_native_size());
+
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap();
+        let pages: Vec<SourcePage> = (0..4)
+            .map(|index| runtime.block_on(source.load_page(index)).unwrap())
+            .collect();
+        let sizes: Vec<(u32, u32)> = pages.iter().map(|p| p.image.dimensions()).collect();
+        assert_eq!(sizes, vec![(40, 60), (60, 80), (60, 80), (40, 64)]);
+        let tone = |page: &SourcePage| page.image.get_pixel(5, 5).0[0];
+        assert_eq!(
+            pages.iter().map(tone).collect::<Vec<_>>(),
+            vec![10, 100, 200, 30]
+        );
+        assert_eq!(pages[1].original_width_pts, 60.0);
+        assert_eq!(pages[1].original_height_pts, 80.0);
+        // The spread's photo was handed from its first page to its second.
+        assert!(source.last_photo.lock().unwrap().is_none());
+        assert!(runtime.block_on(source.load_page(4)).is_err());
     }
 }

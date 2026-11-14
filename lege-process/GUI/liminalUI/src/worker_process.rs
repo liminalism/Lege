@@ -16,8 +16,8 @@ use std::sync::{
 use anyhow::Result;
 
 use crate::models::{
-    BinarizationKind, CompressionType, CoverImageType, ImageProcessingType, OcrMode, OutputFormat,
-    PageTreatment, ProcessingOptions,
+    CompressionType, CoverImageType, ImageProcessingType, OcrMode, OutputFormat, PageTreatment,
+    ProcessingOptions,
 };
 
 // ── Protocol types ────────────────────────────────────────────────────────────
@@ -134,162 +134,30 @@ pub enum WorkerReflowStage {
 }
 
 impl WorkerProcessingStatus {
-    /// Returns three display lines for the GUI (no ANSI codes).
-    pub fn to_gui_display_lines(&self) -> (String, String, String) {
+    /// The status line beside the progress bar. The page counters are not
+    /// repeated here: they are the bar. `None` keeps the line already shown
+    /// (a page-appended notice, or one that arrives as a popup), an empty
+    /// string clears it (a counter update after a phase message).
+    pub fn gui_detail(&self) -> Option<String> {
+        use crate::gui_text::tr;
         match self {
-            Self::Initializing => (
-                "[Initializing]".into(),
-                "Preparing pipeline...".into(),
-                String::new(),
-            ),
-            Self::AssemblingOutput => (
-                "[Finalizing]".into(),
-                "Assembling output file...".into(),
-                "This may take a moment.".into(),
-            ),
-            Self::Complete { message } => (
-                "[Complete]".into(),
-                message.clone(),
-                "Ready for next task.".into(),
-            ),
-            Self::Error { error } => ("[Error]".into(), "An error occurred.".into(), error.clone()),
-            Self::FootnotesDetected { message } => (
-                "[Margin Analysis]".into(),
-                "Margin Analysis: note".into(),
-                format!("{} | Footnotes preserved (centering used).", message),
-            ),
-            Self::OcrLayerDetected { has_ocr } => {
-                if *has_ocr {
-                    (
-                        "[OCR Detection]".into(),
-                        "OCR layer detected in document".into(),
-                        "Leave OCR disabled to preserve existing text layer.".into(),
-                    )
-                } else {
-                    (
-                        "[OCR Detection]".into(),
-                        "No OCR layer found".into(),
-                        "Enable OCR if you want to add text layer.".into(),
-                    )
-                }
-            }
-            Self::MarginPass1Analyzing => (
-                "[Margin Analysis - Pass 1]".into(),
-                "Preparing document-wide margin analysis...".into(),
-                "Progress will update as pages are analyzed.".into(),
-            ),
-            Self::MarginAnalysisSummary { summary } => (
-                "[Margin Analysis - Pass 1]".into(),
-                "Margin Analysis: complete".into(),
-                summary.clone(),
-            ),
-            Self::PipelineMessage { stage, message } => {
-                (format!("[{stage}]"), message.clone(), String::new())
-            }
-            Self::PdfAppend { .. } | Self::PdfAppendMargin { .. } => {
-                (String::new(), String::new(), String::new())
-            }
-            Self::ReflowProgress {
-                stage,
-                current,
-                total,
-                eta,
-            } => {
-                let detail = match stage {
-                    WorkerReflowStage::SourceAnalysis => {
-                        format!("Rendering source pages and detecting layout: {current}/{total}")
-                    }
-                    WorkerReflowStage::Compose => {
-                        "Building reflow plan from detected regions, rows, and words...".into()
-                    }
-                    WorkerReflowStage::OutputPages => {
-                        format!("Rasterizing and encoding reflowed output pages: {current}/{total}")
-                    }
-                };
-                let title = match stage {
-                    WorkerReflowStage::SourceAnalysis => "[Reflow - Source Analysis]",
-                    WorkerReflowStage::Compose => "[Reflow - Compose]",
-                    WorkerReflowStage::OutputPages => "[Reflow - Output Pages]",
-                };
-                (
-                    title.into(),
-                    detail,
-                    eta.as_ref()
-                        .map(|eta| format!("Estimated time remaining: {eta}"))
-                        .unwrap_or_default(),
-                )
-            }
-            Self::EpubProgress {
-                rendered,
-                detected,
-                ocr,
-                total,
-                eta,
-            } => {
-                let detail = format!(
-                    "Render {rendered}/{total} | Layout {detected}/{total} | OCR {ocr}/{total}"
-                );
-                (
-                    "[EPUB]".into(),
-                    detail,
-                    eta.as_ref()
-                        .map(|eta| format!("Estimated time remaining: {eta}"))
-                        .unwrap_or_default(),
-                )
-            }
-            Self::LayoutProgress {
-                rendered,
-                detected,
-                encoded,
-                total,
-                eta,
-                ..
-            } => {
-                let detail = format!(
-                    "Render {rendered}/{total} | Infer {detected}/{total} | Encode {encoded}/{total}"
-                );
-                (
-                    "[Layout Mode]".into(),
-                    detail,
-                    eta.as_ref()
-                        .map(|eta| format!("Estimated time remaining: {eta}"))
-                        .unwrap_or_default(),
-                )
-            }
-            Self::NoLayoutProgress {
-                rendered,
-                encoded,
-                total,
-                eta,
-            } => {
-                let detail = format!("Render {rendered}/{total} | Encode {encoded}/{total}");
-                (
-                    "[No-Layout Mode]".into(),
-                    detail,
-                    eta.as_ref()
-                        .map(|eta| format!("Estimated time remaining: {eta}"))
-                        .unwrap_or_default(),
-                )
-            }
-            Self::MarginProgress {
-                pass1_rendered,
-                pass1_detected,
-                pass2_processed,
-                total,
-                eta,
-                ..
-            } => {
-                let detail = format!(
-                    "Analyze {pass1_rendered}/{total} | Infer {pass1_detected}/{total} | Process {pass2_processed}/{total}"
-                );
-                (
-                    "[Margin Mode]".into(),
-                    detail,
-                    eta.as_ref()
-                        .map(|eta| format!("Estimated time remaining: {eta}"))
-                        .unwrap_or_default(),
-                )
-            }
+            Self::Initializing => Some(tr("phase_preparing").into()),
+            Self::AssemblingOutput => Some(tr("phase_assembling").into()),
+            Self::MarginPass1Analyzing => Some(tr("phase_margins").into()),
+            Self::Complete { message } => Some(message.clone()),
+            Self::Error { error } => Some(error.clone()),
+            Self::PipelineMessage { message, .. } => Some(message.clone()),
+            // The reflow stage is on the bar.
+            Self::ReflowProgress { .. }
+            | Self::EpubProgress { .. }
+            | Self::LayoutProgress { .. }
+            | Self::NoLayoutProgress { .. }
+            | Self::MarginProgress { .. } => Some(String::new()),
+            Self::PdfAppend { .. }
+            | Self::PdfAppendMargin { .. }
+            | Self::FootnotesDetected { .. }
+            | Self::MarginAnalysisSummary { .. }
+            | Self::OcrLayerDetected { .. } => None,
         }
     }
 }
@@ -483,25 +351,20 @@ pub fn gui_options_to_cli_args(
     match options.page_treatment() {
         PageTreatment::Preserved => args.push("--preserve".into()),
         PageTreatment::Grayscale => args.push("--grayscale".into()),
-        PageTreatment::Binarized(BinarizationKind::Fixed) => {
-            args.extend([
-                "--binarization".into(),
-                "fixed".into(),
-                "--threshold".into(),
-                options.threshold_value.to_string().into(),
-            ]);
-        }
-        PageTreatment::Binarized(BinarizationKind::Heavy) => {
-            args.extend(["--binarization".into(), "heavy".into()]);
-        }
-        PageTreatment::Binarized(BinarizationKind::Adaptive) => {
-            args.extend([
-                "--binarization".into(),
-                "adaptive".into(),
-                "--sauvola-k".into(),
-                options.k_factor.to_string().into(),
-            ]);
-        }
+        // Named so that truetyping stays bilevel: without it the worker
+        // renders truetyping text in grayscale.
+        PageTreatment::Binarized => args.extend([
+            "--binarization".into(),
+            if options.fast_binarization {
+                "fast"
+            } else {
+                "model"
+            }
+            .into(),
+        ]),
+    }
+    if options.flatten_pages {
+        args.push("--flatten".into());
     }
 
     // Target dimensions via explicit flags. The trailing-positional form is
@@ -1219,8 +1082,6 @@ mod tests {
             options.jpeg_compat = true;
             options.symbol_mode = true;
             options.reflow = true;
-            options.use_fixed_threshold = true;
-            options.use_heavy_binarization = true;
             let args = gui_options_to_cli_args(
                 &PathBuf::from("input.pdf"),
                 &PathBuf::from(name),
@@ -1287,12 +1148,31 @@ mod tests {
     }
 
     #[test]
-    fn new_options_show_adaptive_as_the_selected_default() {
-        let options = ProcessingOptions::new();
-        assert!(options.use_custom_adaptive);
-        assert!(!options.use_fixed_threshold);
-        assert!(!options.use_heavy_binarization);
-        assert_eq!(options.k_factor, lege_ipc::DEFAULT_K_FACTOR);
+    fn bilevel_pages_name_the_binarizer_and_flatten_is_passed_only_when_on() {
+        let mut options = ProcessingOptions::new();
+        let args = |options: &ProcessingOptions| {
+            gui_options_to_cli_args(
+                &PathBuf::from("scans.zip"),
+                &PathBuf::from("output.pdf"),
+                options,
+                true,
+            )
+        };
+        let plain = args(&options);
+        assert_eq!(
+            cli_arg_after(&plain, "--binarization").as_deref(),
+            Some("model")
+        );
+        for retired in ["--threshold", "--sauvola-k", "--flatten"] {
+            assert!(!plain.iter().any(|arg| arg == retired), "{retired}");
+        }
+        options.flatten_pages = true;
+        assert!(args(&options).iter().any(|arg| arg == "--flatten"));
+        options.fast_binarization = true;
+        assert_eq!(
+            cli_arg_after(&args(&options), "--binarization").as_deref(),
+            Some("fast")
+        );
     }
 
     #[test]

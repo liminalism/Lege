@@ -1,83 +1,41 @@
 //! Shared types for color processing and binarization
 use serde::{Deserialize, Serialize};
 
-/// Default Sauvola k-factor. Lower values produce more ink (darker output)
-/// in flat/low-variance regions. 0.05 balances stroke preservation vs background
-/// noise across clean-white and yellowed paper scans.
-pub use lege_gpu::binarization::DEFAULT_K_FACTOR;
-
-/// These are derived from `BinarizationConfig` for per-image operations.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Per-image binarization options, derived from `BinarizationConfig`.
+///
+/// There is one method: the binarizer model on the GPU, with the adaptive
+/// CPU algorithm where no hardware GPU is available.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct BinarizationOptions {
+    /// Invert output (white on black).
     pub invert: bool,
-    pub invert_input: bool, // Invert input grayscale before thresholding (for inverted docs)
-    pub k_factor: f32,
-    pub use_heavy_duty: bool,
-    /// No-op: the heavy (ONNX) path is always whole-image now; patching was removed.
-    /// Retained only for config/serde compatibility. See `BinarizationConfig`.
-    pub patch_percentage: f32,
-    /// No-op: see `patch_percentage`.
-    pub no_patch: bool,
-    pub use_fixed_threshold: bool,
-    pub fixed_threshold: u8,
-    /// When true, skip GPU binarization fast paths and use the CPU path.
-    /// Used to dodge a black-background regression seen in layout-mode runs
-    /// where the GPU path occasionally produced an inverted base layer.
+    /// The page is light on dark: binarize it as its inverse.
+    pub invert_input: bool,
+    /// Blank pages only: a fixed global threshold instead of the binarizer,
+    /// so that paper noise comes out white. Set by the pipeline when the CPU
+    /// fallback is in use; the model does not need it.
+    #[serde(default)]
+    pub blank_threshold: Option<u8>,
+    /// Use the CPU fallback even when the GPU model is available.
     #[serde(default)]
     pub disable_gpu: bool,
+    /// "Fast": the adaptive algorithm outright, in place of the model.
+    #[serde(default)]
+    pub adaptive: bool,
 }
 
-impl Default for BinarizationOptions {
-    fn default() -> Self {
-        Self {
-            invert: false,
-            invert_input: false,
-            k_factor: DEFAULT_K_FACTOR,
-            use_heavy_duty: false,
-            patch_percentage: 5.0,
-            no_patch: false,
-            use_fixed_threshold: false,
-            fixed_threshold: 180,
-            disable_gpu: false,
-        }
-    }
-}
-
-/// Configuration structure for binarization algorithms
-#[derive(Clone, Debug)]
+/// Binarization settings of a job.
+#[derive(Clone, Debug, Default)]
 pub struct BinarizationConfig {
-    /// Sauvola k factor (controls sensitivity). With `thr = μ(1 + k(σ/127 − 1))`,
-    /// higher k *lowers* the threshold in flat/low-σ regions → more paper, i.e.
-    /// LIGHTER output (less ink); lower k darkens flat regions.
-    pub k_factor: f32,
     /// Invert output (black on white vs. white on black).
     pub invert: bool,
     /// Invert input grayscale before thresholding (for inverted documents).
     pub invert_input: bool,
-    /// Use the heavy (neural) binarizer.
-    pub use_heavy_duty: bool,
-    /// No-op: the heavy (ONNX) path is always whole-image now; patching was removed.
-    /// Retained only for config/serde compatibility.
-    pub patch_percentage: f32,
-    /// No-op: see `patch_percentage`.
-    pub no_patch: bool,
-    /// Use a fixed global threshold instead of Sauvola/Otsu fusion.
-    pub use_fixed_threshold: bool,
-    /// Fixed threshold value (0-255) applied after linearization.
-    pub fixed_threshold: u8,
-}
-
-impl Default for BinarizationConfig {
-    fn default() -> Self {
-        Self {
-            k_factor: DEFAULT_K_FACTOR,
-            invert: false,
-            invert_input: false,
-            use_heavy_duty: false,
-            patch_percentage: 5.0,
-            no_patch: false,
-            use_fixed_threshold: false,
-            fixed_threshold: 180,
-        }
-    }
+    /// Use the adaptive CPU fallback even when the GPU model is available.
+    /// No user switch sets this; tests and diagnostics do.
+    pub force_cpu: bool,
+    /// "Fast" instead of "Best": the adaptive algorithm on the CPU, about
+    /// twice the pages per second of the model at reading resolutions. For
+    /// bulk jobs; the model is the default because it is cleaner on scans.
+    pub fast: bool,
 }

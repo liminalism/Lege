@@ -138,35 +138,27 @@ pub struct ProcessingOptions {
     pub crop_free_aspect: bool,
     pub reflow: bool,
 
-    pub use_heavy_binarization: bool,
-    pub k_factor: f32,
-    /// When set, adaptive binarization uses the user-supplied `k_factor` and the
-    /// K-factor input is revealed; otherwise the default `k_factor` is used and hidden.
-    pub use_custom_adaptive: bool,
-    pub use_fixed_threshold: bool,
-    pub threshold_value: u8,
+    /// Flatten photographed pages (PDF, folder and ZIP input): curved pages
+    /// are straightened and a photographed spread becomes two pages. Flat
+    /// scans are detected and left untouched. Off by default.
+    pub flatten_pages: bool,
+    /// Bilevel text from the fast binarizer (adaptive, on the CPU) instead of
+    /// the best one (the model, on the GPU). For bulk jobs; off by default.
+    pub fast_binarization: bool,
     /// Grayscale/MRC rendering: text becomes a JBIG2/JB2 ink mask over a
-    /// JP2/IW44 grayscale background (keeps antialiasing). Mutually exclusive
-    /// with the bilevel binarization options above; image regions stay JP2/IW44.
+    /// JP2/IW44 grayscale background (keeps antialiasing) instead of bilevel
+    /// text; image regions stay JP2/IW44.
     pub grayscale_mode: bool,
     /// Colour-preserving MRC, exposed as a top-level mode in the liminalUI UI.
     pub preserve_mode: bool,
 }
 
-/// The persisted options keep their historical fields for settings
-/// compatibility. Runtime choices are resolved once through these enums.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BinarizationKind {
-    Adaptive,
-    Fixed,
-    Heavy,
-}
-
+/// Runtime choices are resolved once through these enums.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PageTreatment {
     Preserved,
     Grayscale,
-    Binarized(BinarizationKind),
+    Binarized,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -226,30 +218,13 @@ impl ProcessingOptions {
         self.use_jbig2_halftone =
             mode == ImageTreatment::Jbig2Halftone && self.can_select_jbig2_halftone_images();
     }
-    pub fn binarization_kind(&self) -> BinarizationKind {
-        // Preserve the legacy CLI precedence when repairing conflicting flags.
-        if self.use_fixed_threshold {
-            BinarizationKind::Fixed
-        } else if self.use_heavy_binarization {
-            BinarizationKind::Heavy
-        } else {
-            BinarizationKind::Adaptive
-        }
-    }
-
-    pub fn set_binarization_kind(&mut self, kind: BinarizationKind) {
-        self.use_custom_adaptive = kind == BinarizationKind::Adaptive;
-        self.use_fixed_threshold = kind == BinarizationKind::Fixed;
-        self.use_heavy_binarization = kind == BinarizationKind::Heavy;
-    }
-
     pub fn page_treatment(&self) -> PageTreatment {
         if self.preserve_mode {
             PageTreatment::Preserved
         } else if self.grayscale_mode {
             PageTreatment::Grayscale
         } else {
-            PageTreatment::Binarized(self.binarization_kind())
+            PageTreatment::Binarized
         }
     }
 
@@ -304,11 +279,6 @@ impl ProcessingOptions {
             original_cover: true,
             target_height: Some(1200),
             layout_analysis: true,
-            k_factor: lege_ipc::DEFAULT_K_FACTOR,
-            // Adaptive is the effective processing default, so represent that
-            // default explicitly in the mutually-exclusive GUI controls.
-            use_custom_adaptive: true,
-            threshold_value: 180,
             ..Default::default()
         }
     }
@@ -355,6 +325,25 @@ impl ProcessingOptions {
         self.compression_type = encoder;
     }
 
+    /// The Text row of a preparation job: 0 Best, 1 Fast, 2 Grayscale.
+    /// Grayscale keeps the binarizer choice for when it is left again.
+    /// Compatibility is bilevel only, so grayscale takes it back to JBIG2;
+    /// truetyping needs grayscale, so leaving grayscale takes it back too.
+    pub fn set_text_mode(&mut self, index: usize) {
+        self.grayscale_mode = index == 2;
+        if index < 2 {
+            self.fast_binarization = index == 1;
+        }
+        let incompatible = if self.grayscale_mode {
+            CompressionType::Ccitt4
+        } else {
+            CompressionType::Truetyping
+        };
+        if self.compression_type == incompatible && !self.preserve_mode {
+            self.set_text_encoder(CompressionType::Jbig2);
+        }
+    }
+
     /// Select original or conventionally dithered image regions. JBIG2
     /// halftone is represented by the same durable fields for compatibility
     /// with existing saved settings, but behaves as a third exclusive choice
@@ -392,6 +381,31 @@ impl ProcessingOptions {
         } else {
             self.reflow = false;
         }
+    }
+
+    /// The EPUB toggle beside PDF and DjVu: an EPUB is written in addition
+    /// to the chosen format, and needs thorough OCR, so turning it on turns
+    /// that on. Turning it off leaves OCR as it is.
+    pub fn set_make_epub_also(&mut self, enabled: bool) {
+        self.make_epub_also = enabled;
+        if enabled {
+            self.set_use_ocr(true);
+            self.ocr_mode = OcrMode::Thorough;
+        }
+    }
+
+    /// Compatibility mode (CCITT4) writes bilevel text only: grayscale and
+    /// preserve pages keep their ink mask in JBIG2.
+    pub fn can_select_compatibility(&self) -> bool {
+        !self.grayscale_mode && !self.preserve_mode
+    }
+
+    /// JBIG2 symbol substitution is a sub-option of JBIG2 text on bilevel
+    /// pages.
+    pub fn can_select_symbol_mode(&self) -> bool {
+        self.compression_type == CompressionType::Jbig2
+            && !self.grayscale_mode
+            && !self.preserve_mode
     }
 
     pub fn set_use_ocr(&mut self, enabled: bool) {
@@ -437,11 +451,18 @@ impl ProcessingOptions {
             WorkflowMode::Prepare => {}
         }
         self.set_geometry_mode(self.geometry_mode());
-        self.set_binarization_kind(self.binarization_kind());
         // Current setters keep these fields aligned. Older settings may only
         // carry the compatibility flag; an explicit TrueTyping choice wins.
         if self.jpeg_compat && self.compression_type == CompressionType::Jbig2 {
             self.compression_type = CompressionType::Ccitt4;
+        }
+        // Truetyping on a binarized preparation page cannot be chosen any
+        // more; settings saved before that go back to JBIG2.
+        if self.compression_type == CompressionType::Truetyping
+            && !self.grayscale_mode
+            && !self.preserve_mode
+        {
+            self.compression_type = CompressionType::Jbig2;
         }
         self.jpeg_compat = self.compression_type == CompressionType::Ccitt4;
         self.set_image_treatment(self.image_treatment());
@@ -473,7 +494,7 @@ mod reflow_tests {
 
     #[test]
     fn lifecycle_legacy_flag_combinations_normalize_idempotently_to_exclusive_choices() {
-        for flags in 0..512 {
+        for flags in 0..128 {
             let mut options = ProcessingOptions::new();
             options.preserve_mode = flags & 1 != 0;
             options.reflow = flags & 2 != 0;
@@ -481,21 +502,8 @@ mod reflow_tests {
             options.layout_analysis = flags & 8 != 0;
             options.center_margins = flags & 16 != 0;
             options.crop_margins = flags & 32 != 0;
-            options.use_fixed_threshold = flags & 64 != 0;
-            options.use_heavy_binarization = flags & 128 != 0;
-            options.jpeg_compat = flags & 256 != 0;
+            options.jpeg_compat = flags & 64 != 0;
             options.normalize_processing_dependencies();
-            assert_eq!(
-                [
-                    options.use_custom_adaptive,
-                    options.use_fixed_threshold,
-                    options.use_heavy_binarization
-                ]
-                .into_iter()
-                .filter(|selected| *selected)
-                .count(),
-                1
-            );
             assert!(!(options.center_margins && options.crop_margins));
             if options.preserve_mode {
                 assert!(
@@ -753,18 +761,29 @@ mod tests {
     }
 
     #[test]
-    fn truetyping_turns_grayscale_on_and_leaves_it_to_the_user() {
+    fn truetyping_and_grayscale_come_and_go_together() {
         let mut options = ProcessingOptions::new();
         assert!(!options.grayscale_mode);
 
         options.set_text_encoder(CompressionType::Truetyping);
         assert!(options.grayscale_mode);
 
-        // The pair of buttons still decides: binarized truetyping stays
-        // reachable, and going back to JBIG2 does not undo the choice.
-        options.grayscale_mode = false;
+        // Leaving grayscale for a binarizer takes the text back to JBIG2.
+        options.set_text_mode(1);
+        assert!(!options.grayscale_mode && options.fast_binarization);
+        assert_eq!(options.compression_type, CompressionType::Jbig2);
+
+        // Going back to JBIG2 by hand does not undo grayscale.
+        options.set_text_encoder(CompressionType::Truetyping);
         options.set_text_encoder(CompressionType::Jbig2);
-        assert!(!options.grayscale_mode);
+        assert!(options.grayscale_mode);
+
+        // Grayscale takes compatibility back to JBIG2.
+        options.set_text_mode(0);
+        options.set_text_encoder(CompressionType::Ccitt4);
+        options.set_text_mode(2);
+        assert_eq!(options.compression_type, CompressionType::Jbig2);
+        assert!(!options.jpeg_compat);
     }
 
     #[test]

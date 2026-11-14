@@ -892,8 +892,7 @@ impl ProgressTracker {
         }
     }
 
-    #[cfg(test)]
-    fn current_metrics(&self) -> ProgressMetrics {
+    pub(crate) fn current_metrics(&self) -> ProgressMetrics {
         let state = self.state.lock().unwrap();
         state.metrics
     }
@@ -1322,16 +1321,7 @@ impl ProcessingJob {
         let tracker = self.tracker.clone();
         let task_id = tracker.task_id();
 
-        // Set appropriate update throttle based on processing mode
-        // Heavy sequential processing might need more frequent updates due to slower per-page processing
-        if self.config.binarization().use_heavy_duty {
-            tracker.set_heavy_sequential_mode();
-            // For heavy sequential processing, use a shorter throttle period
-            tracker.set_update_throttle(50); // 50ms for heavy processing
-        } else {
-            // For other modes, use the default 100ms
-            tracker.set_update_throttle(100);
-        }
+        tracker.set_update_throttle(100);
 
         // Process the file with cancellation support
         match process_file_with_tracker(
@@ -1657,9 +1647,6 @@ async fn process_file_with_tracker(
         ProgressMode::Margin
     } else if config.enable_layout_detection() {
         ProgressMode::Layout
-    } else if config.binarization().use_heavy_duty {
-        // Heavy Sauvola runs sequentially and needs special progress handling
-        ProgressMode::HeavySequential
     } else {
         ProgressMode::NoLayout
     };
@@ -1667,6 +1654,35 @@ async fn process_file_with_tracker(
     tracker.set_output_is_djvu(config.text_format() == "djvu");
 
     tracker.set_feature_flags(config.enable_layout_detection());
+
+    // "Flatten page" treats the PDF's pages as photographs: they go through
+    // the image pipeline, where one photographed spread can become two pages.
+    // EPUB and reflow read the document itself and are left as they are.
+    if config.flatten().is_some() && config.text_format() != "epub" && !config.enable_reflow() {
+        let (done, finished) = tokio::sync::oneshot::channel();
+        let job_tracker = tracker.clone();
+        let job_output = output_path.clone();
+        // Its own thread: the image pipeline drives a control runtime of its
+        // own when it is not started from inside one.
+        std::thread::Builder::new()
+            .name("lege-flatten-pdf".into())
+            .spawn(move || {
+                let _ = done.send(crate::pnginference::run_flattened_pdf_mode_with_config(
+                    input_path,
+                    job_output,
+                    config,
+                    Some(job_tracker),
+                ));
+            })
+            .context("failed to start the flatten job")?;
+        finished
+            .await
+            .map_err(|_| anyhow::anyhow!("the flatten job ended without a result"))??;
+        return Ok(format!(
+            "Successfully processed flattened pages to {}",
+            output_path.display()
+        ));
+    }
 
     let pdf_bytes = crate::pipeline::config::read_pdf_file(&input_path)
         .with_context(|| format!("Failed to read input PDF: {}", input_path.display()))?;

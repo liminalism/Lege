@@ -39,22 +39,37 @@ pub static EMBEDDED_LAYOUT_MODEL: &[u8] = include_bytes!("../models/layout-rfdet
 #[cfg(all(feature = "layout-detection", feature = "doclayout-m"))]
 pub static EMBEDDED_LAYOUT_MODEL: &[u8] = include_bytes!("../models/doclayout.onnx");
 
-/// The DIBCO Sauvola model, the heavy binarizer before the tileable one.
-/// Embedded only with the `sauvola-model` feature, as the CPU fallback of
-/// heavy binarization; a `sauvola.prepared.onnx` or `sauvola.onnx` runtime
-/// asset is used for that in any build.
+/// The DIBCO Sauvola model, the neural binarizer before the tileable one.
+/// Embedded only with the `sauvola-model` feature, where it replaces the
+/// adaptive algorithm as the no-GPU fallback; a `sauvola.prepared.onnx` or
+/// `sauvola.onnx` runtime asset does the same in any build.
 #[cfg(feature = "sauvola-model")]
 pub static EMBEDDED_SAUVOLA_MODEL: &[u8] = include_bytes!("../models/sauvola.onnx");
 
-/// Tileable heavy binarizer (TileNet v1, 409k parameters), distilled from the
-/// Sauvola model plus DIBCO 2009-2016 on Colab (2026-11-07). Same I/O
-/// contract as `sauvola.onnx` (`img01_inp` NHWC grey/255 in, >0.5 = paper out),
-/// but fully convolutional with no global statistics, so it runs on the wgpu
-/// executor, and on the CPU executor when the GPU is off or fails. Spatial
-/// dims must be a multiple of 8. A `binarizer-tilenet.onnx` runtime asset
-/// overrides it; `LEGE_HEAVY_BINARIZER=sauvolanet` keeps heavy binarization
-/// off the GPU.
+/// The binarizer: a tileable model (TileNet v1, 409k parameters), distilled
+/// from the Sauvola model plus DIBCO 2009-2016 on Colab (2026-11-07). Same
+/// I/O contract as `sauvola.onnx` (`img01_inp` NHWC grey/255 in, >0.5 = paper
+/// out), but fully convolutional with no global statistics, so it runs on the
+/// wgpu executor. It is "Best", the default of the two binarizers ("Fast" is
+/// the adaptive algorithm on the wgpu kernels); where there is no hardware
+/// GPU the adaptive CPU algorithm stands in. Spatial dims must be a multiple
+/// of 8. A `binarizer-tilenet.onnx` runtime asset overrides it;
+/// `LEGE_FORCE_CPU_BINARIZATION=1` selects the CPU fallback.
 pub static EMBEDDED_TILENET_BINARIZER: &[u8] = include_bytes!("../models/binarizer-tilenet.onnx");
+
+/// Lege-Dewarp (ft4, 2026-11-14), the page-flattening model behind "Flatten
+/// page": 5.3M parameters, fp16 weights that the runtime widens at load. Two
+/// files hold the same weights at two static input shapes, portrait
+/// `[1,3,576,384]` and landscape `[1,3,384,576]`; the graph's reshapes are
+/// baked for one token grid, so one file cannot serve both. See
+/// `models/lege-dewarp.md`. Runtime assets `lege-dewarp-576x384.onnx` and
+/// `lege-dewarp-384x576.onnx` override them.
+#[cfg(feature = "dewarp")]
+pub static EMBEDDED_DEWARP_PORTRAIT: &[u8] =
+    include_bytes!("../models/lege-dewarp-576x384.fp16.onnx");
+#[cfg(feature = "dewarp")]
+pub static EMBEDDED_DEWARP_LANDSCAPE: &[u8] =
+    include_bytes!("../models/lege-dewarp-384x576.fp16.onnx");
 
 pub mod accumulator;
 pub mod app_dirs;
@@ -66,6 +81,8 @@ pub mod color;
 #[path = "../colorquant/mod.rs"]
 pub mod colorquant;
 pub mod debug_log;
+#[path = "../dewarp/mod.rs"]
+pub mod dewarp; // "Flatten page": photographed pages and spreads made flat
 pub mod djvu; // Native Rust DJVU encoder
 #[path = "../encoding/mod.rs"]
 pub mod encoding;
@@ -126,7 +143,6 @@ pub use pnginference::{
 }; // Re-export for CLI debug cropping and new image modes
 
 // Re-export common image-encoding functionality.
-pub use color::DEFAULT_K_FACTOR;
 pub use encoding::jpeg::{EncodeOptions, ImageFormat, encode_jpeg};
 
 // Re-export key types from pipeline submodules for convenience

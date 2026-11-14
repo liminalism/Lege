@@ -434,6 +434,44 @@ record lege-ecosystem.evidence.b14-group-speed-ab-20261108/1 : evidence {
     author "dk"
 }
 
+record lege-ecosystem.evidence.best-fast-binarizers-and-drag-out-20261114/1 : evidence {
+    title "Best/Fast binarizers on the restored kernels, and drag-out with copy, move and shortcut: suites pass, Fast is about twice as fast"
+    state verified
+    result pass
+    method command
+    observed_at git:1c97cfa12404e888dc0aa49090a784a07320db99
+    command "cargo test -p lege --lib; -p lege --bin lege; -p lege-gui-liminalui; -p lege-gpu --lib; -p lege-ocr; -p lege-ipc; LEGE_RUN_GPU_TESTS=1 cargo test -p lege --lib color::binarization; lege <book> 20-139 --no-ocr --binarization best|fast; the same with LEGE_FORCE_CPU_BINARIZATION=1; lege <book> 20-29 3000 --binarization fast; lege <book> 20-25 --ocr-mode best"
+    summary """
+        Uncommitted working tree on the observed commit, RTX 4060 Laptop. Suites: lege lib 383 (1 ignored), lege bin 24, GUI 90 (5 ignored), lege-gpu 87 (1 ignored, the kernel tests are back), lege-ocr 70, lege-ipc 2; GPU-gated binarization tests 13 pass (Fast on the kernels agrees with the CPU algorithm within 1 % of pixels; tiles equal the whole-page mask). 120 pages at 1200 px, no OCR: Best 14.2 s, Fast 7.8 s, Fast forced to the CPU 8.6 s; 10 pages at 3000 px with Fast 2.7 s; a best-OCR run and a Fast run with every adapter skipped complete. GUI: the Text row is Best | Fast | Grayscale (click test); a drag out of the window now offers copy, shortcut and move (move withheld for inputs while a batch runs), and files that were moved away leave the queue and the tiles (unit test with real files). The drag itself was not exercised by hand: it needs a real pointer drag onto Explorer.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.binarizer-model-vs-adaptive-on-20-books-20261114/1 : evidence {
+    title "Binarizer model against the adaptive fallback on 120 pages of the owner's 20 largest books: better on tinted scans, worse on born-digital PDFs"
+    state verified
+    result inconclusive
+    method observation
+    observed_at git:1c97cfa12404e888dc0aa49090a784a07320db99
+    summary """
+        Uncommitted working tree on the observed commit, seeded sample of 6 pages per book, defaults (layout on, 1200 px, no OCR), each page binarized by the model (GPU) and by the adaptive CPU algorithm (LEGE_FORCE_CPU_BINARIZATION=1), renders compared by a worker and two pairs checked by the parent. Model clearly better 27 pages, clearly worse 19, both flawed 3, equal 71 (12 of them byte-identical JBIG2 pass-through). Better: tinted or yellowed scans, where adaptive leaves speckle, mirrored show-through text and black frames around image boxes and the model leaves a clean page. Worse: born-digital PDFs - strokes about 1.3 to 1.4 times the ink area everywhere, light-gray code comments and symbols broken or dropped, CJK and small type filled in, white-on-black banners turned into outlines, a hairline rule lost. With layout detection off the model reduces photographs to sparse edges where adaptive keeps a noisy picture. Margin crops differed on 5 pages (the model tighter and cleaner). Not tested: OCR on, DjVu, EPUB, dither or halftone.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.binarizer-tiles-large-pages-20261114/1 : evidence {
+    title "Pages over 1.6 MP are binarized in grid-aligned tiles: identical to the whole-page mask, and the jobs that panicked complete"
+    state verified
+    result pass
+    method command
+    observed_at git:1c97cfa12404e888dc0aa49090a784a07320db99
+    command "LEGE_RUN_GPU_TESTS=1 cargo test -p lege --lib color::binarization; lege <book> 20-29 3000|4500; lege <book> 1-1 --grayscale --truetyping; lege <book> 2-4 --truetyping --binarization model; lege <book> 27-27 2100|2400; lege <large-format book> 18-18 --crop-margins"
+    summary """
+        Uncommitted working tree on the observed commit, RTX 4060 Laptop. Before: any page over about 2.9 MP (target height 2100 and up, every bilevel truetyping page at its 2400 px working height, the cover of a grayscale+truetyping run, crop-margins on a large-format page) died on a wgpu validation error, which is a panic and so never reached the CPU fallback. After: 1024 px tiles with a 128 px discarded border, origins on multiples of 64. The tiled mask of an 1100x900 test page equals the whole-page mask in every pixel (with tile origins off the model's stride-8 grid 0.3 to 1 % of pixels flipped at stroke edges). All six reproductions complete; 10 pages at 3000 px take 12 s and at 4500 px 24 s (adaptive CPU: 4 s at 3000). At 1200 px, 60 pages take 11 s with the model and 5 s on the CPU fallback.
+        """
+    author "dk"
+}
+
 record lege-ecosystem.evidence.calrgb-adaptation-matrix-cache-landed/1 : evidence {
     title "Uncommitted working tree on top of b4fb52b5: pdf-color gained CalRgbTransform (precomputing the white-point adaptation matrix M^-1 and sanitised gamma once per CalRGB colour space) and pdf-content's CieSpace::CalRgb caches CalRgbTransform directly instead of rebuilding two 3x3 matrix inversions per colour operator/sample. New unit test calrgb_cached_transform_matches_direct_conversion and all pdf-color/pdf-content tests pass."
     state verified
@@ -1002,6 +1040,71 @@ record lege-ecosystem.evidence.exprim-package-archive-test-20261109/1 : evidence
     author "dk"
 }
 
+record lege-ecosystem.evidence.flatten-flat-pages-untouched-in-lege-20261114/1 : evidence {
+    title "Through Lege's folder pipeline: 6 of 6 and 406 of 408 flat pages untouched, none of the 26 curved photos"
+    state verified
+    result pass
+    method command
+    observed_at git:1c97cfa12404e888dc0aa49090a784a07320db99
+    command "lege <folder> --flatten --no-layout --no-ocr --output <dir> (debug-fast build) on the 6 flat test pages, the 408 held-out scans and the 26 spread photos"
+    summary """
+        Uncommitted working tree on the observed commit. Survey lines of the three runs: '6 photos, 6 pages (6 left as they are, 0 spreads)'; '408 photos, 408 pages (406 left as they are, 0 spreads)', 51 s for the whole job; '26 photos, 52 pages (0 left as they are, 26 spreads)', 16 s for the whole job at 24 MP. The same counts as the standalone tester with the final gate.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.flatten-grids-match-tester-20261114/1 : evidence {
+    title "Lege's flatten module computes the tester's grids exactly on the 26 spread photos"
+    state verified
+    result pass
+    method command
+    observed_at git:1c97cfa12404e888dc0aa49090a784a07320db99
+    command "cargo test --profile debug-fast -p lege --lib the_grids_match_the_tester -- --ignored --nocapture (LEGE_FLATTEN_PHOTOS = the 26 spread photos, LEGE_FLATTEN_RECORDS = the tester's ft4 records for them)"
+    summary """
+        Uncommitted working tree on the observed commit, RTX 4060 Laptop (Vulkan). 26 photos, 52 pages: every photo flattened as a two-page spread as in the tester's records, same grid shape and same output size per page, mean node distance 0.0000 px and worst node 0.000 px in the photo. EXIF orientation and the 35 mm focal length are read by Lege's own decode.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.flatten-no-gpu-passes-through-20261114/1 : evidence {
+    title "With every GPU adapter skipped, Flatten page is skipped with one line and the job completes on the CPU binarization fallback"
+    state verified
+    result pass
+    method command
+    observed_at git:1c97cfa12404e888dc0aa49090a784a07320db99
+    command "WGPU_ADAPTER_SKIP=NVIDIA,Intel,Microsoft,AMD lege <mixed folder> --flatten --no-layout --no-ocr --output <dir>"
+    summary """
+        Uncommitted working tree on the observed commit. stderr: 'Flatten page is skipped, pages are used as they are: no hardware GPU adapter; the dewarp model has no practical CPU path', then '[PDF-Parallel] No usable GPU found: text is binarized on the CPU with the adaptive fallback instead of the binarizer model. ...', then 'Image processing complete' with a PDF written. With layout detection left on, the same adapter-skip setting fails in layout initialization ('failed to create the first layout inference session'): that path predates this work and is how the skip variable simulates a missing GPU, not a flatten failure.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.flatten-pdf-and-fallbacks-20261114/1 : evidence {
+    title "Flatten page works on PDF input, a job without a GPU proceeds without layout detection, High quality changes a DjVu, and the suites pass"
+    state verified
+    result pass
+    method command
+    observed_at git:1c97cfa12404e888dc0aa49090a784a07320db99
+    command "lege mixed.pdf --flatten --no-ocr; lege mixed.pdf 2-4 --flatten --no-ocr; WGPU_ADAPTER_SKIP=NVIDIA,Intel,Microsoft,AMD lege <book> 20-22 --no-ocr; the same on a folder with --flatten; cargo test for lege (lib, bin), lege-gui-liminalui, lege-gpu, lege-ocr, lege-ipc; gradlew :app:assembleDebug"
+    summary """
+        Uncommitted working tree on the observed commit. A 5-page PDF of scan, spread, scan, spread, scan: '5 photos, 7 pages (3 left as they are, 2 spreads)'; with page range 2-4: '3 photos, 5 pages'. With every adapter skipped and layout left on, the job prints the CPU binarization notice and 'Layout detection disabled; processing will continue without it' and completes (it used to fail with 'failed to create the first layout inference session'). High quality: 16 pages as DjVu were byte-identical with and without it (78,688 and 189,118 bytes bilevel and grayscale); IW44 quality now rises to 92 with it. PDF output already doubled (188,533 to 388,631 bytes). Suites: lege lib 381 (1 ignored), lege bin 24, GUI 88 (5 ignored), lege-gpu 78, lege-ocr 70, lege-ipc 2. Android: cargo check for aarch64-linux-android and the Gradle debug APK build succeed (NDK 30.0.16248370); not run on a device. The German GUI build fails one test in file_tiles.rs, a file this work did not touch.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.flatten-spread-page-count-20261114/1 : evidence {
+    title "A folder of flat scan, spread, flat scan, spread, flat scan becomes a 7-page document in source order"
+    state verified
+    result pass
+    method command
+    observed_at git:1c97cfa12404e888dc0aa49090a784a07320db99
+    command "lege <mixed folder> --flatten --no-ocr --output <dir> (with and without --no-layout); cargo test -p lege --lib a_spread_becomes_two_pages_in_source_order"
+    summary """
+        Uncommitted working tree on the observed commit. Survey: '5 photos, 7 pages (3 left as they are, 2 spreads)'. The output PDF has 7 pages, rendered and looked at: scan, left page, right page, scan, left page, right page, scan; the spread pages are flat and cut at the gutter. The unit test covers the same with stored plans (page sizes, order, the spread's photo handed from its first page to its second).
+        """
+    author "dk"
+}
+
 record lege-ecosystem.evidence.freya-embedded-about-tests/1 : evidence {
     title "All 37 Freya tests passed, including compile-time document presence, current-content assertions, stale cache refresh, and traversal rejection."
     state verified
@@ -1128,6 +1231,18 @@ record lege-ecosystem.evidence.glyphfont-stage4-verification/1 : evidence {
     summary """
         Stage 4 verified: lege lib 299 passed (1 ignored), lege-pdf-write 58 passed, warncheck PASS across the matrix; Gobineau glyphfont 74 KB vs JBIG2 symbol 80 KB (1200 px) and 75 KB (2400 px) with word recall 0.89/0.92/0.83 against the OCR layer and readable pdftotext output; Hurvitz 447 KB vs 84 KB where glyph reuse is poor.
         """
+}
+
+record lege-ecosystem.evidence.grayscale-truetyping-gray-background-not-reproduced-20261114/1 : evidence {
+    title "Grayscale + truetyping: a gray page background was not reproduced in 220 runs; the binarizer is not on that path"
+    state verified
+    result inconclusive
+    method observation
+    observed_at git:1c97cfa12404e888dc0aa49090a784a07320db99
+    summary """
+        Uncommitted working tree on the observed commit. --grayscale --truetyping, --text-format truetyping, with --no-layout, and with --crop-margins --crop-free-aspect, on 2 to 3 sampled pages of each of the 20 books: the most common page value is 255 on every page that rendered. The grayscale MRC mask comes from clean_page_for_mrc, not from the binarizer (mrc_adaptive_mask defaults to false), so this session's binarization change does not touch it. Candidates seen, none confirmed as the owner's case: page 1 is kept as the original raster by the cover treatment, so a tinted title page stays gray while the rest are white (--no-cover avoids it); the preserved JBIG2-SMask path cleans with halo off and leaves faint paper texture on a near-blank archive scan; image regions keep their own paper tone. Also seen in one-page truetyping runs: 'r' drawn as 't' throughout one page, and a portrait cover rotated 90 degrees with --no-cover.
+        """
+    author "dk"
 }
 
 record lege-ecosystem.evidence.gui-file-tiles-beside-process-button-20261108/1 : evidence {
@@ -2006,6 +2121,81 @@ record lege-ecosystem.evidence.layout-detection-ab-jolly-merge-20261108/1 : evid
     artifact "dev-notes/lege-pdf/render-refinement/scoping-20261108/measurements/layout-ab-jolly-20261108.md"
     summary """
         Layout detections identical before and after the B1 (jolly-ride) merge on five of six documents; on viaduct the two image boxes move at most 0.5 px with confidence 0.85->0.83 and 0.86->0.84, same class, no region decision changes.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.lege-dewarp-flat-pages-untouched-20261113/1 : evidence {
+    title "Lege-Dewarp leaves 99.3 % of held-out flat scans untouched and none of the curved photos"
+    state verified
+    result pass
+    method observation
+    observed_at git:1c97cfa12404e888dc0aa49090a784a07320db99
+    summary """
+        With the tester's untouched-page gate (whole-frame p99 under 0.4 % of the diagonal, or bend score under 0.1 and under 3 %), 405 of 408 held-out flat scans of dev/final-test books are returned unchanged and 0 of the 26 curved spread photos; 3 of 6 out-of-corpus flat pages (scans with a black surround, sheet music) are cropped to the page. Paddle UVDoc, flattener and DocScanner moved every flat page.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.lege-dewarp-loads-in-lege-gpu-20261113/1 : evidence {
+    title "Lege-Dewarp fp16 ONNX loads and runs in lege-gpu unchanged"
+    state verified
+    result pass
+    method observation
+    observed_at git:1c97cfa12404e888dc0aa49090a784a07320db99
+    summary """
+        Trained Lege-Dewarp (5.27 M params, 10.58 MB fp16, static 576x384 and 384x576, input `image`) loads in lege-gpu with no runtime change; 13 ms per call warm on an RTX 4060 Laptop (Vulkan); fp16, fp32 and ONNX Runtime give the same text-line straightness on the 26 test photos (tilt 1.73 / spread 2.17 deg / bow 0.486 % single pass).
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.lege-dewarp-picture-book-finetune-20261114/1 : evidence {
+    title "Lege-Dewarp ft4: fine-tune with a picture cookbook's photo pairs halves distortion on held-out spreads of that book and improves again on an unseen book"
+    state verified
+    result pass
+    method command
+    observed_at git:1c97cfa12404e888dc0aa49090a784a07320db99
+    command "pairs_eval.sh MODEL_DIR ft4 ft3; eval_full.sh CKPT ft4 ft3 (standalone dewarp tester and training workspace)"
+    summary """
+        2026-11-14. ft3 fine-tuned 1.5 M views with 25 % real samples (Zen Letters plus 131 spreads of a large hardcover cookbook with full-page photographs, photographed by the owner, flat Internet Archive scan as reference). Registration measure, warp in % of the page diagonal: 24 held-out cookbook spreads 0.489 -> 0.250 (difference -0.206, 95 % interval [-0.247, -0.165], lower on 68 of 82 pages; Paddle UVDoc 0.528, DocScanner 0.431, flattener 0.430, each higher than ft4 with the interval excluding zero); Zen Teachings, never trained on, 0.290 -> 0.247 ([-0.067, -0.018]). 26 spread photos 1.08 / 1.36 / 0.345 (tilt deg / spread deg / bow %), not established different from ft3 or from Paddle UVDoc; one pass per page better than ft3 on all three. Book100 local distortion better, straightness, MS-SSIM and OCR not established. Flat gate: 5 of 6 and 405 of 408 at the previous turn limit of 1.5 deg, 6 of 6 and 406 of 408 at 2 deg (now the default; moved after seeing test pages, supported by 0 of 590 curved photos untouched at any limit up to 3 deg and by 664 independent flat scans where ft4 leaves 616 alone against ft3's 571). Weakness found: flat scan pages that are full-page photographs are altered (47 of that cookbook's 400 scan pages). 92.3 of 94.1 Colab units spent.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.lege-dewarp-real-pairs-finetune-20261113/1 : evidence {
+    title "Lege-Dewarp fine-tuned with real photo pairs: 41 % less measured distortion on a book never trained on; adopted as the model"
+    state verified
+    result pass
+    method command
+    observed_at git:1c97cfa12404e888dc0aa49090a784a07320db99
+    command "prep/eval_full.sh runs/ft3/ckpt_final.pt ft3 (training workspace); dewarp-tester/tools/pairs_eval.sh MODEL_DIR ft3; tools/paired_diff.py and tools/pairs_table.py for the intervals"
+    summary """
+        Fine-tune from the baseline with 10 % real samples (60 photographed pages of one book registered to its flat scan; page and spread framings and real second-pass inputs), 1.2 M views. Bar set beforehand: about 10 % less distortion on a second book with a flat scan, no loss elsewhere. Distortion left after the best affine map, by registering the flat scan to the output (error of the registration 0.1-0.15 px at 1600 px page height), % of page diagonal: held-out book 0.485 -> 0.288, difference -0.206, 95 % bootstrap interval [-0.255, -0.160], lower on 52 of 57 pages; one pass per page 0.329, below the baseline's three passes and below DocScanner 0.450, flattener 0.457, Lege split + flattener 0.436. Trained book 0.486 -> 0.242. The 26 spread photos tilt/spread/bow 1.04/1.44/0.357 -> 1.01/1.29/0.330 (spread -0.158 [-0.336, -0.007]). Book100 straightness 0.56/0.68/0.207 -> 0.45/0.57/0.186, OCR line CER 0.116 -> 0.094, MS-SSIM unchanged, DIS-flow local distortion 38.2 -> 40.9 (worse). 87 spreads of a third book: spread 0.718 -> 0.664 deg. Flat pages untouched: 6 of 6 and 407 of 408 held-out scans with the fill gate's turn limit raised from 1.0 to 1.5 degrees (5 of 6 at 1.0); none of 278 curved photos untouched. On the 26 photos the spread is established better than DocScanner and flattener, not than Paddle UVDoc (-0.09 [-0.27, +0.09]). A preceding fine-tune on failure-driven synthetic renders gave no measurable gain.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.lege-dewarp-spreads-level-with-paddle-20261113/1 : evidence {
+    title "Lege-Dewarp is level with Paddle UVDoc on the 26 curved spreads, not clearly ahead"
+    state verified
+    result inconclusive
+    method observation
+    observed_at git:1c97cfa12404e888dc0aa49090a784a07320db99
+    summary """
+        Text-line straightness, means over the 26 photos (tilt deg / spread deg / bow %): Lege-Dewarp with 3 refinement passes and per-page smoothing 1.04 / 1.44 / 0.357; Paddle UVDoc 1.17 / 1.38 / 0.363; flattener forced split 1.33 / 1.49 / 0.313; DocScanner-L 1.20 / 1.72 / 0.333; flat-scan floor 0.24 / 0.26 / 0.153. All 26 spreads found and split (flattener's fold detection missed 11). Book100: 0.57 / 0.69 / 0.206 against Paddle 0.64 / 0.74 / 0.273, flattener 0.51 / 0.66 / 0.189, DocScanner 0.39 / 0.50 / 0.212. The margin over the baselines is inside the measure's noise floor.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.lege-dewarp-targeted-finetune-no-gain-20261113/1 : evidence {
+    title "A targeted 576x384 fine-tune of Lege-Dewarp did not meet the bar set beforehand; baseline model kept"
+    state verified
+    result fail
+    method command
+    observed_at git:1c97cfa12404e888dc0aa49090a784a07320db99
+    command "prep/eval_full.sh runs/ft2/ckpt_final.pt ft2 (training workspace), then dewarp-tester/tools/paired_diff.py on the measure and paired results"
+    summary """
+        Fine-tune from the baseline (1.45 M views, twisted-V and hand-occluder renders, more mild second-pass residuals) against a bar of about 10 % on the 26 spread photos with no loss on Book100. 26 photos tilt/spread/bow 1.04/1.44/0.357 -> 0.98/1.34/0.337; bootstrap 95 % interval of the spread difference [-0.32, +0.09] deg, not established; equal at two refinement passes (1.39/1.40). Book100 straightness slightly worse (spread +0.047 deg, interval [+0.011, +0.086]); MS-SSIM 0.525 -> 0.529 and line CER 0.116 -> 0.133 within noise. Flat gate unchanged (6/6, 406/408). Paired Book100 references for the baseline: MS-SSIM 0.525 against 0.490-0.498 for flattener, Paddle UVDoc and DocScanner; OCR line CER 0.116 against flattener 0.088; Lege split + flattener dewarp 0.072. The 26 photos cannot resolve mean differences under about 0.2 deg. The 768x512 session was not started.
         """
     author "dk"
 }
@@ -3471,6 +3661,19 @@ record lege-ecosystem.evidence.sdk-isolated-cold-tensorrt-package-smoke-20260815
         The exact final staged package cold-built detector and recognizer engines without SDK paths, selected tensorrt-paddle through Auto, processed all 10 pages, and produced 10 page shards plus JSON and text exports.
         """
     supersedes [ @lege-ecosystem.evidence.sdk-isolated-cold-tensorrt-package-smoke-20260815/1 ]
+}
+
+record lege-ecosystem.evidence.single-binarizer-tests-20261114/1 : evidence {
+    title "After the binarization methods and GPU kernels were removed: lege 379 + 24, GUI 85, lege-gpu 78, lege-ocr 70, lege-ipc 2 tests pass"
+    state verified
+    result pass
+    method command
+    observed_at git:1c97cfa12404e888dc0aa49090a784a07320db99
+    command "cargo test -p lege --lib; cargo test -p lege --bin lege; cargo test -p lege-gui-liminalui; cargo test -p lege-gpu --lib; cargo test -p lege-ocr; cargo test -p lege-ipc; LEGE_RUN_GPU_TESTS=1 cargo test -p lege --lib model_binarizes_text_on_the_gpu"
+    summary """
+        Uncommitted working tree on the observed commit. lege lib 379 passed (1 ignored: the tester parity test), lege bin 24, lege-gui-liminalui 85 (5 ignored), lege-gpu lib 78, lege-ocr 70, lege-ipc 2; the GPU-gated model test passes on an RTX 4060 Laptop. New tests: the CPU fallback keeps size, polarity and inversion; a blank page under the blank threshold is white; retired CLI flags parse as bilevel; the GUI's Flatten page row toggles; the worker gets '--binarization model' and '--flatten' only when on. A debug-fast run with '--binarization adaptive --sauvola-k 0.3' prints the one retirement note and completes. lege-android was edited to match but not built here.
+        """
+    author "dk"
 }
 
 record lege-ecosystem.evidence.smask-layout-regressions/1 : evidence {

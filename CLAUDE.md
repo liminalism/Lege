@@ -13,8 +13,8 @@ Lege is a fully-automatic PDF processor for E-Ink ebook readers. It renders PDF 
 | Ecosystem workspace | `Cargo.toml` (root) | Virtual workspace, shared dependencies/profiles/patches, and build aliases |
 | `lege` | `lege-process/` | CLI binary + core processing library |
 | Process crate roots | `lege-process/core/{lib,main}.rs` | Rust library and binary roots |
-| Process modules | `lege-process/{pipeline,encoding,color,colorquant,ocr,reflow,resize}/` | Major processing subsystems wired from `core/lib.rs` with `#[path]` |
-| `lege-gpu` | `lege-gpu/` | wgpu GPU compute: binarization, resize, custom ONNX runtime |
+| Process modules | `lege-process/{pipeline,encoding,color,colorquant,dewarp,ocr,reflow,resize}/` | Major processing subsystems wired from `core/lib.rs` with `#[path]` |
+| `lege-gpu` | `lege-gpu/` | wgpu GPU compute: adaptive binarization kernels, resize, custom ONNX runtime (layout, binarizer, flatten and OCR models) |
 | `lege-ocr` | `lege-ocr/` | Shared OCR library + `lege-ocr-debug` |
 | `lege-pdf-write` | `lege-pdf/write/` | Typed append-only PDF writer |
 | `lege-render-wgpu` | `lege-render-wgpu/` | wgpu image renderer + GPU postprocess executor over exprim (needs `lege-gpu`) |
@@ -120,7 +120,8 @@ cargo test --features debug-logging -- --nocapture
 | `jp2-lam` (default) | Enables JPEG2000 encoding via the `jp2lam` library |
 | `profiling` | Inherits `debug-logging`; use with `--profile profiling` for flamegraph-compatible builds |
 | `debug-layers` | Propagated to `lege-gpu` for wgpu validation layer diagnostics |
-| `sauvola-model` | Embeds the Sauvola model as the CPU fallback of heavy binarization (default: the tileable binarizer on the CPU) |
+| `dewarp` (default) | Embeds the page-flattening model behind "Flatten page" / `--flatten` (two files, 21 MB); without it the model is read from runtime assets |
+| `sauvola-model` | Embeds the Sauvola model as the no-GPU fallback of binarization (default: the adaptive CPU algorithm) |
 
 ## Architecture: PDF processing pipeline
 
@@ -164,11 +165,83 @@ picture overlay unless it lies on text.
 
 ## GPU backend (`lege-gpu`)
 
-- **`vision/`** — Custom ONNX runtime: loads `.onnx` protobuf, folds constants, lowers ops to wgpu compute shaders. No `ort`/`tract` dependency.
-- **`binarization/`** — wgpu Sauvola binarization kernel.
+- **`vision/`** — Custom ONNX runtime: loads `.onnx` protobuf, folds constants, lowers ops to wgpu compute shaders. No `ort`/`tract` dependency. `vision/api.rs` holds the resident adapters: `LayoutDetector`, `SauvolaProcessor` (the binarizer model), `DewarpNet` (page flattening), the PP-OCR detector and recognizer.
 - **`resize/`** — wgpu image resize (letterbox + direct).
 
 WGSL shaders are either embedded at compile time (`include_str!`) or, with the `no-include-shaders` feature, loaded at runtime.
+
+- **`binarization/`** — the wgpu kernels of adaptive binarization (Sauvola and
+  background-normalized Otsu, fused on the device): the "Fast" binarizer and
+  lege-ocr's line-segmentation mask.
+
+## Binarization
+
+Two methods, chosen by the GUI's Text row (Best | Fast | Grayscale) and
+`--binarization best|fast`, through `lege-process/color/binarization.rs`:
+
+- **Best** (default): the tileable binarizer model (`binarizer-tilenet.onnx`,
+  embedded) on the GPU. The owner judged it cleaner on scans than every
+  earlier method by eye, which algorithmic parity tests cannot show; on 120
+  sampled pages of 20 books it was better on tinted and yellowed scans and
+  worse (heavier strokes, lost light-gray detail) on born-digital PDFs, which
+  are not what a rasterizer is for.
+- **Fast**: adaptive binarization on the wgpu kernels
+  (`lege_gpu::binarization`), about twice the pages per second at 1200 px and
+  more at high resolutions. For bulk jobs. `BinarizationConfig::fast`.
+- **Last resort, no user switch:** without a hardware GPU (or with
+  `LEGE_FORCE_CPU_BINARIZATION=1`, or `BinarizationConfig::force_cpu` in
+  tests) both come down to the adaptive algorithm on the CPU, and a Best job
+  says so once ("CPU binarization fallback").
+- The fixed threshold is not a method any more. Blank pages take a fixed
+  threshold (`BinarizationOptions::blank_threshold`) wherever the adaptive
+  algorithm runs; the model leaves blank paper white on its own.
+- `model` and `heavy` (and `--heavy`) mean best, `adaptive` means fast;
+  `threshold`, `--threshold` and `--sauvola-k` still parse with a note on
+  stderr and change nothing. Naming a binarizer keeps truetyping bilevel.
+- The history, so that it is not repeated: on 2026-11-14 the kernels were
+  deleted with adaptive, and restored the same day when adaptive came back as
+  Fast. The OCR line-segmentation mask (`lege_ocr::normalize::binarize_page`)
+  uses the kernels too, not the model: its raster is 2.5x the page height.
+- Unit tests that assert on a mask set `force_cpu`, so they do not depend on
+  the machine's GPU.
+- Pages over 1.6 MP are binarized in 1024 px tiles with a 128 px discarded
+  border (`binarize_on_gpu`): the runtime holds a graph's activations in one
+  buffer of about 1.6 kB per pixel and wgpu refuses buffers over 4 GiB, so a
+  3000 px page used to kill the job. Tile origins must stay on multiples of
+  64: the model downsamples by 8 and an off-grid tile flips stroke edges.
+  On the grid, tiles reproduce the whole-page mask exactly.
+- Without a hardware GPU, layout detection switches itself off whatever the
+  initialization error says (`initialize_inference_or_fallback`), and the
+  job's progress mode becomes NoLayout.
+- "High quality" raises picture and background quality in PDF and, since
+  2026-11-14, in DjVu (`PipelineConfig::djvu_iw44_quality`, at least 92).
+
+## Flatten page (photographed pages)
+
+`lege-process/dewarp/` flattens photographed pages with the Lege-Dewarp model
+(`lege-process/models/lege-dewarp.md`): GUI toggle **Flatten page** beside Resolution, CLI
+`--flatten` (`--flatten-pages 1|2`, `--flatten-fast`; `--dewarp*` aliases).
+Off by default.
+
+- Folder, ZIP and PDF input. A PDF's pages are rendered as photos
+  (`PdfPhotos`, 2400 px high or more) and the job runs through the image
+  pipeline (`pnginference.rs::run_flattened_pdf_mode_with_config`, entered from
+  `progress.rs::process_file_with_tracker`), so the PDF's outline and text
+  layer do not carry over; EPUB and reflow jobs ignore the option.
+  `pipeline/source.rs::flatten_photos` wraps the
+  image source in `FlattenedPageSource`, which surveys every photo first
+  (decode, model passes, keep only the grids) because one photographed spread
+  becomes two pages and `PageSource` promises a fixed page count. `load_page`
+  renders one page from the photo's own pixels, before the resize to the
+  target height. EXIF orientation is applied on this path only.
+- Flat scans are detected by a gate and returned untouched. Flattening never
+  fails a page: a model error or a degenerate grid passes the photo through.
+- Needs a hardware GPU; without one the step is skipped with one line.
+- The module is a port of the standalone tester kept with the training photos
+  (outside this repository). Its constants were tuned with these exact
+  functions: change them only against the tester
+  (`dewarp::tests::the_grids_match_the_tester_on_real_photos`, ignored, env
+  `LEGE_FLATTEN_PHOTOS` / `LEGE_FLATTEN_RECORDS`).
 
 ## Encoding
 
@@ -199,10 +272,11 @@ ONNX models are found at runtime via `runtime_asset_path` /
 `runtime_asset_path_if_exists` in `lege-process/pipeline/config.rs`. Search order: exe
 directory → `models/` subdirectory → `LEGE_DATA_DIR` / `LEGE_ASSET_DIR` env
 vars → `/usr/share/lege/models` (Linux). No model file is required: the
-layout model and the tileable binarizer (`binarizer-tilenet.onnx`) are embedded;
+layout model, the binarizer (`binarizer-tilenet.onnx`) and the two flatten
+models (`lege-dewarp-576x384.onnx`, `lege-dewarp-384x576.onnx`) are embedded;
 a file of the same name found there overrides the embedded one. The Sauvola
 model is embedded only with the `sauvola-model` feature; a `sauvola.onnx`
-runtime asset becomes the CPU model of heavy binarization in any build.
+runtime asset becomes the no-GPU binarizer in any build.
 
 ## Platform notes
 
@@ -241,4 +315,5 @@ The only processor GUI is liminalUI (`lege-process/GUI/liminalUI`, package `lege
 
 - `LEGE_BBOX_TRACE=1` — prints bbox/region/placement lines to stderr.
 - `LEGE_RAYON_THREADS=N` — override Rayon thread count (default: CPU count − 1).
+- `LEGE_FORCE_CPU_BINARIZATION=1` — binarize with the adaptive CPU fallback instead of the model.
 - `perf_log!(start, "label")` — zero-cost timing macro; only active with `debug-logging` feature.

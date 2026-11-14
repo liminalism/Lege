@@ -169,6 +169,22 @@ pub async fn create_and_run_epub_pipeline(
                 config = Arc::new(fallback);
                 None
             }
+            Err(e) if !lege_gpu::vision::hardware_gpu_available() => {
+                let msg = format!(
+                    "No usable GPU found ({e}). Layout detection disabled; processing will \
+                     continue without it."
+                );
+                warn_log!("[EPUB] {msg}");
+                eprintln!("[EPUB] {msg}");
+                progress_tracker.update(crate::progress::ProcessingStatus::PipelineMessage {
+                    stage: "GPU Warning".to_string(),
+                    message: msg,
+                });
+                let mut fallback = (*config).clone();
+                fallback.set_enable_layout_detection(false);
+                config = Arc::new(fallback);
+                None
+            }
             Err(e) => return Err(anyhow!("[EPUB] Failed to create InferenceHandle: {}", e)),
         }
     } else {

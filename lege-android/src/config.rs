@@ -17,9 +17,7 @@
 //!     public String  pageRange;               // "5" or "1-20"; null = whole document
 //!     public String  marginMode;              // "none" | "center" | "crop" | "reflow"
 //!     public boolean slowOcr, jpegCompat, ditherImages;
-//!     public String  binarizationMode;        // "default" | "adaptive" | "threshold" | "sauvola"
-//!     public float   sauvolaK;                // 0.0–1.0
-//!     public int     fixedThreshold;          // 0–255
+//!     public boolean flattenPage;             // straighten photographed pages
 //!     public String  epubSidecarPath;         // null = no EPUB companion
 //! }
 //! ```
@@ -65,13 +63,6 @@ fn int_field(env: &mut JNIEnv<'_>, params: &JObject<'_>, name: &str) -> Result<i
         .with_context(|| format!("LegeParams.{name} is missing or not an int"))?
         .i()
         .with_context(|| format!("LegeParams.{name} is not an int"))
-}
-
-fn float_field(env: &mut JNIEnv<'_>, params: &JObject<'_>, name: &str) -> Result<f32> {
-    env.get_field(params, name, "F")
-        .with_context(|| format!("LegeParams.{name} is missing or not a float"))?
-        .f()
-        .with_context(|| format!("LegeParams.{name} is not a float"))
 }
 
 fn bool_field(env: &mut JNIEnv<'_>, params: &JObject<'_>, name: &str) -> Result<bool> {
@@ -125,25 +116,15 @@ pub(crate) fn from_java(env: &mut JNIEnv<'_>, params: &JObject<'_>) -> Result<Pi
     config.set_dither_images(dither_images);
     config.set_keep_original_images(!dither_images);
 
-    let binarization_mode =
-        string_field(env, params, "binarizationMode")?.unwrap_or_else(|| "default".into());
-    let mut binarization = BinarizationConfig::default();
-    match binarization_mode.as_str() {
-        "default" | "adaptive" => {
-            binarization.k_factor = float_field(env, params, "sauvolaK")?;
-        }
-        "threshold" => {
-            binarization.use_fixed_threshold = true;
-            binarization.fixed_threshold = u8::try_from(int_field(env, params, "fixedThreshold")?)
-                .context("fixedThreshold must be between 0 and 255")?;
-        }
-        "sauvola" => binarization.use_heavy_duty = true,
-        _ => anyhow::bail!("unsupported binarizationMode `{binarization_mode}`"),
+    // There is one binarization method and no user choice: the binarizer
+    // model (its CPU fallback where there is no GPU), with default settings.
+    config.set_binarization(BinarizationConfig::default());
+
+    // Flatten page: the embedded page-flattening model (lege's `dewarp`
+    // feature). It needs a hardware GPU adapter and skips itself otherwise.
+    if bool_field(env, params, "flattenPage")? {
+        config.set_flatten(Some(lege::dewarp::Settings::default()));
     }
-    if !(0.0..=1.0).contains(&binarization.k_factor) {
-        anyhow::bail!("sauvolaK must be between 0.0 and 1.0");
-    }
-    config.set_binarization(binarization);
 
     let margin_mode = string_field(env, params, "marginMode")?.unwrap_or_else(|| "none".into());
     let margin = match margin_mode.as_str() {

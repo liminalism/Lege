@@ -103,6 +103,13 @@ pub fn run_png_mode_with_config(
         pipeline_config.target_height(),
         pipeline_config.target_width(),
     ));
+    let source = flattened_if_asked(
+        source.photos(),
+        source,
+        &pipeline_config,
+        &adaptive,
+        progress_tracker.as_ref(),
+    )?;
     run_image_source_with_config(
         source,
         output_path,
@@ -160,6 +167,13 @@ pub fn run_zip_mode_with_config(
             "disabled"
         }
     );
+    let source = flattened_if_asked(
+        source.photos(),
+        source,
+        &pipeline_config,
+        &adaptive,
+        progress_tracker.as_ref(),
+    )?;
     run_image_source_with_config(
         source,
         output_path,
@@ -167,6 +181,90 @@ pub fn run_zip_mode_with_config(
         progress_tracker,
         adaptive,
     )
+}
+
+/// Height a PDF page is rendered at for flattening: above any target so the
+/// flatten render, which samples the page once, has pixels to work with.
+const FLATTEN_PDF_RENDER_HEIGHT: u32 = 2400;
+
+/// "Flatten page" on a PDF: its pages are treated as photographs and go
+/// through the image pipeline, flattened first. A photographed spread becomes
+/// two pages, so the document's outline and any text layer do not carry over.
+/// The job's page range selects the PDF pages that are read.
+pub fn run_flattened_pdf_mode_with_config(
+    pdf_path: PathBuf,
+    output_path: PathBuf,
+    mut pipeline_config: PipelineConfig,
+    progress_tracker: Option<ProgressTracker>,
+) -> Result<()> {
+    let settings = pipeline_config
+        .flatten()
+        .cloned()
+        .ok_or_else(|| anyhow!("Flatten page is not enabled for this job"))?;
+    pipeline_config.set_high_res_render_height(pipeline_config.target_height())?;
+    if let Some(parent) = output_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let pdf_bytes = crate::pipeline::config::read_pdf_file(&pdf_path)
+        .with_context(|| format!("Failed to read input PDF: {}", pdf_path.display()))?;
+    let render_height = pipeline_config
+        .source_render_height()
+        .max(FLATTEN_PDF_RENDER_HEIGHT);
+    let photos: Arc<dyn crate::pipeline::source::PhotoSet> =
+        Arc::new(crate::pipeline::source::PdfPhotos::open(
+            pdf_bytes,
+            pipeline_config.page_range(),
+            render_height,
+        )?);
+    // The photos are the range's pages; what remains is every page of them.
+    pipeline_config.set_page_range(None);
+
+    let adaptive = AdaptiveConcurrency::detect();
+    let plain = crate::pipeline::source::unflattened_photos(
+        Arc::clone(&photos),
+        adaptive.io_workers,
+        pipeline_config.target_height(),
+        pipeline_config.target_width(),
+    );
+    let source = crate::pipeline::source::flatten_photos(
+        plain,
+        photos,
+        &settings,
+        adaptive.io_workers,
+        pipeline_config.target_height(),
+        pipeline_config.target_width(),
+        progress_tracker.as_ref(),
+    )?;
+    run_image_source_with_config(
+        source,
+        output_path,
+        pipeline_config,
+        progress_tracker,
+        adaptive,
+    )
+}
+
+/// "Flatten page": with it on, the photos of a folder or ZIP are surveyed and
+/// the source's pages become their flattened pages (a spread becomes two).
+fn flattened_if_asked(
+    photos: Arc<dyn crate::pipeline::source::PhotoSet>,
+    plain: Arc<dyn crate::pipeline::source::PageSource>,
+    pipeline_config: &PipelineConfig,
+    adaptive: &AdaptiveConcurrency,
+    progress_tracker: Option<&ProgressTracker>,
+) -> Result<Arc<dyn crate::pipeline::source::PageSource>> {
+    match pipeline_config.flatten() {
+        Some(settings) => crate::pipeline::source::flatten_photos(
+            plain,
+            photos,
+            settings,
+            adaptive.io_workers,
+            pipeline_config.target_height(),
+            pipeline_config.target_width(),
+            progress_tracker,
+        ),
+        None => Ok(plain),
+    }
 }
 
 fn run_image_source_with_config(
@@ -784,17 +882,9 @@ pub fn run_pdf_to_images_mode(
                 &crate::color::BinarizationOptions {
                     invert: pipeline_config.binarization().invert,
                     invert_input: pipeline_config.invert_input(),
-                    k_factor: pipeline_config.binarization().k_factor,
-                    use_heavy_duty: pipeline_config.binarization().use_heavy_duty
-                        && !pipeline_config.binarization().use_fixed_threshold,
-                    patch_percentage: pipeline_config.binarization().patch_percentage,
-                    no_patch: pipeline_config.binarization().no_patch,
-                    use_fixed_threshold: pipeline_config.binarization().use_fixed_threshold,
-                    fixed_threshold: pipeline_config.binarization().fixed_threshold,
-                    // GPU binarization re-enabled in layout mode: the premask-spike
-                    // Otsu black-page bug is fixed (Otsu now on the bg-normalized
-                    // histogram) and interior GPU/CPU parity is bit-exact.
-                    disable_gpu: false,
+                    blank_threshold: None,
+                    disable_gpu: pipeline_config.binarization().force_cpu,
+                    adaptive: pipeline_config.binarization().fast,
                 },
             );
 
@@ -971,14 +1061,9 @@ fn process_single_image_to_image(
             &crate::color::BinarizationOptions {
                 invert: pipeline_config.binarization().invert,
                 invert_input: pipeline_config.invert_input(),
-                k_factor: pipeline_config.binarization().k_factor,
-                use_heavy_duty: pipeline_config.binarization().use_heavy_duty
-                    && !pipeline_config.binarization().use_fixed_threshold,
-                patch_percentage: pipeline_config.binarization().patch_percentage,
-                no_patch: pipeline_config.binarization().no_patch,
-                use_fixed_threshold: pipeline_config.binarization().use_fixed_threshold,
-                fixed_threshold: pipeline_config.binarization().fixed_threshold,
-                disable_gpu: pipeline_config.enable_layout_detection(),
+                blank_threshold: None,
+                disable_gpu: pipeline_config.binarization().force_cpu,
+                adaptive: pipeline_config.binarization().fast,
             },
         );
 

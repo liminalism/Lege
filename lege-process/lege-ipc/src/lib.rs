@@ -9,11 +9,6 @@ use std::path::{Path, PathBuf};
 
 pub mod processing_log;
 
-/// Default Sauvola k-factor surfaced in the GUI binarization control. Mirrors
-/// `lege_gpu::binarization::DEFAULT_K_FACTOR` by value; kept here so the GUI
-/// need not link the GPU crate for a single constant.
-pub const DEFAULT_K_FACTOR: f32 = 0.05;
-
 fn ensure_directory(path: &Path) -> PathBuf {
     if let Err(e) = std::fs::create_dir_all(path) {
         eprintln!(

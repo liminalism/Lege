@@ -117,7 +117,7 @@ windows-core = { workspace = true }
 [features]
 # The default build includes the CLI and the LiminalKit desktop GUI. Disable
 # default features to build the processor without the optional GUI dependency.
-default = ["gui", "jp2-lam", "paddle-ocr", "layout-detection"]
+default = ["gui", "jp2-lam", "paddle-ocr", "layout-detection", "dewarp"]
 gui = ["dep:lege-gui-liminalui"]
 # Android platform support. Gates everything under `android/`; nothing new
 # compiles with the feature off, so desktop builds are unaffected. Building for
@@ -132,10 +132,13 @@ android = [
 debug-logging = ["lege-gpu/debug-logging", "lege-gui-liminalui?/debug-logging"]
 jp2-lam = ["dep:jp2lam"]
 layout-detection = ["lege-gpu/layout-detection"]
-# Embed the DIBCO Sauvola model as the CPU fallback of heavy binarization.
-# The default build falls back to the tileable binarizer on the CPU instead;
-# the two give the same kind of mask, and the tileable one is the model the
-# GPU path runs anyway. A `sauvola.onnx` runtime asset works without this.
+# Embed the page-flattening model ("Flatten page", `--flatten`): two files,
+# 21 MB together. Without it the model is read from runtime assets, and
+# flattening is skipped when there are none.
+dewarp = []
+# Embed the DIBCO Sauvola model as the no-GPU fallback of binarization. The
+# default build falls back to the adaptive CPU algorithm instead. A
+# `sauvola.onnx` runtime asset works without this.
 sauvola-model = []
 # Embed PP-DocLayout-M instead of the default RF-DETR-S book layout model
 # (comparison builds only; not in any default feature set).

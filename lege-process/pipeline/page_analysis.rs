@@ -402,7 +402,12 @@ pub fn should_force_blank_page_threshold(
     height: u32,
     classifier: &LabelClassifier,
 ) -> bool {
-    if config.binarization().use_fixed_threshold || config.binarization().use_heavy_duty {
+    // The binarizer model leaves blank paper white on its own; only the
+    // adaptive CPU fallback turns paper noise into ink.
+    if !config.binarization().force_cpu
+        && !config.binarization().fast
+        && crate::color::binarizes_on_gpu()
+    {
         return false;
     }
 
@@ -509,6 +514,14 @@ mod tests {
         }
     }
 
+    fn cpu_binarizer_config() -> PipelineConfig {
+        let mut config = PipelineConfig::default();
+        let mut binarization = config.binarization().clone();
+        binarization.force_cpu = true;
+        config.set_binarization(binarization);
+        config
+    }
+
     #[test]
     fn aged_low_contrast_page_counts_as_visually_blank() {
         let image = RgbImage::from_pixel(100, 100, image::Rgb([210, 207, 198]));
@@ -517,7 +530,9 @@ mod tests {
 
     #[test]
     fn post_nms_tiny_noise_boxes_force_blank_fallback() {
-        let mut config = PipelineConfig::default();
+        // The blank-page threshold belongs to the CPU fallback: the binarizer
+        // model leaves blank paper white on its own.
+        let mut config = cpu_binarizer_config();
         config.set_enable_layout_detection(true);
         let detections = vec![test_detection(
             ContentCategory::Abandon,
@@ -644,9 +659,10 @@ mod tests {
         fill_black(&mut image, 95, 185, 105, 191);
         fill_black(&mut image, 0, 0, 1, 200);
 
+        // The guard is what is under test, so the mask comes from the CPU
+        // fallback: it is the same on every machine.
         assert!(
-            compute_missed_pixel_bounds_for_margin(&image, &[], &PipelineConfig::default())
-                .is_none()
+            compute_missed_pixel_bounds_for_margin(&image, &[], &cpu_binarizer_config()).is_none()
         );
     }
 

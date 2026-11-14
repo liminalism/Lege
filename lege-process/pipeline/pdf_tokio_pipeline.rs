@@ -4624,8 +4624,7 @@ mod phase4_ocr_baseline_tests {
                 .set_text_format(if case == 4 { "jpeg" } else { "ccitt4" })
                 .unwrap();
             let mut binarization = config.binarization().clone();
-            binarization.use_fixed_threshold = true;
-            binarization.fixed_threshold = 180;
+            binarization.force_cpu = true;
             config.set_binarization(binarization);
             let image = Arc::new(synthetic_ocr_page(200, 200));
             let index = if case == 5 { 0 } else { 1 };
@@ -4689,8 +4688,7 @@ mod phase4_ocr_baseline_tests {
         config.set_slow_ocr(true);
         config.set_text_format("ccitt4").expect("format");
         let mut bin = config.binarization().clone();
-        bin.use_fixed_threshold = true;
-        bin.fixed_threshold = 180;
+        bin.force_cpu = true;
         config.set_binarization(bin);
         Arc::new(config)
     }
@@ -4921,7 +4919,7 @@ mod planned_products_tests {
         config.set_target_height(200).unwrap();
         config.set_high_res_render_height(200).unwrap();
         let mut binarization = config.binarization().clone();
-        binarization.use_fixed_threshold = true;
+        binarization.force_cpu = true;
         config.set_binarization(binarization);
         let tracker = crate::progress::ProgressManager::new().create_tracker();
         let (sender, shutdown) = tokio::sync::broadcast::channel(1);

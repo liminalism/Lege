@@ -85,10 +85,6 @@ fn to_shared_options(options: &GuiProcessingOptions) -> shared_log::ProcessingOp
     shared.crop_margins = options.crop_margins;
     shared.crop_footnotes = options.crop_footnotes;
     shared.crop_free_aspect = options.crop_free_aspect;
-    shared.use_heavy_binarization = options.use_heavy_binarization;
-    shared.k_factor = options.k_factor;
-    shared.use_fixed_threshold = options.use_fixed_threshold;
-    shared.threshold_value = options.threshold_value;
 
     shared
 }

@@ -2157,6 +2157,60 @@ record lege-ecosystem.work.initial-target-results/1 : work {
     }
 }
 
+record lege-ecosystem.work.integrate-lege-dewarp/1 : work {
+    title "Integrate the Lege-Dewarp model into lege-process for photographed pages in folder and ZIP input"
+    state completed
+    scope [
+        path "docs/lege-dewarp-integration.md",
+        path "lege-gpu/src/vision/**",
+        path "lege-process/**"
+    ]
+    intent """
+        Take the trained page-dewarp model (ft4, two static-shape fp16 ONNX files, 10.58 MB each) from its standalone tester into Lege, following docs/lege-dewarp-integration.md: a resident adapter in lege-gpu beside SauvolaProcessor (generic OnnxSession::run_gpu compiles per call); a dewarp module in lege-process ported from the tester (whole-frame pass, untouched-page gate, crop pass, gutter split, three refinement rounds, polynomial smoothing, one render from the original photo); and a wrapping PageSource for the folder and ZIP image modes that surveys every photo first, because one photographed spread becomes two pages while PageSource promises a fixed page count. Dewarping runs before the resize to the target height, after applying the EXIF orientation that Lege's image decode does not read today. Switches --dewarp, --dewarp-pages, --dewarp-fast; default off.
+        """
+    note """
+        Proposed 2026-11-14 when the model work closed; nothing is implemented. Default off because flat pages that are full-page photographs are sometimes altered (47 of 400 scan pages of an illustrated cookbook; text scans 263 of 264 untouched). No practical CPU fallback: without a GPU adapter the step passes pages through. The training mix includes Book3D, whose licence wording differs between Hugging Face (MIT) and its authors' repository (non-commercial research); settle that before the model ships in a public release.
+        """
+    acceptance {
+        check flat-pages-untouched-in-lege {
+            statement """
+                Through the real folder pipeline with dewarping on, the 6 flat test pages and at least 406 of the 408 held-out scans come out untouched, and none of the 26 curved photos does.
+                """
+            method command
+            verified_by [
+                @lege-ecosystem.evidence.flatten-flat-pages-untouched-in-lege-20261114/1
+            ]
+        }
+        check grids-match-tester {
+            statement """
+                On the 26 spread photos the page grids computed by the lege-process module match those of the standalone tester within 1 px mean in the photo.
+                """
+            method command
+            verified_by [ @lege-ecosystem.evidence.flatten-grids-match-tester-20261114/1 ]
+        }
+        check no-gpu-passes-through {
+            statement """
+                With the GPU disabled, dewarping is skipped with one log line and the pages pass through unchanged without an error.
+                """
+            method command
+            verified_by [ @lege-ecosystem.evidence.flatten-no-gpu-passes-through-20261114/1 ]
+        }
+        check spread-page-count {
+            statement """
+                A folder mixing single pages, spreads and flat scans produces a document whose page count equals the survey's count, in source order, with each spread as two pages.
+                """
+            method command
+            verified_by [ @lege-ecosystem.evidence.flatten-spread-page-count-20261114/1 ]
+        }
+    }
+    depends_on [ @lege-ecosystem.work.own-page-dewarp-model ]
+    supported_by [
+        @lege-ecosystem.evidence.lege-dewarp-loads-in-lege-gpu-20261113,
+        @lege-ecosystem.evidence.lege-dewarp-picture-book-finetune-20261114
+    ]
+    author "dk"
+}
+
 record lege-ecosystem.work.jbig2-06-bounded-headroom-pass/1 : work {
     title "Bounded 0.6-release generic headroom tests and release-note guidance"
     state superseded
@@ -4480,6 +4534,50 @@ record lege-ecosystem.work.optimize-mqdecoder-only-after-direct-attribution/1 : 
             The MQ arithmetic state is inherently serial within one codeword segment. SIMD is unlikely to help materially inside one MQ stream.
             """
     }
+}
+
+record lege-ecosystem.work.own-page-dewarp-model/1 : work {
+    title "Train an own page-dewarp model on Colab that beats Paddle UVDoc, flattener and DocScanner on book spreads and leaves flat pages alone"
+    state proposed
+    scope [ path "lege-gpu/**", path "lege-process/models/**" ]
+    intent """
+        Train from ImageNet-initialised ResNet-18 trunk + three transformer layers + residual flow head (about 5.3 M parameters, 10-20 MB with fp16 weights) on SyntheticDoc, UVDoc, Book3D spreads and the owner's scanned books (flat pages and textures), on Google Colab within about 90 compute units. The model predicts a correction to the identity map at 1/8 resolution plus a page mask, gutter heat, a bend score and a spread score, so one model serves the whole-frame pass, the page pass and the flat-page gate. Deliverable: one ONNX file with input `image` that lege-gpu loads unchanged, measured with the standalone dewarp tester against the three existing models on 26 hand-held book-spread photos and on a flat-page identity test. Integrating it into the Lege pipeline is a separate follow-up.
+        """
+    note """
+        Plan approved by the owner 2026-11-12. Training workspace is a new dewarp folder beside the layout-detection and binarizer Colab workspaces. Book3D is tagged MIT on Hugging Face while its authors' repository words it as non-commercial research only; it is kept in its own shard set so a model can be retrained without it. Status 2026-11-14, 92.3 of 94.1 Colab units spent (the owner released the whole balance): the model is a 576x384 model (the 768x512 phase was not run), 10.58 MB fp16, loads in lege-gpu unchanged at 13 ms per call. Four fine-tunes followed the main run (6.3 M views): the first gave the baseline; a second on failure-driven synthetic renders was rejected (no measurable gain); the third (ft3) added 10 % real samples made from 33 spreads the owner photographed of a book with a true flat scan and cut distortion on a second, unseen book by 41 % (0.485 -> 0.288 % of the page diagonal by registration of flat scans to the outputs); the fourth (ft4, the current model) raised the real share to 25 % with 131 spreads of a large picture cookbook. ft4 by the same measure: held-out spreads of the cookbook 0.489 -> 0.250, the unseen book 0.290 -> 0.247, where Paddle UVDoc, DocScanner and flattener are at 0.43-0.53 on both; one pass per page of it (0.225 and 0.278) is already below all of them. On the 26 spread photos: tilt 1.08 deg, spread 1.36 deg, bow 0.345 %, not established different from Paddle UVDoc (1.17 / 1.38 / 0.363; the 26 photos resolve about 0.2 deg), so the spreads check as worded stays open while the registration measure answers the question it was meant to ask. Book100: local distortion better than ft3, straightness, MS-SSIM and OCR level. Flat-page check: 6 of 6 test pages and 406 of 408 held-out scans untouched (99.5 %), none of 590 curved photos; the fill gate's turn limit was moved twice after seeing test pages (1.0 -> 1.5 -> 2.0 degrees), supported independently by the curved photos and by 664 flat scans not used for tuning. Open weakness: flat pages that are full-page photographs are altered (47 of the cookbook's 400 scan pages); the cure not yet tried is flat training samples from scans of illustrated books. fp16 against fp32 on one call (baseline): mean 0.009 px, max 0.26 px at model width. Lesson: real photo pairs with true flat references moved the result far more than any synthetic data; a reference must be checked for flatness first (one of the owner's books has a phone capture as its archive copy). See the tester README and the training notes.
+        """
+    acceptance {
+        check beats-existing-on-spreads {
+            statement """
+                On the 26 book-spread photos the model's text-line angle spread and bow are better than Paddle UVDoc, flattener and DocScanner by more than the measure's noise floor.
+                """
+            method command
+        }
+        check flat-pages-untouched {
+            statement """
+                On held-out flat pages the identity gate returns at least 99 % untouched, and passes none of the 26 curved photos.
+                """
+            method command
+            verified_by [ @lege-ecosystem.evidence.lege-dewarp-flat-pages-untouched-20261113 ]
+        }
+        check loads-in-lege-gpu {
+            statement """
+                The exported fp16 ONNX file is 10-20 MB, is accepted by lege-gpu unchanged and its grids match the fp32 twin within 0.05 px.
+                """
+            method command
+        }
+    }
+    derived_from [
+        @lege-ecosystem.observation.dewarp-models-move-flat-pages-20261112,
+        @lege-ecosystem.observation.flattener-dewarp-models-run-in-lege-gpu
+    ]
+    supported_by [
+        @lege-ecosystem.evidence.lege-dewarp-loads-in-lege-gpu-20261113,
+        @lege-ecosystem.evidence.lege-dewarp-picture-book-finetune-20261114,
+        @lege-ecosystem.evidence.lege-dewarp-real-pairs-finetune-20261113,
+        @lege-ecosystem.evidence.lege-dewarp-spreads-level-with-paddle-20261113,
+        @lege-ecosystem.evidence.lege-dewarp-targeted-finetune-no-gain-20261113
+    ]
 }
 
 record lege-ecosystem.work.package-primary-tensorrt-ocr-runtime/1 : work {

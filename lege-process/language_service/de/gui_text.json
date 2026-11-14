@@ -36,7 +36,6 @@
       "image_output_original": "Bildbereiche original belassen.",
       "image_output_dithered": "Bildbereiche auf 1 Bit rastern.",
       "layout_detection": "GPU-beschleunigte Layout-Erkennung schützt Bildbereiche vor der Binarisierung; deaktivieren, wenn das Dokument keine Bilder enthält.",
-      "heavy_model": "Schweres KI-Binarisierungsmodell für beschädigte oder schwierige Seiten. Profitiert von Layout-Erkennung.",
       "inverted_colors": "Für digital erstellte Dokumente mit dunklem Hintergrund und hellem Text. Wandelt sie in weißen Hintergrund und schwarzen Text um.",
       "jpeg_compatibility": "Maximale Kompatibilität: JPEG für Bildbereiche, CCITT4 für binarisierten Text (statt JPEG2000 und JBIG2). Nur im Binarisiert-Modus.",
       "ocr_text_layer": "Führt OCR aus, um Suchtextebene, Inhaltsverzeichnis und Metadaten zu erzeugen.",
@@ -48,8 +47,6 @@
       "jbig2_symbol_mode": "Verwendet gleiche Glyphen mehrfach: kleinere Dateien, geringes Verwechslungsrisiko.",
       "high_quality_output": "Verwendet eine hochwertigere Bildkodierung. Für Ausgaben für E-Ink-Lesegeräte deaktiviert lassen.",
       "target_height": "Höhe für proportionale Ausgabe eingeben, oder Höhe x Breite / Höhe Breite, z. B. 1200, 1200x800 oder 1200 800.",
-      "sauvola_k_factor": "Kontrastempfindlichkeit – niedriger: mehr Text bleibt erhalten, höher: sauberere Hintergründe. Profitiert von Layout-Erkennung.",
-      "threshold_value": "Ein Grenzwert für die ganze Seite: Pixel mit Luma unter diesem Wert (0-255) werden schwarz, der Rest weiß.",
       "margin_centering": "Zentriert den Inhaltsbereich innerhalb der Seitenmaße.",
       "margin_crop_resize": "Schneidet Ränder auf Inhaltsgrenzen zu und skaliert auf die angegebenen Maße.",
       "reflow": "Setzt den Text in einem sauberen einspaltigen Layout für das Zielgerät neu, wobei Wörter und Zeilen der Originalseiten neu umbrochen werden."
@@ -76,11 +73,7 @@
     },
     "controls": {
       "on": "Ein",
-      "off": "Aus",
-      "binarization": "Binarisierung",
-      "custom_adaptive": "Adaptiv anpassen",
-      "fixed_threshold": "Schwellenwert",
-      "heavy_model": "Schweres Modell"
+      "off": "Aus"
     },
     "queue": {
       "queue_button": "Warteschlange: {}",
@@ -125,6 +118,10 @@
       "preserve": "Erhalten",
       "text_rendering": "Textdarstellung",
       "binarized": "Schwarzweiß",
+      "binarize_best": "Beste",
+      "binarize_fast": "Schnell",
+      "binarize_best_note": "Beste Qualität: schwarzweißer Text aus dem Binarisierungsmodell auf der GPU. Am saubersten bei Scans.",
+      "binarize_fast_note": "Schnell: adaptive Binarisierung auf der CPU, etwa doppelt so schnell. Für viele Bücher auf einmal.",
       "grayscale": "Graustufen",
       "original": "Original",
       "dithered": "Gerastert",
@@ -148,8 +145,6 @@
       "tile_files": "{n} {ext}-Dateien",
       "progress": "Fortschritt",
       "invalid_resolution": "Bitte eine gültige Auflösung eingeben.",
-      "invalid_k": "Bitte einen gültigen K-Faktor eingeben.",
-      "invalid_threshold": "Bitte einen gültigen Schwellenwert eingeben.",
       "invalid_page_range": "Bitte einen gültigen Seitenbereich eingeben.",
       "preserve_note": "Seitenfarbe in MRC-Ebenen erhalten: JPEG 2000 + JBIG2 für PDF, IW44 + JB2 für DjVu. Schrift wird schwarz dargestellt; TrueTyping ist optional.",
       "grayscale_pdf": "Graustufen-PDF",
@@ -166,9 +161,27 @@
       "text_short": "Text",
       "layout_short": "Layout",
       "images_short": "Bilder",
+      "flatten_short": "Seite glätten",
+      "flatten_note": "Glättet fotografierte Seiten (PDF, Ordner, ZIP): Wölbungen werden begradigt, ein Buchfoto wird zu zwei Seiten. Flache Scans bleiben unverändert. Braucht eine GPU.",
       "queue_short": "Liste",
       "log_empty": "Noch keine verarbeiteten Dokumente.",
-      "theme_keys_hint": "← → Design · ↑ ↓ hell oder dunkel · Enter übernehmen · Esc abbrechen"
+      "theme_keys_hint": "← → Design · ↑ ↓ hell oder dunkel · Enter übernehmen · Esc abbrechen",
+      "encoding_short": "Kodierung",
+      "compatibility_short": "Kompatibel",
+      "encoding_djvu": "JB2, die Textkodierung von DjVu",
+      "jbig2_note": "JBIG2-Text: die kleinste und schnellste Kodierung, die jedes Lesegerät versteht.",
+      "mode_layout": "Layout-Modus",
+      "mode_no_layout": "Ohne Layout",
+      "mode_margin": "Rand-Modus",
+      "mode_sequential": "Sequenzieller Modus",
+      "mode_epub": "EPUB-Modus",
+      "mode_reflow": "Reflow",
+      "reflow_reading": "Reflow: Seiten lesen",
+      "reflow_composing": "Reflow: Satz",
+      "reflow_writing": "Reflow: Seiten schreiben",
+      "phase_preparing": "Wird vorbereitet…",
+      "phase_assembling": "Ausgabedatei wird zusammengesetzt…",
+      "phase_margins": "Ränder werden analysiert…"
     }
   }
 }

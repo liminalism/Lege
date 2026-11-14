@@ -160,12 +160,7 @@ pub struct ProcessingOptions {
     pub crop_margins: bool,
     pub crop_footnotes: bool,
     pub crop_free_aspect: bool,
-
     // Binarization options
-    pub use_heavy_binarization: bool,
-    pub k_factor: f32,
-    pub use_fixed_threshold: bool,
-    pub threshold_value: u8,
 }
 
 impl ProcessingOptions {
@@ -195,10 +190,6 @@ impl ProcessingOptions {
             crop_margins: false,
             crop_footnotes: false,
             crop_free_aspect: false,
-            use_heavy_binarization: false,
-            k_factor: crate::DEFAULT_K_FACTOR,
-            use_fixed_threshold: false,
-            threshold_value: 200,
         }
     }
 }

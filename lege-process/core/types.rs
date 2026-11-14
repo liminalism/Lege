@@ -1,5 +1,4 @@
 //! Shared types and configuration for lege and lege-ffi
-use crate::color::BinarizationConfig;
 use crate::text_loader::CLI_TEXT;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -286,7 +285,8 @@ pub struct AppConfig {
     /// Use the slower line-segmented OCR pipeline by default
     pub slow_ocr: Option<bool>,
 
-    /// Default binarization method
+    /// Former binarization method choice. There is one method now; the
+    /// key is still read so that saved settings keep loading.
     pub binarization: Option<String>,
 
     /// Keep color images by default
@@ -466,9 +466,6 @@ pub struct CliConfigBuilder {
     pub enable_ocr: bool,
     pub target_height: Option<u32>,
 
-    // Binarization
-    pub binarization_method: Option<String>,
-
     // Page range
     pub page_range: Option<String>,
 
@@ -526,12 +523,6 @@ impl CliConfigBuilder {
         self
     }
 
-    /// Set binarization method
-    pub fn with_binarization(mut self, method: String) -> Self {
-        self.binarization_method = Some(method);
-        self
-    }
-
     /// Set page range
     pub fn with_page_range(mut self, range: String) -> Self {
         self.page_range = Some(range);
@@ -585,16 +576,6 @@ impl CliConfigBuilder {
         self
     }
 
-    /// Set no binarization option
-    pub fn with_no_binarization(mut self, no_binarization: bool) -> Self {
-        self.binarization_method = if no_binarization {
-            None
-        } else {
-            self.binarization_method
-        };
-        self
-    }
-
     /// Build a PipelineConfig from the current configuration
     pub fn build_pipeline_config(
         self,
@@ -625,11 +606,6 @@ impl CliConfigBuilder {
             config.target_width = None;
         }
 
-        // Apply binarization
-        if let Some(method) = self.binarization_method {
-            config.binarization = Self::parse_binarization_method(&method);
-        }
-
         // Apply page range
         if let Some(range_str) = self.page_range {
             config.page_range = Self::parse_page_range(&range_str).ok().flatten();
@@ -640,63 +616,6 @@ impl CliConfigBuilder {
             config.enable_cover_page = enable_cover;
         }
         config.no_cover_page = self.no_cover_page;
-
-        config
-    }
-
-    /// Parse binarization method string into BinarizationConfig
-    pub fn parse_binarization_method(method: &str) -> BinarizationConfig {
-        let trimmed = method.trim();
-        if trimmed.is_empty() {
-            return BinarizationConfig::default();
-        }
-
-        let parts: Vec<&str> = trimmed.split_whitespace().collect();
-        let mut config = BinarizationConfig::default();
-        let mut fixed_selected = false;
-
-        if let Some(choice) = parts.first() {
-            match choice.to_lowercase().as_str() {
-                "1" | "adaptive" | "sauvola" | "otsu" => {
-                    config.use_heavy_duty = false;
-                    config.use_fixed_threshold = false;
-                }
-                "2" | "fixed" | "threshold" | "thr" => {
-                    config.use_heavy_duty = false;
-                    config.use_fixed_threshold = true;
-                    fixed_selected = true;
-                }
-                "3" | "heavy" | "sauvola_ai" | "sauvola-ai" | "onnx" => {
-                    config.use_heavy_duty = true;
-                    config.use_fixed_threshold = false;
-                }
-                _ => {}
-            }
-        }
-
-        for part in parts.iter().skip(1) {
-            if let Some(k_str) = part.strip_prefix("k=") {
-                if let Ok(k) = k_str.parse::<f32>() {
-                    config.k_factor = k;
-                    if !fixed_selected {
-                        config.use_fixed_threshold = false;
-                    }
-                }
-            } else if let Some(thr_str) = part.strip_prefix("thr=") {
-                if let Ok(threshold) = thr_str.parse::<u8>() {
-                    config.fixed_threshold = threshold;
-                    config.use_fixed_threshold = true;
-                    config.use_heavy_duty = false;
-                    fixed_selected = true;
-                }
-            } else if fixed_selected {
-                if let Ok(threshold) = part.parse::<u8>() {
-                    config.fixed_threshold = threshold;
-                    config.use_fixed_threshold = true;
-                    config.use_heavy_duty = false;
-                }
-            }
-        }
 
         config
     }
@@ -738,106 +657,6 @@ impl CliConfigBuilder {
             }
         }
         Ok(())
-    }
-
-    /// Validate binarization method
-    pub fn validate_binarization_method(method: &str) -> Result<(), anyhow::Error> {
-        let trimmed = method.trim();
-        if trimmed.is_empty() {
-            return Ok(());
-        }
-
-        let parts: Vec<&str> = trimmed.split_whitespace().collect();
-        let choice = parts
-            .first()
-            .map(|s| s.to_ascii_lowercase())
-            .unwrap_or_default();
-        let is_fixed_choice = matches!(choice.as_str(), "2" | "fixed" | "threshold" | "thr");
-        let valid_choice = matches!(
-            choice.as_str(),
-            "1" | "adaptive"
-                | "sauvola"
-                | "otsu"
-                | "2"
-                | "fixed"
-                | "threshold"
-                | "thr"
-                | "3"
-                | "heavy"
-                | "sauvola-ai"
-                | "sauvola_ai"
-                | "onnx"
-        );
-        if !valid_choice {
-            return Err(anyhow!(
-                CLI_TEXT
-                    .errors
-                    .invalid_binarization_method
-                    .replace("{}", method)
-            ));
-        }
-
-        let mut positional_threshold_seen = false;
-        for part in parts.iter().skip(1) {
-            if part.starts_with("k=") {
-                let raw = &part[2..];
-                let val = raw
-                    .parse::<f32>()
-                    .map_err(|_| anyhow!("Invalid k value: {}", raw))?;
-                if !(0.0..=1.0).contains(&val) {
-                    return Err(anyhow!("k must be between 0.0 and 1.0"));
-                }
-            } else if part.starts_with("thr=") {
-                let raw = &part[4..];
-                raw.parse::<u8>()
-                    .map_err(|_| anyhow!("Invalid threshold value: {}", raw))?;
-                positional_threshold_seen = true;
-            } else if is_fixed_choice && !positional_threshold_seen {
-                part.parse::<u8>()
-                    .map_err(|_| anyhow!("Invalid threshold value: {}", part))?;
-                positional_threshold_seen = true;
-            } else {
-                return Err(anyhow!(
-                    CLI_TEXT
-                        .errors
-                        .invalid_binarization_method
-                        .replace("{}", method)
-                ));
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Get available binarization methods for interactive selection
-    pub fn get_binarization_methods() -> Vec<(String, BinarizationConfig)> {
-        vec![
-            (
-                CLI_TEXT.interactive.binarization_methods[0].clone(),
-                BinarizationConfig {
-                    k_factor: crate::DEFAULT_K_FACTOR,
-                    use_heavy_duty: false,
-                    use_fixed_threshold: false,
-                    ..Default::default()
-                },
-            ),
-            (
-                CLI_TEXT.interactive.binarization_methods[1].clone(),
-                BinarizationConfig {
-                    use_fixed_threshold: true,
-                    fixed_threshold: 180,
-                    ..Default::default()
-                },
-            ),
-            (
-                CLI_TEXT.interactive.binarization_methods[2].clone(),
-                BinarizationConfig {
-                    k_factor: crate::DEFAULT_K_FACTOR,
-                    use_heavy_duty: true,
-                    ..Default::default()
-                },
-            ),
-        ]
     }
 
     /// Get available encoding formats based on options

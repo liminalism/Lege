@@ -12,10 +12,10 @@ use liminalkit_windowing::{CursorShape, ImeCursorArea, ImeEvent, PixelApp, Waker
 use crate::appearance::{self, ThemeChoice};
 use crate::backend;
 use crate::gui_text::{GUI_TEXT, tr};
-use crate::layout::{Actions, Bands, LeftCard, RightCard, cells};
+use crate::layout::{Actions, Bands, PageCard, ProcessingCard, cells};
 use crate::models::{
-    BinarizationKind, CompressionType, DocumentItem, GeometryMode, ImageProcessingType, OcrMode,
-    OutputFormat, ProcessingOptions, ResolutionPreset,
+    CompressionType, DocumentItem, GeometryMode, ImageProcessingType, OcrMode, OutputFormat,
+    ProcessingOptions, ResolutionPreset,
 };
 use crate::worker_process::{
     WorkerHandle, WorkerProcessingStatus, WorkerProgressMetrics, WorkerProgressMode,
@@ -179,12 +179,17 @@ pub struct Dashboard {
     rows: Vec<QueueRow>,
     range: TextFieldState,
     resolution: TextFieldState,
-    k: TextFieldState,
-    threshold: TextFieldState,
-    status: (String, String, String),
+    /// The one status line of a run that the progress bar does not show: a
+    /// phase ("Assembling the output file"), a worker message or an error.
+    detail: String,
     metrics: Option<WorkerProgressMetrics>,
+    /// The running file's reflow stage, for the label on the bar.
+    reflow_phase: Option<WorkerReflowStage>,
     resolution_edit: ResolutionEdit,
     blink_start: Instant,
+    /// Inputs of finished rows that were dragged away as a move: their
+    /// output tiles stay, their input tiles do not.
+    moved_inputs: Vec<PathBuf>,
     batch: BatchState,
     generation: u64,
     handles: Vec<WorkerHandle>,
@@ -246,7 +251,7 @@ impl PixelApp for LegeApp {
         let theme = crate::theme::theme(palette);
         let bands = Bands::new(buffer.width as i32, buffer.height as i32, scale);
         if self.dashboard.modal.is_none() {
-            let card = LeftCard::new(bands.right.inset(scale.px(8)), scale);
+            let card = PageCard::new(bands.right.inset(scale.px(8)), scale);
             if let Some((x, y)) = self.input.press_position() {
                 let outside_range =
                     self.dashboard.range.caret_area().is_some() && !card.range.contains(x, y);
@@ -363,7 +368,11 @@ impl PixelApp for LegeApp {
         // A tile drag starts here, after the frame that saw the pointer move:
         // the shell's drag loop is modal and must not run inside a paint.
         if let Some(paths) = self.dashboard.shelf.pending_drag.take() {
-            crate::shell_files::drag_out(self.hwnd, &paths);
+            // Copy, move or shortcut, by Explorer's own rules (Ctrl, Shift,
+            // Alt). A file a running batch still has to read may not be moved.
+            let allow_move = self.dashboard.may_move(&paths);
+            crate::shell_files::drag_out(self.hwnd, &paths, allow_move);
+            self.dashboard.forget_moved_files();
             self.dashboard.shelf.recent_drag = Some((paths, Instant::now()));
             // The release happened inside the shell's loop; the window never
             // saw it, so nothing here may think the button is still down.
@@ -451,20 +460,15 @@ impl PixelApp for LegeApp {
         if self.dashboard.modal.is_some() || self.dashboard.running() {
             return None;
         }
-        [
-            &self.dashboard.range,
-            &self.dashboard.resolution,
-            &self.dashboard.k,
-            &self.dashboard.threshold,
-        ]
-        .iter()
-        .find_map(|field| field.caret_area())
-        .map(|area| ImeCursorArea {
-            x: area.x as f64,
-            y: area.y as f64,
-            width: area.w as f64,
-            height: area.h as f64,
-        })
+        [&self.dashboard.range, &self.dashboard.resolution]
+            .iter()
+            .find_map(|field| field.caret_area())
+            .map(|area| ImeCursorArea {
+                x: area.x as f64,
+                y: area.y as f64,
+                width: area.w as f64,
+                height: area.h as f64,
+            })
     }
     fn on_exit(&mut self) {
         self.dashboard.cancel();
@@ -514,15 +518,15 @@ impl Dashboard {
         Self {
             resolution: TextFieldState::with_text(resolution),
             range: TextFieldState::with_text(options.page_range.clone().unwrap_or_default()),
-            k: TextFieldState::with_text(options.k_factor.to_string()),
-            threshold: TextFieldState::with_text(options.threshold_value.to_string()),
             options,
             queue: VecDeque::new(),
             rows: Vec::new(),
-            status: (String::new(), String::new(), String::new()),
+            detail: String::new(),
             metrics: None,
+            reflow_phase: None,
             resolution_edit: ResolutionEdit::Displaying,
             blink_start: Instant::now(),
+            moved_inputs: Vec::new(),
             batch: BatchState::Idle,
             generation: 0,
             handles: Vec::new(),
@@ -637,6 +641,7 @@ impl Dashboard {
                     if !self.cancelling() {
                         self.batch = BatchState::Running;
                     }
+                    self.moved_inputs.clear();
                     self.rows = infos
                         .into_iter()
                         .map(|info| QueueRow {
@@ -688,7 +693,7 @@ impl Dashboard {
                     self.batch = BatchState::Finished(outcome);
                     self.handles.clear();
                     if cancelled {
-                        self.status = (tr("cancelled").into(), String::new(), String::new());
+                        self.detail = tr("cancelled").into();
                     }
                     self.log = crate::logging::load_log_entries().unwrap_or_default();
                 }
@@ -767,14 +772,15 @@ impl Dashboard {
         match event {
             WorkerProgressUpdate::Status { status, .. } => {
                 // A page-appended notice (`PdfAppend`) arrives for every
-                // finished page and has no text of its own: the counters live
-                // in the progress statuses. Keep the last lines rather than
-                // blank them until the next progress event, which flickered.
-                let lines = status.to_gui_display_lines();
-                let blank = lines.0.is_empty() && lines.1.is_empty() && lines.2.is_empty();
-                if !self.cancelling() && !blank {
-                    self.status = lines;
+                // finished page and has no text of its own: keep the last
+                // line rather than blank it until the next progress event,
+                // which flickered.
+                if !self.cancelling()
+                    && let Some(detail) = status.gui_detail()
+                {
+                    self.detail = detail;
                 }
+                self.reflow_phase = phase;
                 if self.rows[index].state == DocumentRunState::Queued {
                     self.rows[index].state = DocumentRunState::Processing {
                         fraction: 0.0,
@@ -797,7 +803,9 @@ impl Dashboard {
                     .output
                     .as_ref()
                     .is_some_and(|output| output.exists());
-                self.status = (tr("processing").into(), message.clone(), String::new());
+                // The message is the notice; the next file's events take the
+                // line over.
+                self.detail.clear();
                 self.notice(message, 6);
                 let path = &self.rows[index].path;
                 self.queue.retain(|item| item.file_path != *path);
@@ -809,7 +817,7 @@ impl Dashboard {
                     DocumentRunState::Failed
                 };
                 if !self.cancelling() {
-                    self.status = (tr("failed").into(), error.clone(), String::new());
+                    self.detail = error.clone();
                     self.notice(error, 8);
                 }
             }
@@ -904,7 +912,7 @@ impl Dashboard {
         self.input_flow = InputFlow::default();
         if self.running() {
             self.batch = BatchState::Cancelling;
-            self.status.0 = GUI_TEXT.interactive.status.cancelling.clone();
+            self.detail.clear();
             for handle in &mut self.handles {
                 handle.kill();
             }
@@ -957,12 +965,9 @@ impl Dashboard {
         self.generation += 1;
         let generation = self.generation;
         self.metrics = None;
+        self.reflow_phase = None;
         self.rows.clear();
-        self.status = (
-            GUI_TEXT.interactive.status.starting.clone(),
-            String::new(),
-            String::new(),
-        );
+        self.detail = tr("phase_preparing").into();
         let options = self.options.clone();
         let queue = self.queue.clone();
         let tx = self.sender.clone();
@@ -1055,21 +1060,6 @@ impl Dashboard {
         };
         self.options.page_range =
             (!self.range.text().trim().is_empty()).then(|| self.range.text().trim().to_owned());
-        if !self.options.grayscale_mode && !self.options.preserve_mode {
-            if self.options.use_fixed_threshold {
-                self.options.threshold_value = self
-                    .threshold
-                    .text()
-                    .parse()
-                    .map_err(|_| tr("invalid_threshold"))?;
-            } else if self.options.use_custom_adaptive {
-                let k: f32 = self.k.text().parse().map_err(|_| tr("invalid_k"))?;
-                if !k.is_finite() || !(0.0..=1.0).contains(&k) {
-                    return Err(tr("invalid_k"));
-                }
-                self.options.k_factor = k;
-            }
-        }
         self.options.normalize_processing_dependencies();
         Ok(())
     }
@@ -1436,39 +1426,6 @@ fn checkbox_font(ui: &mut Ui<'_>, width: i32, columns: i32, labels: &[&str]) -> 
     (widest > available)
         .then(|| crate::theme::crisp_down(style.size * available.max(1) as f32 / widest as f32))
 }
-/// The center/crop/reflow row. Equal columns, aligned with a three-column
-/// grid above, while the labels fit them; otherwise columns sized to their
-/// labels, which are shrunk only if even that is too narrow. May lower
-/// `ui.theme.body.size`; the caller restores it.
-fn geometry_cells(ui: &mut Ui<'_>, area: Rect, labels: [&str; 3]) -> Vec<Rect> {
-    let gap = ui.px(2);
-    if checkbox_font(ui, area.w, 3, &labels).is_none() {
-        return cells(area, 3, gap);
-    }
-    let chrome = ui.px(liminalkit_ui::CHECKBOX_SIZE) + ui.px(ui.theme.padding / 2) + ui.px(6);
-    let style = ui.theme.body;
-    let text: Vec<i32> = labels.iter().map(|l| ui.text.measure(l, style)).collect();
-    let fixed = 3 * chrome + 2 * gap;
-    let total: i32 = text.iter().sum();
-    let room = (area.w - fixed).max(1);
-    if total > room {
-        ui.theme.body.size = crate::theme::crisp_down(style.size * room as f32 / total as f32);
-    }
-    // Spare width is shared equally; text widths shrink in proportion.
-    let spare = (room - total).max(0) / 3;
-    let mut x = area.x;
-    let mut rects = Vec::with_capacity(3);
-    for (i, width) in text.iter().enumerate() {
-        let w = if i == 2 {
-            area.right() - x
-        } else {
-            chrome + spare + (*width as i64 * room.min(total) as i64 / total as i64) as i32
-        };
-        rects.push(Rect::new(x, area.y, w, area.h));
-        x += w + gap;
-    }
-    rects
-}
 fn choices(ui: &mut Ui<'_>, area: Rect, texts: &[&str], selected: usize) -> Option<usize> {
     let gap = ui.px(4);
     let count = texts.len() as i32;
@@ -1492,7 +1449,106 @@ fn hover(ui: &Ui<'_>, area: Rect, text: &'static str, note: &mut Option<&'static
     }
 }
 
+/// The Format row: PDF and DjVu, an exclusive pair, then EPUB a wider gap
+/// apart, since it is made beside either of them.
+fn format_cells(ui: &Ui<'_>, area: Rect) -> [Rect; 3] {
+    let gap = ui.px(4);
+    let apart = ui.px(14);
+    let w = (area.w - gap - apart) / 3;
+    let epub_x = area.x + 2 * w + gap + apart;
+    [
+        Rect::new(area.x, area.y, w, area.h),
+        Rect::new(area.x + w + gap, area.y, w, area.h),
+        Rect::new(epub_x, area.y, area.right() - epub_x, area.h),
+    ]
+}
+/// The one progress bar of a run, with `text` (the progress mode and the
+/// percentage) on it. The text is drawn twice, each clipped to its side of
+/// the fill, so it reads on the filled part and on the track alike.
+fn progress_bar(ui: &mut Ui<'_>, area: Rect, fraction: f64, text: &str) {
+    let radius = area.h / 2;
+    let edge = ui.theme.panel_edge;
+    // The track is an unselected control; the fill, a selected one.
+    let track = ui.theme.background;
+    ui.painter
+        .rounded_rect(area, radius, ui.px(ui.theme.border_width), track, edge);
+    let filled = (area.w as f64 * fraction.clamp(0.0, 1.0)).round() as i32;
+    let fill = Rect::new(area.x, area.y, filled, area.h);
+    if filled > 0 {
+        ui.painter.push_clip(fill);
+        let selection = ui.theme.selection;
+        ui.painter
+            .rounded_rect(area, radius, ui.px(ui.theme.border_width), selection, edge);
+        ui.painter.pop_clip();
+    }
+    let mut style = ui.theme.body;
+    style.size = font(ui, 12.0);
+    let available = (area.w - 2 * radius).max(1);
+    let width = ui.text.measure(text, style);
+    if width > available {
+        style.size = crate::theme::crisp_down(style.size * available as f32 / width as f32);
+    }
+    let rest = Rect::new(area.x + filled, area.y, area.w - filled, area.h);
+    for (clip, colour) in [(fill, on_selection()), (rest, ui.theme.text)] {
+        if clip.w > 0 {
+            ui.painter.push_clip(clip);
+            ui.label_styled(area, text, style, colour, Align::Centre);
+            ui.painter.pop_clip();
+        }
+    }
+}
+
 impl Dashboard {
+    /// What the bar says before its percentage: the worker's progress mode,
+    /// the reflow stage, or that the run is being cancelled.
+    fn progress_label(&self) -> &'static str {
+        if self.cancelling() {
+            return &GUI_TEXT.interactive.status.cancelling;
+        }
+        let Some(metrics) = self.metrics else {
+            return tr("processing");
+        };
+        match metrics.mode {
+            WorkerProgressMode::Layout if metrics.enable_layout_detection => tr("mode_layout"),
+            WorkerProgressMode::Layout | WorkerProgressMode::NoLayout => tr("mode_no_layout"),
+            WorkerProgressMode::Margin => tr("mode_margin"),
+            WorkerProgressMode::HeavySequential => tr("mode_sequential"),
+            WorkerProgressMode::Epub => tr("mode_epub"),
+            WorkerProgressMode::Reflow => match self.reflow_phase {
+                Some(WorkerReflowStage::SourceAnalysis) => tr("reflow_reading"),
+                Some(WorkerReflowStage::Compose) => tr("reflow_composing"),
+                Some(WorkerReflowStage::OutputPages) => tr("reflow_writing"),
+                None => tr("mode_reflow"),
+            },
+            WorkerProgressMode::Unknown => tr("processing"),
+        }
+    }
+    /// The status line of a run: the running file's finished pages and the
+    /// time left, then a phase or message. The three page counters follow
+    /// each other, so the bar stands for them and only the last is a number.
+    fn running_line(&self) -> String {
+        let t = &GUI_TEXT.interactive;
+        let mut parts = Vec::new();
+        if let Some(m) = self.metrics.filter(|m| m.pages_total > 0) {
+            parts.push(format!(
+                "{} / {} {}",
+                m.encoded.min(m.pages_total),
+                m.pages_total,
+                tr("pages")
+            ));
+            if let Some(seconds) = m.eta_seconds {
+                parts.push(
+                    t.progress
+                        .eta
+                        .replace("{}", &format!("{}:{:02}", seconds / 60, seconds % 60)),
+                );
+            }
+        }
+        if !self.detail.is_empty() {
+            parts.push(self.detail.clone());
+        }
+        parts.join(" · ")
+    }
     fn draw(&mut self, ui: &mut Ui<'_>, bands: &Bands, snapshot: bool) {
         let t = &GUI_TEXT.interactive;
         let mut note = None;
@@ -1541,8 +1597,8 @@ impl Dashboard {
             }
             hover(ui, rect, tooltip, &mut note);
         }
-        self.draw_right(ui, bands.left, &mut note);
-        self.draw_left(ui, bands.right, &mut note, snapshot);
+        self.draw_processing(ui, bands.left, &mut note);
+        self.draw_page(ui, bands.right, &mut note, snapshot);
         if let Some(input) = saved_input {
             *ui.input = input;
         }
@@ -1658,29 +1714,16 @@ impl Dashboard {
             actions.utilities[0].h,
         );
         if self.running() {
-            label(ui, header, &self.status.0);
-            small(ui, row(status, 1, ui.px(20)), &self.status.1);
-            let eta = self
-                .metrics
-                .and_then(|m| m.eta_seconds)
-                .map(|seconds| {
-                    format!(
-                        "{}: {}:{:02}",
-                        t.progress.eta.replace("{}", ""),
-                        seconds / 60,
-                        seconds % 60
-                    )
-                })
-                .unwrap_or_else(|| self.status.2.clone());
-            small(ui, row(status, 2, ui.px(20)), &eta);
-            {
-                ui.meter(
-                    actions.meter,
-                    self.batch_progress(),
-                    tr("progress"),
-                    ui.theme.selection,
-                );
-            }
+            // One line above the queue: pages and time left of the running
+            // file, and whatever phase or message the bar does not say.
+            let line = self.running_line();
+            ui.label(header, &line, ui.theme.text, Align::Left);
+            let label = format!(
+                "{} · {}%",
+                self.progress_label(),
+                (self.batch_progress() * 100.0).floor() as u32
+            );
+            progress_bar(ui, actions.meter, self.batch_progress(), &label);
         } else {
             let summary = if self.queue.is_empty() {
                 t.status.ready.clone()
@@ -1778,10 +1821,46 @@ impl Dashboard {
             self.notice(error.to_string(), 6);
         }
     }
+    /// Whether a drag of `paths` out of the window may move them. Outputs
+    /// always may; inputs only while nothing is running, since a running
+    /// batch still reads its queued files from where they are.
+    fn may_move(&self, paths: &[PathBuf]) -> bool {
+        if !self.running() {
+            return true;
+        }
+        let outputs = self.shelf_outputs();
+        paths.iter().all(|path| outputs.contains(path))
+    }
+    /// After a drag out: files that were moved away are no longer where the
+    /// queue and the tiles say, so those entries go.
+    fn forget_moved_files(&mut self) {
+        for row in &mut self.rows {
+            if row.output_ready && !row.output.as_ref().is_some_and(|output| output.exists()) {
+                row.output_ready = false;
+            }
+        }
+        if self.running() {
+            return;
+        }
+        self.queue.retain(|item| item.file_path.exists());
+        self.rows
+            .retain(|row| row.output_ready || row.path.exists());
+        self.moved_inputs = self
+            .rows
+            .iter()
+            .filter(|row| !row.path.exists())
+            .map(|row| row.path.clone())
+            .collect();
+    }
     /// Every input of the current (or last) run, then whatever is queued after
     /// it: what the user added, in the order they added it.
     fn shelf_inputs(&self) -> Vec<PathBuf> {
-        let mut inputs: Vec<PathBuf> = self.rows.iter().map(|row| row.path.clone()).collect();
+        let mut inputs: Vec<PathBuf> = self
+            .rows
+            .iter()
+            .filter(|row| !self.moved_inputs.contains(&row.path))
+            .map(|row| row.path.clone())
+            .collect();
         for item in &self.queue {
             if !inputs.contains(&item.file_path) {
                 inputs.push(item.file_path.clone());
@@ -1797,7 +1876,9 @@ impl Dashboard {
             .filter_map(|row| row.output.clone())
             .collect()
     }
-    fn draw_left(
+    /// The page card, on the right band: page range, resolution and Flatten
+    /// page; the margin buttons; the checkboxes and the OCR slot.
+    fn draw_page(
         &mut self,
         ui: &mut Ui<'_>,
         area: Rect,
@@ -1806,7 +1887,7 @@ impl Dashboard {
     ) {
         let t = &GUI_TEXT.interactive;
         let a = card(ui, area);
-        let card = LeftCard::new(a, ui.scale);
+        let card = PageCard::new(a, ui.scale);
         small(ui, card.range_label, &t.labels.page_range);
         small(ui, card.resolution_label, tr("resolution_short"));
         let (_, range_focused) = ui.text_field_input(&mut self.range, card.range, false, false);
@@ -1837,19 +1918,53 @@ impl Dashboard {
             }
         }
         hover(ui, card.resolution, &t.tooltips.target_height, note);
+        // Flatten page: one toggle beside the resolution, off by default.
+        if choice(
+            ui,
+            card.flatten,
+            tr("flatten_short"),
+            self.options.flatten_pages,
+        ) {
+            self.options.flatten_pages = !self.options.flatten_pages;
+        }
+        hover(ui, card.flatten, tr("flatten_note"), note);
 
-        // Preserve the reading order, filling rows across the columns. The
-        // geometry tray and OCR slot stay anchored when conditional controls
-        // hide. Every possible label is measured, not only the visible ones,
-        // so toggling an option never reflows the grid.
+        // Center / crop / reflow: at most one; pressing the selected one
+        // again leaves the page unchanged.
+        let selected = match self.options.geometry_mode() {
+            GeometryMode::Unchanged => None,
+            GeometryMode::Centered => Some(0),
+            GeometryMode::Cropped { .. } => Some(1),
+            GeometryMode::Reflow => Some(2),
+        };
+        let buttons = cells(card.geometry, 3, ui.px(4));
+        for (index, text, tooltip) in [
+            (
+                0,
+                tr("center_margins"),
+                t.tooltips.margin_centering.as_str(),
+            ),
+            (
+                1,
+                tr("crop_margins"),
+                t.tooltips.margin_crop_resize.as_str(),
+            ),
+            (2, t.labels.reflow.as_str(), t.tooltips.reflow.as_str()),
+        ] {
+            let rect = buttons[index];
+            if choice(ui, rect, text, selected == Some(index)) {
+                self.select_geometry(index);
+            }
+            hover(ui, rect, tooltip, note);
+        }
+
+        // The checkboxes keep their places when one hides, so the others
+        // never move under the pointer. Every label is measured, not only
+        // the visible ones, so toggling an option never reflows the grid.
         let labels = [
             t.labels.inverted_colors.as_str(),
             &t.labels.ocr_text_layer,
-            &t.labels.make_epub_also,
             &t.labels.high_quality_output,
-            &t.labels.truetyping_text,
-            &t.labels.jbig2_symbol_mode,
-            &t.labels.jpeg_compatibility,
         ];
         let columns: i32 = if checkbox_font(ui, card.checks.w, 3, &labels).is_none() {
             3
@@ -1861,93 +1976,39 @@ impl Dashboard {
         if let Some(size) = checkbox_font(ui, card.checks.w, columns, &labels) {
             ui.theme.body.size = size;
         }
-        let mut index = 0;
-        macro_rules! check {
-            ($value:expr,$label:expr,$tip:expr,$changed:expr) => {{
-                let row = cells(
-                    Rect::new(
-                        card.checks.x,
-                        card.checks.y + (index / columns) * card.check_row,
-                        card.checks.w,
-                        card.check_row,
-                    ),
-                    columns as usize,
-                    ui.px(2),
-                );
-                let rect = row[(index % columns) as usize];
-                let mut value = $value;
-                if checkbox(ui, rect, &mut value, $label) {
-                    $changed(value);
-                }
-                hover(ui, rect, $tip, note);
-                index += 1;
-            }};
-        }
+        let gap = ui.px(2);
+        let check_rect = |index: i32| {
+            cells(
+                Rect::new(
+                    card.checks.x,
+                    card.checks.y + (index / columns) * card.check_row,
+                    card.checks.w,
+                    card.check_row,
+                ),
+                columns as usize,
+                gap,
+            )[(index % columns) as usize]
+        };
         if !self.options.preserve_mode {
-            check!(
-                self.options.invert_input,
-                &t.labels.inverted_colors,
-                &t.tooltips.inverted_colors,
-                |v| self.options.set_invert_input(v)
-            );
-        }
-        check!(
-            self.options.use_ocr,
-            &t.labels.ocr_text_layer,
-            &t.tooltips.ocr_text_layer,
-            |v| self.options.set_use_ocr(v)
-        );
-        check!(
-            self.options.make_epub_also,
-            &t.labels.make_epub_also,
-            &t.tooltips.make_epub_also,
-            |v| {
-                self.options.make_epub_also = v;
-                if v {
-                    self.options.set_use_ocr(true);
-                    self.options.ocr_mode = OcrMode::Thorough;
-                }
+            let rect = check_rect(0);
+            let mut value = self.options.invert_input;
+            if checkbox(ui, rect, &mut value, &t.labels.inverted_colors) {
+                self.options.set_invert_input(value);
             }
-        );
-        check!(
-            self.options.high_quality_output,
-            &t.labels.high_quality_output,
-            &t.tooltips.high_quality_output,
-            |v| self.options.high_quality_output = v
-        );
-        if self.options.output_format == OutputFormat::Pdf {
-            check!(
-                self.options.compression_type == CompressionType::Truetyping,
-                &t.labels.truetyping_text,
-                &t.tooltips.truetyping_text,
-                |v| self.options.set_text_encoder(if v {
-                    CompressionType::Truetyping
-                } else {
-                    CompressionType::Jbig2
-                })
-            );
-            if !self.options.grayscale_mode && !self.options.preserve_mode {
-                if self.options.compression_type == CompressionType::Jbig2 {
-                    check!(
-                        self.options.symbol_mode,
-                        &t.labels.jbig2_symbol_mode,
-                        &t.tooltips.jbig2_symbol_mode,
-                        |v| self.options.symbol_mode = v
-                    );
-                }
-                check!(
-                    self.options.jpeg_compat,
-                    &t.labels.jpeg_compatibility,
-                    &t.tooltips.jpeg_compatibility,
-                    |v| self.options.set_text_encoder(if v {
-                        CompressionType::Ccitt4
-                    } else {
-                        CompressionType::Jbig2
-                    })
-                );
-            }
+            hover(ui, rect, &t.tooltips.inverted_colors, note);
         }
-        let _ = index;
+        let rect = check_rect(1);
+        let mut value = self.options.use_ocr;
+        if checkbox(ui, rect, &mut value, &t.labels.ocr_text_layer) {
+            self.options.set_use_ocr(value);
+        }
+        hover(ui, rect, &t.tooltips.ocr_text_layer, note);
+        let rect = check_rect(2);
+        let mut value = self.options.high_quality_output;
+        if checkbox(ui, rect, &mut value, &t.labels.high_quality_output) {
+            self.options.high_quality_output = value;
+        }
+        hover(ui, rect, &t.tooltips.high_quality_output, note);
         ui.theme.body = body;
         if self.options.use_ocr {
             if let Some(index) = choices(
@@ -1974,39 +2035,6 @@ impl Dashboard {
                 note,
             );
         }
-        let buttons = geometry_cells(
-            ui,
-            card.geometry,
-            [tr("center_margins"), tr("crop_margins"), &t.labels.reflow],
-        );
-        for (index, text, selected, tooltip) in [
-            (
-                0,
-                tr("center_margins"),
-                self.options.center_margins,
-                t.tooltips.margin_centering.as_str(),
-            ),
-            (
-                1,
-                tr("crop_margins"),
-                self.options.crop_margins,
-                t.tooltips.margin_crop_resize.as_str(),
-            ),
-            (
-                2,
-                t.labels.reflow.as_str(),
-                self.options.reflow,
-                t.tooltips.reflow.as_str(),
-            ),
-        ] {
-            let rect = buttons[index];
-            let mut checked = selected;
-            if checkbox(ui, rect, &mut checked, text) {
-                self.select_geometry(index);
-            }
-            hover(ui, rect, tooltip, note);
-        }
-        ui.theme.body = body;
     }
 
     fn select_geometry(&mut self, index: usize) {
@@ -2025,25 +2053,19 @@ impl Dashboard {
         self.options.set_geometry_mode(next);
     }
 
-    pub(crate) fn select_binarization(&mut self, index: usize) {
-        let kind = match index {
-            0 => BinarizationKind::Adaptive,
-            1 => BinarizationKind::Fixed,
-            _ => BinarizationKind::Heavy,
-        };
-        self.options.set_binarization_kind(kind);
-    }
-
-    fn draw_right(&mut self, ui: &mut Ui<'_>, area: Rect, note: &mut Option<&'static str>) {
+    /// The processing card, on the left band: one row of buttons per
+    /// setting, and under the text encoding its JBIG2 sub-option.
+    fn draw_processing(&mut self, ui: &mut Ui<'_>, area: Rect, note: &mut Option<&'static str>) {
         let t = &GUI_TEXT.interactive;
         let a = card(ui, area);
-        let card = RightCard::new(a, ui.scale);
+        let card = ProcessingCard::new(a, ui.scale);
         for (index, caption) in [
             (0, tr("mode_short")),
             (1, tr("format_short")),
             (2, tr("text_short")),
             (3, tr("layout_short")),
             (4, tr("images_short")),
+            (5, tr("encoding_short")),
         ] {
             let (label_area, control) = card.setting(index);
             if index == 4 && !self.options.layout_analysis {
@@ -2060,58 +2082,67 @@ impl Dashboard {
                     ) {
                         self.options.set_preserve_mode(index == 1);
                     }
-                    hover(
-                        ui,
-                        control,
-                        if self.options.preserve_mode {
-                            tr("preserve_note")
-                        } else {
-                            tr("preparation_note")
-                        },
-                        note,
-                    );
+                    // Each button explains itself on mouseover, whichever
+                    // mode is selected.
+                    for (rect, text) in cells(control, 2, ui.px(4))
+                        .into_iter()
+                        .zip([tr("preparation_note"), tr("preserve_note")])
+                    {
+                        hover(ui, rect, text, note);
+                    }
                 }
                 1 => {
-                    if let Some(index) = choices(
-                        ui,
-                        control,
-                        &["PDF", "DjVu"],
-                        usize::from(self.options.output_format == OutputFormat::Djvu),
-                    ) {
-                        self.options.output_format = if index == 0 {
-                            OutputFormat::Pdf
-                        } else {
-                            OutputFormat::Djvu
-                        };
+                    // PDF and DjVu exclude each other; EPUB is made beside
+                    // either, so it stands a little apart from the pair.
+                    let [pdf, djvu, epub] = format_cells(ui, control);
+                    let djvu_selected = self.options.output_format == OutputFormat::Djvu;
+                    if choice(ui, pdf, "PDF", !djvu_selected) {
+                        self.options.output_format = OutputFormat::Pdf;
                     }
-                    hover(ui, control, &t.tooltips.base_format, note);
+                    if choice(ui, djvu, "DjVu", djvu_selected) {
+                        self.options.output_format = OutputFormat::Djvu;
+                    }
+                    if choice(ui, epub, "EPUB", self.options.make_epub_also) {
+                        self.options
+                            .set_make_epub_also(!self.options.make_epub_also);
+                    }
+                    hover(ui, pdf, &t.tooltips.base_format, note);
+                    hover(ui, djvu, &t.tooltips.base_format, note);
+                    hover(ui, epub, &t.tooltips.make_epub_also, note);
                 }
                 2 => {
+                    // Best | Fast | Grayscale: the two binarizers and the
+                    // grayscale rendering are one choice of three.
                     if self.options.preserve_mode {
                         small(ui, control, tr("preserve_summary"));
-                    } else if let Some(index) = choices(
-                        ui,
-                        control,
-                        &[tr("binarized"), tr("grayscale")],
-                        usize::from(self.options.grayscale_mode),
-                    ) {
-                        self.options.grayscale_mode = index == 1;
-                        if index == 1 && self.options.jpeg_compat {
-                            self.options.set_text_encoder(CompressionType::Jbig2);
+                        hover(ui, control, tr("preserve_note"), note);
+                    } else {
+                        let selected = if self.options.grayscale_mode {
+                            2
+                        } else {
+                            usize::from(self.options.fast_binarization)
+                        };
+                        if let Some(index) = choices(
+                            ui,
+                            control,
+                            &[tr("binarize_best"), tr("binarize_fast"), tr("grayscale")],
+                            selected,
+                        ) {
+                            self.options.set_text_mode(index);
                         }
-                    }
-                    hover(
-                        ui,
-                        control,
-                        if self.options.preserve_mode {
-                            tr("preserve_note")
-                        } else if self.options.output_format == OutputFormat::Djvu {
+                        let grayscale_note = if self.options.output_format == OutputFormat::Djvu {
                             tr("grayscale_djvu")
                         } else {
                             tr("grayscale_pdf")
-                        },
-                        note,
-                    );
+                        };
+                        for (rect, text) in cells(control, 3, ui.px(4)).into_iter().zip([
+                            tr("binarize_best_note"),
+                            tr("binarize_fast_note"),
+                            grayscale_note,
+                        ]) {
+                            hover(ui, rect, text, note);
+                        }
+                    }
                 }
                 3 => {
                     if let Some(index) = choices(
@@ -2127,7 +2158,8 @@ impl Dashboard {
                     }
                     hover(ui, control, &t.tooltips.layout_detection, note);
                 }
-                _ => {
+                5 => self.draw_text_encoding(ui, control, card.sub_option(), note),
+                4 => {
                     if self.options.preserve_mode {
                         choice(ui, control, tr("original"), true);
                     } else {
@@ -2178,77 +2210,62 @@ impl Dashboard {
                         );
                     }
                 }
+                _ => {}
             }
         }
-        if !self.options.grayscale_mode && !self.options.preserve_mode {
-            let (modes, caption, value) = card.binarization_fields();
-            small(
-                ui,
-                Rect::new(
-                    card.binarization.x,
-                    modes.y,
-                    modes.x - card.binarization.x,
-                    modes.h,
-                ),
-                &t.controls.binarization,
-            );
-            let selected = if self.options.use_fixed_threshold {
-                1
-            } else if self.options.use_heavy_binarization {
-                2
-            } else {
-                0
-            };
-            if let Some(index) = choices(
-                ui,
-                modes,
-                &[
-                    &t.controls.custom_adaptive,
-                    &t.controls.fixed_threshold,
-                    &t.controls.heavy_model,
-                ],
-                selected,
-            ) {
-                self.select_binarization(index);
+    }
+
+    /// JBIG2 / TrueTyping / Compatibility: the PDF text encoder, one of
+    /// three. Compatibility (CCITT4) is bilevel only, so grayscale and
+    /// preserve pages offer the other two. Symbol mode, a JBIG2 option, sits
+    /// under the row while JBIG2 is chosen. DjVu has its own text encoding.
+    fn draw_text_encoding(
+        &mut self,
+        ui: &mut Ui<'_>,
+        control: Rect,
+        sub_option: Rect,
+        note: &mut Option<&'static str>,
+    ) {
+        let t = &GUI_TEXT.interactive;
+        if self.options.output_format == OutputFormat::Djvu {
+            small(ui, control, tr("encoding_djvu"));
+            return;
+        }
+        let mut encoders = vec![
+            (CompressionType::Jbig2, "JBIG2", tr("jbig2_note")),
+            (
+                CompressionType::Truetyping,
+                t.labels.truetyping_text.as_str(),
+                t.tooltips.truetyping_text.as_str(),
+            ),
+        ];
+        if self.options.can_select_compatibility() {
+            encoders.push((
+                CompressionType::Ccitt4,
+                tr("compatibility_short"),
+                t.tooltips.jpeg_compatibility.as_str(),
+            ));
+        }
+        let texts: Vec<&str> = encoders.iter().map(|(_, text, _)| *text).collect();
+        let selected = encoders
+            .iter()
+            .position(|(encoder, _, _)| *encoder == self.options.compression_type)
+            .unwrap_or(0);
+        if let Some(index) = choices(ui, control, &texts, selected) {
+            self.options.set_text_encoder(encoders[index].0.clone());
+        }
+        for (rect, (_, _, tooltip)) in cells(control, encoders.len(), ui.px(4))
+            .into_iter()
+            .zip(&encoders)
+        {
+            hover(ui, rect, tooltip, note);
+        }
+        if self.options.can_select_symbol_mode() {
+            let mut value = self.options.symbol_mode;
+            if checkbox(ui, sub_option, &mut value, &t.labels.jbig2_symbol_mode) {
+                self.options.symbol_mode = value;
             }
-            let heavy = self.options.use_heavy_binarization;
-            let fixed = self.options.use_fixed_threshold;
-            if !heavy {
-                small(ui, caption, if fixed { "0–255" } else { "K" });
-                let body = ui.theme.body;
-                ui.theme.body.size = font(ui, 12.0);
-                if fixed {
-                    ui.text_field(&mut self.threshold, value, "180", false, false);
-                } else {
-                    ui.text_field(&mut self.k, value, "0.05", false, false);
-                }
-                ui.theme.body = body;
-            }
-            let mode_rects = cells(modes, 3, ui.px(4));
-            for (i, rect) in mode_rects.into_iter().enumerate() {
-                hover(
-                    ui,
-                    rect,
-                    match i {
-                        0 => &t.tooltips.sauvola_k_factor,
-                        1 => &t.tooltips.threshold_value,
-                        _ => &t.tooltips.heavy_model,
-                    },
-                    note,
-                );
-            }
-            hover(
-                ui,
-                value,
-                if heavy {
-                    &t.tooltips.heavy_model
-                } else if fixed {
-                    &t.tooltips.threshold_value
-                } else {
-                    &t.tooltips.sauvola_k_factor
-                },
-                note,
-            );
+            hover(ui, sub_option, &t.tooltips.jbig2_symbol_mode, note);
         }
     }
     fn draw_modal(&mut self, ui: &mut Ui<'_>) {
@@ -2604,6 +2621,7 @@ fn progress_fraction(m: WorkerProgressMetrics) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::layout::SETTING_ROWS;
 
     /// Visual review of the file shelf with real files and their shell icons:
     /// `LEGE_SHELF_SNAPSHOT_DIR=<dir> cargo test -p lege-gui-liminalui
@@ -2672,8 +2690,8 @@ mod tests {
                 // A control of each card under the pointer, then a tile.
                 let s = Scale(scale);
                 let bands = Bands::new(w as i32, h as i32, s);
-                let range = LeftCard::new(bands.right.inset(s.px(8)), s).range;
-                let (_, mode) = RightCard::new(bands.left.inset(s.px(8)), s).setting(0);
+                let range = PageCard::new(bands.right.inset(s.px(8)), s).range;
+                let (_, mode) = ProcessingCard::new(bands.left.inset(s.px(8)), s).setting(0);
                 let actions = Actions::new(bands.status.inset(s.px(8)), s);
                 let tile = crate::file_tiles::layout(actions.inputs, actions.outputs, s, 3, 1);
                 for (file, r) in [
@@ -2753,20 +2771,46 @@ mod tests {
     }
 
     #[test]
-    fn a_finished_page_keeps_the_page_counters_on_screen() {
+    fn the_bar_carries_the_counters_and_the_line_keeps_only_what_it_does_not_say() {
         let mut dashboard = active_batch();
+        let mut layout = metrics(3);
+        layout.mode = WorkerProgressMode::Layout;
+        layout.enable_layout_detection = true;
+        layout.eta_seconds = Some(75);
         dashboard.worker_event(WorkerProgressUpdate::Status {
             task_id: 0,
-            status: WorkerProcessingStatus::NoLayoutProgress {
-                rendered: 4,
+            status: WorkerProcessingStatus::LayoutProgress {
+                rendered: 5,
+                detected: 4,
                 encoded: 3,
                 total: 10,
+                enable_layout_detection: true,
                 eta: None,
             },
-            metrics: Some(metrics(3)),
+            metrics: Some(layout),
         });
-        let shown = dashboard.status.clone();
-        assert!(shown.1.contains("Encode 3/10"));
+        // The counters are not spelled out a second time: the line has the
+        // finished pages and the time left, the bar the mode.
+        assert_eq!(dashboard.detail, "");
+        let line = dashboard.running_line();
+        assert!(line.contains("3 / 10"), "{line}");
+        assert!(line.contains("1:15"), "{line}");
+        assert!(
+            !line.contains("Render") && !line.contains("Infer"),
+            "{line}"
+        );
+        assert_eq!(dashboard.progress_label(), tr("mode_layout"));
+        // Layout asked for but not running (no GPU): the bar says so.
+        layout.enable_layout_detection = false;
+        dashboard.metrics = Some(layout);
+        assert_eq!(dashboard.progress_label(), tr("mode_no_layout"));
+        // A phase message takes the line; a page-appended notice keeps it.
+        dashboard.worker_event(WorkerProgressUpdate::Status {
+            task_id: 0,
+            status: WorkerProcessingStatus::AssemblingOutput,
+            metrics: Some(layout),
+        });
+        assert_eq!(dashboard.detail, tr("phase_assembling"));
         for status in [
             WorkerProcessingStatus::PdfAppend {
                 current: 3,
@@ -2780,12 +2824,58 @@ mod tests {
             dashboard.worker_event(WorkerProgressUpdate::Status {
                 task_id: 0,
                 status,
-                metrics: Some(metrics(3)),
+                metrics: Some(layout),
             });
-            assert_eq!(dashboard.status, shown);
+            assert_eq!(dashboard.detail, tr("phase_assembling"));
         }
+        // The reflow stage is the bar's label.
+        dashboard.worker_event(WorkerProgressUpdate::Status {
+            task_id: 1,
+            status: WorkerProcessingStatus::ReflowProgress {
+                stage: WorkerReflowStage::Compose,
+                current: 0,
+                total: 10,
+                eta: None,
+            },
+            metrics: Some(WorkerProgressMetrics {
+                mode: WorkerProgressMode::Reflow,
+                ..metrics(0)
+            }),
+        });
+        assert_eq!(dashboard.progress_label(), tr("reflow_composing"));
+        dashboard.cancel();
+        assert_eq!(
+            dashboard.progress_label(),
+            GUI_TEXT.interactive.status.cancelling
+        );
     }
 
+    /// Renders a running batch: one progress bar, the mode and percentage
+    /// on it, at the window sizes and scales the GUI supports.
+    #[test]
+    fn a_running_batch_renders_at_every_size() {
+        for (w, h, factor) in [(720, 660, 1.0), (940, 700, 1.5), (1400, 700, 2.0)] {
+            let s = Scale(factor);
+            let mut app = LegeApp::new();
+            app.snapshot_mode = true;
+            app.dashboard = active_batch();
+            let mut m = metrics(4);
+            m.mode = WorkerProgressMode::Layout;
+            m.enable_layout_detection = true;
+            m.eta_seconds = Some(200);
+            app.dashboard.worker_event(WorkerProgressUpdate::Status {
+                task_id: 0,
+                status: WorkerProcessingStatus::Initializing,
+                metrics: Some(m),
+            });
+            let mut buffer = WindowBuffer::new(s.px(w) as u32, s.px(h) as u32);
+            app.render(&mut buffer, s);
+            if let Some(dir) = std::env::var_os("LEGE_GUI_SNAPSHOT_DIR") {
+                let file = PathBuf::from(dir).join(format!("running-{w}x{h}@{factor}.png"));
+                liminalkit_raster::png::write(file, &buffer).unwrap();
+            }
+        }
+    }
     #[test]
     fn lifecycle_progress_waits_for_downstream_stages() {
         let mut no_layout = metrics(0);
@@ -2830,7 +2920,7 @@ mod tests {
                 .all(|row| row.state == DocumentRunState::Cancelled)
         );
         assert_eq!(dashboard.queue.len(), 2);
-        assert_eq!(dashboard.status.0, tr("cancelled"));
+        assert_eq!(dashboard.detail, tr("cancelled"));
     }
 
     #[test]
@@ -2978,7 +3068,6 @@ mod tests {
         dashboard.options.target_height = Some(1400);
         dashboard.options.target_width = Some(800);
         dashboard.resolution.clear();
-        dashboard.k.set_text("0.05");
         assert!(dashboard.validate_fields().is_ok());
         assert_eq!(dashboard.options.target_height, Some(1400));
         assert_eq!(dashboard.options.target_width, Some(800));
@@ -3280,7 +3369,7 @@ mod tests {
         let mut buffer = WindowBuffer::new(940, 700);
         app.render(&mut buffer, Scale::ONE);
         let bands = Bands::new(940, 700, Scale::ONE);
-        let (_, mode) = RightCard::new(bands.left.inset(8), Scale::ONE).setting(0);
+        let (_, mode) = ProcessingCard::new(bands.left.inset(8), Scale::ONE).setting(0);
         let mode_cells = cells(mode, 2, 4);
         let centre = |r: Rect| ((r.x + r.w / 2) as f32, (r.y + r.h / 2) as f32);
         // The page count of a file just added is still being read.
@@ -3292,7 +3381,7 @@ mod tests {
             app.dashboard.options.preserve_mode,
             "an option must answer while the probe runs"
         );
-        let range = LeftCard::new(bands.right.inset(8), Scale::ONE).range;
+        let range = PageCard::new(bands.right.inset(8), Scale::ONE).range;
         let (x, y) = centre(range);
         click(&mut app, &mut buffer, x, y);
         assert!(
@@ -3346,7 +3435,7 @@ mod tests {
         let mut buffer = WindowBuffer::new(940, 700);
         app.render(&mut buffer, Scale::ONE);
         let bands = Bands::new(940, 700, Scale::ONE);
-        let (_, mode) = RightCard::new(bands.left.inset(8), Scale::ONE).setting(0);
+        let (_, mode) = ProcessingCard::new(bands.left.inset(8), Scale::ONE).setting(0);
         let mode_cells = cells(mode, 2, 4);
         let preserve = mode_cells[1];
         click(
@@ -3413,9 +3502,7 @@ mod tests {
         app.dashboard.options = ProcessingOptions::new();
         let mut buffer = WindowBuffer::new(940, 700);
         let bands = Bands::new(940, 700, Scale::ONE);
-        let area = LeftCard::new(bands.right.inset(8), Scale::ONE)
-            .geometry
-            .inset(5);
+        let area = PageCard::new(bands.right.inset(8), Scale::ONE).geometry;
         let buttons = cells(area, 3, 4);
         for index in [0, 1, 2, 2] {
             let rect = buttons[index];
@@ -3436,44 +3523,190 @@ mod tests {
                 && !app.dashboard.options.reflow
         );
     }
+    fn centre(r: Rect) -> (f32, f32) {
+        ((r.x + r.w / 2) as f32, (r.y + r.h / 2) as f32)
+    }
     #[test]
-    fn threshold_parameter_is_inactive_under_heavy() {
+    fn flatten_page_is_a_toggle_beside_the_resolution() {
         let mut app = LegeApp::new();
         app.dashboard.options = ProcessingOptions::new();
-        app.dashboard.threshold.set_text("180");
+        assert!(!app.dashboard.options.flatten_pages, "off by default");
         let mut buffer = WindowBuffer::new(940, 700);
         let bands = Bands::new(940, 700, Scale::ONE);
-        let card = RightCard::new(bands.left.inset(8), Scale::ONE);
-        let (modes, _, value) = card.binarization_fields();
-        let buttons = cells(modes, 3, 4);
-        let threshold = buttons[1];
-        click(
-            &mut app,
-            &mut buffer,
-            (threshold.x + threshold.w / 2) as f32,
-            (threshold.y + threshold.h / 2) as f32,
+        let card = PageCard::new(bands.right.inset(8), Scale::ONE);
+        assert_eq!(card.flatten.y, card.resolution.y);
+        let (x, y) = centre(card.flatten);
+        click(&mut app, &mut buffer, x, y);
+        assert!(app.dashboard.options.flatten_pages);
+        click(&mut app, &mut buffer, x, y);
+        assert!(!app.dashboard.options.flatten_pages);
+    }
+    #[test]
+    fn the_text_row_chooses_best_fast_or_grayscale() {
+        let mut app = LegeApp::new();
+        app.dashboard.options = ProcessingOptions::new();
+        let mut buffer = WindowBuffer::new(940, 700);
+        let bands = Bands::new(940, 700, Scale::ONE);
+        let card = ProcessingCard::new(bands.left.inset(8), Scale::ONE);
+        let buttons = cells(card.setting(2).1, 3, 4);
+        // Best by default.
+        assert!(!app.dashboard.options.fast_binarization && !app.dashboard.options.grayscale_mode);
+        let (x, y) = centre(buttons[1]);
+        click(&mut app, &mut buffer, x, y);
+        assert!(app.dashboard.options.fast_binarization);
+        let (x, y) = centre(buttons[2]);
+        click(&mut app, &mut buffer, x, y);
+        // Grayscale keeps the binarizer choice for when it is left again.
+        assert!(app.dashboard.options.grayscale_mode && app.dashboard.options.fast_binarization);
+        let (x, y) = centre(buttons[0]);
+        click(&mut app, &mut buffer, x, y);
+        assert!(!app.dashboard.options.fast_binarization && !app.dashboard.options.grayscale_mode);
+    }
+    #[test]
+    fn files_moved_away_by_a_drag_leave_the_queue_and_the_tiles() {
+        let dir = std::env::temp_dir().join(format!("lege-moved-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = |name: &str| {
+            let path = dir.join(name);
+            std::fs::write(&path, b"x").unwrap();
+            path
+        };
+        let (kept, moved, done, output) = (
+            file("kept.pdf"),
+            file("moved.pdf"),
+            file("done.pdf"),
+            file("done_out.pdf"),
         );
-        assert!(app.dashboard.options.use_fixed_threshold);
-        assert_eq!(app.dashboard.threshold.text(), "180");
-        let heavy = buttons[2];
-        click(
-            &mut app,
-            &mut buffer,
-            (heavy.x + heavy.w / 2) as f32,
-            (heavy.y + heavy.h / 2) as f32,
-        );
-        assert!(app.dashboard.options.use_heavy_binarization);
-        click(
-            &mut app,
-            &mut buffer,
-            (value.x + value.w / 2) as f32,
-            (value.y + value.h / 2) as f32,
-        );
-        app.on_key(&KeyInput::Backspace);
-        app.on_key(&KeyInput::Character('9'));
+        let mut dashboard = Dashboard::new();
+        for path in [&kept, &moved] {
+            dashboard.queue.push_back(DocumentItem::new(path.clone()));
+        }
+        dashboard.rows.push(QueueRow {
+            task_id: 0,
+            path: done.clone(),
+            output: Some(output.clone()),
+            state: DocumentRunState::Completed,
+            output_ready: true,
+        });
+        // Idle: anything may be moved. Running: only outputs.
+        assert!(dashboard.may_move(&[kept.clone(), output.clone()]));
+        dashboard.batch = BatchState::Running;
+        assert!(dashboard.may_move(&[output.clone()]));
+        assert!(!dashboard.may_move(&[kept.clone()]));
+        dashboard.batch = BatchState::Idle;
+
+        // A queued input and a finished row's input are moved away.
+        std::fs::remove_file(&moved).unwrap();
+        std::fs::remove_file(&done).unwrap();
+        dashboard.forget_moved_files();
+        assert_eq!(dashboard.shelf_inputs(), vec![kept.clone()]);
+        assert_eq!(dashboard.shelf_outputs(), vec![output.clone()]);
+
+        // Then the output too: its row has nothing left to show.
+        std::fs::remove_file(&output).unwrap();
+        dashboard.forget_moved_files();
+        assert!(dashboard.shelf_outputs().is_empty() && dashboard.rows.is_empty());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+    #[test]
+    fn text_encoding_is_one_of_three_buttons_with_symbol_mode_under_jbig2() {
+        let mut app = LegeApp::new();
+        app.dashboard.options = ProcessingOptions::new();
+        let mut buffer = WindowBuffer::new(940, 700);
         app.render(&mut buffer, Scale::ONE);
-        assert_eq!(app.dashboard.threshold.text(), "180");
-        assert_eq!(card.binarization_fields().2, value);
+        let bands = Bands::new(940, 700, Scale::ONE);
+        let card = ProcessingCard::new(bands.left.inset(8), Scale::ONE);
+        let (_, row) = card.setting(SETTING_ROWS - 1);
+        let buttons = cells(row, 3, 4);
+        let symbol = card.sub_option();
+        // JBIG2 by default; its symbol mode is a checkbox under the row.
+        assert_eq!(
+            app.dashboard.options.compression_type,
+            CompressionType::Jbig2
+        );
+        let (x, y) = (symbol.x as f32 + 8.0, (symbol.y + symbol.h / 2) as f32);
+        click(&mut app, &mut buffer, x, y);
+        assert!(app.dashboard.options.symbol_mode);
+        // Compatibility: CCITT4, and symbol mode goes with JBIG2.
+        let (cx, cy) = centre(buttons[2]);
+        click(&mut app, &mut buffer, cx, cy);
+        assert_eq!(
+            app.dashboard.options.compression_type,
+            CompressionType::Ccitt4
+        );
+        assert!(app.dashboard.options.jpeg_compat);
+        assert!(!app.dashboard.options.symbol_mode);
+        click(&mut app, &mut buffer, x, y);
+        assert!(
+            !app.dashboard.options.symbol_mode,
+            "no symbol checkbox without JBIG2"
+        );
+        // TrueTyping: exclusive with the other two, and grayscale comes on.
+        let (tx, ty) = centre(buttons[1]);
+        click(&mut app, &mut buffer, tx, ty);
+        assert_eq!(
+            app.dashboard.options.compression_type,
+            CompressionType::Truetyping
+        );
+        assert!(!app.dashboard.options.jpeg_compat);
+        assert!(app.dashboard.options.grayscale_mode);
+        // Grayscale offers two encoders: Compatibility is not there to press.
+        let two = cells(row, 2, 4);
+        let (jx, jy) = centre(two[0]);
+        click(&mut app, &mut buffer, jx, jy);
+        assert_eq!(
+            app.dashboard.options.compression_type,
+            CompressionType::Jbig2
+        );
+        let (rx, ry) = (row.right() as f32 - 4.0, cy);
+        click(&mut app, &mut buffer, rx, ry);
+        assert_ne!(
+            app.dashboard.options.compression_type,
+            CompressionType::Ccitt4
+        );
+        // The worker gets one text format for each choice.
+        for (encoder, format) in [
+            (CompressionType::Jbig2, "jbig2"),
+            (CompressionType::Truetyping, "truetyping"),
+        ] {
+            app.dashboard.options.set_text_encoder(encoder);
+            assert_eq!(app.dashboard.options.effective_text_format(), format);
+        }
+    }
+    #[test]
+    fn epub_toggles_beside_the_exclusive_pdf_and_djvu_pair() {
+        let mut app = LegeApp::new();
+        app.dashboard.options = ProcessingOptions::new();
+        let mut buffer = WindowBuffer::new(940, 700);
+        app.render(&mut buffer, Scale::ONE);
+        let bands = Bands::new(940, 700, Scale::ONE);
+        let card = ProcessingCard::new(bands.left.inset(8), Scale::ONE);
+        let (_, row) = card.setting(1);
+        let gap = 4;
+        let apart = 14;
+        let w = (row.w - gap - apart) / 3;
+        let djvu = Rect::new(row.x + w + gap, row.y, w, row.h);
+        let epub = Rect::new(row.x + 2 * w + gap + apart, row.y, w, row.h);
+        let (ex, ey) = centre(epub);
+        click(&mut app, &mut buffer, ex, ey);
+        let o = &app.dashboard.options;
+        assert!(o.make_epub_also && o.use_ocr && o.ocr_mode == OcrMode::Thorough);
+        assert_eq!(
+            o.output_format,
+            OutputFormat::Pdf,
+            "EPUB is made beside PDF"
+        );
+        let (dx, dy) = centre(djvu);
+        click(&mut app, &mut buffer, dx, dy);
+        assert_eq!(app.dashboard.options.output_format, OutputFormat::Djvu);
+        assert!(app.dashboard.options.make_epub_also, "and beside DjVu");
+        click(&mut app, &mut buffer, ex, ey);
+        assert!(!app.dashboard.options.make_epub_also);
+        assert!(
+            app.dashboard.options.use_ocr,
+            "turning EPUB off leaves OCR on"
+        );
+        assert_eq!(app.dashboard.options.output_format, OutputFormat::Djvu);
     }
     #[test]
     fn resolution_focus_clears_and_clicking_blank_restores_the_saved_value() {
@@ -3483,7 +3716,7 @@ mod tests {
         app.dashboard.resolution.set_text("1200x800");
         let mut buffer = WindowBuffer::new(940, 700);
         let bands = Bands::new(940, 700, Scale::ONE);
-        let field = LeftCard::new(bands.right.inset(8), Scale::ONE).resolution;
+        let field = PageCard::new(bands.right.inset(8), Scale::ONE).resolution;
         click(
             &mut app,
             &mut buffer,
@@ -3550,6 +3783,8 @@ mod tests {
                 "preparation_note",
                 "grayscale_pdf",
                 "grayscale_djvu",
+                "flatten_note",
+                "jbig2_note",
             ]
             .map(|key| (key, &interactive["liminalui"][key]));
             let tooltips = interactive["tooltips"].as_object().unwrap();
@@ -3564,7 +3799,7 @@ mod tests {
     fn compact_resolution_field_fits_height_and_width() {
         let mut text = TextCache::new(crate::theme::fonts());
         let style = crate::theme::theme(appearance::active_palette()).body;
-        let field = LeftCard::new(Rect::new(0, 0, 340, 236), Scale::ONE).resolution;
+        let field = PageCard::new(Rect::new(0, 0, 340, 236), Scale::ONE).resolution;
         assert!(text.measure("1200x800", style) <= field.w - 8);
     }
     #[test]
@@ -3661,7 +3896,7 @@ mod tests {
                     .iter()
                     .all(|row| row.state == DocumentRunState::Completed),
                 "{:?}",
-                app.dashboard.status
+                app.dashboard.detail
             );
             assert!(app.dashboard.queue.is_empty());
             assert!(app.dashboard.metrics.is_some());

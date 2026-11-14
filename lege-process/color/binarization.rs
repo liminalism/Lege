@@ -1,5 +1,11 @@
-//! Pure-CPU document binarization module in Rust
-//! Replicates OpenCV Sauvola-based precision binarization and PBM encoding
+//! Document binarization.
+//!
+//! Two methods. "Best", the default: the tileable binarizer model on the GPU.
+//! "Fast": the adaptive algorithm (Sauvola fused with background-normalized
+//! Otsu) on the wgpu kernels, about twice the pages per second. Where no
+//! hardware GPU is available both come down to the adaptive algorithm on the
+//! CPU, the last resort. Blank pages take a fixed
+//! threshold on the CPU fallback so that they come out white, not noise.
 
 use crate::color::BinarizationOptions;
 use anyhow::{Result, anyhow};
@@ -10,663 +16,172 @@ use std::cell::RefCell;
 use std::cmp::{max, min};
 
 thread_local! {
-    /// Per-worker arena for whole-page heavy Sauvola RGB input. The model
+    /// Per-worker arena for the model's whole-region RGB input. The model
     /// remains shared, while Rayon workers retain their largest region buffer
     /// instead of allocating it again for every page.
     static HEAVY_SAUVOLA_RGB_ARENA: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
 }
 
-/// Heavy (neural) binarization. The tileable binarizer runs on the GPU; when
-/// the GPU is off, disabled or fails, a CPU model takes the page.
-/// Output convention: 255 = foreground (text), 0 = background (paper).
+/// Model binarization. The tileable binarizer runs on the GPU; when there is
+/// no hardware GPU, or the GPU run fails, the CPU fallback takes the page.
+/// Output convention: 0 = ink, 255 = paper.
 pub struct HeavySauvolaProcessor {
     cpu: CpuBinarizer,
-    /// Tileable student binarizer on the wgpu executor; `None` when disabled by
-    /// `LEGE_HEAVY_BINARIZER=sauvolanet` or when it failed to load.
+    /// Tileable binarizer on the wgpu executor; `None` without a hardware
+    /// GPU, when forced off, or when it failed to load.
     student: Option<lege_gpu::vision::SauvolaProcessor>,
-    /// Set after the first GPU failure so later pages go straight to the CPU model.
+    /// Set after the first GPU failure so later pages go straight to the CPU.
     student_failed: std::sync::atomic::AtomicBool,
 }
 
-/// The CPU model behind the GPU student.
+/// What binarizes a page when the GPU model cannot.
 enum CpuBinarizer {
-    /// The DIBCO Sauvola model, from a `sauvola.onnx` runtime asset or the
-    /// `sauvola-model` feature. It uses global instance normalization, so it
-    /// must see the whole region at once and unpadded: tiling or padding
-    /// would shift its statistics.
+    /// The adaptive algorithm: the default.
+    Adaptive,
+    /// The DIBCO Sauvola model, only from a `sauvola.onnx` runtime asset or
+    /// the `sauvola-model` feature. It uses global instance normalization, so
+    /// it must see the whole region at once and unpadded.
     Sauvola(lege_gpu::vision::SauvolaCpuProcessor),
-    /// The tileable binarizer on the CPU executor: the default. No global
-    /// statistics, so the region is padded to the model's stride and the
-    /// mask cropped back.
-    Tileable(lege_gpu::vision::SauvolaCpuProcessor),
 }
 
-impl CpuBinarizer {
-    fn binarize(&self, img: &RgbImage) -> Result<GrayImage> {
-        match self {
-            CpuBinarizer::Sauvola(model) => Ok(model.binarize_rgb(img)?),
-            CpuBinarizer::Tileable(model) => {
-                let (width, height) = img.dimensions();
-                let pw = width.div_ceil(TILEABLE_STRIDE) * TILEABLE_STRIDE;
-                let ph = height.div_ceil(TILEABLE_STRIDE) * TILEABLE_STRIDE;
-                if (pw, ph) == (width, height) {
-                    return Ok(model.binarize_rgb(img)?);
-                }
-                // Edge pixels repeated, as the GPU path pads.
-                let padded = RgbImage::from_fn(pw, ph, |x, y| {
-                    *img.get_pixel(x.min(width - 1), y.min(height - 1))
-                });
-                let mask = model.binarize_rgb(&padded)?;
-                Ok(image::imageops::crop_imm(&mask, 0, 0, width, height).to_image())
-            }
-        }
-    }
-}
-
-/// Stride of the tileable binarizer: its input sides must be multiples of it.
-const TILEABLE_STRIDE: u32 = 8;
-
-/// Spatial multiple the student's input is padded to on the GPU: a coarser
-/// multiple than the stride lets nearby page sizes share one compiled wgpu graph.
+/// Spatial multiple the model's input is padded to on the GPU: a coarser
+/// multiple than its stride (8) lets nearby page sizes share one compiled graph.
 const STUDENT_PAD_MULTIPLE: u32 = 64;
 
-fn load_cpu_binarizer() -> Result<CpuBinarizer> {
-    use lege_gpu::vision::SauvolaCpuProcessor;
-    // Runtime assets remain deliberate model-rollout overrides.
-    if let Some(path) = crate::runtime_asset_path_if_exists("sauvola.prepared.onnx")
-        .or_else(|| crate::runtime_asset_path_if_exists("sauvola.onnx"))
-    {
-        #[cfg(feature = "debug-logging")]
-        crate::encoding::streamline::log_debug_message(&format!(
-            "Loading DIBCO Sauvola model override: {}",
-            path.display()
-        ));
-        return SauvolaCpuProcessor::from_model_path(&path)
-            .map(CpuBinarizer::Sauvola)
-            .map_err(|e| anyhow!("Failed to load sauvola model via lege-vision: {e}"));
-    }
-    #[cfg(feature = "sauvola-model")]
-    {
-        SauvolaCpuProcessor::from_model_bytes(crate::EMBEDDED_SAUVOLA_MODEL)
-            .map(CpuBinarizer::Sauvola)
-            .map_err(|e| anyhow!("Failed to load sauvola model via lege-vision: {e}"))
-    }
-    #[cfg(not(feature = "sauvola-model"))]
-    {
-        match crate::runtime_asset_path_if_exists("binarizer-tilenet.onnx") {
-            Some(path) => SauvolaCpuProcessor::from_model_path(&path),
-            None => SauvolaCpuProcessor::from_model_bytes(crate::EMBEDDED_TILENET_BINARIZER),
+/// Largest page, in pixels after padding, that the model takes in one run.
+/// The runtime keeps a graph's activations in one buffer of about 1.6 kB per
+/// pixel, and wgpu refuses a buffer over 4 GiB: a 3000 px high page asked for
+/// 9.8 GB and the job died on a validation error. Larger pages are tiled.
+const STUDENT_MAX_PIXELS: usize = 1_600_000;
+
+/// Side of a tile of a large page, and the border of each tile that is
+/// computed but not used. The model is fully convolutional with no global
+/// statistics, so a tile's interior does not depend on what lies beyond its
+/// border; `tiles_reproduce_the_whole_page_mask` measures that.
+const STUDENT_TILE: u32 = 1024;
+const STUDENT_TILE_HALO: u32 = 128;
+
+/// Tiles along one axis of length `n`: (start, length, kept range). Starts
+/// are multiples of `tile - 2 * halo`, which must be a multiple of the pad
+/// multiple: the model downsamples by 8, so a tile whose origin is off that
+/// grid sees the page shifted and flips stroke-edge pixels. Kept ranges abut;
+/// the last tile is as long as what is left of the axis.
+fn tile_spans(n: u32, tile: u32, halo: u32) -> Vec<(u32, u32, std::ops::Range<u32>)> {
+    let stride = tile - 2 * halo;
+    let mut spans = Vec::new();
+    let mut start = 0u32;
+    loop {
+        let last = start + tile >= n;
+        let kept_from = if start == 0 { 0 } else { start + halo };
+        let kept_to = if last { n } else { start + tile - halo };
+        spans.push((start, tile.min(n - start), kept_from..kept_to));
+        if last {
+            return spans;
         }
-        .map(CpuBinarizer::Tileable)
-        .map_err(|e| anyhow!("Failed to load the tileable binarizer for the CPU: {e}"))
+        start += stride;
     }
 }
 
-fn load_student_binarizer() -> Option<lege_gpu::vision::SauvolaProcessor> {
-    if std::env::var("LEGE_HEAVY_BINARIZER")
-        .map(|v| v.eq_ignore_ascii_case("sauvolanet") || v.eq_ignore_ascii_case("sauvola"))
-        .unwrap_or(false)
-    {
-        return None;
-    }
-    let loaded = match crate::runtime_asset_path_if_exists("binarizer-tilenet.onnx") {
-        Some(path) => lege_gpu::vision::SauvolaProcessor::from_model_path(&path),
-        None => {
-            lege_gpu::vision::SauvolaProcessor::from_model_bytes(crate::EMBEDDED_TILENET_BINARIZER)
-        }
-    };
-    loaded.ok()
+/// The model's mask of a page on the GPU: in one run when the page is small
+/// enough, in overlapping tiles otherwise.
+fn binarize_on_gpu(
+    student: &lege_gpu::vision::SauvolaProcessor,
+    img: &RgbImage,
+) -> Result<GrayImage> {
+    binarize_on_gpu_with(
+        student,
+        img,
+        STUDENT_MAX_PIXELS,
+        STUDENT_TILE,
+        STUDENT_TILE_HALO,
+    )
 }
 
-impl HeavySauvolaProcessor {
-    pub fn new() -> Result<Self> {
-        Ok(Self {
-            cpu: load_cpu_binarizer()?,
-            student: load_student_binarizer(),
-            student_failed: std::sync::atomic::AtomicBool::new(false),
-        })
+fn binarize_on_gpu_with(
+    student: &lege_gpu::vision::SauvolaProcessor,
+    img: &RgbImage,
+    max_pixels: usize,
+    tile: u32,
+    halo: u32,
+) -> Result<GrayImage> {
+    let (width, height) = img.dimensions();
+    let padded = |n: u32| n.div_ceil(STUDENT_PAD_MULTIPLE) as usize * STUDENT_PAD_MULTIPLE as usize;
+    if padded(width) * padded(height) <= max_pixels {
+        return student.binarize_rgb_padded(img, STUDENT_PAD_MULTIPLE);
     }
-
-    /// Runs the tileable student on the GPU when it is available and allowed.
-    /// Returns `None` to fall back to the CPU model.
-    fn student_mask(&self, img: &RgbImage, opt: &BinarizationOptions) -> Option<GrayImage> {
-        use std::sync::atomic::Ordering;
-        let student = self.student.as_ref()?;
-        if opt.disable_gpu || self.student_failed.load(Ordering::Relaxed) {
-            return None;
-        }
-        match student.binarize_rgb_padded(img, STUDENT_PAD_MULTIPLE) {
-            Ok(mask) => Some(mask),
-            Err(_e) => {
-                self.student_failed.store(true, Ordering::Relaxed);
-                #[cfg(feature = "debug-logging")]
-                crate::encoding::streamline::log_debug_message(&format!(
-                    "Tileable binarizer failed on the GPU, using the CPU model: {_e:#}"
-                ));
-                None
+    let mut mask = GrayImage::new(width, height);
+    for (top, tile_h, rows) in tile_spans(height, tile, halo) {
+        for (left, tile_w, cols) in tile_spans(width, tile, halo) {
+            let view = image::imageops::crop_imm(img, left, top, tile_w, tile_h).to_image();
+            let part = student.binarize_rgb_padded(&view, STUDENT_PAD_MULTIPLE)?;
+            for y in rows.clone() {
+                for x in cols.clone() {
+                    mask.put_pixel(x, y, *part.get_pixel(x - left, y - top));
+                }
             }
         }
     }
+    Ok(mask)
+}
 
-    /// Process an RGB image region through the bridge model at native
-    /// resolution. Extracts the region and runs inference; the mask comes back
-    /// at the region's own size (no resize).
-    /// Output: 255 = foreground (text), 0 = background (paper).
-    pub fn process_rgb_region(
-        &self,
-        rgb_data: &[u8],
-        page_width: u32,
-        _page_height: u32,
-        region_x: u32,
-        region_y: u32,
-        region_w: u32,
-        region_h: u32,
-        opt: &BinarizationOptions,
-    ) -> Result<GrayImage> {
-        // Extract the region as an RgbImage. The region must lie fully within the
-        // page — a silent zero-fill on OOB (the previous behaviour) would feed black
-        // pixels into the model's global instance-norm and corrupt its statistics, so
-        // fail hard instead. Copy whole rows with copy_from_slice.
-        if region_w == 0 || region_h == 0 {
-            return Err(anyhow!("empty region ({region_w}x{region_h})"));
-        }
-        let row_bytes = region_w as usize * 3;
-        let last_src_row = (region_y + region_h - 1) as usize;
-        let last_src_end =
-            (last_src_row * page_width as usize + (region_x + region_w) as usize) * 3;
-        if last_src_end > rgb_data.len() {
-            return Err(anyhow!(
-                "region ({region_x},{region_y} {region_w}x{region_h}) exceeds source \
-                 buffer (needs {last_src_end} bytes, have {})",
-                rgb_data.len()
-            ));
-        }
-        let required = region_h as usize * row_bytes;
-        let mut rgb = HEAVY_SAUVOLA_RGB_ARENA.with(|arena| {
-            let mut arena = arena.borrow_mut();
-            let mut buffer = std::mem::take(&mut *arena);
-            buffer.resize(required, 0);
-            buffer
-        });
-        for y in 0..region_h as usize {
-            let src_y = region_y as usize + y;
-            let src_start = (src_y * page_width as usize + region_x as usize) * 3;
-            let dst_start = y * row_bytes;
-            rgb[dst_start..dst_start + row_bytes]
-                .copy_from_slice(&rgb_data[src_start..src_start + row_bytes]);
-        }
-        let img = RgbImage::from_raw(region_w, region_h, rgb)
-            .ok_or_else(|| anyhow!("failed to create RgbImage from region"))?;
-
-        let mut mask = match self.student_mask(&img, opt) {
-            Some(mask) => mask,
-            None => self.cpu.binarize(&img)?,
-        };
-        let mut recycled = img.into_raw();
-        recycled.clear();
-        HEAVY_SAUVOLA_RGB_ARENA.with(|arena| {
-            *arena.borrow_mut() = recycled;
-        });
-
-        // Handle input inversion
+/// The adaptive algorithm's mask of a region: on the wgpu kernels when a
+/// hardware GPU is there, on the CPU as the last resort. Input inversion is
+/// part of the mask.
+fn adaptive_mask(img: &RgbImage, opt: &BinarizationOptions) -> Result<GrayImage> {
+    let (width, height) = img.dimensions();
+    let (w, h) = (width as usize, height as usize);
+    let invert = |gray: &mut Vec<u8>| {
         if opt.invert_input {
-            for pixel in mask.iter_mut() {
-                *pixel = 255 - *pixel;
-            }
+            gray.par_iter_mut().for_each(|pixel| *pixel = 255 - *pixel);
         }
-
-        Ok(mask)
-    }
-
-    /// Process the whole RGB image as a single patch.
-    pub fn process_rgb_patch(
-        &self,
-        rgb_data: &[u8],
-        width: u32,
-        height: u32,
-        opt: &BinarizationOptions,
-    ) -> Result<GrayImage> {
-        self.process_rgb_region(rgb_data, width, height, 0, 0, width, height, opt)
-    }
-}
-
-/// Cached processor for heavy-duty binarization.
-///
-/// The processor is internally synchronized (its per-size graph cache locks only
-/// briefly to build/clone the prepared graph), so it is shared by `&` rather than
-/// behind a process-wide Mutex — that lets concurrent page workers run the heavy
-/// CPU inference in parallel instead of serializing on one lock.
-static HEAVY_PROCESSOR_CACHE: std::sync::OnceLock<Option<HeavySauvolaProcessor>> =
-    std::sync::OnceLock::new();
-
-fn get_or_init_heavy_processor() -> Option<&'static HeavySauvolaProcessor> {
-    HEAVY_PROCESSOR_CACHE
-        .get_or_init(|| HeavySauvolaProcessor::new().ok())
-        .as_ref()
-}
-
-/// Binarizes an RGB image based on the provided options.
-///
-/// # Arguments
-/// - `image`: The input RGB image data as a byte slice (interleaved R,G,B).
-/// - `width`: The width of the image in pixels.
-/// - `height`: The height of the image in pixels.
-/// - `options`: The binarization options (e.g., threshold, window size, etc.).
-///
-/// # Returns
-/// A `Vec<u8>` containing the PBM P4 formatted binary image for downstream use.
-///
-/// # Panics
-/// Panics if the input image size does not match `width * height * 3`.
-pub fn binarize_image(
-    image: &[u8],
-    width: usize,
-    height: usize,
-    options: &BinarizationOptions,
-) -> Vec<u8> {
-    assert_eq!(
-        image.len(),
-        width * height * 3,
-        "Input image size does not match width*height*3"
-    );
-
-    #[cfg(feature = "debug-logging")]
-    crate::encoding::streamline::log_debug_message(&format!(
-        "[Binarization] Input: {}x{} RGB ({} bytes), heavy_duty={}, fixed_threshold={}, invert_input={}, invert_output={}",
-        width,
-        height,
-        image.len(),
-        options.use_heavy_duty,
-        options.use_fixed_threshold,
-        options.invert_input,
-        options.invert
-    ));
-
-    let bin = binarize_image_raw(image, width, height, options);
-    let pbm_result = pbm::make_pbm_p4(&bin, width, height);
-
-    #[cfg(feature = "debug-logging")]
-    crate::encoding::streamline::log_debug_message(&format!(
-        "[Binarization] Output: {}x{} binary ({} raw bytes -> {} PBM bytes)",
-        width,
-        height,
-        bin.len(),
-        pbm_result.len()
-    ));
-
-    pbm_result
-}
-
-/// Binarizes an RGB image and returns raw binary data (1 byte per pixel).
-///
-/// # Arguments
-/// - `image`: The input RGB image data as a byte slice (interleaved R,G,B).
-/// - `width`: The width of the image in pixels.
-/// - `height`: The height of the image in pixels.
-/// - `options`: The binarization options (e.g., threshold, window size, etc.).
-///
-/// # Returns
-/// A `Vec<u8>` containing raw binary image data (0 or 255 per pixel) for JBIG2 encoding.
-///
-/// # Panics
-/// Panics if the input image size does not match `width * height * 3`.
-pub fn binarize_image_raw(
-    image: &[u8],
-    width: usize,
-    height: usize,
-    options: &BinarizationOptions,
-) -> Vec<u8> {
-    assert_eq!(
-        image.len(),
-        width * height * 3,
-        "Input image size does not match width*height*3"
-    );
-    let gray = rgb_to_gray_for_binarization(image, width, height, options);
-    binarize_gray_impl(&gray, width, height, options, Some(image))
-}
-
-/// Binarizes an 8-bit grayscale image and returns raw binary data.
-///
-/// This is the primary binarization API. RGB callers are compatibility
-/// adapters that convert to the same grayscale representation used by the
-/// previous implementation before entering this path.
-///
-/// # Panics
-/// Panics if the input image size does not match `width * height`.
-pub fn binarize_gray(
-    gray: &[u8],
-    width: usize,
-    height: usize,
-    options: &BinarizationOptions,
-) -> Vec<u8> {
-    binarize_gray_impl(gray, width, height, options, None)
-}
-
-/// Callback variant: produces binarized bytes and hands them to `f` without forcing
-/// an intermediate `Vec<u8>` allocation when the GPU path is available. The callback
-/// receives a slice of exactly `width * height` bytes.
-///
-/// On the GPU fast-path, `f` is invoked over the GPU-mapped readback buffer (one
-/// memcpy already performed during readback; no further allocation). On the CPU
-/// fallback path, a `Vec<u8>` is materialized internally and passed to `f`.
-pub fn binarize_image_raw_with<F, R>(
-    image: &[u8],
-    width: usize,
-    height: usize,
-    options: &BinarizationOptions,
-    f: F,
-) -> R
-where
-    F: FnOnce(&[u8]) -> R,
-{
-    assert_eq!(
-        image.len(),
-        width * height * 3,
-        "Input image size does not match width*height*3"
-    );
-
-    // Hold f in an Option so we can pass it into the GPU closure by &mut Option<F>::take().
-    // On GPU success the closure consumes f; on failure f remains and we fall through.
-    let mut f_slot: Option<F> = Some(f);
-
-    // Heavy-duty path always materializes (ONNX) — call f on result.
-    if !options.use_fixed_threshold && options.use_heavy_duty {
-        if let Some(processor) = get_or_init_heavy_processor() {
-            if let Ok(result) =
-                apply_heavy_duty_binarization_raw(processor, image, width, height, options)
-            {
-                return (f_slot.take().unwrap())(&result);
-            }
-        }
-    }
-
-    // GPU fast-path: feed RGB directly to the GPU. The linearize pre-pass on the GPU
-    // applies an sRGB→linear LUT, computes BT.709 luma in linear space, and re-encodes
-    // to sRGB gray — preserving perceptual contrast at GPU speed.
-    if !options.use_heavy_duty && !options.disable_gpu {
-        let n = width * height;
-        // For invert_input, we'd need to invert RGB before upload (or extend the shader).
-        // The pre-existing CPU fallback handles invert_input via the linearized gray path,
-        // so when invert_input is set, prefer the CPU path for now.
-        if !options.invert_input {
-            let result = try_gpu_binarize_rgb_raw_with(image, width, height, options, |data| {
-                (f_slot.take().unwrap())(&data[..n])
-            });
-            if let Some(r) = result {
-                return r;
-            }
-        }
-    }
-
-    // CPU fallback: materialize then call f.
-    let result = binarize_image_raw(image, width, height, options);
-    (f_slot.take().unwrap())(&result)
-}
-
-fn try_gpu_binarize_rgb_raw_with<F, R>(
-    rgb: &[u8],
-    width: usize,
-    height: usize,
-    options: &BinarizationOptions,
-    f: F,
-) -> Option<R>
-where
-    F: FnOnce(&[u8]) -> R,
-{
-    let mode = if options.use_fixed_threshold {
-        lege_gpu::binarization::BinarizationMode::FixedThreshold
-    } else {
-        lege_gpu::binarization::BinarizationMode::Adaptive
     };
-    let adaptive = if options.use_fixed_threshold {
-        lege_gpu::binarization::AdaptiveBinarizeGpuConstants {
-            sauvola_window: sauvola_window_for(height, width) as u32,
-            bg_window: odd_background_window(height) as u32,
-            percentile_c: 0,
-            otsu_threshold: 0,
-        }
-    } else {
-        // Derive the constants from the SAME gray the shader thresholds: BT.709 luma
-        // in linear space, re-encoded to sRGB (see adaptive_linearize.wgsl). Using a
-        // 601-gamma approximation here would compute percentile_c / Otsu on a different
-        // gray than the one being thresholded (fable-review #5) — a real inconsistency
-        // for colored content (masked for neutral scans). Routing through
-        // `compute_adaptive_gpu_constants` also keeps the Otsu threshold on the
-        // bg-NORMALIZED histogram (see that function re: the black-page bug).
-        let n = width * height;
-        let linear = crate::color::linearize::linearize_rgb_bytes_to_f32(rgb);
-        let mut gray = vec![0u8; n];
-        crate::color::linearize::linearized_rgb_to_grayscale(&linear, &mut gray);
-        compute_adaptive_gpu_constants(&gray, width, height)
+    let wrap = |bin: Vec<u8>| {
+        GrayImage::from_raw(width, height, bin)
+            .ok_or_else(|| anyhow!("failed to wrap the adaptive mask"))
     };
-    let params = lege_gpu::binarization::BinarizationParams {
-        width: width as u32,
-        height: height as u32,
-        mode,
-        invert_output: options.invert,
-        k_factor: options.k_factor,
-        fixed_threshold: options.fixed_threshold,
-        adaptive,
-        debug_mode: 0,
-    };
-    lege_gpu::binarization::try_binarize_rgb_with(rgb, &params, f)
-}
-
-fn rgb_to_gray_for_binarization(
-    image: &[u8],
-    width: usize,
-    height: usize,
-    options: &BinarizationOptions,
-) -> Vec<u8> {
-    let use_heavy = options.use_heavy_duty && !options.use_fixed_threshold;
-    if !use_heavy && (options.use_fixed_threshold || !options.disable_gpu) {
-        let mut gray = vec![0u8; width * height];
+    if !opt.disable_gpu && adaptive_kernels_usable() {
+        // The plane the kernels have always thresholded: integer Rec. 601.
+        let mut gray = vec![0u8; w * h];
         gray.par_iter_mut()
-            .zip(image.par_chunks_exact(3))
+            .zip(img.as_raw().par_chunks_exact(3))
             .for_each(|(out, rgb)| {
-                let r = rgb[0] as u32;
-                let green = rgb[1] as u32;
-                let b = rgb[2] as u32;
-                *out = ((r * 77 + green * 150 + b * 29) >> 8) as u8;
+                *out = ((rgb[0] as u32 * 77 + rgb[1] as u32 * 150 + rgb[2] as u32 * 29) >> 8) as u8;
             });
-        gray
-    } else {
-        linearized_rgb_to_gray(image, width, height)
+        invert(&mut gray);
+        if let Some(bin) = adaptive_on_gpu(&gray, w, h) {
+            return wrap(bin);
+        }
     }
+    let mut gray = linearized_rgb_to_gray(img.as_raw(), w, h);
+    invert(&mut gray);
+    wrap(improved_binarize(&gray, w, h))
 }
 
-fn linearized_rgb_to_gray(image: &[u8], width: usize, height: usize) -> Vec<u8> {
-    let linear_rgb = crate::color::linearize::linearize_rgb_bytes_to_f32(image);
-    let mut gray = vec![0; width * height];
-    crate::color::linearize::linearized_rgb_to_grayscale(&linear_rgb, &mut gray);
-    gray
+/// Whether the adaptive wgpu kernels may be tried: a hardware GPU, and no
+/// request for the CPU. Asked once per process.
+fn adaptive_kernels_usable() -> bool {
+    static USABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *USABLE.get_or_init(|| !cpu_forced_by_env() && lege_gpu::vision::hardware_gpu_available())
 }
 
-fn binarize_gray_impl(
-    gray: &[u8],
-    width: usize,
-    height: usize,
-    options: &BinarizationOptions,
-    source_rgb: Option<&[u8]>,
-) -> Vec<u8> {
-    assert_eq!(
-        gray.len(),
-        width * height,
-        "Input grayscale size does not match width*height"
-    );
-
-    #[cfg(feature = "debug-logging")]
-    crate::encoding::streamline::log_debug_message(&format!(
-        "[BinarizationGray] Processing {}x{} image, method: {}",
-        width,
-        height,
-        if options.use_fixed_threshold {
-            "fixed_threshold"
-        } else if options.use_heavy_duty {
-            "heavy_duty"
-        } else {
-            "light_sauvola"
-        }
-    ));
-
-    let use_heavy = options.use_heavy_duty && !options.use_fixed_threshold;
-    if use_heavy {
-        if let Some(processor) = get_or_init_heavy_processor() {
-            let expanded_rgb;
-            let heavy_rgb = if let Some(source_rgb) = source_rgb {
-                source_rgb
-            } else {
-                expanded_rgb = gray
-                    .iter()
-                    .flat_map(|value| [*value, *value, *value])
-                    .collect::<Vec<_>>();
-                &expanded_rgb
-            };
-            match apply_heavy_duty_binarization_raw(processor, heavy_rgb, width, height, options) {
-                Ok(result) => {
-                    #[cfg(feature = "debug-logging")]
-                    crate::encoding::streamline::log_debug_message(&format!(
-                        "[BinarizationGray] Heavy-duty completed: {}x{} -> {} binary bytes",
-                        width,
-                        height,
-                        result.len()
-                    ));
-                    return result;
-                }
-                Err(_e) => {
-                    #[cfg(feature = "debug-logging")]
-                    crate::encoding::streamline::log_debug_message(&format!(
-                        "Heavy-duty binarization failed: {}",
-                        _e
-                    ));
-                }
-            }
-        }
-    }
-
-    // Light binarization: improved Sauvola + adaptive Otsu fusion
-    #[cfg(feature = "debug-logging")]
-    crate::encoding::streamline::log_debug_message(&format!(
-        "[BinarizationGray] Using light binarization for {}x{} image",
-        width, height
-    ));
-
-    let mut inverted_gray;
-    let gray = if options.invert_input {
-        inverted_gray = gray.to_vec();
-        inverted_gray
-            .par_iter_mut()
-            .for_each(|pixel| *pixel = 255 - *pixel);
-        &inverted_gray
-    } else {
-        gray
-    };
-
-    // The supplied plane is already in the representation that this stage
-    // thresholds. Try it directly on the GPU.
-    if !use_heavy && !options.disable_gpu {
-        if let Some(result) = try_gpu_binarize_gray_raw(gray, width, height, options) {
-            return result;
-        }
-    }
-
-    if options.use_fixed_threshold {
-        let mut result = vec![0u8; width * height];
-        apply_threshold(gray, options.fixed_threshold, &mut result, width, height);
-        if options.invert {
-            result
-                .par_iter_mut()
-                .for_each(|pixel| *pixel = 255 - *pixel);
-        }
-        return result;
-    }
-
-    // Preserve the old RGB fallback exactly. The first GPU attempt used the
-    // integer Rec.601 plane; after a GPU failure the previous implementation
-    // retried and then ran the CPU algorithm on linear-light BT.709 grayscale.
-    let mut fallback_gray;
-    let gray = if !use_heavy && !options.disable_gpu {
-        if let Some(source_rgb) = source_rgb {
-            fallback_gray = linearized_rgb_to_gray(source_rgb, width, height);
-            if options.invert_input {
-                fallback_gray
-                    .par_iter_mut()
-                    .for_each(|pixel| *pixel = 255 - *pixel);
-            }
-            if let Some(result) = try_gpu_binarize_gray_raw(&fallback_gray, width, height, options)
-            {
-                return result;
-            }
-            fallback_gray.as_slice()
-        } else {
-            gray
-        }
-    } else {
-        gray
-    };
-
-    let mut result = improved_binarize(gray, width, height, options);
-
-    if options.invert {
-        result
-            .par_iter_mut()
-            .for_each(|pixel| *pixel = 255 - *pixel);
-    }
-
-    result
-}
-
-fn try_gpu_binarize_gray_raw(
-    gray: &[u8],
-    width: usize,
-    height: usize,
-    options: &BinarizationOptions,
-) -> Option<Vec<u8>> {
-    try_gpu_binarize_gray_raw_with(gray, width, height, options, |data| {
-        let mut out = data.to_vec();
-        out.truncate(width * height);
-        out
-    })
-}
-
-/// Try GPU binarization with a callback that receives the mapped data directly.
-/// This avoids an extra copy from mapped GPU memory to a new Vec.
-fn try_gpu_binarize_gray_raw_with<F, R>(
-    gray: &[u8],
-    width: usize,
-    height: usize,
-    options: &BinarizationOptions,
-    f: F,
-) -> Option<R>
-where
-    F: FnOnce(&[u8]) -> R,
-{
-    let mode = if options.use_fixed_threshold {
-        lege_gpu::binarization::BinarizationMode::FixedThreshold
-    } else {
-        lege_gpu::binarization::BinarizationMode::Adaptive
-    };
-    let adaptive = if options.use_fixed_threshold {
-        lege_gpu::binarization::AdaptiveBinarizeGpuConstants {
-            sauvola_window: sauvola_window_for(height, width) as u32,
-            bg_window: odd_background_window(height) as u32,
-            percentile_c: 0,
-            otsu_threshold: 0,
-        }
-    } else {
-        compute_adaptive_gpu_constants(gray, width, height)
-    };
+/// The adaptive algorithm on the wgpu kernels (`lege_gpu::binarization`):
+/// Sauvola and the background-normalized Otsu arm fused on the device, with
+/// the two page constants (30th percentile, Otsu threshold) found here.
+/// `None` when the kernels refuse or fail; the caller then runs the CPU.
+fn adaptive_on_gpu(gray: &[u8], width: usize, height: usize) -> Option<Vec<u8>> {
     let params = lege_gpu::binarization::BinarizationParams {
         width: width as u32,
         height: height as u32,
-        mode,
-        invert_output: options.invert,
-        k_factor: options.k_factor,
-        fixed_threshold: options.fixed_threshold,
-        adaptive,
+        mode: lege_gpu::binarization::BinarizationMode::Adaptive,
+        invert_output: false,
+        k_factor: DEFAULT_K_FACTOR,
+        fixed_threshold: 180,
+        adaptive: compute_adaptive_gpu_constants(gray, width, height),
         debug_mode: 0,
     };
-    lege_gpu::binarization::try_binarize_gray_with(gray, &params, f)
+    lege_gpu::binarization::try_binarize_gray_with(gray, &params, |data| {
+        data[..width * height].to_vec()
+    })
 }
 
 pub fn compute_adaptive_gpu_constants(
@@ -705,35 +220,355 @@ pub fn compute_adaptive_gpu_constants(
     }
 }
 
-/// Improved binarization matching the Python script: adaptive Sauvola + background-normalized Otsu + AND fusion.
+/// Sauvola k-factor of the adaptive CPU fallback. Lower values keep more ink
+/// in flat regions; 0.05 balances stroke preservation against background
+/// noise on white and yellowed paper.
+const DEFAULT_K_FACTOR: f32 = 0.05;
+
+fn load_cpu_binarizer() -> CpuBinarizer {
+    use lege_gpu::vision::SauvolaCpuProcessor;
+    // Runtime assets remain deliberate model-rollout overrides.
+    if let Some(path) = crate::runtime_asset_path_if_exists("sauvola.prepared.onnx")
+        .or_else(|| crate::runtime_asset_path_if_exists("sauvola.onnx"))
+    {
+        match SauvolaCpuProcessor::from_model_path(&path) {
+            Ok(model) => return CpuBinarizer::Sauvola(model),
+            Err(_e) => {
+                #[cfg(feature = "debug-logging")]
+                crate::encoding::streamline::log_debug_message(&format!(
+                    "Sauvola model override {} failed to load: {_e:#}",
+                    path.display()
+                ));
+            }
+        }
+    }
+    #[cfg(feature = "sauvola-model")]
+    if let Ok(model) = SauvolaCpuProcessor::from_model_bytes(crate::EMBEDDED_SAUVOLA_MODEL) {
+        return CpuBinarizer::Sauvola(model);
+    }
+    CpuBinarizer::Adaptive
+}
+
+/// True when the user or a test asked for the CPU fallback outright.
+fn cpu_forced_by_env() -> bool {
+    std::env::var("LEGE_FORCE_CPU_BINARIZATION").is_ok_and(|v| v != "0")
+        || std::env::var("LEGE_BINARIZATION_BACKEND").is_ok_and(|v| v.eq_ignore_ascii_case("cpu"))
+}
+
+fn load_student_binarizer() -> Option<lege_gpu::vision::SauvolaProcessor> {
+    if cpu_forced_by_env() || !lege_gpu::vision::hardware_gpu_available() {
+        return None;
+    }
+    let loaded = match crate::runtime_asset_path_if_exists("binarizer-tilenet.onnx") {
+        Some(path) => lege_gpu::vision::SauvolaProcessor::from_model_path(&path),
+        None => {
+            lege_gpu::vision::SauvolaProcessor::from_model_bytes(crate::EMBEDDED_TILENET_BINARIZER)
+        }
+    };
+    loaded.ok()
+}
+
+impl HeavySauvolaProcessor {
+    pub fn new() -> Result<Self> {
+        Ok(Self {
+            cpu: load_cpu_binarizer(),
+            student: load_student_binarizer(),
+            student_failed: std::sync::atomic::AtomicBool::new(false),
+        })
+    }
+
+    /// True while pages go through the model on the GPU.
+    fn on_gpu(&self) -> bool {
+        self.student.is_some()
+            && !self
+                .student_failed
+                .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Runs the model on the GPU when it is available and allowed.
+    /// Returns `None` to fall back to the CPU.
+    fn student_mask(&self, img: &RgbImage, opt: &BinarizationOptions) -> Option<GrayImage> {
+        use std::sync::atomic::Ordering;
+        let student = self.student.as_ref()?;
+        if opt.disable_gpu || self.student_failed.load(Ordering::Relaxed) {
+            return None;
+        }
+        match binarize_on_gpu(student, img) {
+            Ok(mask) => Some(mask),
+            Err(error) => {
+                // Said once, on stderr: from here the job is on the fallback.
+                if !self.student_failed.swap(true, Ordering::Relaxed) {
+                    eprintln!(
+                        "The binarizer model failed on the GPU; pages are binarized on the CPU from here: {error:#}"
+                    );
+                }
+                None
+            }
+        }
+    }
+
+    /// The CPU fallback for one region. Input inversion is part of the mask.
+    fn cpu_mask(&self, img: &RgbImage, opt: &BinarizationOptions) -> Result<GrayImage> {
+        match &self.cpu {
+            CpuBinarizer::Sauvola(model) => {
+                let mut mask = model.binarize_rgb(img)?;
+                if opt.invert_input {
+                    mask.par_iter_mut().for_each(|pixel| *pixel = 255 - *pixel);
+                }
+                Ok(mask)
+            }
+            CpuBinarizer::Adaptive => adaptive_mask(img, opt),
+        }
+    }
+
+    /// Binarize one region of an RGB page at native resolution; the mask comes
+    /// back at the region's own size. Output: 0 = ink, 255 = paper.
+    pub fn process_rgb_region(
+        &self,
+        rgb_data: &[u8],
+        page_width: u32,
+        _page_height: u32,
+        region_x: u32,
+        region_y: u32,
+        region_w: u32,
+        region_h: u32,
+        opt: &BinarizationOptions,
+    ) -> Result<GrayImage> {
+        // The region must lie fully within the page: a silent zero-fill would
+        // feed black pixels into the model, so fail hard instead.
+        if region_w == 0 || region_h == 0 {
+            return Err(anyhow!("empty region ({region_w}x{region_h})"));
+        }
+        let row_bytes = region_w as usize * 3;
+        let last_src_row = (region_y + region_h - 1) as usize;
+        let last_src_end =
+            (last_src_row * page_width as usize + (region_x + region_w) as usize) * 3;
+        if last_src_end > rgb_data.len() {
+            return Err(anyhow!(
+                "region ({region_x},{region_y} {region_w}x{region_h}) exceeds source \
+                 buffer (needs {last_src_end} bytes, have {})",
+                rgb_data.len()
+            ));
+        }
+        let required = region_h as usize * row_bytes;
+        let mut rgb = HEAVY_SAUVOLA_RGB_ARENA.with(|arena| {
+            let mut arena = arena.borrow_mut();
+            let mut buffer = std::mem::take(&mut *arena);
+            buffer.resize(required, 0);
+            buffer
+        });
+        for y in 0..region_h as usize {
+            let src_y = region_y as usize + y;
+            let src_start = (src_y * page_width as usize + region_x as usize) * 3;
+            let dst_start = y * row_bytes;
+            rgb[dst_start..dst_start + row_bytes]
+                .copy_from_slice(&rgb_data[src_start..src_start + row_bytes]);
+        }
+        let img = RgbImage::from_raw(region_w, region_h, rgb)
+            .ok_or_else(|| anyhow!("failed to create RgbImage from region"))?;
+
+        let model_mask = if opt.adaptive {
+            None
+        } else {
+            self.student_mask(&img, opt)
+        };
+        let mask = match model_mask {
+            Some(mut mask) => {
+                if opt.invert_input {
+                    mask.par_iter_mut().for_each(|pixel| *pixel = 255 - *pixel);
+                }
+                Ok(mask)
+            }
+            None if opt.adaptive => adaptive_mask(&img, opt),
+            None => self.cpu_mask(&img, opt),
+        };
+        let mut recycled = img.into_raw();
+        recycled.clear();
+        HEAVY_SAUVOLA_RGB_ARENA.with(|arena| {
+            *arena.borrow_mut() = recycled;
+        });
+        mask
+    }
+
+    /// Process the whole RGB image as a single region.
+    pub fn process_rgb_patch(
+        &self,
+        rgb_data: &[u8],
+        width: u32,
+        height: u32,
+        opt: &BinarizationOptions,
+    ) -> Result<GrayImage> {
+        self.process_rgb_region(rgb_data, width, height, 0, 0, width, height, opt)
+    }
+}
+
+/// The process-wide binarizer. It is internally synchronized, so it is shared
+/// by `&` and concurrent page workers do not serialize on one lock.
+static HEAVY_PROCESSOR_CACHE: std::sync::OnceLock<HeavySauvolaProcessor> =
+    std::sync::OnceLock::new();
+
+fn heavy_processor() -> &'static HeavySauvolaProcessor {
+    HEAVY_PROCESSOR_CACHE.get_or_init(|| HeavySauvolaProcessor {
+        cpu: load_cpu_binarizer(),
+        student: load_student_binarizer(),
+        student_failed: std::sync::atomic::AtomicBool::new(false),
+    })
+}
+
+/// True when pages are binarized by the model on the GPU; false when the CPU
+/// fallback is in use (no hardware GPU, forced off, or a failed GPU run).
+/// The first call loads the model.
+pub fn binarizes_on_gpu() -> bool {
+    heavy_processor().on_gpu()
+}
+
+/// Binarizes an RGB image (interleaved R,G,B) and returns it as PBM P4.
 ///
-/// Buffer reuse: previously allocated 5 separate W*H byte buffers (`sauvola_bin`,
-/// `bg`, `normalized`, `otsu_bin`, `fused`); now uses 2. `bg` is overwritten with
-/// the normalized image (since `normalize_by_bg` reads `gray`+`bg` and writes
-/// per-pixel), then with the Otsu thresholding result, and finally AND'd into
-/// `sauvola_bin` which is returned as the fused output.
-fn improved_binarize(
+/// # Panics
+/// Panics if the input image size does not match `width * height * 3`.
+pub fn binarize_image(
+    image: &[u8],
+    width: usize,
+    height: usize,
+    options: &BinarizationOptions,
+) -> Vec<u8> {
+    let bin = binarize_image_raw(image, width, height, options);
+    pbm::make_pbm_p4(&bin, width, height)
+}
+
+/// Binarizes an RGB image and returns raw binary data, one byte per pixel
+/// (0 = ink, 255 = paper before `options.invert`).
+///
+/// # Panics
+/// Panics if the input image size does not match `width * height * 3`.
+pub fn binarize_image_raw(
+    image: &[u8],
+    width: usize,
+    height: usize,
+    options: &BinarizationOptions,
+) -> Vec<u8> {
+    assert_eq!(
+        image.len(),
+        width * height * 3,
+        "Input image size does not match width*height*3"
+    );
+    if let Some(threshold) = options.blank_threshold {
+        let gray = linearized_rgb_to_gray(image, width, height);
+        return threshold_gray(&gray, width, height, threshold, options);
+    }
+    binarize_rgb_model(image, width, height, options)
+}
+
+/// Binarizes an 8-bit grayscale image and returns raw binary data. The model
+/// takes RGB, so the plane is replicated for it.
+///
+/// # Panics
+/// Panics if the input image size does not match `width * height`.
+pub fn binarize_gray(
     gray: &[u8],
     width: usize,
     height: usize,
-    opt: &BinarizationOptions,
+    options: &BinarizationOptions,
 ) -> Vec<u8> {
+    assert_eq!(
+        gray.len(),
+        width * height,
+        "Input grayscale size does not match width*height"
+    );
+    if let Some(threshold) = options.blank_threshold {
+        return threshold_gray(gray, width, height, threshold, options);
+    }
+    let rgb = gray
+        .iter()
+        .flat_map(|value| [*value, *value, *value])
+        .collect::<Vec<_>>();
+    binarize_rgb_model(&rgb, width, height, options)
+}
+
+/// Callback variant of [`binarize_image_raw`]: hands the binarized bytes
+/// (exactly `width * height`) to `f`.
+pub fn binarize_image_raw_with<F, R>(
+    image: &[u8],
+    width: usize,
+    height: usize,
+    options: &BinarizationOptions,
+    f: F,
+) -> R
+where
+    F: FnOnce(&[u8]) -> R,
+{
+    f(&binarize_image_raw(image, width, height, options))
+}
+
+fn binarize_rgb_model(
+    image: &[u8],
+    width: usize,
+    height: usize,
+    options: &BinarizationOptions,
+) -> Vec<u8> {
+    let mut bin =
+        match heavy_processor().process_rgb_patch(image, width as u32, height as u32, options) {
+            Ok(mask) => mask.into_raw(),
+            Err(_e) => {
+                // The region is the whole page, so only a failed CPU model lands
+                // here: the adaptive algorithm cannot fail.
+                crate::warn_log!("Binarizer failed, using the adaptive CPU algorithm: {_e:#}");
+                let mut gray = linearized_rgb_to_gray(image, width, height);
+                if options.invert_input {
+                    gray.par_iter_mut().for_each(|pixel| *pixel = 255 - *pixel);
+                }
+                improved_binarize(&gray, width, height)
+            }
+        };
+    if options.invert {
+        bin.par_iter_mut().for_each(|pixel| *pixel = 255 - *pixel);
+    }
+    bin
+}
+
+fn threshold_gray(
+    gray: &[u8],
+    width: usize,
+    height: usize,
+    threshold: u8,
+    options: &BinarizationOptions,
+) -> Vec<u8> {
+    let mut result = vec![0u8; width * height];
+    if options.invert_input {
+        let inverted: Vec<u8> = gray.par_iter().map(|pixel| 255 - *pixel).collect();
+        apply_threshold(&inverted, threshold, &mut result, width, height);
+    } else {
+        apply_threshold(gray, threshold, &mut result, width, height);
+    }
+    if options.invert {
+        result
+            .par_iter_mut()
+            .for_each(|pixel| *pixel = 255 - *pixel);
+    }
+    result
+}
+
+fn linearized_rgb_to_gray(image: &[u8], width: usize, height: usize) -> Vec<u8> {
+    let linear_rgb = crate::color::linearize::linearize_rgb_bytes_to_f32(image);
+    let mut gray = vec![0; width * height];
+    crate::color::linearize::linearized_rgb_to_grayscale(&linear_rgb, &mut gray);
+    gray
+}
+
+/// The adaptive CPU algorithm: Sauvola, background-normalized Otsu, and their
+/// AND fusion. 0 = ink, 255 = paper.
+///
+/// `scratch` rotates through the dilated background, the normalized image and
+/// the Otsu result, and is finally AND'd into the Sauvola buffer.
+fn improved_binarize(gray: &[u8], width: usize, height: usize) -> Vec<u8> {
     let n = width * height;
     assert!(gray.len() == n);
 
     let win = sauvola_window_for(height, width);
 
     let mut sauvola_bin = vec![0u8; n];
-    sauvola_via_integral(
-        gray,
-        width,
-        height,
-        win,
-        opt.k_factor as f32,
-        &mut sauvola_bin,
-    );
+    sauvola_via_integral(gray, width, height, win, DEFAULT_K_FACTOR, &mut sauvola_bin);
 
-    // `scratch` rotates: dilated bg → normalized → Otsu binary.
     let s = odd_background_window(height);
     let mut scratch = vec![0u8; n];
     dilate_square_reflect(gray, width, height, s, &mut scratch);
@@ -749,7 +584,6 @@ fn improved_binarize(
         .par_iter_mut()
         .for_each(|v| *v = if *v > t_otsu { 255 } else { 0 });
 
-    // Fuse AND into sauvola_bin (in place) — sauvola_bin becomes the fused output.
     sauvola_bin
         .par_iter_mut()
         .zip(scratch.par_iter())
@@ -1034,43 +868,6 @@ fn reflect_101(idx: isize, len: isize) -> isize {
     }
 }
 
-/// Heavy-duty ONNX-based binarization returning raw binary data
-pub fn apply_heavy_duty_binarization_raw(
-    processor: &HeavySauvolaProcessor,
-    image: &[u8],
-    width: usize,
-    height: usize,
-    options: &BinarizationOptions,
-) -> Result<Vec<u8>> {
-    // Always whole-image: the sauvola model's global instance normalization
-    // makes per-tile statistics inconsistent, so it must see the full region at
-    // once. Running on CPU keeps this RAM-bounded with no VRAM ceiling.
-    let result_img = processor.process_rgb_region(
-        image,
-        width as u32,
-        height as u32,
-        0,
-        0,
-        width as u32,
-        height as u32,
-        options,
-    )?;
-
-    // Convert to binary data.
-    let mut bin_data = result_img.into_raw();
-    // The sauvola model already emits pipeline convention (0 = ink/text, 255 = paper), matching
-    // adaptive Sauvola, CCITT, JBIG2 and the mask paths — so no unconditional inversion here.
-    // (An earlier `255 - pixel` double-inverted the output, which is why "inverted colors" had to
-    // be selected alongside heavy to get the correct polarity.) Only honor an explicit invert.
-    if options.invert {
-        bin_data
-            .par_iter_mut()
-            .for_each(|pixel| *pixel = 255 - *pixel);
-    }
-
-    Ok(bin_data)
-}
-
 /// Applies a mask to an already binarized image.
 /// Pixels in the binary data corresponding to a 255 in the mask will be set to white (255).
 pub fn apply_mask_to_binary(binary_data: &mut [u8], mask: &[u8]) {
@@ -1187,47 +984,9 @@ pub mod pbm {
 #[cfg(test)]
 mod tests {
     use super::{
-        apply_threshold, binarize_gray, binarize_image, binarize_image_raw,
-        binarize_image_raw_with, improved_binarize, invert_binary, rgb_to_gray_for_binarization,
+        apply_threshold, binarize_gray, binarize_image_raw, improved_binarize, invert_binary,
     };
-    // Only used by the GPU-parity tests below, which are gated to the same targets.
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
-    use super::{dilate_square_reflect, try_gpu_binarize_gray_raw};
     use crate::color::BinarizationOptions;
-
-    /// The default CPU fallback: the tileable binarizer on the CPU executor,
-    /// at a size that is not a multiple of its stride.
-    #[test]
-    fn tileable_binarizer_runs_on_the_cpu_at_an_odd_size() {
-        let model = lege_gpu::vision::SauvolaCpuProcessor::from_model_bytes(
-            crate::EMBEDDED_TILENET_BINARIZER,
-        )
-        .expect("the tileable binarizer loads on the CPU executor");
-        let (w, h) = (203u32, 141u32);
-        let img = image::RgbImage::from_fn(w, h, |x, y| {
-            let ink = (60..140).contains(&x) && (50..90).contains(&y) && (x / 6 + y / 6) % 2 == 0;
-            if ink {
-                image::Rgb([20, 20, 20])
-            } else {
-                image::Rgb([225, 215, 190])
-            }
-        });
-        let mask = super::CpuBinarizer::Tileable(model)
-            .binarize(&img)
-            .expect("the tileable binarizer runs on the CPU");
-        assert_eq!(mask.dimensions(), (w, h));
-        assert!(mask.iter().all(|&v| v == 0 || v == 255));
-        assert_eq!(
-            mask.get_pixel(5, 5).0[0],
-            255,
-            "paper corner must stay paper"
-        );
-        let ink = mask.iter().filter(|&&v| v == 0).count();
-        assert!(
-            ink > 200,
-            "the dark checker block must produce ink, got {ink} pixels"
-        );
-    }
 
     #[cfg(feature = "sauvola-model")]
     #[test]
@@ -1310,537 +1069,197 @@ mod tests {
         let gray: Vec<u8> = (0..width * height)
             .map(|i| ((i * 17 + i / 3) % 256) as u8)
             .collect();
-        let out = improved_binarize(&gray, width, height, &BinarizationOptions::default());
+        let out = improved_binarize(&gray, width, height);
         assert_eq!(out.len(), width * height);
         assert!(out.iter().all(|&v| v == 0 || v == 255));
     }
 
-    #[test]
-    fn improved_binarize_does_not_apply_output_inversion() {
-        let width = 37usize;
-        let height = 31usize;
-        let gray: Vec<u8> = (0..width * height)
-            .map(|i| ((i * 23 + i / 5) % 256) as u8)
-            .collect();
-        let normal = BinarizationOptions::default();
-        let inverted = BinarizationOptions {
-            invert: true,
-            ..BinarizationOptions::default()
-        };
-
-        assert_eq!(
-            improved_binarize(&gray, width, height, &normal),
-            improved_binarize(&gray, width, height, &inverted)
-        );
-    }
-
-    fn make_rgb_test_image(width: usize, height: usize) -> Vec<u8> {
+    fn text_like_page(width: usize, height: usize) -> Vec<u8> {
         (0..width * height)
             .flat_map(|index| {
-                let x = index % width;
-                let y = index / width;
-                [
-                    ((x * 17 + y * 3) % 256) as u8,
-                    ((x * 5 + y * 19 + 41) % 256) as u8,
-                    ((x * 11 + y * 7 + 89) % 256) as u8,
-                ]
+                let (x, y) = (index % width, index / width);
+                let ink = (20..width - 20).contains(&x) && y % 12 < 3 && (x / 5) % 2 == 0;
+                if ink { [25u8, 25, 25] } else { [228, 220, 200] }
             })
             .collect()
     }
 
+    /// The fallback for machines without a GPU: the adaptive algorithm,
+    /// reached with `disable_gpu`, keeps size, polarity and inversion.
     #[test]
-    fn rgb_fixed_threshold_wrapper_matches_legacy_and_gray_paths() {
-        let (width, height) = (43, 31);
-        let rgb = make_rgb_test_image(width, height);
+    fn cpu_fallback_binarizes_text_and_honors_inversion() {
+        let (width, height) = (160usize, 120usize);
+        let rgb = text_like_page(width, height);
         let options = BinarizationOptions {
-            invert: true,
-            invert_input: true,
-            use_fixed_threshold: true,
-            fixed_threshold: 137,
             disable_gpu: true,
             ..BinarizationOptions::default()
         };
+        let bin = binarize_image_raw(&rgb, width, height, &options);
+        assert_eq!(bin.len(), width * height);
+        assert!(bin.iter().all(|&v| v == 0 || v == 255));
+        assert_eq!(bin[0], 255, "paper stays paper");
+        assert_eq!(bin[width + 20], 0, "ink stays ink");
 
-        let gray = rgb_to_gray_for_binarization(&rgb, width, height, &options);
-        let mut legacy_gray = gray.clone();
-        legacy_gray
-            .iter_mut()
-            .for_each(|pixel| *pixel = 255 - *pixel);
-        let mut legacy = vec![0; width * height];
-        apply_threshold(
-            &legacy_gray,
-            options.fixed_threshold,
-            &mut legacy,
-            width,
-            height,
-        );
-        legacy.iter_mut().for_each(|pixel| *pixel = 255 - *pixel);
-
-        let rgb_result = binarize_image_raw(&rgb, width, height, &options);
-        assert_eq!(rgb_result, legacy);
-        assert_eq!(rgb_result, binarize_gray(&gray, width, height, &options));
-        assert_eq!(
-            binarize_image(&rgb, width, height, &options),
-            super::pbm::make_pbm_p4(&legacy, width, height)
-        );
+        let inverted = BinarizationOptions {
+            invert: true,
+            ..options.clone()
+        };
+        let flipped = binarize_image_raw(&rgb, width, height, &inverted);
+        assert!(bin.iter().zip(&flipped).all(|(a, b)| *a == 255 - *b));
     }
 
+    /// "Fast" kept off the GPU is the adaptive CPU algorithm: the same mask
+    /// as the no-GPU fallback of "Best".
     #[test]
-    fn rgb_adaptive_wrapper_matches_legacy_cpu_and_callback_paths() {
-        let (width, height) = (47, 37);
-        let rgb = make_rgb_test_image(width, height);
-        let options = BinarizationOptions {
-            invert: true,
-            invert_input: true,
+    fn fast_on_the_cpu_is_the_adaptive_fallback() {
+        let (width, height) = (160usize, 120usize);
+        let rgb = text_like_page(width, height);
+        let fast = BinarizationOptions {
+            adaptive: true,
             disable_gpu: true,
             ..BinarizationOptions::default()
         };
-
-        let linear_rgb = crate::color::linearize::linearize_rgb_bytes_to_f32(&rgb);
-        let mut legacy_gray = vec![0; width * height];
-        crate::color::linearize::linearized_rgb_to_grayscale(&linear_rgb, &mut legacy_gray);
-        legacy_gray
-            .iter_mut()
-            .for_each(|pixel| *pixel = 255 - *pixel);
-        let mut legacy = improved_binarize(&legacy_gray, width, height, &options);
-        legacy.iter_mut().for_each(|pixel| *pixel = 255 - *pixel);
-
-        let rgb_result = binarize_image_raw(&rgb, width, height, &options);
-        assert_eq!(rgb_result, legacy);
-        let callback_result =
-            binarize_image_raw_with(&rgb, width, height, &options, <[u8]>::to_vec);
-        assert_eq!(callback_result, legacy);
-
-        let gray = rgb_to_gray_for_binarization(&rgb, width, height, &options);
-        assert_eq!(rgb_result, binarize_gray(&gray, width, height, &options));
-    }
-
-    #[test]
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
-    fn rgb_wrapper_matches_legacy_gpu_gray_path() {
-        if std::env::var("LEGE_RUN_GPU_TESTS").ok().as_deref() != Some("1") {
-            return;
-        }
-
-        let (width, height) = (128, 96);
-        let rgb = make_rgb_test_image(width, height);
-        let options = BinarizationOptions::default();
-        let gray = rgb_to_gray_for_binarization(&rgb, width, height, &options);
-        let legacy = try_gpu_binarize_gray_raw(&gray, width, height, &options)
-            .expect("real GPU is required for the wrapper parity test");
-
-        assert_eq!(binarize_image_raw(&rgb, width, height, &options), legacy);
-    }
-
-    fn legacy_cpu_binarize_rgb(
-        rgb: &[u8],
-        width: usize,
-        height: usize,
-        options: &BinarizationOptions,
-    ) -> Vec<u8> {
-        let mut gray = if options.use_fixed_threshold {
-            let mut gray = vec![0; width * height];
-            gray.iter_mut()
-                .zip(rgb.chunks_exact(3))
-                .for_each(|(out, pixel)| {
-                    *out = ((pixel[0] as u32 * 77 + pixel[1] as u32 * 150 + pixel[2] as u32 * 29)
-                        >> 8) as u8;
-                });
-            gray
-        } else {
-            let linear_rgb = crate::color::linearize::linearize_rgb_bytes_to_f32(rgb);
-            let mut gray = vec![0; width * height];
-            crate::color::linearize::linearized_rgb_to_grayscale(&linear_rgb, &mut gray);
-            gray
+        let fallback = BinarizationOptions {
+            disable_gpu: true,
+            ..BinarizationOptions::default()
         };
-        if options.invert_input {
-            gray.iter_mut().for_each(|pixel| *pixel = 255 - *pixel);
-        }
-
-        let mut result = if options.use_fixed_threshold {
-            let mut result = vec![0; width * height];
-            apply_threshold(&gray, options.fixed_threshold, &mut result, width, height);
-            result
-        } else {
-            improved_binarize(&gray, width, height, options)
-        };
-        if options.invert {
-            result.iter_mut().for_each(|pixel| *pixel = 255 - *pixel);
-        }
-        result
-    }
-
-    #[test]
-    #[ignore = "requires LEGE_BINARIZATION_PARITY_CORPUS with local PDF paths"]
-    fn rgb_wrappers_are_byte_identical_to_legacy_cpu_on_pdf_corpus() {
-        use std::sync::Arc;
-
-        use exprim::{RasterPlane, RasterProduct, RenderSession};
-
-        let corpus = std::env::var_os("LEGE_BINARIZATION_PARITY_CORPUS")
-            .expect("set LEGE_BINARIZATION_PARITY_CORPUS to PDF paths");
-        let paths = std::env::split_paths(&corpus).collect::<Vec<_>>();
-        assert!(!paths.is_empty(), "binarization parity corpus is empty");
-
-        let cases = [
-            BinarizationOptions {
-                disable_gpu: true,
-                ..BinarizationOptions::default()
-            },
-            BinarizationOptions {
-                use_fixed_threshold: true,
-                fixed_threshold: 173,
-                disable_gpu: true,
-                ..BinarizationOptions::default()
-            },
-        ];
-
-        for path in paths {
-            let bytes: Arc<[u8]> =
-                Arc::from(std::fs::read(&path).expect("failed to read parity PDF"));
-            let session =
-                RenderSession::open(bytes, None).expect("failed to open binarization parity PDF");
-            for page_index in 0..session.page_count() {
-                let geometry = session
-                    .page_geometry(page_index)
-                    .expect("failed to read page geometry");
-                let height = 160u32;
-                let width = ((geometry.display_width() / geometry.display_height())
-                    * f64::from(height))
-                .round()
-                .max(1.0) as u32;
-                let page = session
-                    .compile(page_index)
-                    .expect("failed to compile parity page");
-                let RasterPlane::Rgb8(surface) = session
-                    .render(&page, &RasterProduct::rgb8(width, height))
-                    .expect("failed to render parity page")
-                else {
-                    panic!("RGB parity request returned a non-RGB plane");
-                };
-
-                for options in &cases {
-                    let legacy = legacy_cpu_binarize_rgb(
-                        &surface.pixels,
-                        width as usize,
-                        height as usize,
-                        options,
-                    );
-                    let current = binarize_image_raw(
-                        &surface.pixels,
-                        width as usize,
-                        height as usize,
-                        options,
-                    );
-                    assert_eq!(
-                        current,
-                        legacy,
-                        "binarization changed for {} page {} ({:?})",
-                        path.display(),
-                        page_index,
-                        options
-                    );
-                }
-            }
-        }
-    }
-
-    // --- GPU algorithm parity tests ---
-    // Gated by LEGE_RUN_GPU_TESTS=1 to avoid blocking CI on headless machines.
-
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
-    fn make_test_image(w: usize, h: usize) -> Vec<u8> {
-        (0..w * h)
-            .map(|i| {
-                let x = i % w;
-                let y = i / w;
-                // Varied gradient with noise to exercise all regions of the algorithm.
-                ((x * 3 + y * 5 + (x ^ y) * 7) % 256) as u8
-            })
-            .collect()
-    }
-
-    #[test]
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
-    fn gpu_bg_parity_debug3() {
-        if std::env::var("LEGE_RUN_GPU_TESTS").ok().as_deref() != Some("1") {
-            return;
-        }
-        use lege_gpu::binarization::{
-            AdaptiveBinarizeGpuConstants, BinarizationMode, BinarizationParams, wgpu::WgpuBinarizer,
-        };
-
-        let w = 128usize;
-        let h = 96usize;
-        let gray = make_test_image(w, h);
-
-        let bg_window = super::odd_background_window(h);
-        let mut cpu_bg = vec![0u8; w * h];
-        dilate_square_reflect(&gray, w, h, bg_window, &mut cpu_bg);
-
-        let constants = super::compute_adaptive_gpu_constants(&gray, w, h);
-        let params = BinarizationParams {
-            width: w as u32,
-            height: h as u32,
-            mode: BinarizationMode::Adaptive,
-            invert_output: false,
-            k_factor: crate::DEFAULT_K_FACTOR,
-            fixed_threshold: 128,
-            adaptive: AdaptiveBinarizeGpuConstants {
-                sauvola_window: constants.sauvola_window,
-                bg_window: constants.bg_window,
-                percentile_c: constants.percentile_c,
-                otsu_threshold: constants.otsu_threshold,
-            },
-            debug_mode: 3,
-        };
-
-        let mut binarizer = WgpuBinarizer::new().expect("WgpuBinarizer::new");
-        let gpu_bg = binarizer
-            .binarize_gray_raw(&gray, &params)
-            .expect("GPU debug_mode=3 (bg)");
-
-        assert_eq!(gpu_bg.len(), w * h, "output length mismatch");
-        // Interior must match exactly; the bg (max-filter) border convention differs
-        // between GPU and CPU within `bg_window` of an edge — skip that band.
-        let b = bg_window;
-        let mismatches: usize = (0..w * h)
-            .filter(|&i| {
-                let (x, y) = (i % w, i / w);
-                x >= b && y >= b && x < w - b && y < h - b
-            })
-            .filter(|&i| cpu_bg[i] != gpu_bg[i])
-            .count();
         assert_eq!(
-            mismatches, 0,
-            "interior bg parity: {mismatches} pixels differ (CPU bg vs GPU debug_mode=3)"
+            binarize_image_raw(&rgb, width, height, &fast),
+            binarize_image_raw(&rgb, width, height, &fallback)
+        );
+    }
+
+    /// "Fast" on the wgpu kernels gives a text mask of the right polarity and
+    /// agrees with the CPU algorithm on nearly every pixel (the two threshold
+    /// slightly different gray planes). GPU-gated.
+    #[test]
+    fn fast_runs_on_the_gpu_kernels() {
+        if std::env::var("LEGE_RUN_GPU_TESTS").ok().as_deref() != Some("1") {
+            return;
+        }
+        let (width, height) = (640usize, 480usize);
+        let rgb = text_like_page(width, height);
+        let gray: Vec<u8> = rgb
+            .chunks_exact(3)
+            .map(|p| ((p[0] as u32 * 77 + p[1] as u32 * 150 + p[2] as u32 * 29) >> 8) as u8)
+            .collect();
+        let gpu = super::adaptive_on_gpu(&gray, width, height).expect("the kernels run");
+        assert_eq!(gpu.len(), width * height);
+        assert!(gpu.iter().all(|&v| v == 0 || v == 255));
+        assert_eq!(gpu[0], 255, "paper stays paper");
+        let cpu = improved_binarize(&gray, width, height);
+        let differing = gpu.iter().zip(&cpu).filter(|(a, b)| a != b).count();
+        assert!(
+            differing * 100 <= width * height,
+            "{differing} pixels differ between the kernels and the CPU algorithm"
+        );
+    }
+
+    /// A blank page takes the fixed threshold and comes out white.
+    #[test]
+    fn blank_threshold_turns_a_noisy_blank_page_white() {
+        let (width, height) = (64usize, 48usize);
+        let gray: Vec<u8> = (0..width * height)
+            .map(|i| 215 + ((i * 7) % 20) as u8)
+            .collect();
+        let options = BinarizationOptions {
+            blank_threshold: Some(180),
+            ..BinarizationOptions::default()
+        };
+        assert!(
+            binarize_gray(&gray, width, height, &options)
+                .iter()
+                .all(|&v| v == 255)
         );
     }
 
     #[test]
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
-    fn gpu_local_mean_parity_debug5() {
+    fn tile_spans_cover_an_axis_once_with_equal_tiles() {
+        for (n, tile, halo) in [
+            (900u32, 1024u32, 128u32),
+            (1024, 1024, 128),
+            (1025, 1024, 128),
+            (3000, 1024, 128),
+            (4500, 1024, 128),
+            (700, 256, 32),
+        ] {
+            let spans = super::tile_spans(n, tile, halo);
+            let mut next = 0;
+            for (index, (start, length, kept)) in spans.iter().enumerate() {
+                assert_eq!(start % 64, 0, "tiles start on the model's grid ({n})");
+                assert_eq!(kept.start, next, "kept ranges abut ({n})");
+                assert!(kept.end > kept.start && *length <= tile);
+                assert!(*start <= kept.start && kept.end <= start + length);
+                // Away from the page edge a kept pixel has a full halo around it.
+                if index > 0 {
+                    assert!(kept.start >= start + halo, "{n}: left halo");
+                }
+                if index + 1 < spans.len() {
+                    assert!(kept.end + halo <= start + length, "{n}: right halo");
+                }
+                next = kept.end;
+            }
+            assert_eq!(next, n);
+        }
+    }
+
+    /// A page binarized in tiles is the page binarized whole: the tile border
+    /// that is thrown away covers the model's reach. GPU-gated.
+    #[test]
+    fn tiles_reproduce_the_whole_page_mask() {
         if std::env::var("LEGE_RUN_GPU_TESTS").ok().as_deref() != Some("1") {
             return;
         }
-        use lege_gpu::binarization::{
-            AdaptiveBinarizeGpuConstants, BinarizationMode, BinarizationParams, wgpu::WgpuBinarizer,
-        };
-
-        let w = 128usize;
-        let h = 96usize;
-        let gray = make_test_image(w, h);
-        let constants = super::compute_adaptive_gpu_constants(&gray, w, h);
-        let win = constants.sauvola_window as usize;
-        let r = (win / 2) as isize;
-
-        // CPU: sliding-window mean using the same reflect-101 border handling as the GPU.
-        let cpu_mean: Vec<u8> = (0..w * h)
-            .map(|i| {
-                let px = (i % w) as isize;
-                let py = (i / w) as isize;
-                let mut sum = 0u32;
-                for dy in -r..=r {
-                    for dx in -r..=r {
-                        let rx = super::reflect_101(px + dx, w as isize) as usize;
-                        let ry = super::reflect_101(py + dy, h as isize) as usize;
-                        sum += gray[ry * w + rx] as u32;
-                    }
+        let student =
+            lege_gpu::vision::SauvolaProcessor::from_model_bytes(crate::EMBEDDED_TILENET_BINARIZER)
+                .expect("embedded binarizer loads");
+        let (width, height) = (1100usize, 900usize);
+        // Text-like strokes over a paper gradient with a darker band.
+        let rgb: Vec<u8> = (0..width * height)
+            .flat_map(|index| {
+                let (x, y) = (index % width, index / width);
+                let paper = 200 + ((x / 40 + y / 60) % 30) as u8
+                    - if (400..520).contains(&y) { 60 } else { 0 };
+                let ink = y % 14 < 4 && (x / 7) % 3 != 0 && (30..width - 30).contains(&x);
+                if ink {
+                    [30u8, 28, 26]
+                } else {
+                    [paper, paper - 6, paper - 20]
                 }
-                let area = (win * win) as u32;
-                (sum / area).min(255) as u8
             })
             .collect();
-
-        let params = BinarizationParams {
-            width: w as u32,
-            height: h as u32,
-            mode: BinarizationMode::Adaptive,
-            invert_output: false,
-            k_factor: crate::DEFAULT_K_FACTOR,
-            fixed_threshold: 128,
-            adaptive: AdaptiveBinarizeGpuConstants {
-                sauvola_window: constants.sauvola_window,
-                bg_window: constants.bg_window,
-                percentile_c: constants.percentile_c,
-                otsu_threshold: constants.otsu_threshold,
-            },
-            debug_mode: 5,
-        };
-
-        let mut binarizer = WgpuBinarizer::new().expect("WgpuBinarizer::new");
-        let gpu_mean = binarizer
-            .binarize_gray_raw(&gray, &params)
-            .expect("GPU debug_mode=5 (local mean)");
-
-        assert_eq!(gpu_mean.len(), w * h);
-        // The GPU and CPU use different border conventions in the windowed passes, so
-        // pixels within `win` of an edge can legitimately differ; the interior must be
-        // bit-exact (this is what the integral-precision fix guarantees). Restrict the
-        // parity check to interior pixels.
-        let mut max_diff = 0u8;
-        let mut bad = 0usize;
-        for (i, (&c, &g)) in cpu_mean.iter().zip(gpu_mean.iter()).enumerate() {
-            let x = i % w;
-            let y = i / w;
-            if x < win || y < win || x >= w - win || y >= h - win {
-                continue; // border band: convention differs, not a precision bug
-            }
-            let diff = c.abs_diff(g);
-            if diff > max_diff {
-                max_diff = diff;
-            }
-            if diff > 1 {
-                bad += 1;
-                if bad <= 5 {
-                    eprintln!("interior mean mismatch at ({x},{y}): cpu={c} gpu={g}");
-                }
-            }
-        }
-        assert_eq!(
-            bad, 0,
-            "local mean parity: {bad} pixels differ by >1 (max_diff={max_diff}); \
-             integral image or padding bug"
-        );
-    }
-
-    #[test]
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
-    fn gpu_fused_parity_debug0() {
-        if std::env::var("LEGE_RUN_GPU_TESTS").ok().as_deref() != Some("1") {
-            return;
-        }
-        use lege_gpu::binarization::{
-            AdaptiveBinarizeGpuConstants, BinarizationMode, BinarizationParams, wgpu::WgpuBinarizer,
-        };
-
-        let w = 128usize;
-        let h = 96usize;
-        let gray = make_test_image(w, h);
-        let constants = super::compute_adaptive_gpu_constants(&gray, w, h);
-        let cpu_fused = improved_binarize(&gray, w, h, &BinarizationOptions::default());
-
-        let params = BinarizationParams {
-            width: w as u32,
-            height: h as u32,
-            mode: BinarizationMode::Adaptive,
-            invert_output: false,
-            k_factor: crate::DEFAULT_K_FACTOR,
-            fixed_threshold: 128,
-            adaptive: AdaptiveBinarizeGpuConstants {
-                sauvola_window: constants.sauvola_window,
-                bg_window: constants.bg_window,
-                percentile_c: constants.percentile_c,
-                otsu_threshold: constants.otsu_threshold,
-            },
-            debug_mode: 0,
-        };
-
-        let mut binarizer = WgpuBinarizer::new().expect("WgpuBinarizer::new");
-        let gpu_fused = binarizer
-            .binarize_gray_raw(&gray, &params)
-            .expect("GPU debug_mode=0 (fused)");
-
-        assert_eq!(gpu_fused.len(), w * h);
-        // Interior parity is now exact: with the normalized-histogram Otsu constant and
-        // the u32 second-moment integral, both fusion arms match the CPU bit-for-bit away
-        // from the edges. Border-band pixels can differ (windowed border convention),
-        // so exclude the `win` band and require zero interior mismatches.
-        let win = constants.sauvola_window as usize;
-        let mismatches: usize = (0..w * h)
-            .filter(|&i| {
-                let (x, y) = (i % w, i / w);
-                x >= win && y >= win && x < w - win && y < h - win
-            })
-            .filter(|&i| cpu_fused[i] != gpu_fused[i])
+        let img = image::RgbImage::from_raw(width as u32, height as u32, rgb).unwrap();
+        let whole = super::binarize_on_gpu_with(&student, &img, usize::MAX, 1024, 128).unwrap();
+        let tiled = super::binarize_on_gpu_with(&student, &img, 0, 512, 128).unwrap();
+        let differing = whole
+            .iter()
+            .zip(tiled.iter())
+            .filter(|(a, b)| a != b)
             .count();
+        eprintln!(
+            "TILE PARITY: {differing} of {} pixels differ",
+            width * height
+        );
         assert_eq!(
-            mismatches, 0,
-            "interior fused parity: {mismatches} pixels differ; \
-             Sauvola or Otsu threshold divergence"
+            differing, 0,
+            "pixels differ between the tiled and the whole-page mask"
         );
     }
 
-    /// Regression guard for the second-moment integral precision fix (fable #2).
-    /// At page scale the running sum-of-squares reaches ~10^10, where an f32 prefix
-    /// sum loses several gray-levels of σ. The u32 wrapping SAT is exact, so at a
-    /// large image the GPU local σ (debug_mode=6) must match the CPU reference. A
-    /// small (128×96) image cannot see this class of bug; use ≥2000px.
+    /// With a hardware GPU the model takes the page. GPU-gated like the other
+    /// wgpu tests.
     #[test]
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
-    fn gpu_local_stddev_parity_large_debug6() {
+    fn model_binarizes_text_on_the_gpu() {
         if std::env::var("LEGE_RUN_GPU_TESTS").ok().as_deref() != Some("1") {
             return;
         }
-        use lege_gpu::binarization::{
-            AdaptiveBinarizeGpuConstants, BinarizationMode, BinarizationParams, wgpu::WgpuBinarizer,
-        };
-
-        let w = 2048usize;
-        let h = 2048usize;
-        let gray = make_test_image(w, h);
-        let constants = super::compute_adaptive_gpu_constants(&gray, w, h);
-        let win = constants.sauvola_window as usize;
-        let r = (win / 2) as isize;
-        let area = (win * win) as f64;
-
-        // CPU: sliding-window σ in f64 (exact), same reflect-101 border as the GPU.
-        let cpu_std: Vec<u8> = (0..w * h)
-            .map(|i| {
-                let px = (i % w) as isize;
-                let py = (i / w) as isize;
-                let mut sum = 0f64;
-                let mut sum_sq = 0f64;
-                for dy in -r..=r {
-                    for dx in -r..=r {
-                        let rx = super::reflect_101(px + dx, w as isize) as usize;
-                        let ry = super::reflect_101(py + dy, h as isize) as usize;
-                        let g = gray[ry * w + rx] as f64;
-                        sum += g;
-                        sum_sq += g * g;
-                    }
-                }
-                let mean = sum / area;
-                let var = (sum_sq / area) - mean * mean;
-                var.max(0.0).sqrt().clamp(0.0, 255.0) as u8
-            })
-            .collect();
-
-        let params = BinarizationParams {
-            width: w as u32,
-            height: h as u32,
-            mode: BinarizationMode::Adaptive,
-            invert_output: false,
-            k_factor: crate::DEFAULT_K_FACTOR,
-            fixed_threshold: 128,
-            adaptive: AdaptiveBinarizeGpuConstants {
-                sauvola_window: constants.sauvola_window,
-                bg_window: constants.bg_window,
-                percentile_c: constants.percentile_c,
-                otsu_threshold: constants.otsu_threshold,
-            },
-            debug_mode: 6,
-        };
-
-        let mut binarizer = WgpuBinarizer::new().expect("WgpuBinarizer::new");
-        let gpu_std = binarizer
-            .binarize_gray_raw(&gray, &params)
-            .expect("GPU debug_mode=6 (local stddev)");
-
-        assert_eq!(gpu_std.len(), w * h);
-        let mut max_diff = 0u8;
-        let mut bad = 0usize;
-        for (&c, &g) in cpu_std.iter().zip(gpu_std.iter()) {
-            let diff = c.abs_diff(g);
-            max_diff = max_diff.max(diff);
-            if diff > 1 {
-                bad += 1;
-            }
-        }
-        assert_eq!(
-            bad, 0,
-            "large-image local σ parity: {bad} pixels differ by >1 (max_diff={max_diff}); \
-             second-moment integral precision regression"
-        );
+        assert!(super::binarizes_on_gpu(), "a hardware GPU is expected here");
+        let (width, height) = (203usize, 141usize);
+        let rgb = text_like_page(width, height);
+        let bin = binarize_image_raw(&rgb, width, height, &BinarizationOptions::default());
+        assert_eq!(bin.len(), width * height);
+        assert!(bin.iter().all(|&v| v == 0 || v == 255));
+        assert_eq!(bin[0], 255, "paper stays paper");
+        assert!(bin.iter().filter(|&&v| v == 0).count() > 200);
     }
 }

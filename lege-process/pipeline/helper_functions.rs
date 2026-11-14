@@ -53,6 +53,43 @@ pub(crate) fn report_layout_model_loading(progress: &crate::progress::ProgressTr
     });
 }
 
+/// Text is binarized by a model on the GPU. Without a hardware GPU the
+/// adaptive CPU algorithm stands in for it: say so, once per job, in the same
+/// place every output pipeline reports its GPU state.
+pub(crate) fn report_cpu_binarization_fallback(
+    config: &PipelineConfig,
+    progress: &crate::progress::ProgressTracker,
+    pipeline_label: &str,
+) {
+    // "Fast" chose the CPU algorithm: nothing fell back.
+    if config.binarization().force_cpu
+        || config.binarization().fast
+        || crate::color::binarizes_on_gpu()
+    {
+        return;
+    }
+    let message = concat!(
+        "No usable GPU found: text is binarized on the CPU with the adaptive fallback ",
+        "instead of the binarizer model. Install or update your GPU driver to use the model."
+    )
+    .to_string();
+    // stderr, so that a plain CLI run shows it and `--gui-worker` stdout stays JSON.
+    eprintln!("[{pipeline_label}] {message}");
+    progress.update(crate::progress::ProcessingStatus::PipelineMessage {
+        stage: "CPU binarization fallback".to_string(),
+        message,
+    });
+}
+
+/// The job goes on without layout detection: its progress says so, so that a
+/// front end stops showing a layout-mode job.
+fn report_layout_switched_off(progress: &crate::progress::ProgressTracker) {
+    progress.set_feature_flags(false);
+    if progress.current_metrics().mode == crate::progress::ProgressMode::Layout {
+        progress.set_mode_enum(crate::progress::ProgressMode::NoLayout);
+    }
+}
+
 pub(crate) fn initialize_inference_or_fallback(
     mut config: Arc<PipelineConfig>,
     progress: &crate::progress::ProgressTracker,
@@ -61,6 +98,7 @@ pub(crate) fn initialize_inference_or_fallback(
     Arc<PipelineConfig>,
     Option<Arc<crate::pipeline::inference::InferenceHandle>>,
 )> {
+    report_cpu_binarization_fallback(&config, progress, pipeline_label);
     if !config.enable_layout_detection() {
         return Ok((config, None));
     }
@@ -81,6 +119,7 @@ pub(crate) fn initialize_inference_or_fallback(
                 message,
             });
             Arc::make_mut(&mut config).set_enable_layout_detection(false);
+            report_layout_switched_off(progress);
             Ok((config, None))
         }
         Err(error) if crate::pipeline::inference::is_gpu_device_error(error.as_ref()) => {
@@ -96,6 +135,24 @@ pub(crate) fn initialize_inference_or_fallback(
                 message,
             });
             Arc::make_mut(&mut config).set_enable_layout_detection(false);
+            report_layout_switched_off(progress);
+            Ok((config, None))
+        }
+        // Whatever the error says, a machine without a hardware GPU cannot
+        // run the layout model: carry on without it rather than fail the job.
+        Err(error) if !lege_gpu::vision::hardware_gpu_available() => {
+            let message = format!(
+                "No usable GPU found ({error}). Layout detection disabled; processing will \
+                 continue without it."
+            );
+            warn_log!("[{}] {}", pipeline_label, message);
+            eprintln!("[{pipeline_label}] {message}");
+            progress.update(crate::progress::ProcessingStatus::PipelineMessage {
+                stage: "GPU Warning".to_string(),
+                message,
+            });
+            Arc::make_mut(&mut config).set_enable_layout_detection(false);
+            report_layout_switched_off(progress);
             Ok((config, None))
         }
         Err(error) => Err(anyhow!(

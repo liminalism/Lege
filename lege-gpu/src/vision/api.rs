@@ -556,6 +556,150 @@ impl SauvolaCpuProcessor {
     }
 }
 
+// ── Page flattening (Lege-Dewarp) ─────────────────────────────────────────
+
+/// True when a hardware wgpu adapter is available. A software adapter
+/// (llvmpipe, WARP) or no adapter at all reports false: model work that has
+/// no practical CPU path must then switch itself off.
+pub fn hardware_gpu_available() -> bool {
+    use crate::vision::runtime::device::GpuContext;
+    pollster::block_on(GpuContext::shared()).is_ok_and(|ctx| !ctx.is_cpu_adapter)
+}
+
+/// Portrait input (height, width) of the Lege-Dewarp model; the landscape
+/// file takes the transpose.
+pub const DEWARP_PORTRAIT: (usize, usize) = (576, 384);
+/// The model's outputs are one cell per this many input pixels.
+pub const DEWARP_STRIDE: usize = 8;
+
+/// One call's outputs, flattened, each over the (H/8, W/8) cell grid.
+#[derive(Debug, Clone)]
+pub struct DewarpOutput {
+    /// Cell rows and columns.
+    pub rows: usize,
+    pub cols: usize,
+    /// `[2, rows, cols]`: x then y correction to the identity map, in view
+    /// values where -1 and +1 are the view's edges.
+    pub flow: Vec<f32>,
+    /// `[2, rows, cols]`: page mask and gutter heat, as probabilities.
+    pub maps: Vec<f32>,
+    /// `bend` (the page is not flat) and `spread` (two pages), as probabilities.
+    pub scores: [f32; 2],
+}
+
+/// The Lege-Dewarp page-flattening model, resident on the GPU.
+///
+/// Two files hold the same weights at two static input shapes (the graph's
+/// reshapes are baked for one token grid), so both are compiled once and kept:
+/// portrait `[1,3,576,384]` and landscape `[1,3,384,576]`. Each compiled graph
+/// is single-flight; the lock is held per call, not per page.
+pub struct DewarpNet {
+    portrait: Mutex<CompiledGraph>,
+    landscape: Mutex<CompiledGraph>,
+}
+
+impl DewarpNet {
+    /// Build from in-memory ONNX payloads (embedded models).
+    pub fn from_model_bytes(portrait: &[u8], landscape: &[u8]) -> Result<Self> {
+        Self::from_models(
+            load_model_from_bytes(portrait).context("failed to load the portrait dewarp model")?,
+            load_model_from_bytes(landscape)
+                .context("failed to load the landscape dewarp model")?,
+        )
+    }
+
+    /// Build from model files (runtime-asset overrides).
+    pub fn from_model_paths(portrait: &Path, landscape: &Path) -> Result<Self> {
+        Self::from_models(
+            load_model(portrait)
+                .with_context(|| format!("failed to load dewarp model {}", portrait.display()))?,
+            load_model(landscape)
+                .with_context(|| format!("failed to load dewarp model {}", landscape.display()))?,
+        )
+    }
+
+    fn from_models(portrait: ModelProto, landscape: ModelProto) -> Result<Self> {
+        if !hardware_gpu_available() {
+            bail!("no hardware GPU adapter; the dewarp model has no practical CPU path");
+        }
+        let (h, w) = DEWARP_PORTRAIT;
+        let prepare = |model: &ModelProto, dims: [i64; 4]| -> Result<PreparedGraph> {
+            let report =
+                ModelReport::from_model(model).context("failed to inspect dewarp model")?;
+            if !report.rejection_reasons.is_empty() {
+                bail!(
+                    "dewarp model is not compatible with lege-vision: {}",
+                    report.rejection_reasons.join("; ")
+                );
+            }
+            let graph = PreparedGraph::from_model_with_input_dims(model, Some(&dims))
+                .context("failed to prepare dewarp graph")?;
+            if graph.inputs.first().map(String::as_str) != Some("image") {
+                bail!(
+                    "dewarp model must use input `image`, got {:?}",
+                    graph.inputs
+                );
+            }
+            Ok(graph)
+        };
+        let portrait_graph = prepare(&portrait, [1, 3, h as i64, w as i64])?;
+        let landscape_graph = prepare(&landscape, [1, 3, w as i64, h as i64])?;
+        let portrait_compiled = pollster::block_on(CompiledGraph::build(&portrait_graph))
+            .context("failed to compile the portrait dewarp graph")?;
+        let landscape_compiled = pollster::block_on(CompiledGraph::build(&landscape_graph))
+            .context("failed to compile the landscape dewarp graph")?;
+        Ok(Self {
+            portrait: Mutex::new(portrait_compiled),
+            landscape: Mutex::new(landscape_compiled),
+        })
+    }
+
+    /// (height, width) of the input the chosen orientation takes.
+    pub fn input_size(landscape: bool) -> (usize, usize) {
+        let (h, w) = DEWARP_PORTRAIT;
+        if landscape { (w, h) } else { (h, w) }
+    }
+
+    /// Run one view. `chw` is float32 NCHW RGB in [0, 1] at
+    /// [`Self::input_size`] of the chosen orientation; mean and standard
+    /// deviation are folded into the model.
+    pub fn run(&self, landscape: bool, chw: Vec<f32>) -> Result<DewarpOutput> {
+        let (height, width) = Self::input_size(landscape);
+        let input = Tensor::new(vec![1, 3, height, width], chw)?;
+        let entry = if landscape {
+            &self.landscape
+        } else {
+            &self.portrait
+        };
+        let mut outputs = {
+            let compiled = entry
+                .lock()
+                .map_err(|_| anyhow::anyhow!("dewarp graph lock poisoned"))?;
+            pollster::block_on(compiled.run(&input)).context("dewarp inference failed")?
+        };
+        let mut take = |name: &str| -> Result<Vec<f32>> {
+            outputs
+                .remove(name)
+                .map(|tensor| tensor.data)
+                .with_context(|| format!("dewarp model has no output `{name}`"))
+        };
+        let (flow, maps, scores) = (take("flow")?, take("maps")?, take("scores")?);
+        let (rows, cols) = (height / DEWARP_STRIDE, width / DEWARP_STRIDE);
+        let plane = rows * cols;
+        anyhow::ensure!(
+            flow.len() == 2 * plane && maps.len() == 2 * plane && scores.len() == 2,
+            "unexpected dewarp output sizes"
+        );
+        Ok(DewarpOutput {
+            rows,
+            cols,
+            flow,
+            maps,
+            scores: [scores[0], scores[1]],
+        })
+    }
+}
+
 // ── PP-OCR text-line recognition ──────────────────────────────────────────
 
 /// Fixed input height for PP-OCR text-line recognition (unchanged v5 -> v6).

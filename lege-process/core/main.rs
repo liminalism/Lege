@@ -379,10 +379,9 @@ struct CliOptions {
     cover_format: Option<String>, // --cover-format jpeg|jp2|ccitt4|jbig2|none
 
     // --- Binarization ---
-    binarization: Option<String>, // --binarization adaptive|fixed|heavy
-    threshold: Option<u8>,        // --threshold 200
-    sauvola_k: Option<f32>,       // --sauvola-k 0.3
-    heavy: bool,                  // --heavy / --heavy-sauvola (neural binarizer)
+    /// Bilevel text asked for by name: `Some("model")` (best, the default
+    /// binarizer) or `Some("fast")` (the adaptive algorithm).
+    binarization: Option<String>,
 
     // --- Quality ---
     djvu_quality: Option<u8>, // --djvu-quality 100
@@ -426,6 +425,9 @@ struct CliOptions {
     mrc_bg_subsample: Option<u8>,  // --mrc-subsample <1-12>
     mrc_ink_threshold: Option<u8>, // --mrc-ink-threshold <0-255>
     mrc_adaptive_mask: bool,       // --mrc-adaptive-mask: Sauvola mask over cleaned-gray bg
+    flatten: bool,                 // --flatten: flatten photographed pages (folder/ZIP input)
+    flatten_pages: Option<u8>,     // --flatten-pages 1|2: every photo is one page, or a spread
+    flatten_fast: bool,            // --flatten-fast: one pass per page
     fast_resize: bool,             // --fast-resize (force CPU fast_image_resize backend)
 
     // --- Language ---
@@ -551,48 +553,30 @@ fn extract_cli_options(args: Vec<String>) -> Result<(Vec<String>, CliOptions)> {
                 let val = args
                     .get(i + 1)
                     .ok_or_else(|| anyhow!("Missing value after --binarization"))?;
-                let normalized = val.trim().to_ascii_lowercase();
-                match normalized.as_str() {
-                    // `fixed` is the legacy spelling of `threshold`, still accepted.
-                    // `sauvola-ai` / `onnx` are aliases for the heavy neural binarizer.
-                    "adaptive" | "threshold" | "fixed" | "heavy" | "sauvola-ai" | "sauvola_ai"
-                    | "onnx" => {}
-                    _ => bail!(
-                        "Invalid --binarization '{}'. Use: adaptive, threshold, or heavy (neural binarizer)",
-                        val
-                    ),
-                }
-                opts.binarization = Some(match normalized.as_str() {
-                    "sauvola-ai" | "sauvola_ai" | "onnx" => "heavy".to_string(),
-                    other => other.to_string(),
-                });
+                let choice = match val.trim().to_ascii_lowercase().as_str() {
+                    "best" | "model" | "heavy" | "sauvola-ai" | "sauvola_ai" | "onnx" => "model",
+                    "fast" | "adaptive" => "fast",
+                    // The fixed threshold still parses, so existing command
+                    // lines keep working; it selects the default.
+                    "threshold" | "fixed" => {
+                        note_retired_binarization_flag(val);
+                        "model"
+                    }
+                    _ => bail!("Invalid --binarization '{}'. Use: best or fast", val),
+                };
+                opts.binarization = Some(choice.to_string());
                 i += 2;
             }
             "--heavy" | "--heavy-sauvola" => {
-                opts.heavy = true;
+                opts.binarization = Some("model".to_string());
                 i += 1;
             }
-            "--threshold" => {
-                let val = args
-                    .get(i + 1)
-                    .ok_or_else(|| anyhow!("Missing value after --threshold"))?;
-                let thr: u8 = val
-                    .parse()
-                    .map_err(|_| anyhow!("Invalid --threshold '{}'. Must be 0-255", val))?;
-                opts.threshold = Some(thr);
-                i += 2;
-            }
-            "--sauvola-k" => {
-                let val = args
-                    .get(i + 1)
-                    .ok_or_else(|| anyhow!("Missing value after --sauvola-k"))?;
-                let k: f32 = val
-                    .parse()
-                    .map_err(|_| anyhow!("Invalid --sauvola-k '{}'. Must be 0.0-1.0", val))?;
-                if !(0.0..=1.0).contains(&k) {
-                    bail!("--sauvola-k must be between 0.0 and 1.0, got: {}", k);
-                }
-                opts.sauvola_k = Some(k);
+            "--threshold" | "--sauvola-k" => {
+                let flag = args[i].clone();
+                args.get(i + 1)
+                    .ok_or_else(|| anyhow!("Missing value after {flag}"))?;
+                note_retired_binarization_flag(&flag);
+                opts.binarization = Some("model".to_string());
                 i += 2;
             }
             "--target-height" => {
@@ -956,6 +940,30 @@ fn extract_cli_options(args: Vec<String>) -> Result<(Vec<String>, CliOptions)> {
                 opts.mrc_adaptive_mask = true;
                 i += 1;
             }
+            "--flatten" | "--dewarp" => {
+                opts.flatten = true;
+                i += 1;
+            }
+            "--flatten-fast" | "--dewarp-fast" => {
+                opts.flatten = true;
+                opts.flatten_fast = true;
+                i += 1;
+            }
+            "--flatten-pages" | "--dewarp-pages" => {
+                let flag = args[i].clone();
+                let val = args
+                    .get(i + 1)
+                    .ok_or_else(|| anyhow!("Missing value after {flag}"))?;
+                opts.flatten_pages = Some(match val.as_str() {
+                    "1" => 1,
+                    "2" => 2,
+                    _ => {
+                        bail!("Invalid {flag} '{val}'. Use 1 (one page per photo) or 2 (a spread)")
+                    }
+                });
+                opts.flatten = true;
+                i += 2;
+            }
             "--fast-resize" => {
                 opts.fast_resize = true;
                 i += 1;
@@ -980,10 +988,6 @@ fn extract_cli_options(args: Vec<String>) -> Result<(Vec<String>, CliOptions)> {
         }
     }
 
-    if opts.heavy {
-        opts.binarization = Some("heavy".to_string());
-    }
-
     if opts.music_sheet {
         apply_music_sheet_preset(&mut opts);
     }
@@ -1002,8 +1006,6 @@ fn extract_cli_options(args: Vec<String>) -> Result<(Vec<String>, CliOptions)> {
         && !opts.preserve
         && !opts.grayscale
         && opts.binarization.is_none()
-        && opts.threshold.is_none()
-        && opts.sauvola_k.is_none()
     {
         opts.grayscale = true;
     }
@@ -1049,11 +1051,7 @@ fn validate_preserve_options(opts: &CliOptions) -> Result<()> {
 ///   systems as figures and pastes un-cleaned raster crops over the
 ///   normalized background (the "gray splotch" artifact).
 /// - OCR is off by default (staves aren't text; explicit `--ocr` still wins).
-/// - Binarization defaults to `adaptive`, the customer-validated mode, but
-///   every `--binarization` mode (adaptive/fixed/heavy) stays usable and an
-///   explicit choice wins. A bare `--threshold`/`--sauvola-k` (no method) is
-///   left to the standalone handling in `cli_binarization_config`, and an
-///   explicit `--grayscale` keeps working as plain grayscale.
+/// - Pages are bilevel (the binarizer model) unless `--grayscale` is given.
 ///
 /// Incompatible flags are dropped with a warning on stderr so `--gui-worker`
 /// stdout JSON stays clean.
@@ -1094,15 +1092,9 @@ fn apply_music_sheet_preset(opts: &mut CliOptions) {
     }
 
     opts.no_layout = true;
-    // Default to adaptive binarization — the customer-validated mode — unless
-    // the user picked a binarization mode, a standalone threshold/k (handled
-    // by `cli_binarization_config`), or explicit grayscale.
-    if opts.binarization.is_none()
-        && !opts.grayscale
-        && opts.threshold.is_none()
-        && opts.sauvola_k.is_none()
-    {
-        opts.binarization = Some("adaptive".to_string());
+    // Bilevel unless the user asked for grayscale.
+    if opts.binarization.is_none() && !opts.grayscale {
+        opts.binarization = Some("model".to_string());
     }
     if opts.ocr.is_none() {
         opts.ocr = Some(false);
@@ -1991,42 +1983,41 @@ fn lone_integer_target_warning(arg: &str) -> Option<String> {
     ))
 }
 
-/// Build a `BinarizationConfig` from the CLI `--binarization` / `--threshold` /
-/// `--sauvola-k` flags, or `None` if none were given. Shared by the normal pipeline and
-/// the `--pdf-to-images` / `--images-to-images` debug modes so those honor the requested
-/// method (e.g. `heavy`) instead of silently defaulting to adaptive.
-fn cli_binarization_config(cli_opts: &CliOptions) -> Option<lege::color::BinarizationConfig> {
-    let method_str = if let Some(ref method) = cli_opts.binarization {
-        let mut s = match method.as_str() {
-            "adaptive" => "1".to_string(),
-            "threshold" | "fixed" => "2".to_string(),
-            "heavy" => "3".to_string(),
-            _ => method.clone(),
+/// The retired method flags (`--binarization adaptive|threshold`,
+/// `--threshold`, `--sauvola-k`) say so once on stderr, which keeps
+/// `--gui-worker` stdout JSON clean.
+fn note_retired_binarization_flag(flag: &str) {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        eprintln!(
+            "note: '{flag}' no longer selects a binarization method; text is binarized by the binarizer model"
+        );
+    });
+}
+
+/// The flatten settings the `--flatten*` flags ask for, or `None` when off.
+fn cli_flatten_settings(cli_opts: &CliOptions) -> Option<lege::dewarp::Settings> {
+    cli_opts.flatten.then(|| {
+        let mut settings = if cli_opts.flatten_fast {
+            lege::dewarp::Settings::fast()
+        } else {
+            lege::dewarp::Settings::default()
         };
-        if let Some(k) = cli_opts.sauvola_k {
-            s.push_str(&format!(" k={}", k));
-        }
-        if let Some(thr) = cli_opts.threshold {
-            s.push_str(&format!(" thr={}", thr));
-        }
-        s
-    } else if cli_opts.threshold.is_some() || cli_opts.sauvola_k.is_some() {
-        // Standalone --threshold / --sauvola-k without an explicit method.
-        let mut s = "2".to_string();
-        if let Some(k) = cli_opts.sauvola_k {
-            s = "1".to_string();
-            s.push_str(&format!(" k={}", k));
-        }
-        if let Some(thr) = cli_opts.threshold {
-            s.push_str(&format!(" thr={}", thr));
-        }
-        s
-    } else {
-        return None;
-    };
-    Some(lege::CliConfigBuilder::parse_binarization_method(
-        &method_str,
-    ))
+        settings.force_pages = cli_opts.flatten_pages.unwrap_or(0);
+        settings
+    })
+}
+
+/// `Some` when bilevel text was asked for by name. Shared by the normal
+/// pipeline and the `--pdf-to-images` / `--images-to-images` debug modes.
+fn cli_binarization_config(cli_opts: &CliOptions) -> Option<lege::color::BinarizationConfig> {
+    cli_opts
+        .binarization
+        .as_ref()
+        .map(|choice| lege::color::BinarizationConfig {
+            fast: choice == "fast",
+            ..Default::default()
+        })
 }
 
 fn looks_like_input_arg(input: &str) -> bool {
@@ -2229,7 +2220,7 @@ fn handle_simple_processing(
         pipeline_config.set_image_format(cover);
     }
 
-    // Binarization (--binarization / --threshold / --sauvola-k)
+    // Binarization (--binarization)
     if let Some(bin_config) = cli_binarization_config(&cli_opts) {
         pipeline_config.set_binarization(bin_config);
     }
@@ -2244,15 +2235,11 @@ fn handle_simple_processing(
         pipeline_config.set_keep_original_images(true);
     }
     // Preservation mode: colour MRC (colour JPX background under a JBIG2 ink
-    // mask). Ink is rendered black for now. The mask is Sauvola, as in
-    // --mrc-adaptive-mask, unless the user picked a binarization method.
+    // mask). Ink is rendered black for now. The mask comes from the binarizer,
+    // as in --mrc-adaptive-mask.
     if cli_opts.preserve {
         pipeline_config.set_page_mode(lege::pipeline::PageMode::Preserved);
         pipeline_config.set_keep_original_images(true);
-        if cli_opts.binarization.is_none() {
-            pipeline_config
-                .set_binarization(lege::CliConfigBuilder::parse_binarization_method("1"));
-        }
     }
     if let Some(q) = cli_opts.mrc_bg_quality {
         pipeline_config.set_mrc_bg_quality(q);
@@ -2265,14 +2252,8 @@ fn handle_simple_processing(
     }
     if cli_opts.mrc_adaptive_mask {
         pipeline_config.set_mrc_adaptive_mask(true);
-        // The mask binarizer must be local-adaptive Sauvola; without an
-        // explicit --binarization the config default is fixed-threshold,
-        // which on the raw (un-normalized) render is wrong for this path.
-        if cli_opts.binarization.is_none() {
-            pipeline_config
-                .set_binarization(lege::CliConfigBuilder::parse_binarization_method("1"));
-        }
     }
+    pipeline_config.set_flatten(cli_flatten_settings(&cli_opts));
 
     // DjVu quality
     if let Some(q) = cli_opts.djvu_quality {
@@ -2704,7 +2685,7 @@ fn run_cli() -> Result<Option<(PathBuf, PipelineConfig)>> {
         ocr_mode,
         original_image,
         no_cover_page,
-        no_binarization,
+        _no_binarization,
         invert_input,
         jbig2_mode,
         center_margins,
@@ -2807,32 +2788,31 @@ fn run_cli() -> Result<Option<(PathBuf, PipelineConfig)>> {
         }
     };
 
-    // Step 3: Binarization method
-    // When layout detection is disabled, adaptive and heavy binarization remain
-    // selectable; the prompt notes that both benefit from layout detection.
-    let binarization_method = if layout_detection_enabled {
+    // Step 3: bilevel text (the binarizer model) or grayscale/MRC.
+    let binarization_method = {
         println!(
             "\n{}{}{}",
             cli_color(COLORS.info),
             CLI_TEXT.interactive.binarization_title,
             cli_reset()
         );
+        if !layout_detection_enabled {
+            println!(
+                "{}{}{}",
+                cli_color(COLORS.highlight),
+                CLI_TEXT.interactive.binarization_no_layout_note,
+                cli_reset()
+            );
+        }
         println!(
             "{}",
-            fmt3(
-                &CLI_TEXT.main.binarization_choices_template,
+            CLI_TEXT.main.binarization_choices_template.replacen(
+                "{}",
                 &CLI_TEXT.interactive.binarization_methods[0],
-                &CLI_TEXT.interactive.binarization_methods[1],
-                &CLI_TEXT.interactive.binarization_methods[2]
+                1
             )
         );
         println!(
-            "{}{}{}",
-            cli_color(COLORS.highlight),
-            CLI_TEXT.interactive.binarization_advanced,
-            cli_reset()
-        );
-        println!(
             "{}  g = Grayscale/MRC — keeps text antialiasing (JBIG2 mask over JP2 gray; images JP2){}",
             cli_color(COLORS.highlight),
             cli_reset()
@@ -2847,65 +2827,7 @@ fn run_cli() -> Result<Option<(PathBuf, PipelineConfig)>> {
 
         let mut binarization_input = String::new();
         io::stdin().read_line(&mut binarization_input)?;
-        let binarization_input = binarization_input.trim();
-
-        parse_binarization_method(binarization_input)?
-    } else {
-        println!(
-            "\n{}{}{}",
-            cli_color(COLORS.info),
-            CLI_TEXT.interactive.binarization_title,
-            cli_reset()
-        );
-        println!(
-            "{}{}{}",
-            cli_color(COLORS.highlight),
-            CLI_TEXT.interactive.binarization_no_layout_note,
-            cli_reset()
-        );
-        println!(
-            "{}{}{}",
-            cli_color(COLORS.info),
-            fmt3(
-                &CLI_TEXT.main.binarization_choices_template,
-                &CLI_TEXT.interactive.binarization_methods[0],
-                &CLI_TEXT.interactive.binarization_methods[1],
-                &CLI_TEXT.interactive.binarization_methods[2]
-            ),
-            cli_reset()
-        );
-        println!(
-            "{}{}{}",
-            cli_color(COLORS.highlight),
-            CLI_TEXT.interactive.binarization_advanced,
-            cli_reset()
-        );
-        println!(
-            "{}  g = Grayscale/MRC — keeps text antialiasing (JBIG2 mask over JP2 gray; images JP2){}",
-            cli_color(COLORS.highlight),
-            cli_reset()
-        );
-        print!(
-            "{}{} {} ",
-            cli_color(COLORS.prompt),
-            CLI_TEXT.interactive.binarization_prompt,
-            cli_reset()
-        );
-        io::stdout().flush()?;
-
-        let mut binarization_input = String::new();
-        io::stdin().read_line(&mut binarization_input)?;
-        let raw = binarization_input.trim();
-        if raw.is_empty() {
-            "1".to_string()
-        } else if raw.chars().all(|c| c.is_ascii_digit()) {
-            match raw {
-                "1" | "2" | "3" => raw.to_string(),
-                _ => format!("2 thr={}", raw),
-            }
-        } else {
-            parse_binarization_method(raw).unwrap_or_else(|_| "2".to_string())
-        }
+        parse_binarization_method(binarization_input.trim())?
     };
 
     // Apply precedence rules before constructing the final config
@@ -3158,10 +3080,11 @@ fn run_cli() -> Result<Option<(PathBuf, PipelineConfig)>> {
         // regions by default; jpeg-compat affects image regions only).
         config.set_page_mode(lege::pipeline::PageMode::Grayscale);
         config.set_keep_original_images(true);
-    } else if !no_binarization {
-        use lege::CliConfigBuilder;
-        let binarization_config = CliConfigBuilder::parse_binarization_method(&binarization_method);
-        config.set_binarization(binarization_config);
+    } else if binarization_method == "fast" {
+        config.set_binarization(lege::color::BinarizationConfig {
+            fast: true,
+            ..Default::default()
+        });
     }
 
     if let Some(range) = page_range {
@@ -3734,8 +3657,11 @@ mod cli_parser_tests {
     #[test]
     fn usage_mentions_heavy_sauvola_flag() {
         assert!(
-            CLI_TEXT.main.usage_block.contains("--heavy"),
-            "main help should name --heavy"
+            CLI_TEXT
+                .main
+                .usage_block
+                .contains("--binarization <best|fast>"),
+            "main help should name the binarizer choice"
         );
         assert!(
             CLI_TEXT.main.debug_help_block.contains("--image-debug"),
@@ -3749,11 +3675,49 @@ mod cli_parser_tests {
             extract_cli_options(vec!["lege".into(), "scan.jpg".into(), "--heavy".into()])
                 .expect("parse --heavy");
         assert_eq!(rest, vec!["lege", "scan.jpg"]);
-        assert_eq!(opts.binarization.as_deref(), Some("heavy"));
-        assert!(opts.heavy);
-        let cfg = cli_binarization_config(&opts).expect("heavy config");
-        assert!(cfg.use_heavy_duty);
-        assert!(!cfg.use_fixed_threshold);
+        assert_eq!(opts.binarization.as_deref(), Some("model"));
+        assert!(cli_binarization_config(&opts).is_some());
+    }
+
+    #[test]
+    fn retired_binarization_flags_still_parse_as_bilevel() {
+        for flags in [
+            vec!["--binarization", "best"],
+            vec!["--binarization", "threshold"],
+            vec!["--threshold", "150"],
+            vec!["--sauvola-k", "0.3"],
+            vec!["--binarization", "model"],
+        ] {
+            let mut args = vec!["lege".to_string(), "book.pdf".to_string()];
+            args.extend(flags.iter().map(|s| s.to_string()));
+            let (rest, opts) = extract_cli_options(args).expect("retired flags parse");
+            assert_eq!(
+                rest,
+                vec!["lege", "book.pdf"],
+                "{flags:?} consumes its value"
+            );
+            assert_eq!(opts.binarization.as_deref(), Some("model"), "{flags:?}");
+        }
+        assert!(
+            extract_cli_options(vec![
+                "lege".into(),
+                "book.pdf".into(),
+                "--binarization".into(),
+                "nonsense".into()
+            ])
+            .is_err()
+        );
+        for name in ["fast", "adaptive"] {
+            let (_, opts) = extract_cli_options(vec![
+                "lege".into(),
+                "book.pdf".into(),
+                "--binarization".into(),
+                name.into(),
+            ])
+            .expect("fast parses");
+            assert_eq!(opts.binarization.as_deref(), Some("fast"));
+            assert!(cli_binarization_config(&opts).is_some_and(|config| config.fast));
+        }
     }
 
     #[test]
@@ -3774,7 +3738,7 @@ mod cli_parser_tests {
         ])
         .expect("parse --image-debug 1600");
         assert_eq!(opts.image_debug, Some(Some(1600)));
-        assert_eq!(opts.binarization.as_deref(), Some("heavy"));
+        assert_eq!(opts.binarization.as_deref(), Some("model"));
         assert!(is_raster_image_path(Path::new("scan.JPEG")));
         assert!(!is_raster_image_path(Path::new("book.pdf")));
     }
@@ -3947,8 +3911,8 @@ mod cli_parser_tests {
         assert!(opts.music_sheet);
         assert_eq!(
             opts.binarization.as_deref(),
-            Some("adaptive"),
-            "preset defaults to adaptive binarization"
+            Some("model"),
+            "preset defaults to bilevel text"
         );
         assert!(!opts.grayscale, "preset no longer forces grayscale");
         assert!(
@@ -4056,7 +4020,7 @@ mod cli_parser_tests {
         assert!(!opts.crop_free_aspect);
         assert!(!opts.dither);
         assert!(!opts.grayscale);
-        assert_eq!(opts.binarization.as_deref(), Some("adaptive"));
+        assert_eq!(opts.binarization.as_deref(), Some("model"));
         assert!(opts.no_layout);
     }
 
@@ -4082,7 +4046,7 @@ mod cli_parser_tests {
             !opts.mrc_adaptive_mask,
             "adaptive mask only applies to the grayscale preset path"
         );
-        assert_eq!(opts.binarization.as_deref(), Some("adaptive"));
+        assert_eq!(opts.binarization.as_deref(), Some("fast"));
         assert_eq!(opts.ocr, Some(true), "explicit --ocr wins over preset");
         assert_eq!(opts.mrc_ink_threshold, Some(170));
         assert!(opts.no_layout, "layout stays off regardless");
@@ -4101,92 +4065,29 @@ mod cli_parser_tests {
 
         assert_eq!(
             opts.binarization.as_deref(),
-            Some("heavy"),
-            "explicit --binarization heavy is kept as-is"
+            Some("model"),
+            "explicit --binarization keeps bilevel text"
         );
-        assert!(!opts.grayscale, "heavy mode does not enable grayscale");
-        assert!(opts.no_layout);
-    }
-
-    #[test]
-    fn cli_music_sheet_standalone_threshold_not_forced_adaptive() {
-        let (_remaining, opts) = extract_cli_options(vec![
-            "lege".to_string(),
-            "--music-sheet".to_string(),
-            "--threshold".to_string(),
-            "150".to_string(),
-            "songbook.pdf".to_string(),
-        ])
-        .expect("music-sheet args should parse");
-
-        assert!(
-            opts.binarization.is_none(),
-            "a standalone --threshold stays on the fixed-threshold path"
-        );
-        assert_eq!(opts.threshold, Some(150));
-        assert!(!opts.grayscale);
+        assert!(!opts.grayscale, "bilevel text does not enable grayscale");
         assert!(opts.no_layout);
     }
 }
 
+/// The interactive answer to the text-rendering step: `"model"` for bilevel
+/// text from the binarizer model, `"fast"` for the adaptive algorithm,
+/// `"grayscale"` for grayscale/MRC.
 fn parse_binarization_method(input: &str) -> Result<String> {
-    let trimmed = input.trim();
-    if trimmed.is_empty() {
-        return Ok("1".to_string());
+    let choice = input.split_whitespace().next().unwrap_or("").to_lowercase();
+    match choice.as_str() {
+        "" | "1" | "2" | "3" | "b" | "best" | "model" | "heavy" | "fixed" | "threshold" | "thr"
+        | "sauvola_ai" | "onnx" => Ok("model".to_string()),
+        "f" | "fast" | "adaptive" | "sauvola" | "otsu" => Ok("fast".to_string()),
+        "g" | "grayscale" | "gray" | "4" => Ok("grayscale".to_string()),
+        other => Err(anyhow!(
+            "Invalid choice: {}. Press Enter for the best binarizer, f for fast, or g for Grayscale/MRC",
+            other
+        )),
     }
-
-    let parts: Vec<&str> = trimmed.split_whitespace().collect();
-
-    let choice = match parts[0].to_lowercase().as_str() {
-        "1" | "adaptive" | "sauvola" | "otsu" => "1",
-        "2" | "fixed" | "threshold" | "thr" => "2",
-        "3" | "heavy" | "sauvola_ai" | "onnx" => "3",
-        // Grayscale/MRC: a distinct rendering mode rather than a binarizer.
-        // Returned verbatim so the caller can switch on it.
-        "g" | "grayscale" | "gray" | "4" => return Ok("grayscale".to_string()),
-        other => {
-            return Err(anyhow!(
-                "Invalid choice: {}. Use 1 (Adaptive), 2 (Threshold), 3 (Heavy model), or g (Grayscale/MRC)",
-                other
-            ));
-        }
-    };
-
-    let mut result = choice.to_string();
-    let mut positional_threshold_consumed = false;
-    for part in &parts[1..] {
-        if let Some(k_str) = part.strip_prefix("k=") {
-            let k_factor: f32 = k_str
-                .parse()
-                .map_err(|_| anyhow!("Invalid k= parameter: {}", k_str))?;
-            if !(0.0..=1.0).contains(&k_factor) {
-                return Err(anyhow!(
-                    "k factor must be between 0.0 and 1.0, got: {}",
-                    k_factor
-                ));
-            }
-            result.push_str(&format!(" k={}", k_factor));
-        } else if let Some(thr_str) = part.strip_prefix("thr=") {
-            let threshold: u8 = thr_str
-                .parse()
-                .map_err(|_| anyhow!("Invalid thr= parameter: {}", thr_str))?;
-            result.push_str(&format!(" thr={}", threshold));
-            positional_threshold_consumed = true;
-        } else if choice == "2" && !positional_threshold_consumed {
-            let threshold: u8 = part
-                .parse()
-                .map_err(|_| anyhow!("Invalid threshold '{}'. Expected 0-255.", part))?;
-            result.push_str(&format!(" thr={}", threshold));
-            positional_threshold_consumed = true;
-        } else if !part.is_empty() {
-            return Err(anyhow!(
-                "Unrecognized parameter '{}'. Use k=<value>, thr=<value>, or for threshold mode: '2 <0-255>'.",
-                part
-            ));
-        }
-    }
-
-    Ok(result)
 }
 
 fn parse_file_paths_with_range(input: &str) -> (Vec<String>, Option<String>) {
@@ -5038,34 +4939,7 @@ fn build_png_folder_pipeline_config(cli_opts: &CliOptions) -> Result<PipelineCon
     if let Some(ref fmt) = cli_opts.text_format {
         pipeline_config.set_text_format(fmt)?;
     }
-
-    if let Some(ref method) = cli_opts.binarization {
-        let mut method_str = match method.as_str() {
-            "adaptive" => "1".to_string(),
-            "threshold" | "fixed" => "2".to_string(),
-            "heavy" => "3".to_string(),
-            _ => method.clone(),
-        };
-        if let Some(k) = cli_opts.sauvola_k {
-            method_str.push_str(&format!(" k={}", k));
-        }
-        if let Some(thr) = cli_opts.threshold {
-            method_str.push_str(&format!(" thr={}", thr));
-        }
-        let bin_config = lege::CliConfigBuilder::parse_binarization_method(&method_str);
-        pipeline_config.set_binarization(bin_config);
-    } else if cli_opts.threshold.is_some() || cli_opts.sauvola_k.is_some() {
-        let mut method_str = "2".to_string();
-        if let Some(k) = cli_opts.sauvola_k {
-            method_str = "1".to_string();
-            method_str.push_str(&format!(" k={}", k));
-        }
-        if let Some(thr) = cli_opts.threshold {
-            method_str.push_str(&format!(" thr={}", thr));
-        }
-        let bin_config = lege::CliConfigBuilder::parse_binarization_method(&method_str);
-        pipeline_config.set_binarization(bin_config);
-    }
+    pipeline_config.set_flatten(cli_flatten_settings(cli_opts));
 
     if let Some(q) = cli_opts.djvu_quality {
         pipeline_config.set_djvu_iw44_quality(q)?;

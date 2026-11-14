@@ -32,10 +32,10 @@
 #       RUSTUP_TOOLCHAIN=1.97.0 bash -lc "cd /workspace && lege-process/scripts/build-macos-app-silicon.sh"'
 #
 # Inputs / env:
-#   SAUVOLA_ONNX  optional path to sauvola.onnx. Not bundled by default: heavy
-#                 binarization runs the embedded tileable binarizer. When set,
-#                 the file is copied into Resources and becomes the CPU model
-#                 of --binarization heavy.
+#   SAUVOLA_ONNX  optional path to sauvola.onnx. Not bundled by default: text
+#                 is binarized by the embedded binarizer model. When set, the
+#                 file is copied into Resources and becomes the binarizer of
+#                 machines without a GPU (in place of the adaptive algorithm).
 #   OUT_DIR       output directory (defaults to <workspace>/target/macos-silicon
 #                 or <workspace>/target/macos-intel according to architecture)
 #   CODESIGN_ID   codesign identity — macOS only (default: "-" = ad-hoc)

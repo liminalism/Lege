@@ -65,12 +65,6 @@ pub fn from_pipeline_config(config: &PipelineConfig) -> ProcessingOptions {
     options.crop_footnotes = config.crop_footnotes();
     options.crop_free_aspect = config.crop_free_aspect();
 
-    let bin = config.binarization();
-    options.use_heavy_binarization = bin.use_heavy_duty;
-    options.k_factor = bin.k_factor;
-    options.use_fixed_threshold = bin.use_fixed_threshold;
-    options.threshold_value = bin.fixed_threshold;
-
     if let Some(range) = config.page_range() {
         options.page_range = Some(format!("{}-{}", range.start, range.end));
     }
