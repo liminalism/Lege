@@ -187,10 +187,30 @@ pub(crate) struct StepProfile {
     pub(crate) gpu_ms: f64,
 }
 
+/// Shared immutable GPU resources (weights, shader pipelines, bind group layouts)
+/// extracted from a built graph so dynamic-shape callers can evict large activation
+/// buffers before allocating a new shape without recompiling shaders or re-uploading weights.
+#[derive(Clone)]
+pub(crate) struct CompiledShared {
+    pub(crate) ctx: GpuContext,
+    constant_buffers: HashMap<String, Arc<crate::vision::wgpu::Buffer>>,
+    pipeline_cache: HashMap<&'static str, Arc<crate::vision::wgpu::ComputePipeline>>,
+    bgl_cache: HashMap<&'static str, Arc<crate::vision::wgpu::BindGroupLayout>>,
+}
+
+fn check_oom_scope(scope: crate::vision::wgpu::ErrorScopeGuard, context: &str) -> Result<()> {
+    if let Some(error) = pollster::block_on(scope.pop()) {
+        bail!("{context}: {error}");
+    }
+    Ok(())
+}
+
 pub(crate) struct CompiledGraph {
     ctx: GpuContext,
     slot_buffers: Vec<Arc<crate::vision::wgpu::Buffer>>,
     tensor_slots: HashMap<String, usize>,
+    constant_names: Vec<String>,
+    resident_bytes: u64,
     _dummy_bias_buffer: crate::vision::wgpu::Buffer,
     aliases: HashMap<String, String>,
     input_name: String,
@@ -284,23 +304,54 @@ impl CompiledGraph {
         self.build_related(graph)
     }
 
+    pub(crate) fn resident_bytes(&self) -> u64 {
+        self.resident_bytes
+    }
+
+    pub(crate) fn estimate_resident_bytes(graph: &PreparedGraph) -> Result<u64> {
+        let plan = ResidentMemoryPlan::from_graph(graph)?;
+        Ok(plan.slot_sizes().into_iter().sum())
+    }
+
+    pub(crate) fn shared_resources(&self) -> CompiledShared {
+        let mut constant_buffers = HashMap::with_capacity(self.constant_names.len());
+        for name in &self.constant_names {
+            if let Some(&slot) = self.tensor_slots.get(name)
+                && let Some(buf) = self.slot_buffers.get(slot)
+            {
+                constant_buffers.insert(name.clone(), Arc::clone(buf));
+            }
+        }
+        CompiledShared {
+            ctx: self.ctx.clone(),
+            constant_buffers,
+            pipeline_cache: self.pipeline_cache.clone(),
+            bgl_cache: self.bgl_cache.clone(),
+        }
+    }
+
+    pub(crate) fn build_with_shared(graph: &PreparedGraph, shared: &CompiledShared) -> Result<Self> {
+        Self::build_from_context(
+            graph,
+            shared.ctx.clone(),
+            std::time::Instant::now(),
+            Some(shared),
+        )
+    }
+
     /// Build a graph from the same model at another dynamic input shape while
     /// sharing immutable constant buffers and compatible shader pipelines by
     /// tensor/shader identity.
     pub(crate) fn build_related(&self, graph: &PreparedGraph) -> Result<Self> {
-        Self::build_from_context(
-            graph,
-            self.ctx.clone(),
-            std::time::Instant::now(),
-            Some(self),
-        )
+        let shared = self.shared_resources();
+        Self::build_with_shared(graph, &shared)
     }
 
     fn build_from_context(
         graph: &PreparedGraph,
         ctx: GpuContext,
         t0: std::time::Instant,
-        shared_constants: Option<&CompiledGraph>,
+        shared_constants: Option<&CompiledShared>,
     ) -> Result<Self> {
         #[cfg(not(feature = "debug-logging"))]
         let _ = t0;
@@ -313,19 +364,27 @@ impl CompiledGraph {
             .initializer_entries()
             .filter_map(|entry| entry.reuse_slot.map(|slot| (slot, entry.name.clone())))
             .collect::<HashMap<_, _>>();
+        let constant_names: Vec<String> = plan
+            .initializer_entries()
+            .map(|entry| entry.name.clone())
+            .collect();
         let mut shared_constant_names = HashSet::new();
+        let mut owned_slot_bytes = 0u64;
+        let oom_scope = ctx
+            .device
+            .push_error_scope(crate::vision::wgpu::ErrorFilter::OutOfMemory);
         let mut slot_buffers = Vec::with_capacity(slot_sizes.len());
         for (slot, byte_size) in slot_sizes.iter().enumerate() {
-            if let (Some(name), Some(parent)) =
+            if let (Some(name), Some(shared)) =
                 (constant_names_by_slot.get(&slot), shared_constants)
-                && let Some(&parent_slot) = parent.tensor_slots.get(name)
-                && let Some(parent_buffer) = parent.slot_buffers.get(parent_slot)
+                && let Some(parent_buffer) = shared.constant_buffers.get(name)
                 && parent_buffer.size() >= *byte_size
             {
                 slot_buffers.push(Arc::clone(parent_buffer));
                 shared_constant_names.insert(name.clone());
                 continue;
             }
+            owned_slot_bytes = owned_slot_bytes.saturating_add(*byte_size);
             let buf = Arc::new(
                 ctx.device
                     .create_buffer(&crate::vision::wgpu::BufferDescriptor {
@@ -339,13 +398,6 @@ impl CompiledGraph {
             );
             slot_buffers.push(buf);
         }
-        let mut tensor_slots = HashMap::new();
-        for entry in plan.entries() {
-            let slot = entry.reuse_slot.with_context(|| {
-                format!("compiled: resident entry `{}` has no slot", entry.name)
-            })?;
-            tensor_slots.insert(entry.name.clone(), slot);
-        }
         let dummy_bias_buffer = ctx
             .device
             .create_buffer(&crate::vision::wgpu::BufferDescriptor {
@@ -355,6 +407,20 @@ impl CompiledGraph {
                     | crate::vision::wgpu::BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             });
+        check_oom_scope(
+            oom_scope,
+            &format!(
+                "wgpu out of memory allocating {:.1} MiB of resident graph buffers",
+                owned_slot_bytes as f64 / (1024.0 * 1024.0)
+            ),
+        )?;
+        let mut tensor_slots = HashMap::new();
+        for entry in plan.entries() {
+            let slot = entry.reuse_slot.with_context(|| {
+                format!("compiled: resident entry `{}` has no slot", entry.name)
+            })?;
+            tensor_slots.insert(entry.name.clone(), slot);
+        }
         ctx.queue.write_buffer(&dummy_bias_buffer, 0, &[0u8; 4]);
         #[cfg(feature = "debug-logging")]
         eprintln!(
@@ -585,6 +651,9 @@ impl CompiledGraph {
                 };
 
                 // Create params buffer (kept alive in params_bufs)
+                let oom_scope = ctx
+                    .device
+                    .push_error_scope(crate::vision::wgpu::ErrorFilter::OutOfMemory);
                 let params_buf = ctx.device.create_buffer_init(
                     &crate::vision::wgpu::util::BufferInitDescriptor {
                         label: None,
@@ -592,6 +661,10 @@ impl CompiledGraph {
                         usage: crate::vision::wgpu::BufferUsages::STORAGE,
                     },
                 );
+                check_oom_scope(
+                    oom_scope,
+                    &format!("wgpu out of memory allocating step params for op {}", op.name),
+                )?;
 
                 // Build bind group referencing persistent tensor buffers
                 let mut bg_entries: Vec<crate::vision::wgpu::BindGroupEntry> =
@@ -715,6 +788,9 @@ impl CompiledGraph {
             let bytes = elements
                 .checked_mul(std::mem::size_of::<f32>())
                 .with_context(|| format!("compiled output `{name}` byte size overflows usize"))?;
+            let oom_scope = ctx
+                .device
+                .push_error_scope(crate::vision::wgpu::ErrorFilter::OutOfMemory);
             let rb = ctx
                 .device
                 .create_buffer(&crate::vision::wgpu::BufferDescriptor {
@@ -724,6 +800,13 @@ impl CompiledGraph {
                         | crate::vision::wgpu::BufferUsages::COPY_DST,
                     mapped_at_creation: false,
                 });
+            check_oom_scope(
+                oom_scope,
+                &format!(
+                    "wgpu out of memory allocating {:.1} MiB readback buffer `{name}`",
+                    bytes as f64 / (1024.0 * 1024.0)
+                ),
+            )?;
             let canonical = resolve_alias(name, &aliases);
             output_names.push(name.clone());
             output_buf_names.push(canonical);
@@ -741,6 +824,15 @@ impl CompiledGraph {
                     let bytes = rows
                         .checked_mul(4 * std::mem::size_of::<u32>())
                         .context("compact CTC byte size overflow")?;
+                    let rows_u32 = u32::try_from(rows).context("too many compact CTC rows")?;
+                    anyhow::ensure!(
+                        rows_u32 <= 65_535,
+                        "compact CTC row count exceeds one-dimensional dispatch limit"
+                    );
+                    let classes_u32 = u32::try_from(*classes).context("too many CTC classes")?;
+                    let oom_scope = ctx
+                        .device
+                        .push_error_scope(crate::vision::wgpu::ErrorFilter::OutOfMemory);
                     let output = ctx
                         .device
                         .create_buffer(&crate::vision::wgpu::BufferDescriptor {
@@ -759,12 +851,6 @@ impl CompiledGraph {
                                     | crate::vision::wgpu::BufferUsages::COPY_DST,
                                 mapped_at_creation: false,
                             });
-                    let rows_u32 = u32::try_from(rows).context("too many compact CTC rows")?;
-                    anyhow::ensure!(
-                        rows_u32 <= 65_535,
-                        "compact CTC row count exceeds one-dimensional dispatch limit"
-                    );
-                    let classes_u32 = u32::try_from(*classes).context("too many CTC classes")?;
                     let params = ctx.device.create_buffer_init(
                         &crate::vision::wgpu::util::BufferInitDescriptor {
                             label: Some("compiled_ctc_top2_params"),
@@ -772,6 +858,10 @@ impl CompiledGraph {
                             usage: crate::vision::wgpu::BufferUsages::STORAGE,
                         },
                     );
+                    check_oom_scope(
+                        oom_scope,
+                        "wgpu out of memory allocating compact CTC buffers",
+                    )?;
                     let canonical = &output_buf_names[0];
                     let slot = *tensor_slots.get(canonical).with_context(|| {
                         format!("compact CTC output buffer `{canonical}` is missing")
@@ -824,6 +914,8 @@ impl CompiledGraph {
             ctx,
             slot_buffers,
             tensor_slots,
+            constant_names,
+            resident_bytes: owned_slot_bytes,
             _dummy_bias_buffer: dummy_bias_buffer,
             aliases,
             input_name,

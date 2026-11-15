@@ -3,354 +3,611 @@
     <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>Lege Readme</title>
+        <meta name="description" content="A practical guide to Lege: prepare scanned books, flatten photographed pages, preserve page color, and create searchable PDF, DjVu, and text-only EPUB output." />
+        <title>Lege — User Guide</title>
         <style>
             :root {
-                color-scheme: light;
-                --bg: #f5f1f1;
-                --panel: #fffafa;
-                --text: #1a1a1a;
-                --muted: #5a5a5a;
-                --border: #b5adad;
-                --link: #0b5fad;
+                color-scheme: light dark;
+                --bg: #f3f1ec;
+                --paper: #fffefa;
+                --text: #242923;
+                --muted: #60685d;
+                --line: #d6dacf;
+                --accent: #245c46;
+                --tint: #edf3eb;
+                --code: #eff0eb;
             }
-            * {
-                box-sizing: border-box;
-            }
+            * { box-sizing: border-box; }
+            html { scroll-padding-top: 24px; }
             body {
                 margin: 0;
                 padding: 32px 20px;
                 background: var(--bg);
                 color: var(--text);
-                font:
-                    16px/1.6 "Segoe UI",
-                    Tahoma,
-                    sans-serif;
+                font: 16px/1.65 system-ui, "Segoe UI", sans-serif;
             }
             main {
-                max-width: 940px;
-                margin: 0 auto;
-                padding: 28px 32px;
-                background: var(--panel);
-                border: 1px solid var(--border);
+                max-width: 1000px;
+                margin: auto;
+                padding: 40px 48px;
+                background: var(--paper);
+                border: 1px solid var(--line);
                 border-radius: 12px;
             }
-            h1,
-            h2,
-            h3 {
-                line-height: 1.25;
-                margin: 0 0 12px;
-            }
-            h1 {
-                font-size: 2rem;
-            }
+            h1, h2, h3 { line-height: 1.25; text-wrap: balance; }
+            h1 { margin: 8px 0 16px; font-size: 2.5rem; }
             h2 {
-                font-size: 1.4rem;
-                margin-top: 28px;
-                padding-top: 22px;
-                border-top: 1px solid #d9d3d3;
+                margin: 42px 0 18px;
+                padding-top: 26px;
+                border-top: 1px solid var(--line);
+                font-size: 1.55rem;
             }
-            h3 {
-                font-size: 1.08rem;
-                margin-top: 22px;
+            h3 { margin: 26px 0 10px; font-size: 1.12rem; }
+            p { margin: 0 0 16px; }
+            p, li { max-width: 80ch; }
+            a { color: var(--accent); text-underline-offset: 3px; }
+            a:hover { text-decoration-thickness: 2px; }
+            a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+            ul, ol { margin: 0 0 20px; padding-left: 24px; }
+            li { margin-bottom: 9px; }
+            .edition { color: var(--muted); font-size: 0.9rem; }
+            .intro { font-size: 1.16rem; }
+            .note {
+                margin: 20px 0;
+                padding: 16px 20px;
+                background: var(--tint);
+                border-left: 3px solid var(--accent);
             }
-            p,
-            li {
-                max-width: 78ch;
+            .note p:last-child { margin-bottom: 0; }
+            nav {
+                margin: 28px 0;
+                padding: 20px 24px;
+                border: 1px solid var(--line);
+                border-radius: 8px;
             }
-            p {
-                margin: 0 0 14px;
+            nav ol {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 4px 32px;
+                margin: 12px 0 0;
             }
-            ul,
-            ol {
-                margin: 0 0 16px 22px;
-                padding: 0;
+            nav li { margin: 0; }
+            .table-wrap { overflow-x: auto; margin: 18px 0 22px; }
+            table { width: 100%; border-collapse: collapse; text-align: left; }
+            caption { text-align: left; font-weight: 650; margin-bottom: 10px; }
+            th, td {
+                padding: 12px 14px;
+                border-bottom: 1px solid var(--line);
+                vertical-align: top;
             }
-            li {
-                margin: 0 0 10px;
+            thead th { background: var(--tint); }
+            tbody th { width: 20%; }
+            code, pre { font-family: Consolas, "Liberation Mono", monospace; font-size: 0.9em; }
+            code { overflow-wrap: anywhere; }
+            p code, li code, td code { background: var(--code); padding: 2px 4px; border-radius: 3px; }
+            pre {
+                padding: 16px 20px;
+                background: var(--code);
+                border: 1px solid var(--line);
+                border-radius: 6px;
+                overflow-x: auto;
+                line-height: 1.7;
             }
-            a {
-                color: var(--link);
+            footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--line); }
+            @media (prefers-color-scheme: dark) {
+                :root {
+                    --bg: #191d19;
+                    --paper: #222722;
+                    --text: #e5e9df;
+                    --muted: #b1bbab;
+                    --line: #465043;
+                    --accent: #a3d5b5;
+                    --tint: #2d392e;
+                    --code: #2b322b;
+                }
             }
-            hr {
-                border: 0;
-                border-top: 1px solid #d9d3d3;
-                margin: 26px 0;
+            @media (max-width: 640px) {
+                body { padding: 0; }
+                main { padding: 28px 20px; border: 0; border-radius: 0; }
+                h1 { font-size: 2rem; }
+                nav { padding: 16px 20px; }
+                nav ol { grid-template-columns: 1fr; }
+                th, td { padding: 10px; }
             }
-            .lede {
-                color: var(--muted);
-                font-size: 1.05rem;
-                margin-bottom: 22px;
+            @media print {
+                :root {
+                    color-scheme: light;
+                    --paper: white;
+                    --text: #242923;
+                    --muted: #60685d;
+                    --line: #d6dacf;
+                    --accent: #245c46;
+                    --tint: #edf3eb;
+                    --code: #eff0eb;
+                }
+                body { padding: 0; background: white; }
+                main { max-width: none; padding: 0; border: 0; }
+                nav { display: none; }
+                h2, h3 { break-after: avoid; }
+                tr, pre, .note { break-inside: avoid; }
+                .table-wrap, pre { overflow: visible; }
+                pre { white-space: pre-wrap; overflow-wrap: anywhere; }
             }
         </style>
     </head>
     <body>
         <main>
-            <h1>Lege Document Processing Application</h1>
-            <p class="lede">
-                This is a walkthrough of the features in the Lege processing
-                application. The name is derived from the Latin,
-                <em>Legere</em>.
-            </p>
+            <header>
+                <p class="edition">Lege 1.6 · User guide · Updated November 14, 2026</p>
+                <h1>Lege user guide</h1>
+                <p class="intro">
+                    Lege turns scanned books and photographed pages into PDF or DjVu files
+                    suited to your reader. It separates pictures from text, cleans page
+                    backgrounds, adjusts margins, and compresses the result. Optional OCR
+                    adds search and can produce a text-only EPUB.
+                </p>
+                <p>
+                    The desktop app and the <code>lege</code> command use the same processing
+                    core. Processing runs locally. The standard build includes the models;
+                    you do not need an account, a model download, or an external AI service.
+                </p>
+            </header>
 
-            <h2>Book Processing Ecosystem</h2>
-            <p>
-                Lege is intended to be part of a mini-ecosystem of book
-                processing:
-            </p>
-            <ol>
-                <li>
-                    <strong>Get the Book PDF Scan</strong><br />Obtain the full
-                    book PDF scan on your computer. Use a hardware book scanner
-                    for old books you own, or access sites like
-                    <a href="https://www.archive.org">Internet Archive</a> or
-                    <a href="https://www.gutenberg.org">Project Gutenberg</a>.
-                    For archive.org, the
-                    <a
-                        href="https://github.com/elementdavv/internet_archive_downloader"
-                        >Internet Archive Downloader</a
-                    >
-                    is the best way to download the full book as a PDF if not
-                    directly available.
-                </li>
-                <li>
-                    <strong>Manage with Calibre</strong><br />Use Calibre to
-                    manage your books. Lege is intended to complement Calibre.
-                </li>
-                <li>
-                    <strong>Process with Lege</strong><br />Process your books
-                    with Lege, the output folder defaults to the input folder.
-                    Supports PDF and DJVU outputs, with an optional OCR layer.
-                    EPUB support was planned but is not offered due to severe
-                    technical difficulties, best outlined
-                    <a
-                        href="https://manual.calibre-ebook.com/conversion.html#pdfconversion"
-                        >here</a
-                    >. Future support remains possible using Epub-fxl. Rendered
-                    images in 1-bit binarized fax format provide the best
-                    compromise for PDF inputs.
-                </li>
-                <li>
-                    <strong>Send to E-ink Reader</strong><br />Transfer the
-                    processed file to your E-ink reader. The best compact E-ink
-                    reader for external books is a <strong>Kobo</strong> model,
-                    ideally used with <strong>KoReader</strong> for DJVU
-                    support, faster book loading, page turning, WebDAV support,
-                    and more.
-                </li>
-            </ol>
+            <nav aria-label="Contents">
+                <strong>In this guide</strong>
+                <ol>
+                    <li><a href="#start">Process your first book</a></li>
+                    <li><a href="#inputs">Inputs and output formats</a></li>
+                    <li><a href="#page-treatment">Preparation, Preserve, and text</a></li>
+                    <li><a href="#layout">Layout detection</a></li>
+                    <li><a href="#flatten">Flatten photographed pages</a></li>
+                    <li><a href="#pictures">Pictures and covers</a></li>
+                    <li><a href="#geometry">Resolution, margins, and reflow</a></li>
+                    <li><a href="#ocr">OCR and EPUB</a></li>
+                    <li><a href="#encoding">PDF text encoding</a></li>
+                    <li><a href="#models">Models and hardware</a></li>
+                    <li><a href="#cli">Command-line examples</a></li>
+                    <li><a href="#problems">Checking results and solving problems</a></li>
+                </ol>
+            </nav>
 
-            <h2>Features</h2>
-            <p>
-                There is also a CLI in the main program folder that is quick and
-                easy to use. Some installers make a shortcut for it, some, like
-                the Microsoft Store version, do not.
-            </p>
+            <section id="start">
+                <h2>Process your first book</h2>
+                <ol>
+                    <li><strong>Add the source.</strong> Drop PDFs, image ZIPs, or folders
+                        of page images into the window, or use <strong>Add File</strong> and
+                        <strong>Add Folder</strong>. Each input becomes a book in the queue.</li>
+                    <li><strong>Set the reading size.</strong> Enter the page height in
+                        pixels under <strong>Resolution</strong>. A fresh setup uses 1200.
+                        Use your reader's screen height as a starting point.</li>
+                    <li><strong>Choose the treatment.</strong> For a typical scanned book,
+                        start with <strong>Preparation</strong>, <strong>Best</strong> text,
+                        layout detection on, and <strong>Original</strong> pictures. Use
+                        <strong>Preserve</strong> when the page's color matters.</li>
+                    <li><strong>Try a few pages.</strong> Set a range such as
+                        <code>5-10</code>. Include small text and an illustrated page.
+                        Turn on OCR if you need search; leave <strong>Flatten page</strong>
+                        off for ordinary flat scans.</li>
+                    <li><strong>Choose the destination and process.</strong> Outputs go next
+                        to their inputs unless you choose an <strong>Output Directory</strong>,
+                        which then applies to the queue. Inspect the sample on the device
+                        you will read on before processing the whole book.</li>
+                </ol>
+                <p>
+                    File tiles beside Process group inputs by kind and show counts. Page
+                    counts load in the background; you can keep adding files and changing
+                    options while they load. Process waits until the counts are ready.
+                    Queue shows the individual inputs; Cancel stops a running job.
+                </p>
+                <p>
+                    Settings are remembered between launches. The defaults described here
+                    apply to a fresh desktop setup: PDF, JBIG2 encoding, Best text, layout
+                    on, Original pictures, OCR off, and Flatten page off.
+                </p>
+            </section>
 
-            <h3>Outputs</h3>
-            <p>
-                <strong>PDF and DJVU</strong><br />PDF is offered as an output
-                just as it is the sole input besides a folder of images if they
-                are numbered sequentially. DJVU is the other supported format.
-                DJVU was a much-publicized archival format in the early 2000s
-                which ran into copyright issues and poor marketing, so it never
-                gained wide adoption, and then Adobe essentially adopted most of
-                its best features for the PDF 2.0 standard. But DJVU is still
-                the superior format for this specific use; its image compression
-                is better across the board, and its standardized encoding and
-                decoding allow much faster loading than a standard PDF document.
-                Definitely choose DJVU if your e-reader supports it.
-            </p>
+            <section id="inputs">
+                <h2>Inputs and output formats</h2>
+                <p>
+                    The main workflow accepts <strong>PDFs</strong>, <strong>folders of page
+                    images</strong>, and <strong>ZIP archives of page images</strong>, including
+                    Internet Archive JP2 ZIPs. Image collections support PNG, JPEG, JPEG 2000
+                    (<code>.jp2</code>), TIFF, BMP, and PBM/PGM/PPM/PNM.
+                    DjVu is an output format, not an input format for this workflow.
+                </p>
+                <p>
+                    Give page images consistent, numbered filenames and check the page count.
+                    Folder intake searches subfolders and selects the most common image
+                    extension as the page set, preferring JP2 in a tie. Other formats can be
+                    skipped to avoid including duplicate previews or thumbnails. Keep each
+                    book in its own folder and use one image format when every file should
+                    be included.
+                </p>
+                <div class="table-wrap">
+                    <table>
+                        <caption>Choose an output</caption>
+                        <thead><tr><th scope="col">Format</th><th scope="col">What it contains</th><th scope="col">When to use it</th></tr></thead>
+                        <tbody>
+                            <tr><th scope="row">PDF</th><td>Processed page images, separately encoded text and picture regions, and an optional search layer.</td><td>A page-based book for a PDF reader. Processing rasterizes the source; editable vector artwork and the original PDF structure are not retained.</td></tr>
+                            <tr><th scope="row">DjVu</th><td>JB2 black-and-white content and IW44 picture/background layers, with optional hidden OCR text.</td><td>A compact scanned book when your reading app supports DjVu. Check support before converting a collection.</td></tr>
+                            <tr><th scope="row">EPUB</th><td>Recognized text arranged into paragraphs and chapters. Pictures and the scanned page appearance are not included.</td><td>Adjustable text size and reflow in an EPUB reader, with the limitations of OCR. The GUI can make this alongside PDF or DjVu.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <p>
+                    Lege writes a separate processed file. Keep the source: reducing resolution,
+                    binarizing, cropping, and lossy image encoding can discard detail that
+                    cannot be recovered from the result.
+                </p>
+            </section>
 
-            <hr />
+            <section id="page-treatment">
+                <h2>Preparation, Preserve, and text</h2>
+                <h3>Preparation</h3>
+                <p>
+                    Preparation aims for readable pages on e-ink: clean text, a light
+                    background, and separately treated pictures. The Text row offers three
+                    choices. These control page appearance; the Encoding choices control
+                    how the resulting text is stored.
+                </p>
+                <div class="table-wrap">
+                    <table>
+                        <caption>Text treatment in Preparation</caption>
+                        <thead><tr><th scope="col">Choice</th><th scope="col">How it works</th><th scope="col">Tradeoff</th></tr></thead>
+                        <tbody>
+                            <tr><th scope="row">Best</th><td>The embedded <code>binarizer-tilenet</code> neural model turns text into black ink on white paper. Large regions are processed in overlapping tiles.</td><td>The default for scans, particularly tinted or yellowed paper. It can thicken fine text or lose pale marks on digitally generated pages.</td></tr>
+                            <tr><th scope="row">Fast</th><td>Adaptive binarization combines Sauvola with background-normalized Otsu using GPU compute kernels.</td><td>Useful for bulk conversion and as an alternative when Best changes fine strokes. It can retain more paper noise or show-through.</td></tr>
+                            <tr><th scope="row">Grayscale</th><td>A crisp ink mask sits over a cleaned grayscale background, retaining gray edge detail and text antialiasing.</td><td>Useful when strictly black-and-white text looks too harsh. Uses layered compression and can cost more space.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <p>
+                    Best and Fast both use the adaptive CPU fallback if a hardware GPU is
+                    unavailable. Fast also falls back to the CPU if its GPU kernels fail.
+                    There is no adjustable fixed-threshold method in the current interface;
+                    the former threshold and Sauvola-k controls are retired.
+                </p>
+                <h3>Preserve</h3>
+                <p>
+                    Preserve keeps page color using mixed raster content (MRC): a compressed
+                    color background plus a sharp ink layer. PDF uses JPEG 2000 and JBIG2;
+                    DjVu uses IW44 and JB2. Ink is currently rendered black. This is a way
+                    to retain more of a page's appearance while compressing it; the result
+                    is still resized and encoded, so it is not a lossless archive of the source.
+                </p>
+                <p>
+                    Preserve replaces the Preparation text and picture treatments. The GUI
+                    turns off conflicting options such as dithering, Symbol mode, inversion,
+                    and reflow. Margins and resolution still deserve care if you want the
+                    original page composition.
+                </p>
+            </section>
 
-            <h3>Image Output Type</h3>
-            <p>
-                <strong>Dithering and Original</strong><br />Dithering is the
-                method of reducing diffusion error when reducing the color space
-                of an image, leading to a much more natural result. When
-                dithering is enabled, a picture is reduced from 16 million
-                colors down to 1-bit color while preserving fine detail where
-                possible. CCITT4 uses a custom dithering method while JBIG2 uses
-                Stucki by default. There is also an option that uses
-                spec-correct JBIG2 halftone regions in the CLI; the output is
-                worse quality but the file sizes are lower.
-            </p>
-            <p>
-                CCITT Group 4 and JBIG2, fax formats from the 1990s, are used
-                for text and dithered image areas. In the GUI the choice is
-                between dithered or original image areas. JBIG2 is used if
-                dithered is chosen and CCITT4 is used for original images by
-                default.
-            </p>
+            <section id="layout">
+                <h2>Layout detection</h2>
+                <p>
+                    Layout detection identifies text, pictures, tables, headings, captions,
+                    footnotes, and page furniture. It lets Lege protect picture regions from
+                    text binarization and supplies content bounds for cropping and reflow.
+                    It is on by default.
+                </p>
+                <p>
+                    Lege 1.6 ships its own <strong>RF-DETR-S book layout model, v2</strong>.
+                    It was trained on 64,785 pages from 547 books, with labels corrected in
+                    bulk and 16,090 pages reviewed by hand. It replaces the older layout
+                    models. Its detected boxes are used without the old box-expansion and
+                    synthetic-region corrections. Contents lists, references, and formulas
+                    are treated as text rather than separate classes.
+                </p>
+                <p>
+                    Pictures detected by the model stay picture regions, including drawings
+                    and maps; the old tone-based line-art filter is gone. Tables are text-like
+                    for binarization. Running headers, footers, and page numbers can be
+                    excluded from content crops and reflow, while footnotes are retained by
+                    normal cropping.
+                </p>
+                <p>
+                    Detection can miss content or stop a box inside a picture, leaving a
+                    binarized rim. A header misread as a heading can survive cropping or
+                    enter reflow. Check illustrated pages and page edges in a sample.
+                </p>
+                <p>
+                    With layout off, the page follows the whole-page text treatment and
+                    pictures lose their protected regions. This can suit pure line art, but
+                    Best may reduce photographs to sparse outlines. For problem pages, the
+                    CLI can skip layout selectively with <code>--exclude-layout 1,3,7-10</code>.
+                </p>
+            </section>
 
-            <hr />
+            <section id="flatten">
+                <h2>Flatten photographed pages</h2>
+                <p>
+                    <strong>Flatten page</strong> straightens curved book pages and splits
+                    a photograph of an open spread into two output pages. It uses
+                    <strong>Lege-Dewarp ft4</strong>, the page-flattening model introduced
+                    November 14, 2026. Enable it beside Resolution, or pass
+                    <code>--flatten</code> on the command line.
+                </p>
+                <p>
+                    The model estimates page shape and the gutter, refines each page, and
+                    samples the result from the original image before resizing to your
+                    target. Two embedded versions handle portrait and landscape views;
+                    these are the same model at different input shapes. A flat-page gate
+                    attempts to leave ordinary scans unchanged.
+                </p>
+                <div class="note">
+                    <p>
+                        <strong>Leave it off for flat scans unless you have checked a sample.</strong>
+                        The gate is imperfect, especially on full-page photographs without
+                        text or clear page edges. It can warp an already flat picture.
+                        Thick page blocks and the left side of a spread can also give less
+                        accurate results. Flatten page is off by default.
+                    </p>
+                </div>
+                <ul>
+                    <li><strong>Inputs:</strong> image folders, image ZIPs, and PDFs whose pages contain photographs or curved scans.</li>
+                    <li><strong>Hardware:</strong> a hardware GPU is required. If unavailable, Lege reports that flattening is skipped and processes the pages without it.</li>
+                    <li><strong>PDF limitation:</strong> pages are rendered as images and sent through the image pipeline. Existing PDF text layers and bookmarks do not carry over. Enable OCR to create new searchable text.</li>
+                    <li><strong>Other workflows:</strong> EPUB and raster reflow jobs ignore flattening. Splitting spreads changes the output page count.</li>
+                </ul>
+                <p>
+                    Automatic single-page/spread detection is the default. For a uniform
+                    photo collection, <code>--flatten-pages 1</code> forces one page per photo
+                    and <code>--flatten-pages 2</code> forces spreads. Use
+                    <code>--flatten-fast</code> for one pass per page, trading some
+                    straightness for speed.
+                </p>
+            </section>
 
-            <h3>Layout Detection</h3>
-            <p>
-                This is achieved with a PaddleX model. It detects 21 different
-                layout elements on each page, but for the program&rsquo;s
-                purposes only 8 are used.
-            </p>
-            <p>
-                Layout detection runs through Lege&rsquo;s native wgpu compute
-                path (Vulkan or DirectX 12 on Windows/Linux and Metal on macOS)
-                and prefers a discrete GPU when one is available. Its purpose
-                is to identify and protect image regions from binarization,
-                because the binarization methods will ruin picture quality so
-                those regions must be treated separately per page. Layout
-                detection is on by default. The best reason to turn it off is
-                to get image areas processed by the same binarization as text
-                for situations such as documents containing only line art.
-            </p>
+            <section id="pictures">
+                <h2>Pictures and covers</h2>
+                <p>With layout enabled, choose how detected picture regions appear:</p>
+                <ul>
+                    <li><strong>Original:</strong> retain continuous-tone color or grayscale pictures, separately encoded from the text. “Original” describes their treatment; the crops are still rendered, resized, and compressed.</li>
+                    <li><strong>Dithered:</strong> represent shades with black-and-white dot patterns. This can suit monochrome e-ink and reduce size, at the cost of tone and fine detail. JBIG2/DjVu use Stucki dithering; CCITT4 uses clustered dots.</li>
+                    <li><strong>JBIG2 halftone:</strong> an experimental PDF picture encoding that trades picture resolution for compact halftone patterns. It needs layout detection and JBIG2-capable output; it is unavailable in Compatibility mode and raster reflow.</li>
+                </ul>
+                <p>
+                    Picture encoding is separate from PDF text encoding. Normal PDF picture
+                    regions use JPEG 2000; <strong>Compatibility</strong> uses JPEG pictures
+                    and CCITT Group 4 text. <strong>High quality</strong> raises picture and
+                    background quality in PDF and DjVu, usually increasing file size.
+                </p>
+                <p>
+                    Separate cover treatment keeps source page 1 as a full-page picture.
+                    A range beginning after page 1 does not turn its first selected page
+                    into a cover; a range beginning at page 1 can retain cover treatment.
+                    Use <code>--no-cover</code> if the first page should be processed as an
+                    ordinary body page. <code>--cover-format</code> selects the cover/image
+                    encoding, with <code>none</code> disabling separate cover treatment.
+                </p>
+            </section>
 
-            <hr />
+            <section id="geometry">
+                <h2>Resolution, margins, and reflow</h2>
+                <h3>Resolution and page range</h3>
+                <p>
+                    Resolution is in pixels, not DPI. Enter <code>1200</code> for proportional
+                    scaling to that height, or <code>1200x800</code> (height × width) for a
+                    specific canvas. <code>1200 800</code> is also accepted. Forcing both
+                    dimensions can alter page proportions. Higher values retain more detail
+                    and increase processing work and file size; enlarging a poor scan cannot
+                    restore missing detail.
+                </p>
+                <p>
+                    Page ranges are one-based source page positions, not the printed page
+                    numbers: <code>5-10</code> selects the fifth through tenth source pages.
+                    Leave the GUI range empty for the whole book. A CLI range is positional,
+                    such as <code>lege book.pdf 5-10</code>.
+                </p>
+                <h3>Margins</h3>
+                <ul>
+                    <li><strong>Center margins:</strong> standardize and center the detected content within the page.</li>
+                    <li><strong>Crop margins:</strong> crop toward the content bounds and resize. Normal cropping retains footnotes and excludes detected page furniture.</li>
+                    <li><strong>Force crop:</strong> allow cropping past footnotes too. Use only after inspecting the result.</li>
+                </ul>
+                <p>
+                    With layout disabled, pixel-based content bounds provide margin
+                    detection. Cropping can change page proportions; the current free-aspect
+                    crop uses the requested height and ignores an explicit target width.
+                    Marks close to the edge and incorrect detections can change the crop.
+                </p>
+                <h3>Raster reflow</h3>
+                <p>
+                    Reflow rearranges the scanned words and lines into new pages for the
+                    target size. It can make small print readable without zooming. It
+                    requires layout detection and changes pagination and composition.
+                    Try prose first; tables, formulas, and complex page designs need inspection.
+                    Reflow is separate from OCR-based EPUB and does not require recognizing
+                    the text to rearrange its pixels.
+                </p>
+                <p>
+                    Reflow replaces margin centering/cropping, cannot be combined with
+                    Preserve or inverted-input mode, and ignores Flatten page. PDF reflow
+                    uses raster CCITT4 pages rather than TrueTyping.
+                </p>
+                <h3>Inverted input</h3>
+                <p>
+                    Use inverted colors for light text on a dark background. It inverts
+                    the input before processing and disables layout detection, so pictures
+                    no longer receive layout-based protection.
+                </p>
+            </section>
 
-            <h3>OCR Text Layer</h3>
-            <p>
-                OCR generates the searchable text overlay, inferred metadata,
-                and an automatic table of contents from headings found by layout
-                analysis. Windows uses the system WinRT OCR API; Linux and macOS
-                use the PP-OCRv6 detection and recognition models embedded in
-                Lege and executed by its native wgpu inference engine. If your
-                input PDF already has an OCR layer, Lege retains it when OCR is
-                off. Enabling OCR generates a replacement layer. Fast mode runs
-                full-page recognition for a search overlay. Thorough mode feeds
-                individually prepared text lines to recognition at higher detail
-                and is intended for EPUB creation or when text accuracy matters
-                most.
-            </p>
+            <section id="ocr">
+                <h2>OCR and EPUB</h2>
+                <p>
+                    OCR recognizes words for a search/copy layer. It is separate from visual
+                    text cleanup and from TrueTyping. Turning it on generates replacement
+                    recognized text. With OCR off, the normal PDF pipeline attempts to reuse
+                    extractable source text; it does not copy the original PDF layer unchanged.
+                    Flattened PDF input loses that source-text route.
+                </p>
+                <ul>
+                    <li><strong>Fast OCR:</strong> page recognition for a searchable overlay.</li>
+                    <li><strong>Thorough OCR:</strong> prepares and recognizes individual lines at higher detail. Use it for EPUB or when recognized text matters more than throughput. The CLI calls this mode <code>best</code>.</li>
+                </ul>
+                <p>
+                    Windows uses the system WinRT OCR service; language availability depends
+                    on installed Windows OCR support. Standard Linux, macOS, and Android
+                    builds use embedded <strong>PP-OCRv6 small</strong> detection and recognition
+                    models through Lege's native GPU runtime. Tesseract is an optional
+                    Linux/macOS build backend, not a standard installation requirement.
+                </p>
+                <p>
+                    In the desktop app, OCR also requests inferred metadata and an automatic
+                    table of contents from available text and layout headings. Existing PDF
+                    bookmarks take precedence when they can be carried into the output.
+                    On the CLI, request heading-based bookmarks with <code>--auto-toc</code>.
+                    Recognition, reading order, and heading detection can all be wrong;
+                    inspect copied text and navigation as well as the page image.
+                </p>
+                <h3>Add an EPUB</h3>
+                <p>
+                    Select <strong>EPUB</strong> beside the PDF and DjVu format buttons to
+                    write a text-only EPUB alongside the chosen format. This turns on
+                    Thorough OCR. Direct CLI EPUB
+                    output is available with <code>--text-format epub</code>.
+                    The EPUB contains recognized paragraphs and chapter navigation, not
+                    facsimile pages or illustrations. Expect errors in difficult scans,
+                    tables, formulas, and unusual reading orders; review the text before
+                    relying on it.
+                </p>
+            </section>
 
-            <h3>Page Range</h3>
-            <p>
-                You can set the page range to process. If you set a page range,
-                the cover image feature will be disabled automatically.
-                Otherwise, the first page is always treated as the cover, and
-                thus as a full-page image area.
-            </p>
+            <section id="encoding">
+                <h2>PDF text encoding</h2>
+                <p>
+                    Binarization chooses which pixels are ink. Encoding stores that result.
+                    Lossless compression of the resulting mask does not make the earlier
+                    cleanup, resizing, or cropping lossless.
+                </p>
+                <ul>
+                    <li><strong>JBIG2:</strong> the desktop default. Generic mode stores the black-and-white mask without symbol substitution.</li>
+                    <li><strong>Symbol mode:</strong> an optional JBIG2 mode that reuses matching glyph bitmaps for smaller files. It is lossy: a wrong match can replace one character with another. Leave it off when exact text appearance matters.</li>
+                    <li><strong>Compatibility:</strong> CCITT Group 4 text with JPEG pictures for readers that have trouble with JBIG2 or JPEG 2000. Available for binarized Preparation pages.</li>
+                    <li><strong>TrueTyping:</strong> traces printed glyphs into an embedded book-specific TrueType font. It can give smoother text at different zoom levels, but can change glyph shapes and may be slower or larger than JBIG2. It does not recognize words and does not replace OCR.</li>
+                </ul>
+                <p>
+                    In the GUI, selecting TrueTyping enables Grayscale in Preparation.
+                    Returning to Best or Fast returns the text encoder to JBIG2. TrueTyping
+                    can also be explicitly selected in Preserve. Existing bilevel scan
+                    content may remain raster rather than being traced again.
+                </p>
+                <p>DjVu uses its own JB2 text encoding; the PDF codec choices do not change it.</p>
+            </section>
 
-            <hr />
+            <section id="models">
+                <h2>Models and hardware</h2>
+                <div class="table-wrap">
+                    <table>
+                        <caption>Models included in the standard build</caption>
+                        <thead><tr><th scope="col">Model</th><th scope="col">Role</th><th scope="col">Practical detail</th></tr></thead>
+                        <tbody>
+                            <tr><th scope="row">RF-DETR-S v2</th><td>Book layout detection.</td><td>About 58 MB of weights. Keeps pictures separate and identifies content for margins, OCR, and reflow.</td></tr>
+                            <tr><th scope="row">binarizer-tilenet</th><td>Best black-and-white text treatment.</td><td>About 1.65 MB of weights. A small tileable network distilled from the earlier Sauvola model and document-binarization data.</td></tr>
+                            <tr><th scope="row">Lege-Dewarp ft4</th><td>Flatten page.</td><td>Two exports, about 10.58 MB each, with portrait/landscape input grids of 576 × 384 and 384 × 576. Requires a hardware GPU.</td></tr>
+                            <tr><th scope="row">PP-OCRv6 small</th><td>Text detection and recognition on Linux, macOS, and Android.</td><td>Embedded detection model, recognition model, and character dictionary. Windows uses its system OCR engine.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <p>
+                    Fast binarization is an algorithm, not another neural model. The old
+                    whole-image Sauvola neural model is no longer embedded by default; it
+                    remains an optional legacy build/runtime override. Custom builds may
+                    also omit layout, OCR, or dewarp features.
+                </p>
+                <p>
+                    Lege runs model inference through its native wgpu compute runtime.
+                    Desktop GPU processing uses <strong>Vulkan on Windows and Linux</strong>
+                    and <strong>Metal on macOS</strong>; Direct3D 12 is no longer used on
+                    Windows. The standard build does not need ONNX Runtime, DirectML, or
+                    CUDA installed separately. Model and shader initialization can take
+                    time at the start of a job before page progress begins.
+                </p>
+                <p>
+                    Without a usable hardware GPU, layout detection can be disabled for
+                    the run, Best/Fast use adaptive CPU binarization, and flattening is
+                    skipped. These fallbacks change the available processing: unprotected
+                    pictures can be binarized with the page. Check the reported status and
+                    output rather than assuming the requested model ran. Update your GPU
+                    driver if Vulkan or Metal initialization fails.
+                </p>
+            </section>
 
-            <h3>Target Height / Width</h3>
-            <p>
-                You can set the target height of the output PDF pages in pixels.
-                Width is set proportionately based on the original proportions
-                of the page.
-            </p>
-            <p>
-                Functionality has been recently added to set the output,
-                unproportionately, to the exact screen dimensions of specific
-                e-ink readers. That way no fiddling is necessary to get the
-                pages to crop or center or scale to the screen, although the
-                text itself will appear different than the original page since
-                its proportions have been altered.
-            </p>
-            <p>
-                There is no clean final way to do this, but the goal is to
-                provide all of the practical compromises.
-            </p>
+            <section id="cli">
+                <h2>Command-line examples</h2>
+                <p>
+                    Run <code>lege</code> without arguments for the guided prompts, or pass
+                    a PDF, folder, or ZIP directly. Quote paths containing spaces.
+                    <code>lege --help</code> lists processing flags;
+                    <code>lege --help debug</code> lists inspection/export tools.
+                </p>
+                <div class="note">
+                    <p>
+                        <strong>The simple CLI and desktop defaults differ.</strong>
+                        <code>lege book.pdf</code> uses CCITT4 text, Original pictures,
+                        layout on, and a 1200-pixel target height. The desktop defaults to
+                        JBIG2. Name the format explicitly in repeatable commands.
+                        Supply a page range as a positional argument, such as <code>5-10</code>.
+                    </p>
+                </div>
+                <h3>Prepare a scanned book, then try a faster sample</h3>
+                <pre><code>lege book.pdf --text-format jbig2 --target-height 1200
+lege book.pdf 5-10 --text-format jbig2 --binarization fast</code></pre>
+                <h3>Flatten a folder of book photographs</h3>
+                <pre><code>lege "book photos" --flatten --text-format jbig2 --ocr
+lege photos.zip --flatten-pages 2 --flatten-fast --text-format jbig2</code></pre>
+                <h3>Keep page color, or retain grayscale text edges</h3>
+                <pre><code>lege book.pdf --preserve --text-format jbig2 --high-quality
+lege book.pdf --grayscale --text-format jbig2</code></pre>
+                <h3>Make DjVu, searchable PDF, or text-only EPUB</h3>
+                <pre><code>lege book.pdf --text-format djvu --ocr
+lege book.pdf --text-format jbig2 --ocr-mode best --auto-toc
+lege book.pdf 1-20 --text-format epub</code></pre>
+                <h3>Fit a reader or choose a destination</h3>
+                <pre><code>lege book.pdf --text-format jbig2 --crop-margins --target-height 1600
+lege book.pdf --text-format jbig2 --target-height 1200 --target-width 800
+lege book.pdf --text-format jbig2 --output "processed books"
+lege first.pdf second.pdf --text-format jbig2</code></pre>
+                <p>
+                    Prefer explicit <code>--target-height</code> and
+                    <code>--target-width</code> flags in scripts. In the positional syntax,
+                    a lone number below 500 is interpreted as a page number. Use
+                    <code>--text-format djvu</code> to choose DjVu. For a picture-only PDF that skips
+                    binarization, use <code>--text-format jpeg --image-only</code>.
+                </p>
+            </section>
 
-            <hr />
+            <section id="problems">
+                <h2>Checking results and solving problems</h2>
+                <ul>
+                    <li><strong>Fine text becomes heavy or pale marks disappear:</strong> compare Best with Fast or Grayscale at the same resolution. Best is tuned for scans and can be less suitable for a digitally generated PDF.</li>
+                    <li><strong>Pictures become black blobs or outlines:</strong> check that layout actually ran and Images is set to Original. Without layout, text binarization can affect the entire page.</li>
+                    <li><strong>A dark rim appears around a picture:</strong> the detected picture box may end inside its boundary. Changing binarization can change the rim; the current model's boxes are not expanded automatically.</li>
+                    <li><strong>A flat illustration becomes bent:</strong> turn Flatten page off. Its flat-page gate can misclassify full-page photographs.</li>
+                    <li><strong>Headers remain or footnotes disappear:</strong> compare with margins and reflow off, then check crop settings. Force crop permits removing footnotes; layout errors can also affect content bounds.</li>
+                    <li><strong>The result is larger:</strong> check resolution, High quality, Grayscale/Preserve, and TrueTyping. Already compressed sources may not shrink. More detected pictures can also increase size while retaining content previously binarized.</li>
+                    <li><strong>Search or copying is wrong:</strong> compare OCR modes and confirm language support. A clean-looking page does not establish OCR accuracy, and TrueTyping alone does not supply recognized words.</li>
+                    <li><strong>The reader cannot display the PDF:</strong> try binarized Preparation with Compatibility enabled. Test on the actual device before converting the full book.</li>
+                    <li><strong>A folder has fewer pages than expected:</strong> check filenames and image extensions. Mixed-format folder intake can select only the dominant format.</li>
+                </ul>
+                <p>
+                    The GUI's <strong>Log</strong> keeps the most recent 30 processing entries;
+                    inspect the run log when a job fails or reports a GPU fallback.
+                    <strong>Debug</strong> exposes additional diagnostics. Clear Log removes
+                    processing history from the app. For layout inspection from the CLI,
+                    use <code>lege book.pdf 5-10 --layout-visualize 1200</code> to export pages
+                    with detected boxes and labels.
+                </p>
+            </section>
 
-            <h3>Margin Correction and Reflow</h3>
-            <p>
-                Margin correction is done via the bounding boxes from layout
-                detection. Centering will equalize the margins on either side
-                versus the dimensions of the main bounding box areas. Cropping
-                will crop as much as possible toward those boxes while
-                preserving aspect ratio. Footnotes will be preserved. Forced
-                margin cropping can be set. There is also algorithmic margin
-                detection that works when layout detection is off and produces
-                similar results.
-            </p>
-            <p>
-                Reflow is new since 1.45, replacing Deskew, and is an indirect
-                port of the Reflow feature in K2PDFOPT, an excellent program.
-                Lege's version is slightly less effective but multiple times
-                faster and simpler to use. It will reorganize rasterized text on
-                a paragaph level to be larger and to span more document pages
-                while preserving most other formatting.
-            </p>
-
-            <h3>Adaptive Binarization</h3>
-            <p>
-                Uses a <strong>Sauvola / Otsu fusion</strong> method, two
-                well-known binarization techniques, which works great every
-                time. The source is cited in the Licenses section even though it
-                was unlicensed and free to use, because it is good enough that
-                it deserves attribution. There is one issue where it will try to
-                binarize blank or almost blank pages and produce static
-                patterns. There is code to prevent this when layout mode is
-                turned on. If there are no detections on a page, it uses a
-                threshold at 128 for any blank page. But when layout detection
-                is turned off and adaptive binarization is used, blank pages can
-                still be affected this way.
-            </p>
-            <p><strong>Heavy model</strong></p>
-            <p>
-                Document binarization is an entire field, and there is a yearly
-                international contest for the best document binarization method.
-                In recent years the field has moved almost completely to neural
-                models, where before it was mostly algorithms.
-            </p>
-            <p>
-                Lege also supports a heavier neural model that was a participant
-                in one such contest and performs very well for historical and
-                degraded documents. It is offered as a backup in case the
-                lighter method creates or retains imperfections in the final
-                output.
-            </p>
-            <p>It is much slower, up to 3 seconds per page to process.</p>
-
-            <hr />
-
-            <h3>Log Feature</h3>
-            <p>
-                Lastly, there is a log feature in the bottom right that shows
-                the last 20 documents processed in Lege. The log can be cleared
-                from within the window.
-            </p>
-
-            <h3>Recommended Settings</h3>
-            <p>
-                Here are a few recommendations for using the program based on
-                the input book:
-            </p>
-            <ol>
-                <li>
-                    Old book with yellowed but undamaged pages with images with
-                    solid, simple coloring: keep layout detection off and run it
-                    with a fixed threshold between 128 and 200. The fixed
-                    threshold will affect images the least.
-                </li>
-                <li>
-                    Old book with yellowed, damaged, discolored, spotty pages:
-                    use adaptive binarization. It is designed for that kind of
-                    book. The heavy model is for when even the text is degraded.
-                </li>
-                <li>
-                    Book with gray or other color pages and full-color images:
-                    use adaptive binarization and enable layout detection so the
-                    image areas will be preserved. If the pages are gray or
-                    blue, original images tend to look better. If they are
-                    yellowed, dithering usually looks better as the entire page
-                    gets binarized with image areas dithered more naturally.
-                </li>
-            </ol>
-
-            <h3>One Thing</h3>
-            <p>
-                There is a natural question here: if a book is already black and
-                white, how do you re-encode it to a manageable size without
-                running it through binarization? The answer is that the process
-                of re-encoding the book is binarization. The decision still has
-                to be made for what pixels turn white and what pixels turn
-                black. The best option is to test different simple threshold
-                modes starting from 180 or 200. If you want to re-encode in JPEG
-                without affecting page color much, there is an option for it in
-                the CLI, but file size will not be reduced as much as with the
-                two fax-based encoding modes.
-            </p>
+            <footer>
+                <p>
+                    <a href="licenses.html">Licenses and third-party notices</a> ·
+                    <a href="https://github.com/liminalism/lege">Source and issue tracker</a>
+                </p>
+            </footer>
         </main>
     </body>
 </html>

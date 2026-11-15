@@ -411,14 +411,13 @@ pub async fn create_and_run_djvu_source_pipeline(
                                 // This means the page processing was skipped, continue
                             }
                             Ok(Err(e)) => {
-                                #[cfg(feature = "debug-logging")]
-                                crate::error_println!("[DJVU-Parallel-Process] Processing failed (page dropped): {:#}", e);
-                                warn_log!("[DJVU-Parallel-Process] Processing failed: {}", e);
+                                return Err(anyhow!(
+                                    "DjVu binarization stage page processing failed: {:#}",
+                                    e
+                                ));
                             }
                             Err(e) => {
-                                #[cfg(feature = "debug-logging")]
-                                crate::error_println!("[DJVU-Parallel-Process] Task join error (page dropped): {:#}", e);
-                                warn_log!("[DJVU-Parallel-Process] Task join error: {}", e);
+                                return Err(anyhow!("DjVu binarization page task panicked: {}", e));
                             }
                         }
                     }

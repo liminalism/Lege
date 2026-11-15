@@ -683,7 +683,10 @@ mod embedded_document_tests {
 
     #[test]
     fn about_documents_are_embedded_and_current() {
-        assert!(DOCUMENTATION_HTML.contains("Margin Correction and Reflow"));
+        assert!(DOCUMENTATION_HTML.contains("Resolution, margins, and reflow"));
+        assert!(DOCUMENTATION_HTML.contains("Lege-Dewarp ft4"));
+        assert!(DOCUMENTATION_HTML.contains("binarizer-tilenet"));
+        assert!(DOCUMENTATION_HTML.contains("RF-DETR-S"));
         assert!(DOCUMENTATION_HTML.contains("PP-OCRv6"));
         assert!(LICENSES_HTML.contains("PaddleOCR"));
         assert!(LICENSES_HTML.contains("LICENSE.txt"));

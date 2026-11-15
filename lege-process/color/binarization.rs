@@ -32,6 +32,8 @@ pub struct HeavySauvolaProcessor {
     student: Option<lege_gpu::vision::SauvolaProcessor>,
     /// Set after the first GPU failure so later pages go straight to the CPU.
     student_failed: std::sync::atomic::AtomicBool,
+    /// Largest GPU tile size allowed for the model; steps down on allocation failure.
+    max_gpu_tile: std::sync::atomic::AtomicU32,
 }
 
 /// What binarizes a page when the GPU model cannot.
@@ -61,6 +63,15 @@ const STUDENT_MAX_PIXELS: usize = 1_600_000;
 const STUDENT_TILE: u32 = 1024;
 const STUDENT_TILE_HALO: u32 = 128;
 
+/// Progressively smaller GPU tile budgets tried if a full page or large tile
+/// exceeds available VRAM. Every rung keeps stride = tile - 2 * halo a multiple
+/// of `STUDENT_PAD_MULTIPLE` (64).
+const GPU_TILE_LADDER: [(usize, u32, u32); 3] = [
+    (STUDENT_MAX_PIXELS, STUDENT_TILE, STUDENT_TILE_HALO),
+    (0, 768, STUDENT_TILE_HALO),
+    (0, 512, STUDENT_TILE_HALO),
+];
+
 /// Tiles along one axis of length `n`: (start, length, kept range). Starts
 /// are multiples of `tile - 2 * halo`, which must be a multiple of the pad
 /// multiple: the model downsamples by 8, so a tile whose origin is off that
@@ -84,19 +95,6 @@ fn tile_spans(n: u32, tile: u32, halo: u32) -> Vec<(u32, u32, std::ops::Range<u3
 
 /// The model's mask of a page on the GPU: in one run when the page is small
 /// enough, in overlapping tiles otherwise.
-fn binarize_on_gpu(
-    student: &lege_gpu::vision::SauvolaProcessor,
-    img: &RgbImage,
-) -> Result<GrayImage> {
-    binarize_on_gpu_with(
-        student,
-        img,
-        STUDENT_MAX_PIXELS,
-        STUDENT_TILE,
-        STUDENT_TILE_HALO,
-    )
-}
-
 fn binarize_on_gpu_with(
     student: &lege_gpu::vision::SauvolaProcessor,
     img: &RgbImage,
@@ -124,10 +122,10 @@ fn binarize_on_gpu_with(
     Ok(mask)
 }
 
-/// The adaptive algorithm's mask of a region: on the wgpu kernels when a
-/// hardware GPU is there, on the CPU as the last resort. Input inversion is
+/// The adaptive algorithm's mask of a region: on the wgpu kernels when allowed
+/// and a hardware GPU is available, or on the CPU otherwise. Input inversion is
 /// part of the mask.
-fn adaptive_mask(img: &RgbImage, opt: &BinarizationOptions) -> Result<GrayImage> {
+fn adaptive_mask(img: &RgbImage, opt: &BinarizationOptions, allow_gpu: bool) -> Result<GrayImage> {
     let (width, height) = img.dimensions();
     let (w, h) = (width as usize, height as usize);
     let invert = |gray: &mut Vec<u8>| {
@@ -139,7 +137,7 @@ fn adaptive_mask(img: &RgbImage, opt: &BinarizationOptions) -> Result<GrayImage>
         GrayImage::from_raw(width, height, bin)
             .ok_or_else(|| anyhow!("failed to wrap the adaptive mask"))
     };
-    if !opt.disable_gpu && adaptive_kernels_usable() {
+    if allow_gpu && !opt.disable_gpu && adaptive_kernels_usable() {
         // The plane the kernels have always thresholded: integer Rec. 601.
         let mut gray = vec![0u8; w * h];
         gray.par_iter_mut()
@@ -269,12 +267,17 @@ fn load_student_binarizer() -> Option<lege_gpu::vision::SauvolaProcessor> {
 }
 
 impl HeavySauvolaProcessor {
-    pub fn new() -> Result<Self> {
-        Ok(Self {
+    fn init() -> Self {
+        Self {
             cpu: load_cpu_binarizer(),
             student: load_student_binarizer(),
             student_failed: std::sync::atomic::AtomicBool::new(false),
-        })
+            max_gpu_tile: std::sync::atomic::AtomicU32::new(STUDENT_TILE),
+        }
+    }
+
+    pub fn new() -> Result<Self> {
+        Ok(Self::init())
     }
 
     /// True while pages go through the model on the GPU.
@@ -285,6 +288,38 @@ impl HeavySauvolaProcessor {
                 .load(std::sync::atomic::Ordering::Relaxed)
     }
 
+    fn binarize_with_ladder(
+        &self,
+        student: &lege_gpu::vision::SauvolaProcessor,
+        img: &RgbImage,
+    ) -> Result<GrayImage> {
+        use std::sync::atomic::Ordering;
+        let cap = self.max_gpu_tile.load(Ordering::Relaxed);
+        let rungs: Vec<_> = GPU_TILE_LADDER
+            .iter()
+            .copied()
+            .filter(|&(_, tile, _)| tile <= cap)
+            .collect();
+        let active_rungs = if rungs.is_empty() {
+            &GPU_TILE_LADDER[GPU_TILE_LADDER.len() - 1..]
+        } else {
+            &rungs[..]
+        };
+        let mut last_error = None;
+        for (idx, &(max_pixels, tile, halo)) in active_rungs.iter().enumerate() {
+            match binarize_on_gpu_with(student, img, max_pixels, tile, halo) {
+                Ok(mask) => return Ok(mask),
+                Err(error) => {
+                    if let Some(&(_, next_tile, _)) = active_rungs.get(idx + 1) {
+                        self.max_gpu_tile.fetch_min(next_tile, Ordering::Relaxed);
+                    }
+                    last_error = Some(error);
+                }
+            }
+        }
+        Err(last_error.unwrap_or_else(|| anyhow!("GPU binarization produced no result")))
+    }
+
     /// Runs the model on the GPU when it is available and allowed.
     /// Returns `None` to fall back to the CPU.
     fn student_mask(&self, img: &RgbImage, opt: &BinarizationOptions) -> Option<GrayImage> {
@@ -293,11 +328,12 @@ impl HeavySauvolaProcessor {
         if opt.disable_gpu || self.student_failed.load(Ordering::Relaxed) {
             return None;
         }
-        match binarize_on_gpu(student, img) {
+        match self.binarize_with_ladder(student, img) {
             Ok(mask) => Some(mask),
             Err(error) => {
-                // Said once, on stderr: from here the job is on the fallback.
+                // Said once, on stderr: from here the job is on the CPU fallback.
                 if !self.student_failed.swap(true, Ordering::Relaxed) {
+                    student.clear_cache();
                     eprintln!(
                         "The binarizer model failed on the GPU; pages are binarized on the CPU from here: {error:#}"
                     );
@@ -317,7 +353,7 @@ impl HeavySauvolaProcessor {
                 }
                 Ok(mask)
             }
-            CpuBinarizer::Adaptive => adaptive_mask(img, opt),
+            CpuBinarizer::Adaptive => adaptive_mask(img, opt, false),
         }
     }
 
@@ -379,7 +415,7 @@ impl HeavySauvolaProcessor {
                 }
                 Ok(mask)
             }
-            None if opt.adaptive => adaptive_mask(&img, opt),
+            None if opt.adaptive => adaptive_mask(&img, opt, true),
             None => self.cpu_mask(&img, opt),
         };
         let mut recycled = img.into_raw();
@@ -408,11 +444,7 @@ static HEAVY_PROCESSOR_CACHE: std::sync::OnceLock<HeavySauvolaProcessor> =
     std::sync::OnceLock::new();
 
 fn heavy_processor() -> &'static HeavySauvolaProcessor {
-    HEAVY_PROCESSOR_CACHE.get_or_init(|| HeavySauvolaProcessor {
-        cpu: load_cpu_binarizer(),
-        student: load_student_binarizer(),
-        student_failed: std::sync::atomic::AtomicBool::new(false),
-    })
+    HEAVY_PROCESSOR_CACHE.get_or_init(HeavySauvolaProcessor::init)
 }
 
 /// True when pages are binarized by the model on the GPU; false when the CPU

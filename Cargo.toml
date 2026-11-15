@@ -112,10 +112,10 @@ flume = "0.11"
 memmap2 = "0.9"
 crossbeam-channel = "0.5"
 arc-swap = "1.7"
-# The PDF engine, from the sibling exprim checkout (publishes as `exprim`).
-exprim = { path = "../exprim" }
-jp2lam = { path = "../exprim/codecs/jp2lam", default-features = false }
-jbig2enc-rust = { path = "../exprim/codecs/jbig2enc-rust", default-features = false, features = ["decode"] }
+# The PDF engine, from GitHub (publishes as `exprim`).
+exprim = { git = "https://github.com/liminalism/exprim", branch = "main" }
+jp2lam = { git = "https://github.com/liminalism/exprim", branch = "main", default-features = false }
+jbig2enc-rust = { git = "https://github.com/liminalism/exprim", branch = "main", default-features = false, features = ["decode"] }
 hayro-ccitt = "0.3"
 tempfile = "3.27.0"
 flate2 = { version = "1.1.9", features = ["zlib-rs"] }
@@ -177,15 +177,6 @@ rustc-hash = "2.1.3"
 windows = { version = "0.62.2", default-features = false }
 windows-core = { version = "0.62.2", default-features = false }
 windows-future = { version = "0.3.2", default-features = false }
-
-# The JBIG2 and JPEG2000 codecs live in the sibling exprim checkout. Point the
-# historical Git coordinates at those local checkouts so `lege` links that
-# source (no network needed) while the codec folders keep their own build graphs.
-[patch."https://github.com/LegeApp/jbig2enc-rust.git"]
-jbig2enc-rust = { path = "../exprim/codecs/jbig2enc-rust" }
-
-[patch."https://github.com/LegeApp/jp2lam.git"]
-jp2lam = { path = "../exprim/codecs/jp2lam" }
 
 # ---------------------------------------------------------------------------
 # Build profiles (must live in the workspace root).

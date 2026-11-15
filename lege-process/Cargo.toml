@@ -53,9 +53,9 @@ lege-ocr = { path = "../lege-ocr", optional = true }
 lege-ipc = { path = "lege-ipc" }
 lege-pdf-write = { path = "../lege-pdf/write" }
 exprim = { workspace = true }
-djvu_encoder = { path = "../../exprim/codecs/djvulibrust", features = ["simd", "rayon"] }
-jbig2enc-rust = { path = "../../exprim/codecs/jbig2enc-rust", default-features = false, features = ["symboldict", "parallel"] }
-jp2lam = { path = "../../exprim/codecs/jp2lam", optional = true }
+djvu_encoder = { git = "https://github.com/liminalism/exprim", branch = "main", features = ["simd", "rayon"] }
+jbig2enc-rust = { git = "https://github.com/liminalism/exprim", branch = "main", default-features = false, features = ["symboldict", "parallel"] }
+jp2lam = { git = "https://github.com/liminalism/exprim", branch = "main", optional = true }
 quick-xml = "0.41.0"
 # mimalloc = "0.1"  # Comment out mimalloc to avoid cross-compilation issues
 sysinfo = "0.39.6"

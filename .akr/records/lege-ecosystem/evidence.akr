@@ -4096,6 +4096,33 @@ record lege-ecosystem.evidence.turboocr-linux-trt11-probe-20260821/1 : evidence 
         """
 }
 
+record lege-ecosystem.evidence.user-guide-embedded-tests-20261114/1 : evidence {
+    title "Final rewritten documentation: all three GUI embedding, allowlisted document serving and local HTTP retrieval tests passed, with zero failures. Existing locale dead-code warnings remain."
+    state verified
+    result pass
+    method command
+    observed_at git:98dd5cc2dcc36fa0efa3fa5aa42f1945171f7cfe
+    command "cargo test -p lege-gui-liminalui embedded_document_tests -- --nocapture"
+    summary """
+        Final rewritten documentation: all three GUI embedding, allowlisted document serving and local HTTP retrieval tests passed, with zero failures. Existing locale dead-code warnings remain.
+        Capture ".agent/scratch/documentation-rewrite/gui-doc-tests.txt": 4774 bytes; sha256:1ea86c65cc130cfc8ebb98fdd5f3b471b4db8779fe8ceaa396e9934cc4eaa4de (identity only; raw capture is not a retained artifact).
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.user-guide-model-review-20261114/1 : evidence {
+    title "Working tree on 98dd5cc2: rewrote the complete in-app guide after reviewing history since d17c696c (2026-08-23), model provenance, GUI state and worker flags, CLI parsing/defaults, OCR backends and PDF/image pipelines. Covers RF-DETR-S v2, tileable Best versus adaptive Fast, Lege-Dewarp ft4 with PDF and no-GPU limitations, PP-OCRv6, Preserve/Grayscale, TrueTyping, opt-in symbols, EPUB, margins and current cover behavior. Static inspection found balanced HTML, 12 unique section anchors, 14 links and 13 CLI examples whose 15 flags match the parser. Edge render inspection at 1280, 390 and 1000 pixels showed no document overflow; narrow light and model-table dark screenshots were visually reviewed."
+    state verified
+    result pass
+    method observation
+    observed_at git:98dd5cc2dcc36fa0efa3fa5aa42f1945171f7cfe
+    artifact "lege-misc/docs/documentation.html"
+    summary """
+        Working tree on 98dd5cc2: rewrote the complete in-app guide after reviewing history since d17c696c (2026-08-23), model provenance, GUI state and worker flags, CLI parsing/defaults, OCR backends and PDF/image pipelines. Covers RF-DETR-S v2, tileable Best versus adaptive Fast, Lege-Dewarp ft4 with PDF and no-GPU limitations, PP-OCRv6, Preserve/Grayscale, TrueTyping, opt-in symbols, EPUB, margins and current cover behavior. Static inspection found balanced HTML, 12 unique section anchors, 14 links and 13 CLI examples whose 15 flags match the parser. Edge render inspection at 1280, 390 and 1000 pixels showed no document overflow; narrow light and model-table dark screenshots were visually reviewed.
+        """
+    author "dk"
+}
+
 record lege-ecosystem.evidence.viewer-stage-6-7-tests-2026-09-04/1 : evidence {
     title "lege-viewer stage 6 and 7 work passes tests and clippy; the visual and gestural behaviour is unverified"
     state verified

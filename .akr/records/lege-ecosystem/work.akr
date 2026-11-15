@@ -5975,6 +5975,43 @@ record lege-ecosystem.work.reusable-bounded-scratch/1 : work {
     }
 }
 
+record lege-ecosystem.work.rewrite-in-app-user-guide-20261114/1 : work {
+    title "Rewrite the in-app user guide for current models and workflows"
+    state completed
+    scope [
+        path "lege-misc/docs/documentation.html",
+        path "lege-process/GUI/liminalUI/src/backend.rs"
+    ]
+    intent """
+        Rewrite the in-app user guide from a review of changes since its last update, with particular attention to the current layout, binarization, flattening and OCR models. Document present user-visible behavior and limitations rather than retaining the old prose.
+        """
+    acceptance {
+        check current-behavior {
+            statement """
+                The guide reflects the changes since its last edit, current models, defaults, supported workflows and material limitations.
+                """
+            method manual
+            verified_by [ @lege-ecosystem.evidence.user-guide-model-review-20261114/1 ]
+        }
+        check embedded-document {
+            statement """
+                The GUI embeds and serves the rewritten documentation and the focused documentation tests pass.
+                """
+            method command
+            command "cargo test -p lege-gui-liminalui embedded_document_tests -- --nocapture"
+            verified_by [ @lege-ecosystem.evidence.user-guide-embedded-tests-20261114/1 ]
+        }
+        check readable-html {
+            statement """
+                HTML structure, local navigation and example flags pass inspection, and the guide renders at desktop and narrow widths in light and dark modes.
+                """
+            method manual
+            verified_by [ @lege-ecosystem.evidence.user-guide-model-review-20261114/1 ]
+        }
+    }
+    author "dk"
+}
+
 record lege-ecosystem.work.run-the-census-2nd-arg-max-files-omit-for-all/1 : work {
     title "2. Run the census (2nd arg = max files; omit for all 424). ~250s per ~34 files."
     state abandoned

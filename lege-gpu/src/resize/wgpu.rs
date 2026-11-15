@@ -736,7 +736,13 @@ impl WgpuResizer {
             return Ok(());
         }
 
+        // Release old bind groups and buffers first so reallocation doesn't spike peak VRAM.
+        self.resize_bind_groups.clear();
+        self.resize_buffers = None;
+        let _ = self.ctx.device.poll(wgpu::PollType::Poll);
+
         let device = &self.ctx.device;
+        let oom_scope = device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
 
         let gpu_src = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("lege-wgpu-resize-gpu-src"),
@@ -766,6 +772,12 @@ impl WgpuResizer {
             mapped_at_creation: false,
         });
 
+        if let Some(error) = pollster::block_on(oom_scope.pop()) {
+            return Err(WgpuResizeError::Execution(format!(
+                "wgpu out of memory allocating resize buffers: {error}"
+            )));
+        }
+
         self.resize_buffers = Some(WgpuResizeBuffers {
             gpu_src,
             gpu_dst,
@@ -774,7 +786,6 @@ impl WgpuResizer {
             src_capacity: src_aligned,
             dst_capacity: dst_aligned,
         });
-        self.resize_bind_groups.clear();
 
         Ok(())
     }

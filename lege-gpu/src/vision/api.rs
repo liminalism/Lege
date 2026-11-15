@@ -11,7 +11,7 @@ use crate::vision::onnx::{ModelReport, PreparedGraph, load_model, load_model_fro
 use crate::vision::onnx_pb::ModelProto;
 use crate::vision::preprocess;
 use crate::vision::reference::Tensor;
-use crate::vision::runtime::compiled::CompiledGraph;
+use crate::vision::runtime::compiled::{CompiledGraph, CompiledShared};
 #[cfg(feature = "layout-detection")]
 use crate::vision::runtime::device::GpuContext;
 
@@ -284,14 +284,73 @@ struct SauvolaGraph {
     height: u32,
     graph: PreparedGraph,
     compiled: CompiledGraph,
+    resident_bytes: u64,
 }
 
-/// Number of distinct tile sizes to keep compiled at once. The caller binarizes
-/// in overlapping patches (see `process_in_patches`), so a page yields only a
-/// handful of sizes — the full patch plus the clamped right/bottom/corner tiles.
-/// A small LRU keeps each built once per job instead of thrashing the ~0.5 s
-/// graph compile as tile sizes alternate.
-const SAUVOLA_CACHE_CAP: usize = 8;
+/// Number of distinct tile sizes to keep compiled at once, also bounded by
+/// `sauvola_cache_budget_bytes()`. Because `binarizer-tilenet.onnx` + Winograd
+/// takes ~1.4 KiB/px of resident activation slots, holding too many distinct
+/// tile graphs at once exhausts 8 GB GPUs while rebuilding with `CompiledShared`
+/// only takes a few milliseconds.
+const SAUVOLA_CACHE_CAP: usize = 4;
+const DEFAULT_SAUVOLA_CACHE_MAX_BYTES: u64 = 2048 * 1024 * 1024;
+
+fn sauvola_cache_budget_bytes() -> u64 {
+    std::env::var("LEGE_SAUVOLA_CACHE_MB")
+        .ok()
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .map(|mb| mb.saturating_mul(1024 * 1024))
+        .unwrap_or(DEFAULT_SAUVOLA_CACHE_MAX_BYTES)
+}
+
+#[derive(Default)]
+struct SauvolaCache {
+    shared: Option<CompiledShared>,
+    entries: Vec<SauvolaGraph>,
+    total_bytes: u64,
+}
+
+impl SauvolaCache {
+    fn lock_or_recover(mutex: &Mutex<Self>) -> std::sync::MutexGuard<'_, Self> {
+        mutex.lock().unwrap_or_else(|poisoned| {
+            let mut guard = poisoned.into_inner();
+            guard.entries.clear();
+            guard.total_bytes = 0;
+            mutex.clear_poison();
+            guard
+        })
+    }
+
+    fn poll_shared_device(&self) {
+        if let Some(shared) = &self.shared {
+            let _ = shared.ctx.device.poll(crate::vision::wgpu::PollType::Poll);
+        }
+    }
+
+    fn clear_entries(&mut self) {
+        if !self.entries.is_empty() {
+            self.entries.clear();
+            self.total_bytes = 0;
+            self.poll_shared_device();
+        }
+    }
+
+    fn evict_for(&mut self, needed_bytes: u64, budget_bytes: u64) {
+        let mut evicted = false;
+        while !self.entries.is_empty()
+            && (self.entries.len() >= SAUVOLA_CACHE_CAP
+                || self.total_bytes.saturating_add(needed_bytes) > budget_bytes)
+        {
+            if let Some(removed) = self.entries.pop() {
+                self.total_bytes = self.total_bytes.saturating_sub(removed.resident_bytes);
+                evicted = true;
+            }
+        }
+        if evicted {
+            self.poll_shared_device();
+        }
+    }
+}
 
 /// sauvola.onnx adaptive binarization via the dynamic-resolution model.
 ///
@@ -302,12 +361,12 @@ const SAUVOLA_CACHE_CAP: usize = 8;
 /// native dims at preparation time so that plumbing folds (the all-ones
 /// `ConstantOfShape` tensors become initializers feeding `CumSum`), and the
 /// graph compiles natively at the tile size — no resize. Compiled graphs are
-/// cached per tile size (most-recently-used first, capped) since the caller
-/// feeds a few recurring patch sizes.
+/// cached per tile size (most-recently-used first, bounded by count and VRAM
+/// budget) while sharing weights and shader pipelines across shapes.
 pub struct SauvolaProcessor {
     model: ModelProto,
     config: SauvolaConfig,
-    cache: Mutex<Vec<SauvolaGraph>>,
+    cache: Mutex<SauvolaCache>,
 }
 
 impl SauvolaProcessor {
@@ -345,7 +404,7 @@ impl SauvolaProcessor {
         Ok(Self {
             model,
             config,
-            cache: Mutex::new(Vec::new()),
+            cache: Mutex::new(SauvolaCache::default()),
         })
     }
 
@@ -358,12 +417,7 @@ impl SauvolaProcessor {
         &self.config.model_path
     }
 
-    fn build_for(
-        &self,
-        width: u32,
-        height: u32,
-        related: Option<&CompiledGraph>,
-    ) -> Result<SauvolaGraph> {
+    fn prepare_graph(&self, width: u32, height: u32) -> Result<PreparedGraph> {
         let dims = [1, height as i64, width as i64, 1];
         let graph = PreparedGraph::from_model_with_input_dims(&self.model, Some(&dims))
             .with_context(|| format!("failed to prepare sauvola graph for {width}x{height}"))?;
@@ -373,17 +427,30 @@ impl SauvolaProcessor {
                 graph.inputs
             );
         }
-        let compiled = match related {
-            Some(parent) => parent.build_related(&graph),
-            None => pollster::block_on(CompiledGraph::build(&graph)),
+        Ok(graph)
+    }
+
+    fn compile_prepared(
+        width: u32,
+        height: u32,
+        graph: &PreparedGraph,
+        shared: Option<&CompiledShared>,
+    ) -> Result<CompiledGraph> {
+        match shared {
+            Some(shared) => CompiledGraph::build_with_shared(graph, shared),
+            None => pollster::block_on(CompiledGraph::build(graph)),
         }
-        .with_context(|| format!("failed to compile sauvola graph for {width}x{height}"))?;
-        Ok(SauvolaGraph {
-            width,
-            height,
-            graph,
-            compiled,
-        })
+        .with_context(|| format!("failed to compile sauvola graph for {width}x{height}"))
+    }
+
+    /// Release all cached GPU graphs and shared weights held by this processor.
+    pub fn clear_cache(&self) {
+        let mut cache = SauvolaCache::lock_or_recover(&self.cache);
+        cache.entries.clear();
+        cache.total_bytes = 0;
+        if let Some(shared) = cache.shared.take() {
+            let _ = shared.ctx.device.poll(crate::vision::wgpu::PollType::Poll);
+        }
     }
 
     /// Process an RGB image through the sauvola model at its native resolution.
@@ -394,34 +461,71 @@ impl SauvolaProcessor {
         if width == 0 || height == 0 {
             bail!("sauvola input image must be non-empty");
         }
-        let mut cache = self
-            .cache
-            .lock()
-            .map_err(|_| anyhow::anyhow!("sauvola cache poisoned"))?;
+        let mut cache = SauvolaCache::lock_or_recover(&self.cache);
         // Move a cached graph for this size to the front, or build and insert it.
         match cache
+            .entries
             .iter()
             .position(|e| e.width == width && e.height == height)
         {
             Some(0) => {}
             Some(index) => {
-                let entry = cache.remove(index);
-                cache.insert(0, entry);
+                let entry = cache.entries.remove(index);
+                cache.entries.insert(0, entry);
             }
             None => {
-                let entry =
-                    self.build_for(width, height, cache.first().map(|entry| &entry.compiled))?;
-                cache.insert(0, entry);
-                cache.truncate(SAUVOLA_CACHE_CAP);
+                let graph = self.prepare_graph(width, height)?;
+                let estimated_bytes = CompiledGraph::estimate_resident_bytes(&graph)
+                    .with_context(|| {
+                        format!("failed to plan sauvola memory for {width}x{height}")
+                    })?;
+                cache.evict_for(estimated_bytes, sauvola_cache_budget_bytes());
+                let compiled = match Self::compile_prepared(
+                    width,
+                    height,
+                    &graph,
+                    cache.shared.as_ref(),
+                ) {
+                    Ok(compiled) => compiled,
+                    Err(err) if !cache.entries.is_empty() => {
+                        cache.clear_entries();
+                        Self::compile_prepared(width, height, &graph, cache.shared.as_ref())
+                            .map_err(|_| err)?
+                    }
+                    Err(err) => return Err(err),
+                };
+                if cache.shared.is_none() {
+                    cache.shared = Some(compiled.shared_resources());
+                }
+                let resident_bytes = compiled.resident_bytes();
+                cache.total_bytes = cache.total_bytes.saturating_add(resident_bytes);
+                cache.entries.insert(
+                    0,
+                    SauvolaGraph {
+                        width,
+                        height,
+                        graph,
+                        compiled,
+                        resident_bytes,
+                    },
+                );
             }
         }
-        let entry = &cache[0];
         let input = rgb_to_nhwc_gray_native(image);
-        let outputs =
-            pollster::block_on(entry.compiled.run(&input)).context("sauvola inference failed")?;
-        let output = graph_output(&entry.graph, &outputs, 0)
-            .context("sauvola output missing from WGPU result")?;
-        nhwc_gray_tensor_to_image(output)
+        let run_result = {
+            let entry = &cache.entries[0];
+            pollster::block_on(entry.compiled.run(&input))
+                .context("sauvola inference failed")
+                .and_then(|outputs| {
+                    let output = graph_output(&entry.graph, &outputs, 0)
+                        .context("sauvola output missing from WGPU result")?;
+                    nhwc_gray_tensor_to_image(output)
+                })
+        };
+        if run_result.is_err() {
+            cache.clear_entries();
+        }
+        run_result
     }
 
     /// Like [`Self::binarize_rgb`], for fully convolutional (tileable) models

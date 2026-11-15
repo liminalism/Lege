@@ -27,6 +27,18 @@ record lege-ecosystem.papercut.a-broad-identifier-search-returned-akr-record/2 :
     created_at 2026-08-23
 }
 
+record lege-ecosystem.papercut.a-complete-html-rewrite-expressed-as-delete-and/1 : papercut {
+    title "A complete HTML rewrite expressed as delete and add of the same file in…"
+    state verified
+    statement """
+        A complete HTML rewrite expressed as delete and add of the same file in one patch was rejected as multiple operations on one target. Separate delete and add calls are needed for this tool.
+        """
+    observed_at git:98dd5cc2dcc36fa0efa3fa5aa42f1945171f7cfe
+    about "apply_patch"
+    author "codex"
+    created_at 2026-11-14
+}
+
 record lege-ecosystem.papercut.a-file-glob-embedded-in-an-rg-path-argument/1 : papercut {
     title "A file glob embedded in an rg path argument…"
     state superseded
@@ -278,6 +290,18 @@ record lege-ecosystem.papercut.a-single-cargo-build-selecting-lege-and-lege/2 : 
         """
     observed_at git:70147b50c31faf7aad4e0eaf056745ccd7cd8e49
     supersedes [ @lege-ecosystem.papercut.a-single-cargo-build-selecting-lege-and-lege/1 ]
+}
+
+record lege-ecosystem.papercut.a-source-search-passed-an-unexpanded-directory/1 : papercut {
+    title "A source search passed an unexpanded directory/*.rs argument in…"
+    state verified
+    statement """
+        A source search passed an unexpanded directory/*.rs argument in PowerShell and rg rejected it as an invalid path. Search the directory with -g *.rs on Windows.
+        """
+    observed_at git:98dd5cc2dcc36fa0efa3fa5aa42f1945171f7cfe
+    about "rg"
+    author "codex"
+    created_at 2026-11-14
 }
 
 record lege-ecosystem.papercut.a-windows-print-test-initially-used-intersects/1 : papercut {
@@ -4619,6 +4643,18 @@ record lege-ecosystem.papercut.the-first-generic-benchmark-setup-searched-too/2 
     created_at 2026-11-01
 }
 
+record lege-ecosystem.papercut.the-focused-gui-documentation-tests-passed-but/1 : papercut {
+    title "The focused GUI documentation tests passed, but rustc could not…"
+    state verified
+    statement """
+        The focused GUI documentation tests passed, but rustc could not finalize its incremental compilation directory on Windows (Access is denied, os error 5). The next build cannot reuse that incremental work.
+        """
+    observed_at git:98dd5cc2dcc36fa0efa3fa5aa42f1945171f7cfe
+    about "cargo"
+    author "codex"
+    created_at 2026-11-14
+}
+
 record lege-ecosystem.papercut.the-focused-no-default-features-djvu-library/1 : papercut {
     title "The focused no-default-features DjVu library test could not compile…"
     state superseded
@@ -4763,6 +4799,18 @@ record lege-ecosystem.papercut.the-lean-turboocr-linux-build-finds-cuda/2 : pape
     supersedes [ @lege-ecosystem.papercut.the-lean-turboocr-linux-build-finds-cuda/1 ]
     author "codex"
     created_at 2026-08-21
+}
+
+record lege-ecosystem.papercut.the-mcp-validate-tool-accepts-a-diagnostic/1 : papercut {
+    title "The MCP validate tool accepts a diagnostic limit, but the CLI…"
+    state verified
+    statement """
+        The MCP validate tool accepts a diagnostic limit, but the CLI equivalent check rejects --limit. The CLI help does not expose that pagination parameter; rerun check without it.
+        """
+    observed_at git:98dd5cc2dcc36fa0efa3fa5aa42f1945171f7cfe
+    about "akr"
+    author "codex"
+    created_at 2026-11-14
 }
 
 record lege-ecosystem.papercut.the-new-crate-local-print-pdf-fixture-was/1 : papercut {

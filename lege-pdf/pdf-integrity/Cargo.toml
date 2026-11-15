@@ -38,14 +38,9 @@ sha2_10 = { package = "sha2", version = "0.10" }
 # the ecosystem root's single-PNG-version pin.
 png = "0.18"
 
-# The exprim PDF engine, consumed by path from the sibling exprim checkout.
+# The exprim PDF engine, from GitHub.
 # Evidence rendering stays CPU-only: no GPU crates, no OCR.
-#
-# The ecosystem root's [patch] entries do not apply to this nested workspace;
-# exprim declares its codecs by path, so none are needed here. If a transitive
-# git-sourced codec dependency ever appears, it must be patched in this
-# manifest.
-exprim = { path = "../../../exprim" }
+exprim = { git = "https://github.com/liminalism/exprim", branch = "main" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

@@ -592,7 +592,7 @@ impl WgpuBinarizer {
 
         // --- Pass 2: allocate / grow buffers ---
         self.ensure_buffers(max_img_bytes, max_padded_bytes, max_integral_bytes)?;
-        self.ensure_readback(total_rb);
+        self.ensure_readback(total_rb)?;
 
         // --- Pass 3: per-page write → encode → submit (no poll yet) ---
         let mut last_submission = None;
@@ -959,7 +959,7 @@ impl WgpuBinarizer {
         let packed_words = pixel_count.div_ceil(4) as u32;
         let packed_bytes = packed_words as usize * size_of::<u32>();
 
-        self.ensure_readback(packed_bytes);
+        self.ensure_readback(packed_bytes)?;
         let submission = self.encode_pack_copy_submit(enc, packed_words, packed_bytes, 0);
 
         let rb = self.readback.as_ref().unwrap();
@@ -1132,7 +1132,13 @@ impl WgpuBinarizer {
             return Ok(());
         }
 
+        // Release old buffers and bind groups first so growing doesn't peak at old + new VRAM.
+        self.bind_groups = None;
+        self.buffers = None;
+        let _ = self.ctx.device.poll(wgpu::PollType::Poll);
+
         let dev = &self.ctx.device;
+        let oom_scope = dev.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
 
         let mk = |label: &str, size: usize, usage: wgpu::BufferUsages| {
             dev.create_buffer(&wgpu::BufferDescriptor {
@@ -1147,7 +1153,7 @@ impl WgpuBinarizer {
         let dst_usage = wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::STORAGE;
         let rw_usage = wgpu::BufferUsages::STORAGE;
 
-        self.buffers = Some(WgpuBuffers {
+        let buffers = WgpuBuffers {
             params: mk(
                 "lege-wgpu-binarize-params",
                 par_al,
@@ -1168,23 +1174,44 @@ impl WgpuBinarizer {
             img_bytes: img_al,
             padded_bytes: pad_al,
             integral_bytes: int_al,
-        });
+        };
+        if let Some(error) = pollster::block_on(oom_scope.pop()) {
+            return Err(GpuBinarizationError::Execution(format!(
+                "wgpu out of memory allocating binarization work buffers: {error}"
+            )));
+        }
+        self.buffers = Some(buffers);
         self.rebuild_bind_groups();
         Ok(())
     }
 
-    fn ensure_readback(&mut self, needed: usize) {
+    fn ensure_readback(&mut self, needed: usize) -> Result<()> {
         let al = align_up(needed.max(1), 256);
         if self.readback_cap >= al {
-            return;
+            return Ok(());
         }
-        self.readback = Some(self.ctx.device.create_buffer(&wgpu::BufferDescriptor {
+        self.readback = None;
+        self.readback_cap = 0;
+        let _ = self.ctx.device.poll(wgpu::PollType::Poll);
+
+        let oom_scope = self
+            .ctx
+            .device
+            .push_error_scope(wgpu::ErrorFilter::OutOfMemory);
+        let readback = self.ctx.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("lege-wgpu-binarize-readback"),
             size: al as u64,
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
             mapped_at_creation: false,
-        }));
+        });
+        if let Some(error) = pollster::block_on(oom_scope.pop()) {
+            return Err(GpuBinarizationError::Execution(format!(
+                "wgpu out of memory allocating binarization readback buffer ({al} bytes): {error}"
+            )));
+        }
+        self.readback = Some(readback);
         self.readback_cap = al;
+        Ok(())
     }
 }
 
