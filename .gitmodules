@@ -1,0 +1,4 @@
+[submodule "lege-document-ocr/turboocr"]
+	path = lege-document-ocr/turboocr
+	url = https://github.com/liminalism/TurboOCR.git
+	branch = windows-tensorrt-runtime

@@ -123,6 +123,15 @@ if (-not $SkipRustBuild) {
     }
 }
 
+# The PP-OCRv6 tiny models are TurboOCR release assets, not tracked files, so
+# a fresh submodule checkout has none. Fetch them (SHA-256 verified against the
+# release manifest) only when one is missing, so an offline rebuild still works.
+$textModels = @('det_tiny.onnx', 'rec_tiny.onnx', 'keys_tiny.txt')
+$turboModels = Join-Path $TurboOcrRoot 'models'
+if ($textModels | Where-Object { -not (Test-Path -LiteralPath (Join-Path $turboModels $_) -PathType Leaf) }) {
+    & (Join-Path $TurboOcrRoot 'scripts\fetch_text_models_windows.ps1') -Tier tiny -OutDir $turboModels
+}
+
 $tensorrtRoot = Join-Path $OutputDirectory 'tensorrt'
 $runtimeDirectory = Join-Path $tensorrtRoot 'runtime'
 $modelDirectory = Join-Path $tensorrtRoot 'models'
@@ -131,7 +140,7 @@ $licenseDirectory = Join-Path $OutputDirectory 'licenses'
 
 Copy-RequiredFile (Join-Path $workspaceRoot 'target\release\lege-ocr.exe') $OutputDirectory
 Copy-RequiredFile (Join-Path $TurboOcrRoot 'build-windows-trt-text-ninja\turboocr-text.exe') $binaryDirectory
-foreach ($model in @('det_tiny.onnx', 'rec_tiny.onnx', 'keys_tiny.txt')) {
+foreach ($model in $textModels) {
     Copy-RequiredFile (Join-Path $TurboOcrRoot "models\$model") $modelDirectory
 }
 

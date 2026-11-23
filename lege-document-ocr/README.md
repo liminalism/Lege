@@ -161,9 +161,15 @@ target/debug-fast/lege-ocr batch a.pdf b.pdf c.pdf d.pdf \
 The Windows TensorRT test script builds the worker, performs an actual CUDA
 inference preflight, builds the release CLI, and runs a fail-closed PDF job:
 
+TurboOCR is a git submodule at `lege-document-ocr/turboocr`, tracking the
+`windows-tensorrt-runtime` branch of
+[`liminalism/TurboOCR`](https://github.com/liminalism/TurboOCR), a fork of
+`aiptimizer/TurboOCR` that carries the lean Windows TensorRT text worker. The
+packaging script downloads its PP-OCRv6 tiny models from the TurboOCR release
+when they are missing.
+
 ```powershell
-git clone https://github.com/aiptimizer/TurboOCR.git `
-  .\lege-document-ocr\turboocr
+git submodule update --init lege-document-ocr/turboocr
 
 .\lege-document-ocr\scripts\test_windows_tensorrt.ps1 `
   -Pdf .\.agent\scratch\ocr-benchmark\social-justice-pages-0021-0030.pdf
