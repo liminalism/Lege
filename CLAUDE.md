@@ -18,10 +18,10 @@ Lege is a fully-automatic PDF processor for E-Ink ebook readers. It renders PDF 
 | `lege-ocr` | `lege-ocr/` | Shared OCR library + `lege-ocr-debug` |
 | `lege-pdf-write` | `lege-pdf/write/` | Typed append-only PDF writer |
 | `lege-render-wgpu` | `lege-render-wgpu/` | wgpu image renderer + GPU postprocess executor over exprim (needs `lege-gpu`) |
-| `exprim` | `../exprim/` (sibling repo) | PDF engine: reading, text, rendering, printing (`print` feature); the `exprim` agent CLI/MCP server is `../exprim/agent` |
-| `jbig2enc-rust` | `../exprim/codecs/jbig2enc-rust/` | JBIG2 encoder/decoder (patched into `lege`) |
-| `jp2lam` | `../exprim/codecs/jp2lam/` | JPEG2000 codec (patched into `lege`) |
-| `djvu_encoder` | `../exprim/codecs/djvulibrust/` | AGPL DjVu library linked by Lege; standalone codec CLI retained |
+| `exprim` | GitHub `liminalism/exprim` `main` (sibling checkout `../exprim/` for development) | PDF engine: reading, text, rendering, printing (`print` feature); the `exprim` agent CLI/MCP server is `../exprim/agent` |
+| `jbig2enc-rust` | GitHub `liminalism/exprim` `main` (`codecs/jbig2enc-rust/`) | JBIG2 encoder/decoder |
+| `jp2lam` | GitHub `liminalism/exprim` `main` (`codecs/jp2lam/`) | JPEG2000 codec |
+| `djvu_encoder` | GitHub `liminalism/exprim` `main` (`codecs/djvulibrust/`) | AGPL DjVu library linked by Lege; standalone codec CLI retained |
 | `lege-gui-liminalui` | `lege-process/GUI/liminalUI/` | liminalUI GUI frontend; produces bin `lege-gui` (the only frontend) |
 | Liminaldoc reader and writer | `../liminaldoc/` | Separate native document product; old source copies remain here during migration |
 | Shared assets/tools | `lege-misc/` | Icons, packaging, scripts, docs, dev utilities, and `xtask` |
@@ -30,10 +30,19 @@ The only workspace default member is `lege-process`. Its default `gui`
 feature depends on `lege-gui-liminalui` and adds a `lege-gui` binary target, so
 plain `cargo build` (or `cargo gui`, i.e. `cargo build -p lege`) builds both
 the CLI and the GUI; `cargo cli` builds `--bin lege` alone.
-The PDF engine (`exprim`) and the codecs live in the sibling `../exprim`
-repository, which must be checked out beside this one; `exprim` is a path
-dependency, and root patches make the processor use the sibling codec sources.
-Standalone codec projects retain their own build graphs.
+The PDF engine (`exprim`) and the `jbig2enc-rust` / `jp2lam` / `djvu_encoder` codecs come from
+GitHub (`liminalism/exprim`, branch `main`) as git dependencies, so Lege builds
+from a fresh clone without a sibling checkout (since 2026-11-15; before that
+they were path dependencies on `../exprim`, with root `[patch]` entries).
+`Cargo.lock` pins each git dependency to the commit it was last resolved to,
+and a plain build keeps using that commit: **exprim changes reach Lege only
+after they are pushed to exprim's `main` and the lock is refreshed** with
+`cargo latest` (or `cargo update -p exprim`). From 2026-11-15 to 2026-11-26 the
+lock stayed on exprim `1671fdd` and missed every exprim optimization in between.
+A local `../exprim` checkout is still used for its standalone codec projects and
+the agent CLI (the `jbig2`, `jp2`, `djvu` and `pdf-tool` aliases); a `[patch]`
+pointing the git source at it is deliberately not committed, because Cargo
+fails outright when the patched path is missing.
 
 Never select `-p lege` and `-p lege-gui-liminalui` in one invocation: both
 packages have a `lege-gui` binary, and their outputs collide in `target/`.
@@ -54,7 +63,7 @@ Liminaldoc has its own Cargo workspace:
 cargo cli                 # CLI only          -> lege
 cargo gui                 # CLI + liminalUI GUI -> lege, lege-gui   (the default)
 cargo viewer              # Liminaldoc reader -> liminaldoc-reader
-cargo latest              # move git dependencies (liminalkit) in Cargo.lock to their newest commit, then build
+cargo latest              # move git dependencies (exprim + codecs, liminalkit) in Cargo.lock, and in ../liminaldoc's, to their newest commit, then build
 cargo liminaldoc          # all Liminaldoc binaries
 
 # Standard release build (CLI + liminalUI GUI, via workspace default-members)
@@ -83,9 +92,8 @@ cargo deb
 cargo build -p lege-gpu
 ```
 
-Normal root Cargo commands already use the in-tree `jp2lam` and
-`jbig2enc-rust` sources through root `[patch]` entries. The compatibility helper
-is now `lege-misc/scripts/cargo-local.sh`.
+Run `cargo latest` after pushing exprim (or liminalkit) changes: a plain build
+uses the commits pinned in `Cargo.lock`, not your local `../exprim` tree.
 
 ## Important 
 

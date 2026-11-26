@@ -69,25 +69,19 @@ fn build_appimage(extra_args: Vec<String>) -> Result<(), String> {
 ///
 /// A git dependency names a branch, not a commit, but `Cargo.lock` records the
 /// commit it was last resolved to and a plain `cargo build` keeps using it.
-/// This moves every git dependency in the lockfile to the head of its branch
-/// and then builds. Registry (crates.io) versions are left where the lockfile
-/// has them; the sibling `exprim` checkout is a path dependency and is always
-/// built as it stands.
+/// This moves every git dependency in the lockfile (exprim and its codecs,
+/// liminalkit) to the head of its branch and then builds. The sibling
+/// Liminaldoc workspace keeps its own lockfile with the same exprim source; when
+/// `../liminaldoc` is checked out its git dependencies are moved too, so the
+/// reader and Lege link the same exprim commit. Registry (crates.io) versions
+/// are left where the lockfiles have them.
 fn build_latest(build_args: Vec<String>) -> Result<(), String> {
     let root = workspace_root()?;
-    let lock = std::fs::read_to_string(root.join("Cargo.lock"))
-        .map_err(|err| format!("could not read Cargo.lock: {err}"))?;
-    let packages = git_packages(&lock);
-    if packages.is_empty() {
-        println!("No git dependencies in Cargo.lock; nothing to refresh.");
-    } else {
-        println!("Refreshing git dependencies: {}", packages.join(", "));
-        let mut update = Command::new("cargo");
-        update.arg("update").current_dir(&root);
-        for package in &packages {
-            update.arg("--package").arg(package);
-        }
-        run_cargo(update, "cargo update")?;
+    refresh_git_dependencies(&root, "Lege-ecosystem")?;
+    if let Some(liminaldoc) = root.parent().map(|parent| parent.join("liminaldoc"))
+        && liminaldoc.join("Cargo.lock").is_file()
+    {
+        refresh_git_dependencies(&liminaldoc, "liminaldoc")?;
     }
     let mut build = Command::new("cargo");
     build
@@ -95,6 +89,27 @@ fn build_latest(build_args: Vec<String>) -> Result<(), String> {
         .args(&build_args)
         .current_dir(&root);
     run_cargo(build, "cargo build")
+}
+
+/// `cargo update` the packages the workspace at `root` resolves from git.
+fn refresh_git_dependencies(root: &Path, label: &str) -> Result<(), String> {
+    let lock = std::fs::read_to_string(root.join("Cargo.lock"))
+        .map_err(|err| format!("could not read {label}'s Cargo.lock: {err}"))?;
+    let packages = git_packages(&lock);
+    if packages.is_empty() {
+        println!("{label}: no git dependencies in Cargo.lock; nothing to refresh.");
+        return Ok(());
+    }
+    println!(
+        "{label}: refreshing git dependencies: {}",
+        packages.join(", ")
+    );
+    let mut update = Command::new("cargo");
+    update.arg("update").current_dir(root);
+    for package in &packages {
+        update.arg("--package").arg(package);
+    }
+    run_cargo(update, &format!("cargo update ({label})"))
 }
 
 fn run_cargo(mut command: Command, what: &str) -> Result<(), String> {
@@ -147,7 +162,7 @@ fn workspace_root() -> Result<PathBuf, String> {
 
 fn print_help() {
     println!(
-        "Lege build and packaging tasks\n\n  cargo latest [cargo build options]\n      Move the git dependencies in Cargo.lock to the head of their branches,\n      then build lege and lege-gui (for example `cargo latest --release`).\n\n  cargo appimage [viewer]\n      Build target/appimage/Lege-<version>-<arch>.AppImage\n      Defaults to the liminalUI GUI; pass `viewer` to use the Liminaldoc reader.\n\nEnvironment forwarded to scripts/build-appimage.sh:\n  APPIMAGETOOL                appimagetool executable/path\n  APPIMAGE_GUI                 gui variant: liminalui (default) or viewer\n  APPIMAGE_UPDATE_INFORMATION AppImage update metadata string\n  LEGE_CARGO_FEATURES         Additional Cargo features"
+        "Lege build and packaging tasks\n\n  cargo latest [cargo build options]\n      Move the git dependencies in Cargo.lock (exprim, liminalkit) to the head\n      of their branches, and those of ../liminaldoc when it is checked out,\n      then build lege and lege-gui (for example `cargo latest --release`).\n\n  cargo appimage [viewer]\n      Build target/appimage/Lege-<version>-<arch>.AppImage\n      Defaults to the liminalUI GUI; pass `viewer` to use the Liminaldoc reader.\n\nEnvironment forwarded to scripts/build-appimage.sh:\n  APPIMAGETOOL                appimagetool executable/path\n  APPIMAGE_GUI                 gui variant: liminalui (default) or viewer\n  APPIMAGE_UPDATE_INFORMATION AppImage update metadata string\n  LEGE_CARGO_FEATURES         Additional Cargo features"
     );
 }
 

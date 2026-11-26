@@ -1,6 +1,7 @@
 [alias]
 appimage = "run --package xtask -- appimage"
-# Refresh the git dependencies in Cargo.lock, then build lege + lege-gui:
+# Refresh the git dependencies (exprim, liminalkit) in Cargo.lock and in the
+# sibling ../liminaldoc's, then build lege + lege-gui:
 # `cargo latest`, `cargo latest --release`.
 latest = "run --package xtask -- latest"
 fmt-all = "fmt --all"
