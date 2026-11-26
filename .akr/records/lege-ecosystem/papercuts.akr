@@ -5668,6 +5668,18 @@ record lege-ecosystem.papercut.while-locating-parsecontext-cancellation/2 : pape
     created_at 2026-11-03
 }
 
+record lege-ecosystem.papercut.while-locating-resizing-code-an-assumed-src/1 : papercut {
+    title "While locating resizing code, an assumed src directory did not exist…"
+    state verified
+    statement """
+        While locating resizing code, an assumed src directory did not exist and a wildcard in a path argument failed on Windows. Search from the package root or enumerate real paths before narrowing.
+        """
+    observed_at git:2026cbf170b7d66f8e658922c63379ca094719be
+    about "rg"
+    author "codex"
+    created_at 2026-11-17
+}
+
 record lege-ecosystem.papercut.while-narrowing-multi-grep-to-lege-process/1 : papercut {
     title "While narrowing multi_grep to…"
     state superseded

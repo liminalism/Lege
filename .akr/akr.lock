@@ -2,10 +2,10 @@ akr-lock 0.1
 project lege-ecosystem
 
 build {
-    tool "akr 0.6.5"
+    tool "akr 0.8.0"
     grammar "0.1"
-    vocabulary "0.2"
-    source_graph "sha256:b88843c4f4a0153db995a43bc3d719888d872df5e632147dffe4ccc9165d8894"
+    vocabulary "0.3"
+    source_graph "sha256:21a53bd07932ee8ab04d84f7b971a7e98bf1af6e1401c2c6e8a1683c383df503"
 }
 
 source ".akr/project.akr" {
@@ -79,8 +79,8 @@ source ".akr/records/lege-ecosystem/observations.akr" {
 }
 
 source ".akr/records/lege-ecosystem/papercuts.akr" {
-    hash "sha256:5681787b040d87f2e3f70033116dc096459c6699572180bfb978f2dd15796c2b"
-    records 343
+    hash "sha256:9bf3f39dcba85fb4a5c8c2eda75db5ee150bea2139aa09e6d1f1bb5c6d007a20"
+    records 344
 }
 
 source ".akr/records/lege-ecosystem/policies.akr" {
@@ -99,8 +99,8 @@ source ".akr/records/lege-ecosystem/requirements.akr" {
 }
 
 source ".akr/records/lege-ecosystem/work.akr" {
-    hash "sha256:39834baa31fb2d6d532b4ea7d132112e4008110fded7b31adad805cfbe118bfa"
-    records 170
+    hash "sha256:c2aeb1390af1957bc2659b9345e83a6966b7fbafca1743a0bfdb6d96b447cfc7"
+    records 171
 }
 
 resolution @lege-ecosystem.assessment.glyph-outlines-rasterized-into-a-jbig2-layer/1 {
@@ -4958,6 +4958,11 @@ seal @lege-ecosystem.papercut.while-locating-parsecontext-cancellation/2 {
     hash "sha256:635159c0016896c8fa446cc5ae4fa8265c778e4be632168a0896b9ccddc7026a"
 }
 
+seal @lege-ecosystem.papercut.while-locating-resizing-code-an-assumed-src/1 {
+    state verified
+    hash "sha256:a752f100964168da0f2685ab08f30059eedf5b797f619939f946bff4ba3c2a06"
+}
+
 seal @lege-ecosystem.papercut.while-narrowing-multi-grep-to-lege-process/1 {
     state superseded
     hash "sha256:e749cf24ba96e7948aa09c38242ae1e6ab1e58a46f00a676b69af444005e135a"
@@ -5806,6 +5811,11 @@ seal @lege-ecosystem.work.vertical-lifting-layout/1 {
 seal @lege-ecosystem.work.viewer-movement-and-reliability/1 {
     state abandoned
     hash "sha256:33e138c0d987b0a9f51f0831c13142bcf879b47f2d6529305cafa4a0ae11e605"
+}
+
+seal @lege-ecosystem.work.viewer-sized-gpu-and-renderer/1 {
+    state completed
+    hash "sha256:6cdfedd0aea757b33bf3ccbe0d7b77e6bdd832c13e277e98285b20cc012981dd"
 }
 
 seal @lege-ecosystem.work.what-was-already-fixed-do-not-redo/1 {

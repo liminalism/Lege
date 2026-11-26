@@ -2476,7 +2476,18 @@ impl ExperimentalImageRenderer {
         preference: ImageRendererPreference,
         options: CpuBackendOptions,
     ) -> Result<Self, RenderError> {
-        let cpu = Arc::new(CpuBackend::new(options));
+        Self::with_cpu_backend(preference, CpuBackend::new(options))
+    }
+
+    /// [`Self::new`] over a CPU backend the caller configured, for example
+    /// with smaller caches (`CpuBackend::with_cache_bytes`,
+    /// `CpuBackend::with_surface_pool_bytes`) than its 96 MiB image cache and
+    /// 256 MiB buffer pool, which suit batch rendering more than a viewer.
+    pub fn with_cpu_backend(
+        preference: ImageRendererPreference,
+        cpu: CpuBackend,
+    ) -> Result<Self, RenderError> {
+        let cpu = Arc::new(cpu);
         let gpu_state = match preference {
             ImageRendererPreference::Cpu => GpuLifecycle::CpuOnly,
             ImageRendererPreference::Auto => GpuLifecycle::Cold,

@@ -6488,6 +6488,20 @@ record lege-ecosystem.work.viewer-movement-and-reliability/1 : work {
     }
 }
 
+record lege-ecosystem.work.viewer-sized-gpu-and-renderer/1 : work {
+    title "Let a viewer opt out of the compute device and batch-sized renderer caches"
+    state completed
+    intent """
+        liminaldoc-reader used 5-9x Kitab's memory on a scanned book; part came from Lege defaults built for batch processing: the shared compute device and exprim's batch-sized CPU caches.
+        """
+    trace [
+        "PresentationDevice::Dedicated: downlevel limits, no features, MemoryUsage hint; saved ~100 MB commit on NVIDIA Vulkan versus the shared compute device. SharedCompute stays the default.",
+        "prepare_dedicated() lets a viewer load the Vulkan driver off the window thread without creating the compute device.",
+        "ExperimentalImageRenderer::with_cpu_backend takes a configured CpuBackend, so a viewer can shrink exprim's 96 MiB image cache and 256 MiB buffer pool."
+    ]
+    author "dk"
+}
+
 record lege-ecosystem.work.what-was-already-fixed-do-not-redo/1 : work {
     title "What was already fixed (do not redo)"
     state abandoned

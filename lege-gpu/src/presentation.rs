@@ -137,10 +137,27 @@ pub struct PresentationStats {
     pub vertices: u32,
 }
 
+/// Which GPU device the compositor draws with.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum PresentationDevice {
+    /// Share Lege's compute device, so GPU compute results and display use
+    /// one device. That device requests the adapter's maximum limits, the
+    /// compute features and the allocator's performance hint.
+    #[default]
+    SharedCompute,
+    /// A presentation-only device: downlevel limits raised to the adapter's
+    /// resolution limits, no optional features, and the allocator's
+    /// memory-usage hint. For a viewer that never runs GPU compute: on an
+    /// NVIDIA Vulkan driver the shared compute device committed ~360 MB of
+    /// process memory before a single frame was drawn.
+    Dedicated,
+}
+
 #[derive(Debug, Clone)]
 pub struct PresentationConfig {
     pub max_atlas_banks: usize,
     pub desired_maximum_frame_latency: u32,
+    pub device: PresentationDevice,
 }
 
 impl Default for PresentationConfig {
@@ -148,8 +165,34 @@ impl Default for PresentationConfig {
         Self {
             max_atlas_banks: DEFAULT_MAX_BANKS,
             desired_maximum_frame_latency: 2,
+            device: PresentationDevice::default(),
         }
     }
+}
+
+/// The instance [`PresentationDevice::Dedicated`] compositors are created
+/// from, so [`prepare_dedicated`] can load the driver ahead of the window
+/// thread asking for a device.
+static DEDICATED_INSTANCE: std::sync::OnceLock<Arc<wgpu::Instance>> = std::sync::OnceLock::new();
+
+fn dedicated_instance() -> Arc<wgpu::Instance> {
+    Arc::clone(DEDICATED_INSTANCE.get_or_init(|| Arc::new(crate::wgpu_setup::create_instance())))
+}
+
+/// Load the GPU driver and enumerate adapters for a later
+/// [`PresentationDevice::Dedicated`] compositor, off the window thread.
+/// Surface compatibility can only be checked once a window surface exists,
+/// so this succeeds whenever at least one adapter is present.
+pub fn prepare_dedicated() -> Result<(), PresentationError> {
+    let instance = dedicated_instance();
+    let adapters =
+        pollster::block_on(instance.enumerate_adapters(crate::wgpu_setup::requested_backends()));
+    if adapters.is_empty() {
+        return Err(PresentationError::Adapter(
+            "no GPU adapter was enumerated".to_owned(),
+        ));
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -274,13 +317,22 @@ impl GpuCompositor {
         // possible. WGPU adapters and surfaces are instance-scoped on some
         // backends, so checking a surface created by an unrelated Instance can
         // produce a false compatibility result.
-        let shared_candidate = crate::vision::runtime::device::GpuContext::shared()
-            .await
-            .ok();
-        let instance = shared_candidate
-            .as_ref()
-            .map(|context| Arc::clone(&context.instance))
-            .unwrap_or_else(|| Arc::new(crate::wgpu_setup::create_instance()));
+        let dedicated = config.device == PresentationDevice::Dedicated;
+        let shared_candidate = if dedicated {
+            None
+        } else {
+            crate::vision::runtime::device::GpuContext::shared()
+                .await
+                .ok()
+        };
+        let instance = if dedicated {
+            dedicated_instance()
+        } else {
+            shared_candidate
+                .as_ref()
+                .map(|context| Arc::clone(&context.instance))
+                .unwrap_or_else(|| Arc::new(crate::wgpu_setup::create_instance()))
+        };
         let surface = instance
             .create_surface(window)
             .map_err(|error| PresentationError::CreateSurface(error.to_string()))?;
@@ -320,11 +372,20 @@ impl GpuCompositor {
                 let info = candidate.get_info();
                 let description =
                     format!("{} ({:?}, {:?})", info.name, info.backend, info.device_type);
+                let (required_limits, memory_hints) = if dedicated {
+                    (
+                        wgpu::Limits::downlevel_defaults().using_resolution(candidate.limits()),
+                        wgpu::MemoryHints::MemoryUsage,
+                    )
+                } else {
+                    (candidate.limits(), wgpu::MemoryHints::default())
+                };
                 match candidate
                     .request_device(&wgpu::DeviceDescriptor {
                         label: Some("lege-presentation"),
                         required_features: wgpu::Features::empty(),
-                        required_limits: candidate.limits(),
+                        required_limits,
+                        memory_hints,
                         ..Default::default()
                     })
                     .await
