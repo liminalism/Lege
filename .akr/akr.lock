@@ -5,7 +5,7 @@ build {
     tool "akr 0.8.0"
     grammar "0.1"
     vocabulary "0.3"
-    source_graph "sha256:e5fa9e43e0783cd3a95dd5e67141b87876f726c81644356edca2138573309a7b"
+    source_graph "sha256:a3124abe5e191d58077ffa9543bb0a4208bf56412cfa91aa1a0237cb6fb842e0"
 }
 
 source ".akr/project.akr" {
@@ -74,8 +74,8 @@ source ".akr/records/lege-ecosystem/milestones.akr" {
 }
 
 source ".akr/records/lege-ecosystem/observations.akr" {
-    hash "sha256:99daa8d350cd90ed4d108fa26d5b5cbefff49cac9fbce7c4848fc0d54261ed80"
-    records 61
+    hash "sha256:9f66d7bfff159bd05929339f2d5ee1198337158f9b4a5dae6d25d6e38f437acc"
+    records 62
 }
 
 source ".akr/records/lege-ecosystem/papercuts.akr" {
@@ -422,6 +422,12 @@ resolution @lege-ecosystem.observation.truetyping-halftone-review-fixes-20260905
 }
 
 resolution @lege-ecosystem.observation.truetyping-text-accuracy-20261127/1 {
+    slot derived_from
+    to @lege-ecosystem.work.glyph-font-text-output/1
+    hash "sha256:5431000d866027d8e54b370590aeba52845e0035df3c8b2b467dde63c610bd3f"
+}
+
+resolution @lege-ecosystem.observation.truetyping-text-accuracy-20261127/2 {
     slot derived_from
     to @lege-ecosystem.work.glyph-font-text-output/1
     hash "sha256:5431000d866027d8e54b370590aeba52845e0035df3c8b2b467dde63c610bd3f"
@@ -3635,8 +3641,13 @@ seal @lege-ecosystem.observation.truetyping-letters-ride-off-their-baseline/2 {
 }
 
 seal @lege-ecosystem.observation.truetyping-text-accuracy-20261127/1 {
+    state superseded
+    hash "sha256:348dabf707e22534fe24189c9e5235c33a66affd9e075a96470534b39b9a4ae6"
+}
+
+seal @lege-ecosystem.observation.truetyping-text-accuracy-20261127/2 {
     state verified
-    hash "sha256:0d05ac5cefd370082437dbdb35f2608a3abcbe066597adb10aed79f096dc57e2"
+    hash "sha256:515b4d0605f86dced1ff16b65c2e87ce053f8ba4f3cc2ce3fed1a3f7cfd1c790"
 }
 
 seal @lege-ecosystem.observation.truetyping-text-identity-moved-letters-off-their-baseline/1 {
