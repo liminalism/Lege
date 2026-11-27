@@ -1244,6 +1244,23 @@ record lege-ecosystem.work.current-decoder-pipeline/1 : work {
     }
 }
 
+record lege-ecosystem.work.dark-painting-binarizer-repro/1 : work {
+    title "Reproduce or retire the all-ink result on full-page paintings with a caption"
+    state proposed
+    intent """
+        In October, --grayscale --mrc-adaptive-mask turned a full-page painting with a caption black: the adaptive binarizer called the whole picture ink. No code, test or changelog entry tracks it, the source book is no longer on disk, and binarization has since been reworked (Best model by default, Fast adaptive). Find a full-page-painting-plus-caption page, run Best, Fast and grayscale with the adaptive mask, and either show the picture survives or reproduce the defect and fix it. Preserve is not affected: it keeps such pictures as premasked regions.
+        """
+    acceptance {
+        check dark-painting-repro {
+            statement """
+                On a located full-page painting with a caption, Best, Fast and grayscale+adaptive-mask output keep the picture intact, or the defect is reproduced with a failing test.
+                """
+            method manual
+        }
+    }
+    author "dk"
+}
+
 record lege-ecosystem.work.do-not-start-with/1 : work {
     title "Do not start with"
     state abandoned
@@ -3371,6 +3388,44 @@ record lege-ecosystem.work.layout-vertical-bands-ocr-horizontal/1 : work {
     }
 }
 
+record lege-ecosystem.work.ledger-audit-small-fixes-20261127/1 : work {
+    title "Small fixes found by the 2026-11-27 ledger audit"
+    state proposed
+    scope [
+        path "README.md",
+        path "lege-gpu/Cargo.toml",
+        path "lege-misc/xtask/Cargo.toml",
+        path "lege-ocr/Cargo.toml",
+        path "lege-pdf/write/Cargo.toml",
+        path "lege-process/core/main.rs"
+    ]
+    intent """
+        Text and metadata that drifted after the Freya removal, the exprim extraction and Flatten page's PDF support: four Lege library manifests declare no licence although the workspace is AGPL-3.0-only; the README still names a vendored Freya tree and says codec crates live in Lege; a CLI field comment says Flatten page takes only folder and ZIP input; exprim's NUp::grid doc comment tells callers to swap the grid for landscape, which the N-up decision and the code no longer do. Optional, owner to confirm: the five jp2lam decode-fix-plan documents under lege-codecs/ are byte-identical copies of the ones in exprim/codecs/jp2lam and are the only files left in that folder.
+        """
+    acceptance {
+        check exprim-nup-comment {
+            statement """
+                exprim's NUp::grid doc comment says the grid is read in the sheet's own frame, with no swap for landscape.
+                """
+            method manual
+        }
+        check licence-fields {
+            statement """
+                lege-gpu, lege-ocr, lege-pdf-write and xtask take license.workspace = true, so cargo metadata reports AGPL-3.0-only for every Lege package.
+                """
+            method command
+            command "cargo metadata --no-deps --format-version 1"
+        }
+        check text-drift {
+            statement """
+                README.md no longer mentions Freya or in-tree codec crates, and the --flatten field comment in core/main.rs says folder, ZIP and PDF input.
+                """
+            method manual
+        }
+    }
+    author "dk"
+}
+
 record lege-ecosystem.work.lege-gpu-tensor-core-gemm/1 : work {
     title "lege-gpu: tensor-core GEMM on Vulkan, GEMM generator and tuning harness"
     state completed
@@ -4531,7 +4586,7 @@ record lege-ecosystem.work.own-page-dewarp-model/1 : work {
 
 record lege-ecosystem.work.own-page-dewarp-model/2 : work {
     title "Train an own page-dewarp model on Colab that beats Paddle UVDoc, flattener and DocScanner on book spreads and leaves flat pages alone"
-    state proposed
+    state completed
     scope [ path "lege-gpu/**", path "lege-process/models/**" ]
     intent """
         Train from ImageNet-initialised ResNet-18 trunk + three transformer layers + residual flow head (about 5.3 M parameters, 10-20 MB with fp16 weights) on SyntheticDoc, UVDoc, Book3D spreads and the owner's scanned books (flat pages and textures), on Google Colab within about 90 compute units. The model predicts a correction to the identity map at 1/8 resolution plus a page mask, gutter heat, a bend score and a spread score, so one model serves the whole-frame pass, the page pass and the flat-page gate. Deliverable: one ONNX file with input `image` that lege-gpu loads unchanged, measured with the standalone dewarp tester against the three existing models on 26 hand-held book-spread photos and on a flat-page identity test. Integrating it into the Lege pipeline is a separate follow-up.
@@ -4551,7 +4606,8 @@ record lege-ecosystem.work.own-page-dewarp-model/2 : work {
             method observation
             verified_by [
                 @lege-ecosystem.evidence.lege-dewarp-picture-book-finetune-20261114/1,
-                @lege-ecosystem.evidence.lege-dewarp-real-pairs-finetune-20261113/1
+                @lege-ecosystem.evidence.lege-dewarp-real-pairs-finetune-20261113/1,
+                @lege-ecosystem.evidence.lege-dewarp-shipped-files-are-ft4-20261127/1
             ]
         }
         check flat-pages-untouched {
@@ -4559,14 +4615,20 @@ record lege-ecosystem.work.own-page-dewarp-model/2 : work {
                 On held-out flat pages the identity gate returns at least 99 % untouched, and passes none of the 26 curved photos.
                 """
             method command
-            verified_by [ @lege-ecosystem.evidence.lege-dewarp-flat-pages-untouched-20261113/1 ]
+            verified_by [
+                @lege-ecosystem.evidence.lege-dewarp-flat-pages-untouched-20261113/1,
+                @lege-ecosystem.evidence.lege-dewarp-shipped-files-are-ft4-20261127/1
+            ]
         }
         check loads-in-lege-gpu {
             statement """
                 The exported fp16 ONNX file is 10-20 MB and is accepted by lege-gpu unchanged; against its fp32 twin its grids differ by 0.009 px on average (0.26 px at most, at model width), which the owner accepted in place of the planned 0.05 px bound.
                 """
             method observation
-            verified_by [ @lege-ecosystem.evidence.lege-dewarp-loads-in-lege-gpu-20261113/1 ]
+            verified_by [
+                @lege-ecosystem.evidence.lege-dewarp-loads-in-lege-gpu-20261113/1,
+                @lege-ecosystem.evidence.lege-dewarp-shipped-files-are-ft4-20261127/1
+            ]
         }
     }
     derived_from [
@@ -4658,6 +4720,47 @@ record lege-ecosystem.work.package-primary-tensorrt-ocr-runtime/1 : work {
     part_of [ @lege-ecosystem.milestone.business-pdf-ocr-cli ]
 }
 
+record lege-ecosystem.work.pagepress-builds-against-exprim/1 : work {
+    title "Make PagePress build again against exprim and the exprim codecs"
+    state proposed
+    intent """
+        PagePress (sibling repo) no longer resolves: its manifests still name Lege's lege-codecs/jbig2enc-rust, lege-codecs/jp2lam and lege-pdf/read, all moved to exprim on 2026-11-09. Point the codecs and the reader at liminalism/exprim main as git dependencies, the way Lege's root manifest does, move pagepress-gui's preview from lege_pdf_read to exprim's RenderSession (same API, no renames found at exprim 853afbe), refresh both lock files, and get the library, CLI and GUI tests passing. lege-pdf-write and the liminalkit crates stay path dependencies unless the owner wants PagePress to build from a bare clone. The lopdf import backend is untouched here (lege-ecosystem.work.pagepress-pdf-import-followup).
+        """
+    note """
+        Scoped 2026-11-27. Separate hygiene in the PagePress repo, to be asked before doing: it has no .gitignore, tracks target/ (3979 files), and its GUI, README, src/pdf_import.rs and tests/pdf_merge.rs exist only uncommitted.
+        """
+    acceptance {
+        check pagepress-core-tests {
+            statement """
+                The PagePress library and CLI build and pass their tests, tests/pdf_merge.rs included.
+                """
+            method command
+            command "cargo test --manifest-path ../pagepress/Cargo.toml"
+        }
+        check pagepress-gui-tests {
+            statement """
+                The GUI builds against exprim's RenderSession and its preview tests pass.
+                """
+            method command
+            command "cargo test --manifest-path ../pagepress/pagepress-gui/Cargo.toml"
+        }
+        check pagepress-gui-thumbnails {
+            statement """
+                Importing a multi-page PDF in the GUI shows correct thumbnails and a 768 px preview that respects CropBox and Rotate.
+                """
+            method manual
+        }
+        check pagepress-resolves {
+            statement """
+                Both PagePress manifests resolve with no path dependency on lege-codecs or lege-pdf/read.
+                """
+            method command
+            command "cargo metadata --format-version 1 --manifest-path ../pagepress/Cargo.toml && cargo metadata --format-version 1 --manifest-path ../pagepress/pagepress-gui/Cargo.toml"
+        }
+    }
+    author "dk"
+}
+
 record lege-ecosystem.work.pagepress-gui-drop-sort/1 : work {
     title "PagePress GUI: OS drag-and-drop plus sort button"
     state completed
@@ -4669,13 +4772,16 @@ record lege-ecosystem.work.pagepress-gui-drop-sort/1 : work {
 }
 
 record lege-ecosystem.work.pagepress-pdf-import-followup/1 : work {
-    title "PagePress followup: PDF page import via lege-pdf-read"
+    title "PagePress: replace the lopdf import backend with an exprim + lege-pdf-write page-import API"
     state proposed
     scope [ all ]
     intent """
-        Replace or augment PagePress's temporary lopdf PDF import and merge backend (src/pdf_import.rs, lopdf 0.39) with the exprim reader, or let lege-pdf-write carry existing pages. OCR text layers and automatic deskew stay separately scoped. First repoint PagePress's path dependencies: they still name Lege's removed lege-pdf/read and lege-codecs/*, which moved to exprim on 2026-11-09, so PagePress does not build as checked in.
+        Replace PagePress's lopdf import and merge backend with Lege's own reader and writer, once both can do it. Neither can today: lege-pdf-write is write-only (it composes PdfPageArtifact pages and cannot copy objects from an existing PDF), and exprim's raw object access (document, object, PageRef) is doc-hidden with no semver promise. Needed first: a stable exprim API that walks a page's reference closure with inherited attributes folded, /Parent not followed and streams left encoded; and a lege-pdf-write DocumentWriter::add_imported_page that renumbers those objects, keeps stream bytes raw, repoints /Parent and applies extra rotation. Links to unselected pages must be nulled and repeated selections supported, and the nine behaviours pinned by PagePress's tests/pdf_merge.rs must be kept. Until then lopdf stays: it works and is pinned by tests. Depends on lege-ecosystem.work.pagepress-builds-against-exprim.
         """
     note "PagePress already imports and merges existing PDF pages through its temporary lopdf backend; lege-pdf-read integration is the remaining backend follow-up."
+    trace [
+        "Scoped 2026-11-27 as L across three repos; build repair split into pagepress-builds-against-exprim. Keeping lopdf is the pragmatic answer until the import API exists."
+    ]
     after [ @lege-ecosystem.milestone.pagepress-mvp ]
     author "dk"
 }
@@ -4952,7 +5058,7 @@ record lege-ecosystem.work.pipeline-memory-follow-ups/1 : work {
     state proposed
     scope [ path "lege-process/pipeline/**" ]
     intent """
-        Two items from the external memory review remain: bring the staged DjVu pipeline under the shared page-memory governor (or carry one reservation per page through its queues; today only its source stage is capped and its queues are not byte-bounded), and measure peak RSS on the decisive workloads (oversized natives, slow writer, one-worker margin, illustration-heavy pages, mid-decode cancel) to size what the review could only identify statically. JP2 native-dimension sniffing, the writer off the control loop and streamed EPUB hOCR landed on 2026-10-28.
+        Two items from the external memory review remain, in this order. First measure: Windows has no peak-RSS figure today (runtime_stats' read_process_status is a stub there, so peak_rss_kib is 0), so add a probe (GetProcessMemoryInfo PeakWorkingSetSize, or an external PeakWorkingSet64 sampler) and take a DjVu-vs-PDF baseline on the decisive workloads: oversized natives, slow writer, one-worker margin, illustration-heavy pages, mid-decode cancel. Then, if the baseline justifies it (owner's gate: DjVu peak on oversized natives above budget plus resident baseline, or more than about 1.5x the PDF path), carry one page-memory reservation per DjVu page from source admission (in page order, without holding the fill loop) through inference and processing until encode drops the raster, and move the margin pre-pass onto the shared budget. No encoded-bytes reservation for DjVu: its writer keeps every page until finalize and a byte cap there can deadlock the reorder buffer. JP2 native-dimension sniffing, the writer off the control loop and streamed EPUB hOCR landed on 2026-10-28.
         """
     note """
         2026-10-28: three of the five original items have landed:
@@ -4960,6 +5066,39 @@ record lege-ecosystem.work.pipeline-memory-follow-ups/1 : work {
         - Move PDF writer blocking work off the current-thread control loop: spawn_pdf_writer_actor in lege-process/pipeline/helper_functions.rs now runs on a dedicated blocking worker thread (runtime_stats::spawn_blocking + blocking_recv) instead of tokio::spawn. Evidence: lege-ecosystem.evidence.pipeline-writer-and-spooled-epub-tests/1.
         - Stream EPUB sidecar packaging instead of re-reading all spooled hOCR into one Vec: lege-process/pipeline/epub_pipeline.rs gained build_epub_from_spooled_hocr_pages_with_outline_cancellable, which sorts SpooledHocrPage handles and reads/parses one spooled .hocr file at a time into PageText inside the blocking packaging task. Evidence: lege-ecosystem.evidence.pipeline-writer-and-spooled-epub-tests/1.
         """
+    acceptance {
+        check djvu-margin-shares-budget {
+            statement """
+                The DjVu margin pre-pass draws from the same page budget as the page stages.
+                """
+            method observation
+        }
+        check djvu-source-admits-bytes {
+            statement """
+                The shared source stage admits each DjVu page against the page byte budget in page order, admits an oversized page alone, and returns every permit on abort, without deadlock under out-of-order completion.
+                """
+            method command
+            command "cargo test -p lege --lib djvu_page_budget"
+        }
+        check peak-rss-after-djvu-governed {
+            statement """
+                Re-run on the changed build: DjVu admitted MB never exceeds the budget, peak RSS on oversized natives is no worse and inside the owner's gate, a mid-decode Ctrl+C exits within the bounded drain with no partial output, and ordinary-size DjVu output is byte-identical to before.
+                """
+            method observation
+        }
+        check peak-rss-baseline-before {
+            statement """
+                Peak RSS, admitted and queued megabytes and wall time are recorded for the five workloads on the current DjVu and PDF paths, three interleaved runs each, with output hashes.
+                """
+            method observation
+        }
+        check windows-peak-rss-recorded {
+            statement """
+                A Windows run records a non-zero peak working set, in the runtime report or through a documented sampler script.
+                """
+            method observation
+        }
+    }
     depends_on [ @lege-ecosystem.decision.pipeline-memory-policy-from-external-review ]
     author "dk"
 }
@@ -5497,7 +5636,7 @@ record lege-ecosystem.work.preservation-mode/1 : work {
 
 record lege-ecosystem.work.preservation-mode/2 : work {
     title "Preservation mode: an MRC document beside the e-ink preparation mode"
-    state active
+    state superseded
     scope [
         path "dev-notes/lege-process/PRESERVATION-MODE-PLAN.md",
         path "lege-codecs/djvulibrust/**",
@@ -5540,6 +5679,91 @@ record lege-ecosystem.work.preservation-mode/2 : work {
     }
     derived_from [ @lege-ecosystem.work.glyph-font-text-output ]
     supersedes [ @lege-ecosystem.work.preservation-mode/1 ]
+    verified_by [
+        @lege-ecosystem.evidence.preservation-mode-djvu-e2e,
+        @lege-ecosystem.evidence.preservation-mode-pdf-e2e,
+        @lege-ecosystem.evidence.preservation-mode-unit-tests
+    ]
+    author "dk"
+}
+
+record lege-ecosystem.work.preservation-mode/3 : work {
+    title "Preservation mode: an MRC document beside the e-ink preparation mode"
+    state active
+    scope [
+        path "dev-notes/lege-process/PRESERVATION-MODE-PLAN.md",
+        path "lege-codecs/djvulibrust/**",
+        path "lege-process/GUI/**",
+        path "lege-process/core/clean_gray.rs",
+        path "lege-process/core/djvu.rs",
+        path "lege-process/pipeline/config.rs",
+        path "lege-process/pipeline/pdf_tokio_pipeline.rs"
+    ]
+    intent """
+        Preserve is the second top-level mode beside e-ink Preparation, shipped in the CLI (--preserve) and the liminalUI GUI: page colour retained, PDF as a JPEG 2000 background under JBIG2 ink, DjVu as IW44 plus JB2; hOCR independent, TrueTyping opt-in. Left for a release, in this order: (1) fix colour loss on already-MRC sources — when a source JBIG2 /SMask qualifies for passthrough, the planned path forces a Gray8 base, so Preserve writes the background grey (found in code, not yet reproduced; Structures.pdf is this shape); (2) decode and look at Preserve DjVu output with djvulibre's ddjvu and djview, against a --grayscale DjVu of the same pages; (3) a size and time table on three books, PDF and DjVu, input vs preparation vs grayscale vs preserve, with the binarizer named (Preserve's mask now follows Best/Fast). The table also decides supersampled coverage, which is only triggered by dark glyph rings or a preserve background more than 25 % larger than grayscale's.
+        """
+    note """
+        Plan: dev-notes/lege-process/PRESERVATION-MODE-PLAN.md §8. GUI integration was first wired in the PixelKit preview, which became liminalUI, now the only GUI. A two-page colour PDF completed through the GUI supervisor with JPX backgrounds and JBIG2 masks; cancellation smoke passed. This does not close DjVu decode-and-look, the three-book size/time measurements, the pre-refactor grayscale identity gate, or deferred fidelity work (coloured ink and colour source-MRC passthrough included). The shared dark-painting binarizer defect predates Preserve. Audit 2026-11-27: no later evidence for the open items was found.
+        """
+    trace [
+        "Retired the grayscale byte-identity gate: its pre-refactor baseline predates the binarizer and layout reworks; rgb_coverage_matches_grey_per_channel remains the guard.",
+        "Deferred coloured ink: both writers need new layers and no corpus book with rubrics or stamps is known; --help says ink is black.",
+        "Split the dark-painting binarizer defect into its own work; Preserve is insulated by keeping full-page pictures as premasked regions."
+    ]
+    claim coverage-has-no-producer {
+        text """
+            `mrc_background_with_coverage` consumes a continuous 0-255 ink coverage plane, but the only producer is the decoded source /SMask; binarization emits bilevel. The first cut feeds it the Sauvola mask as 0/255 coverage, which under the ×2 gain and box downsample equals an area-averaged coverage at background resolution; a supersampled plane is deferred until glyph rings or background size justify it.
+            """
+    }
+    claim hocr-is-already-independent {
+        text """
+            On the default PP-OCR backend the recognizer reads the RGB raster rather than the bilevel mask and the text reaches the writer on its own channel, so hOCR carries into preservation mode unchanged.
+            """
+    }
+    claim legacy-path-still-has-colour {
+        text """
+            The legacy page path holds the RGB render (`binarization_image`, `adjusted_image`) right up to the grayscale-MRC branch, and the planned path already declines grayscale mode, so a preservation branch there needs no renderer change.
+            """
+    }
+    claim preserved-path-needs-an-mrc-input {
+        text """
+            The source-MRC passthrough fires only when the input PDF is already MRC: `RenderSession::preserved_jbig2_smask` returns None unless the page is one full-page image whose /SMask is itself JBIG2, and no code synthesizes that shape for a plain scan. Its background is built from the planned path's Gray8 base tripled to RGB, so it does not preserve colour either.
+            """
+    }
+    claim the-writers-already-layer {
+        text """
+            Both writers already support MRC layers: the PDF writer stacks a colour JPX background under a JBIG2 ink stencil, and djvulibrust represents colour backgrounds and JB2 masks. Colour segmentation and the --preserve CLI path are implemented; GUI mode selection is now wired in the PixelKit preview. The remaining fidelity and corpus gates are retained in the note.
+            """
+    }
+    acceptance {
+        check coverage-trigger-evaluated {
+            statement """
+                The size table reports the preserve vs grayscale background size and whether the supersampled-coverage trigger (25 % or dark rings) fired.
+                """
+            method observation
+        }
+        check djvu-preserve-decoded {
+            statement """
+                ddjvu decodes a --preserve DjVu page whose paper tone and mean saturation match the source render, while a --grayscale DjVu of the same page has near-zero chroma; the file opens in djview with colour and a selectable text layer.
+                """
+            method manual
+        }
+        check preserve-source-mrc-colour {
+            statement """
+                lege Structures.pdf 1-5 --preserve writes a DeviceRGB JPX background whose mean saturation is within about 2 of the source render, the source JBIG2 mask stream passes through byte-identical, and a unit test pins an Rgb8 base for the planned path in preserve mode.
+                """
+            method command
+            command "cargo test -p lege --lib preserve_source_mrc"
+        }
+        check size-time-table {
+            statement """
+                One evidence record tabulates bytes and seconds for input, preparation, grayscale and preserve, PDF and DjVu, on three books, with the binarization setting named and warm runs interleaved.
+                """
+            method observation
+        }
+    }
+    derived_from [ @lege-ecosystem.work.glyph-font-text-output ]
+    supersedes [ @lege-ecosystem.work.preservation-mode/2 ]
     verified_by [
         @lege-ecosystem.evidence.preservation-mode-djvu-e2e,
         @lege-ecosystem.evidence.preservation-mode-pdf-e2e,

@@ -2222,6 +2222,29 @@ record lege-ecosystem.evidence.lege-dewarp-real-pairs-finetune-20261113/1 : evid
     author "dk"
 }
 
+record lege-ecosystem.evidence.lege-dewarp-shipped-files-are-ft4-20261127/1 : evidence {
+    title "The embedded Flatten page models are the measured ft4 files, unchanged since they shipped"
+    state verified
+    result pass
+    method observation
+    observed_at git:576e4de6602ad956c4036943f2442afad84f5bd1
+    summary """
+        Checked at Lege 576e4de6. lege-process/models/lege-dewarp-576x384.fp16.onnx and -384x576.fp16.onnx are
+        10 583 268 bytes each (10.58 MB) and have exactly one commit, 98dd5cc2 (2026-11-14), which shipped
+        checkpoint ft4 (lege-process/models/lege-dewarp.md). So the ft4 measurements still describe the shipped
+        model: residual distortion after registration 0.250 and 0.247 % of the page diagonal on held-out
+        spreads against 0.43-0.53 for Paddle UVDoc, DocScanner and flattener
+        (lege-dewarp-picture-book-finetune-20261114); level with Paddle UVDoc on the 26 hand-held spreads
+        (lege-dewarp-spreads-level-with-paddle-20261113); 406 of 408 held-out flat scans and 6 of 6 test pages
+        untouched, none of 590 curved photos (lege-dewarp-flat-pages-untouched-20261113,
+        flatten-flat-pages-untouched-in-lege-20261114); loads in lege-gpu unchanged and reproduces the
+        tester's grids inside Lege (lege-dewarp-loads-in-lege-gpu-20261113, flatten-grids-match-tester-20261114);
+        fp16 against fp32 mean 0.009 px, max 0.26 px at model width (measured on the baseline checkpoint).
+        Nothing was re-run for this record.
+        """
+    author "dk"
+}
+
 record lege-ecosystem.evidence.lege-dewarp-spreads-level-with-paddle-20261113/1 : evidence {
     title "Lege-Dewarp is level with Paddle UVDoc on the 26 curved spreads, not clearly ahead"
     state verified

@@ -5,7 +5,7 @@ build {
     tool "akr 0.8.0"
     grammar "0.1"
     vocabulary "0.3"
-    source_graph "sha256:be506ca22661d0de628e00e3637e8c2fcc1cb47aac2fc40a0a9e26572357f6e1"
+    source_graph "sha256:39fa3bd367c3a7af5bfa37222c22debbc6613876b491c5db87d025efedd1a7a5"
 }
 
 source ".akr/project.akr" {
@@ -64,8 +64,8 @@ source ".akr/records/lege-ecosystem/decisions.akr" {
 }
 
 source ".akr/records/lege-ecosystem/evidence.akr" {
-    hash "sha256:33a6a77f20fe7bbde7551f7039277445460894f1e5defd09d82d8ff9465fdd2c"
-    records 339
+    hash "sha256:5a364f33573ae41fbc1a9426a62cfdc2aad698afea353d3ba9f2696e1a93de48"
+    records 340
 }
 
 source ".akr/records/lege-ecosystem/milestones.akr" {
@@ -99,8 +99,8 @@ source ".akr/records/lege-ecosystem/requirements.akr" {
 }
 
 source ".akr/records/lege-ecosystem/work.akr" {
-    hash "sha256:b2477b0839cc15f4c3595bc4e1f41278dfd8d1e5d0a88167142c5068c0a3ffa1"
-    records 173
+    hash "sha256:506a556a4c1d2346be95345bede7cbc83376810538ba5011355101e61d60d890"
+    records 177
 }
 
 resolution @lege-ecosystem.assessment.glyph-outlines-rasterized-into-a-jbig2-layer/1 {
@@ -484,7 +484,7 @@ resolution @lege-ecosystem.work.gui-file-tiles-grouped-by-kind/1 {
 resolution @lege-ecosystem.work.integrate-lege-dewarp/1 {
     slot depends_on
     to @lege-ecosystem.work.own-page-dewarp-model/2
-    hash "sha256:9745c56236ce9146cc39b753d98f2cb707c6fd1e80cf0c4a308406992c9ca70a"
+    hash "sha256:344f06dfffa8f531d231fa477714c19929725882a3c72be8f4413ae6b020144c"
 }
 
 resolution @lege-ecosystem.work.integrate-lege-dewarp/1 {
@@ -1244,6 +1244,30 @@ resolution @lege-ecosystem.work.preservation-mode/2 {
 }
 
 resolution @lege-ecosystem.work.preservation-mode/2 {
+    slot verified_by
+    to @lege-ecosystem.evidence.preservation-mode-unit-tests/1
+    hash "sha256:dd3b50d711e6e83fe463a69a248757eb7214c4c8f0508cf2e99ee9958e10d67b"
+}
+
+resolution @lege-ecosystem.work.preservation-mode/3 {
+    slot derived_from
+    to @lege-ecosystem.work.glyph-font-text-output/1
+    hash "sha256:d39ab1284ebdd423d45ee6ad6579f60402c10e2c46a6f46200555200f9e2bf36"
+}
+
+resolution @lege-ecosystem.work.preservation-mode/3 {
+    slot verified_by
+    to @lege-ecosystem.evidence.preservation-mode-djvu-e2e/1
+    hash "sha256:80f2aabb63fbd546d676bb2c05223df1cebd656317c81b3321555a2ce03ba6ef"
+}
+
+resolution @lege-ecosystem.work.preservation-mode/3 {
+    slot verified_by
+    to @lege-ecosystem.evidence.preservation-mode-pdf-e2e/1
+    hash "sha256:45504381490d8cb69e77d91e40592a8909fa8fb9b8b68dee5d9eae7a5744ba81"
+}
+
+resolution @lege-ecosystem.work.preservation-mode/3 {
     slot verified_by
     to @lege-ecosystem.evidence.preservation-mode-unit-tests/1
     hash "sha256:dd3b50d711e6e83fe463a69a248757eb7214c4c8f0508cf2e99ee9958e10d67b"
@@ -2422,6 +2446,11 @@ seal @lege-ecosystem.evidence.lege-dewarp-picture-book-finetune-20261114/1 {
 seal @lege-ecosystem.evidence.lege-dewarp-real-pairs-finetune-20261113/1 {
     state verified
     hash "sha256:122fe04117f3cda4146076e485235466d2178ba0ec594579749a179e01dd09b2"
+}
+
+seal @lege-ecosystem.evidence.lege-dewarp-shipped-files-are-ft4-20261127/1 {
+    state verified
+    hash "sha256:6f183535e3d05214ecc7f2a64d5a2d5326522b194cce86374913ac3cf962fcae"
 }
 
 seal @lege-ecosystem.evidence.lege-dewarp-spreads-level-with-paddle-20261113/1 {
@@ -5874,6 +5903,11 @@ seal @lege-ecosystem.work.own-page-dewarp-model/1 {
     hash "sha256:79686d1e1ada2077d4dec4b4c4d40e6e82b6e9dca4b9532e2140a3447a48b5ee"
 }
 
+seal @lege-ecosystem.work.own-page-dewarp-model/2 {
+    state completed
+    hash "sha256:344f06dfffa8f531d231fa477714c19929725882a3c72be8f4413ae6b020144c"
+}
+
 seal @lege-ecosystem.work.package-primary-tensorrt-ocr-runtime/1 {
     state completed
     hash "sha256:44603d1b9ed20b4ffa91ee7cee2445e4f625a2e8c019fd4f837744056a6244de"
@@ -5990,8 +6024,13 @@ seal @lege-ecosystem.work.preservation-mode/1 {
 }
 
 seal @lege-ecosystem.work.preservation-mode/2 {
+    state superseded
+    hash "sha256:64a8c9a743709acf0840d6e7248c1c780c82b20c4b9a9ac29ce42425947ac643"
+}
+
+seal @lege-ecosystem.work.preservation-mode/3 {
     state active
-    hash "sha256:c73e8642e28ec4c2a2aa884ad6750459e5356f9c798634a370da5201c7c225cc"
+    hash "sha256:b0fd89a0d1bc29bd6a29746d73d5371aabdc9d147bc1ae5cadbc4bf56cc682f3"
 }
 
 seal @lege-ecosystem.work.preserve-jbig2-smask-text-plane/1 {
