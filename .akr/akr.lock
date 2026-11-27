@@ -5,7 +5,7 @@ build {
     tool "akr 0.8.0"
     grammar "0.1"
     vocabulary "0.3"
-    source_graph "sha256:e8c6e3f5558bf140b147f2dd5a7b53d187e3074e232eb427562b1848ae3ebf75"
+    source_graph "sha256:48d0e78ba92cc34bfdd75f32e1508169ecfd45ae1680fb678f0ecc15240c9068"
 }
 
 source ".akr/project.akr" {
@@ -74,8 +74,8 @@ source ".akr/records/lege-ecosystem/milestones.akr" {
 }
 
 source ".akr/records/lege-ecosystem/observations.akr" {
-    hash "sha256:ba3aae6ea4b5fb947f4d8da409316f2b25ee98cf40fca7210e4beda374a4b6cf"
-    records 63
+    hash "sha256:b935bb70769302f129ee93606a14ce93272f97288eceb6238674dca63573f5e6"
+    records 64
 }
 
 source ".akr/records/lege-ecosystem/papercuts.akr" {
@@ -434,6 +434,12 @@ resolution @lege-ecosystem.observation.truetyping-text-accuracy-20261127/2 {
 }
 
 resolution @lege-ecosystem.observation.truetyping-text-accuracy-20261127/3 {
+    slot derived_from
+    to @lege-ecosystem.work.glyph-font-text-output/1
+    hash "sha256:4bccecef0f6a7d1e3ed6da32f0f139498c6cc76f16f8f9931f6b24889b29a0f9"
+}
+
+resolution @lege-ecosystem.observation.truetyping-text-accuracy-20261127/4 {
     slot derived_from
     to @lege-ecosystem.work.glyph-font-text-output/1
     hash "sha256:4bccecef0f6a7d1e3ed6da32f0f139498c6cc76f16f8f9931f6b24889b29a0f9"
@@ -3662,8 +3668,13 @@ seal @lege-ecosystem.observation.truetyping-text-accuracy-20261127/2 {
 }
 
 seal @lege-ecosystem.observation.truetyping-text-accuracy-20261127/3 {
+    state superseded
+    hash "sha256:668f00d3e893e11c9b500a98628e974b483dbc8f364e5c770f9eb1fe3eec0996"
+}
+
+seal @lege-ecosystem.observation.truetyping-text-accuracy-20261127/4 {
     state verified
-    hash "sha256:0eb9c0bac0df680837dca2a86c34e955aa11dbf68f7afa1e9c9196c77bf532fb"
+    hash "sha256:ec76f9f5ffcb21eda42d1c5c3edbb67c32e73999c03a3c932686e83a14e8e6fb"
 }
 
 seal @lege-ecosystem.observation.truetyping-text-identity-moved-letters-off-their-baseline/1 {
