@@ -1,6 +1,75 @@
 # Changelog
 
-## 1.6.0 (2026-11-10)
+## 1.6.1 (2026-11-26)
+
+### Processing
+
+- **Binarization survives a GPU that runs out of memory.** When a page or tile does not fit in
+  video memory, Best retries with smaller tiles (1024, then 768, then 512 px) and keeps the
+  smaller size for the rest of the job, instead of failing the job.
+- **A DjVu page that fails is an error, not a gap.** A page whose processing failed used to be
+  left out of the DjVu file with only a log line; the job now stops and says which stage failed.
+- **Preserve keeps the colour of scans that are already layered.** On a PDF whose pages are a
+  colour image under a JBIG2 text mask (the usual shape of archive and Acrobat-compressed scans),
+  Preserve passed the mask through but wrote the background in grey. The background is now colour
+  JPEG 2000; the source's text mask is still carried over byte for byte.
+- **Adaptive masking no longer erases photographs.** With layout detection off,
+  `--grayscale --mrc-adaptive-mask` turned a full-page photograph into a few outlines on white;
+  the picture now survives as it does with plain `--grayscale`.
+
+### Faster, leaner PDF reading (exprim)
+
+The PDF engine moves from the 2026-11-11 state that 1.6.0 was built with to exprim 0.4.5,
+jp2lam 0.4.0 and jbig2enc-rust 0.6.2. Rendered pages are byte-identical; what changes is speed
+and memory.
+
+- Large pages render in horizontal strips, so a page's peak memory no longer grows several times
+  over with its pixel count.
+- JPEG 2000 images (common in scanned books) decode faster and in less memory; grayscale images
+  are resampled as one channel instead of three.
+- JBIG2 images decode faster (about 1.2x for generic regions, 2.3–2.7x for symbol and halftone
+  regions), with fixes for malformed pattern dictionaries and region coordinates.
+- Opening a large scan no longer reads its image data up front: compiling all 808 pages of a
+  781 MB scan uses 38 MB instead of 755 MB and takes 0.78 s instead of about 1.8 s.
+
+### Under the hood
+
+- Lege now builds the PDF engine and codecs from GitHub (`liminalism/exprim`) at the commit pinned
+  in `Cargo.lock`, so a fresh clone builds without a sibling checkout. `cargo latest` also
+  refreshes Liminaldoc's git dependencies.
+- The user guide covers Flatten page, Best/Fast binarization and the new layout model.
+- `--debug-runtime-stats` reports the peak working set on Windows too (it read 0 there before).
+- Every crate in the workspace declares its licence, AGPL-3.0-only.
+
+## 1.6.0 (2026-11-14)
+
+Published to the Microsoft Store on 2026-11-14 from commit `98dd5cc2`. The `1.6.0` git tag marks
+an earlier commit (`1c97cfa1`, 2026-11-10) that has neither Flatten page nor the Best/Fast
+binarization choice.
+
+### Photographed pages
+
+- **Flatten page** (GUI toggle beside Resolution, CLI `--flatten`) flattens photographed pages
+  with the embedded Lege-Dewarp model. One photographed spread can become two pages
+  (`--flatten-pages 1|2`); `--flatten-fast` makes one pass per page, faster and a little less
+  straight. Flat scans are detected and
+  left untouched, and a page the model cannot flatten passes through as it was. Works on folders,
+  ZIPs and PDFs (a PDF's pages are treated as photos, so its outline and text layer do not carry
+  over); EPUB and reflow jobs ignore it. Needs a hardware GPU.
+
+### Binarization
+
+- **Best or Fast.** The Text row offers Best, Fast and Grayscale; the CLI takes
+  `--binarization best|fast`. Best (the default) is the tileable binarizer model on the GPU,
+  cleaner on tinted and yellowed scans. Fast is adaptive binarization on the GPU, about twice the
+  pages per second, for bulk jobs. Without a hardware GPU both fall back to the adaptive
+  algorithm on the CPU, and a Best job says so once.
+- The fixed threshold is no longer a method. `threshold`, `--threshold` and `--sauvola-k` are
+  accepted with a note and change nothing; `heavy` and `--heavy` mean Best, `adaptive` means Fast.
+- Pages over 1.6 megapixels are binarized in tiles, so very large pages no longer exhaust GPU
+  memory.
+- Leaving Grayscale for Best or Fast switches TrueTyping back to JBIG2, since TrueTyping needs
+  grayscale outside Preserve; saved settings are normalized the same way.
 
 ### Layout detection
 

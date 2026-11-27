@@ -105,3 +105,7 @@ __pycache__/
 
 # Scratch target directory of a profiling build
 /target-pb/
+
+# Model training exports (fp32 twins and export metadata); the shipped fp16
+# models live in lege-process/models/.
+/lege-dewarp-*/
