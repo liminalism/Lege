@@ -284,6 +284,24 @@ record lege-ecosystem.evidence.adapter-order-tests-20260813/2 : evidence {
     supersedes [ @lege-ecosystem.evidence.adapter-order-tests-20260813/1 ]
 }
 
+record lege-ecosystem.evidence.adaptive-mask-keeps-photos-20261127/1 : evidence {
+    title "Adaptive mask without layout keeps full-page photographs; text output moves under 1 percent"
+    state verified
+    result pass
+    method manual
+    observed_at git:1424e598a78b911c8d4f0b45a6c9b4d78c8c7bdb
+    summary """
+        After 6d71debe, 1000ideasforbett0000unse_1.pdf pages 18-27 with --no-layout --grayscale
+        --mrc-adaptive-mask: the full-page photos on output pages 1, 4 and 10 keep their tones, looked at by
+        render (before the fix they were a few outlines on white). With layout on, the same flags before
+        and after on 20-page runs: xenosystems 1 016 371 -> 1 009 304 bytes, sahib 622 370 -> 622 661,
+        the photo book 843 033 -> 848 561. Regression test
+        clean_gray::tests::adaptive_mask_keeps_a_photo_the_mask_barely_touches failed before the fix
+        (255 vs 24) and passes after; lege lib suite 389 passed.
+        """
+    author "dk"
+}
+
 record lege-ecosystem.evidence.annotator-abandon-resolution-20261109/1 : evidence {
     title "Abandon boxes take PP-DocLayout-L labels: tests and real-pool run"
     state verified

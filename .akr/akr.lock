@@ -5,7 +5,7 @@ build {
     tool "akr 0.8.0"
     grammar "0.1"
     vocabulary "0.3"
-    source_graph "sha256:97ed396eb1ed1264fc092649cb04ff3daef5f4a5a4416ecd670dc2f308a60102"
+    source_graph "sha256:3271e50c876c5e5f99e7f93628a272591ff676e4604d448b380eeacfbac285c9"
 }
 
 source ".akr/project.akr" {
@@ -64,8 +64,8 @@ source ".akr/records/lege-ecosystem/decisions.akr" {
 }
 
 source ".akr/records/lege-ecosystem/evidence.akr" {
-    hash "sha256:d33bb0c74c8b4bfc0535e3cdfb03d39af01e5f19adf34d6c0cb3d3b6a92b17f9"
-    records 346
+    hash "sha256:6d5948924be0c60a89dd29e5778079d29bd76ad3814cf4f759c6e7b0adfecd96"
+    records 347
 }
 
 source ".akr/records/lege-ecosystem/milestones.akr" {
@@ -99,7 +99,7 @@ source ".akr/records/lege-ecosystem/requirements.akr" {
 }
 
 source ".akr/records/lege-ecosystem/work.akr" {
-    hash "sha256:d0ea659981c8149eac9a29cd773d18173e232b8b8543d422f002c4a49644c750"
+    hash "sha256:f149ea19cd8c9499624aea333b84e48639782f68979b579e072c2ca09fb5a0be"
     records 177
 }
 
@@ -1716,6 +1716,11 @@ seal @lege-ecosystem.evidence.adapter-order-tests-20260813/1 {
 seal @lege-ecosystem.evidence.adapter-order-tests-20260813/2 {
     state verified
     hash "sha256:06fac2b6b32abc5fea46ed387e43ebebaf71d5effda3355195a518471bddc2f7"
+}
+
+seal @lege-ecosystem.evidence.adaptive-mask-keeps-photos-20261127/1 {
+    state verified
+    hash "sha256:9da29fb62e9fa0daa479ea3134f0e5cadad70e4755085234c79a5356cad40046"
 }
 
 seal @lege-ecosystem.evidence.annotator-abandon-resolution-20261109/1 {
@@ -5506,6 +5511,11 @@ seal @lege-ecosystem.work.core-recommendation/1 {
 seal @lege-ecosystem.work.current-decoder-pipeline/1 {
     state abandoned
     hash "sha256:7a4206d5847c068bedc09b3141e77a983b2ed803dedbd96e07538f60a13b61b3"
+}
+
+seal @lege-ecosystem.work.dark-painting-binarizer-repro/1 {
+    state completed
+    hash "sha256:8b97b2836fd778c17373848a13626dac185f76b8a9f2284c3bc71f3c374e7c32"
 }
 
 seal @lege-ecosystem.work.do-not-start-with/1 {
