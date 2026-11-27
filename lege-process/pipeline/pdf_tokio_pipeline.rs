@@ -2140,9 +2140,13 @@ async fn encode_preserved_rgb_base_layer(
 /// Encode only the cleaned continuous-tone background while passing the
 /// qualifying source JBIG2 `/SMask` bytes and globals through unchanged.
 /// `working_coverage` affects background cleanup only; it is never encoded as
-/// the foreground text plane.
+/// the foreground text plane. `base` holds `channels` samples per pixel: 1
+/// for the cleaned grey layer, 3 for preservation mode's colour layer, whose
+/// background is an RGB JPX unless a dither policy is selected.
+#[allow(clippy::too_many_arguments)]
 async fn encode_preserved_mrc_base_layer(
-    cleaned_gray: Vec<u8>,
+    base: Vec<u8>,
+    channels: usize,
     working_coverage: Vec<u8>,
     width: usize,
     height: usize,
@@ -2176,21 +2180,46 @@ async fn encode_preserved_mrc_base_layer(
         // output renders above that height for its own sake only, and the
         // background comes back down to it here.
         let (bg, ow, oh) = crate::clean_gray::mrc_background_with_coverage(
-            &cleaned_gray,
+            &base,
             &working_coverage,
             width,
             height,
-            1,
+            channels,
             background_subsample,
         );
+        drop(base);
         let ow = ow as u32;
         let oh = oh as u32;
-        let rgb = bg
-            .iter()
-            .flat_map(|&gray| [gray, gray, gray])
-            .collect::<Vec<_>>();
+        // `bg` keeps the base's channels. The encoders below take packed RGB
+        // or one grey channel; derive whichever the base is not.
+        let rgb: std::borrow::Cow<[u8]> = if channels == 3 {
+            std::borrow::Cow::Borrowed(&bg)
+        } else {
+            std::borrow::Cow::Owned(bg.iter().flat_map(|&gray| [gray, gray, gray]).collect())
+        };
+        let gray = || -> std::borrow::Cow<[u8]> {
+            if channels == 3 {
+                let mut gray = vec![0u8; ow as usize * oh as usize];
+                crate::clean_gray::rgb_to_luma(&bg, &mut gray);
+                std::borrow::Cow::Owned(gray)
+            } else {
+                std::borrow::Cow::Borrowed(&bg)
+            }
+        };
 
         let background = match image_mode {
+            ImageRegionDitherMode::None if channels == 3 => {
+                // Preservation mode keeps the page's colour: an RGB JPX, as
+                // `encode_preserved_rgb_base_layer` writes it.
+                let jp2 = crate::encoding::jp2::encode_rgb(&bg, ow, oh, bg_quality)
+                    .map_err(|error| anyhow!("preserved-mask RGB JP2 background encode: {error}"))?;
+                crate::accumulator::ContentType::EncodedImage {
+                    data: Arc::from(jp2),
+                    pixel_width: ow,
+                    pixel_height: oh,
+                    format: "jp2".to_string(),
+                }
+            }
             ImageRegionDitherMode::None => {
                 // Preservation path: the background is already subsampled
                 // beneath a full-resolution source mask, so it stays on the
@@ -2216,7 +2245,7 @@ async fn encode_preserved_mrc_base_layer(
                 }
             }
             ImageRegionDitherMode::GrayJp2 => {
-                let jp2 = crate::encoding::jp2::encode_gray_document(&bg, ow, oh, bg_quality)
+                let jp2 = crate::encoding::jp2::encode_gray_document(&gray(), ow, oh, bg_quality)
                     .map_err(|error| anyhow!("preserved-mask JP2 background encode: {error}"))?;
                 crate::accumulator::ContentType::EncodedImage {
                     data: Arc::from(jp2),
@@ -2226,7 +2255,7 @@ async fn encode_preserved_mrc_base_layer(
                 }
             }
             ImageRegionDitherMode::Halftone => {
-                let inverted = bg
+                let inverted = gray()
                     .iter()
                     .map(|&gray| crate::color::color_processing::halftone_ink_from_gray(gray))
                     .collect::<Vec<_>>();
@@ -2307,9 +2336,10 @@ async fn encode_preserved_mrc_base_layer(
             ),
         };
         crate::bbox_trace!(
-            "PAGE {} preserved MRC mode={:?} bg={}x{} bytes={} native_mask={}x{} bytes={}",
+            "PAGE {} preserved MRC mode={:?} channels={} bg={}x{} bytes={} native_mask={}x{} bytes={}",
             page_index,
             image_mode,
+            channels,
             ow,
             oh,
             background.as_bytes().len(),
@@ -3207,14 +3237,20 @@ async fn prepare_planned_pdf_page(
             crate::pipeline::page_output_plan::PagePlanInput {
                 output_width,
                 output_height,
-                gray_suitability: if preserved_mask.is_some() {
-                    exprim::GraySuitability::AcceptableForBilevel
-                } else {
-                    page.gray_suitability()
-                },
+                // Grey under a preserved mask, except in preservation mode,
+                // which keeps the page's colour.
+                gray_suitability: crate::pipeline::page_output_plan::planned_gray_suitability(
+                    &config,
+                    preserved_mask.is_some(),
+                    page.gray_suitability(),
+                ),
             },
         );
-        if plan.base.product.format != exprim::RasterFormat::Gray8 {
+        if !crate::pipeline::page_output_plan::planned_base_is_supported(
+            &config,
+            preserved_mask.is_some(),
+            plan.base.product.format,
+        ) {
             return Ok(None);
         }
         let t_analysis = std::time::Instant::now();
@@ -3433,6 +3469,26 @@ fn compact_gray_surface(surface: exprim::GraySurface) -> Result<Vec<u8>> {
     Ok(compact)
 }
 
+fn compact_rgb_surface(surface: exprim::RgbSurface) -> Result<Vec<u8>> {
+    let row_bytes = (surface.width as usize).saturating_mul(3);
+    let height = surface.height as usize;
+    let bytes = surface.as_bytes();
+    if surface.stride == row_bytes && bytes.len() == row_bytes.saturating_mul(height) {
+        return Ok(bytes.to_vec());
+    }
+    let mut compact = Vec::with_capacity(row_bytes.saturating_mul(height));
+    for row in 0..height {
+        let start = row.saturating_mul(surface.stride);
+        let end = start.saturating_add(row_bytes);
+        compact.extend_from_slice(
+            bytes
+                .get(start..end)
+                .ok_or_else(|| anyhow!("truncated Rgb8 row {row}"))?,
+        );
+    }
+    Ok(compact)
+}
+
 fn gray_to_rgb_image(gray: &[u8], width: u32, height: u32) -> Result<RgbImage> {
     let mut rgb = Vec::with_capacity(gray.len().saturating_mul(3));
     for &pixel in gray {
@@ -3484,12 +3540,28 @@ async fn process_planned_pdf_products(
         "[PROFILING] Page {} planned base render",
         page_index + 1
     );
-    let exprim::RasterPlane::Gray8(base_surface) = base_plane else {
-        return Err(anyhow!("planned gray path received a non-gray base"));
+    // The base is Gray8, except preservation mode's colour layer under a
+    // preserved source mask (`planned_gray_suitability`): `channels` is 1 or
+    // 3, and only the preserved-mask branch below ever sees 3.
+    let (width, height, mut base, channels) = match base_plane {
+        exprim::RasterPlane::Gray8(surface) => (
+            surface.width,
+            surface.height,
+            compact_gray_surface(surface)?,
+            1usize,
+        ),
+        exprim::RasterPlane::Rgb8(surface) if preserved_mask.is_some() => (
+            surface.width,
+            surface.height,
+            compact_rgb_surface(surface)?,
+            3usize,
+        ),
+        exprim::RasterPlane::Rgb8(_) => {
+            return Err(anyhow!(
+                "planned path received an RGB base without a preserved source mask"
+            ));
+        }
     };
-    let width = base_surface.width;
-    let height = base_surface.height;
-    let mut gray = compact_gray_surface(base_surface)?;
     let mut working_coverage = preserved_mask
         .as_ref()
         .map(|mask| compact_gray_surface(mask.working_coverage.clone()))
@@ -3505,30 +3577,33 @@ async fn process_planned_pdf_products(
             for y in y1..y2 {
                 let start = y as usize * width as usize + x1 as usize;
                 let end = y as usize * width as usize + x2 as usize;
-                gray[start..end].fill(255);
+                base[start * channels..end * channels].fill(255);
                 if let Some(coverage) = working_coverage.as_mut() {
                     coverage[start..end].fill(0);
                 }
             }
         }
     }
-    checkpoint(&cancellation, "after Gray8 region masking")?;
+    checkpoint(&cancellation, "after base region masking")?;
     let binarized = if let Some(coverage) = working_coverage.as_ref() {
         // This fixed conversion is only an OCR/collar view of the already
         // decoded source mask. It never thresholds rendered page pixels and
         // never feeds the authoritative output JBIG2 stream.
-        let mut clean_options = crate::clean_gray::CleanOptions::production_for_height(
-            height as usize,
-            config.invert_input(),
-        );
-        clean_options.halo = None;
-        if let Ok(cleaned) = crate::clean_gray::clean_gray_page(
-            &gray,
-            width as usize,
-            height as usize,
-            &clean_options,
-        ) {
-            gray = cleaned.pixels;
+        // Preservation mode's colour base is never cleaned.
+        if channels == 1 {
+            let mut clean_options = crate::clean_gray::CleanOptions::production_for_height(
+                height as usize,
+                config.invert_input(),
+            );
+            clean_options.halo = None;
+            if let Ok(cleaned) = crate::clean_gray::clean_gray_page(
+                &base,
+                width as usize,
+                height as usize,
+                &clean_options,
+            ) {
+                base = cleaned.pixels;
+            }
         }
         coverage
             .iter()
@@ -3537,8 +3612,9 @@ async fn process_planned_pdf_products(
     } else {
         let options = crate::pipeline::policies::binarize_options_for(&config, false);
         let t_bin = std::time::Instant::now();
+        // Without a preserved mask the base is Gray8 (`channels == 1`).
         let b = crate::color::binarization::binarize_gray(
-            &gray,
+            &base,
             width as usize,
             height as usize,
             &options,
@@ -3564,7 +3640,12 @@ async fn process_planned_pdf_products(
             // On preserved-mask pages OCR must consume the source-derived
             // binary view instead of re-thresholding a separately rendered
             // high-resolution composite.
-            let ocr_image = gray_to_rgb_image(&gray, width, height)?;
+            let ocr_image = if channels == 3 {
+                RgbImage::from_raw(width, height, base.clone())
+                    .ok_or_else(|| anyhow!("planned RGB base was truncated"))?
+            } else {
+                gray_to_rgb_image(&base, width, height)?
+            };
             crate::ocr::slow::perform_slow_ocr(
                 &ocr_image,
                 &binarized,
@@ -3617,10 +3698,20 @@ async fn process_planned_pdf_products(
             .await?
         }
     } else if config.enable_ocr() {
+        // A colour base goes to OCR as the page raster; a grey one as the
+        // cleaned grey buffer.
+        let page_rgb = if channels == 3 {
+            Some(
+                RgbImage::from_raw(width, height, base.clone())
+                    .ok_or_else(|| anyhow!("planned RGB base was truncated"))?,
+            )
+        } else {
+            None
+        };
         perform_ocr(
             &binarized,
-            None,
-            Some(&gray),
+            page_rgb.as_ref(),
+            (channels == 1).then_some(base.as_slice()),
             width as usize,
             height as usize,
             &detections,
@@ -3714,7 +3805,8 @@ async fn process_planned_pdf_products(
     if let Some(mask) = preserved_mask {
         let coverage = working_coverage.expect("preserved mask has working coverage");
         let (background, foreground) = encode_preserved_mrc_base_layer(
-            gray,
+            base,
+            channels,
             coverage,
             width as usize,
             height as usize,
@@ -4994,5 +5086,184 @@ mod planned_products_tests {
         assert_eq!((processed.width, processed.height), (150, 200));
         // Base layer plus the one encoded region.
         assert_eq!(processed.elements.len(), 2);
+    }
+
+    /// A one-page PDF filled with one strong colour, standing in for the
+    /// colour continuous-tone layer of a source MRC page.
+    fn preserve_source_mrc_colour_pdf() -> Vec<u8> {
+        let mut builder = exprim::test_support::builder::PdfBuilder::new();
+        builder.add_object(1, "<</Type/Catalog/Pages 2 0 R>>");
+        builder.add_object(
+            2,
+            "<</Type/Pages/Kids[3 0 R]/Count 1/MediaBox[0 0 150 200]>>",
+        );
+        builder.add_object(
+            3,
+            "<</Type/Page/Parent 2 0 R/Contents 4 0 R/Resources<<>>>>",
+        );
+        builder.add_stream(4, "", b"0.9 0.1 0.1 rg 0 0 150 200 re f");
+        builder.finish_classic_xref("/Root 1 0 R");
+        builder.into_bytes()
+    }
+
+    fn preserve_source_mrc_config(mode: crate::pipeline::config::PageMode) -> PipelineConfig {
+        let mut config = PipelineConfig::new().expect("config");
+        config.set_enable_layout_detection(false);
+        config.set_enable_ocr(false);
+        config.set_enable_auto_toc(false);
+        config.set_text_format("ccitt4").expect("format");
+        config.set_target_height(200).expect("height");
+        config.set_high_res_render_height(200).expect("render");
+        config.set_page_mode(mode);
+        // As `--preserve` sets it (core/main.rs).
+        config.set_keep_original_images(true);
+        config
+    }
+
+    /// Run the planned path on the colour fixture in `mode` with a synthetic
+    /// preserved source mask (one fully covered block in the middle), check
+    /// that the mask's bytes and globals reach the output unchanged, and
+    /// return the planned base format and the background element.
+    async fn preserve_source_mrc_run(
+        mode: crate::pipeline::config::PageMode,
+    ) -> (exprim::RasterFormat, crate::accumulator::ContentType) {
+        let session = Arc::new(
+            exprim::RenderSession::open(Arc::from(preserve_source_mrc_colour_pdf()), None)
+                .expect("open"),
+        );
+        let page = session.compile(0).expect("compile");
+        let config = Arc::new(preserve_source_mrc_config(mode));
+        // The decision `prepare_planned_pdf_page` makes.
+        let plan = plan_page_output(
+            &config,
+            PagePlanInput {
+                output_width: 150,
+                output_height: 200,
+                gray_suitability: crate::pipeline::page_output_plan::planned_gray_suitability(
+                    &config,
+                    true,
+                    page.gray_suitability(),
+                ),
+            },
+        );
+        let base_format = plan.base.product.format;
+        assert!(
+            crate::pipeline::page_output_plan::planned_base_is_supported(
+                &config,
+                true,
+                base_format
+            )
+        );
+
+        let page_data: Arc<[u8]> = Arc::from(&b"source-jbig2-page-bytes"[..]);
+        let global_data: Arc<[u8]> = Arc::from(&b"source-jbig2-globals"[..]);
+        // One block of full source-mask coverage in the middle of the page.
+        let mut coverage = vec![0u8; 150 * 200];
+        for y in 80..120 {
+            coverage[y * 150 + 50..y * 150 + 100].fill(255);
+        }
+        let mask = exprim::PreservedJbig2Smask {
+            page_data: page_data.clone(),
+            global_data: global_data.clone(),
+            native_width: 300,
+            native_height: 400,
+            stencil_polarity: exprim::Jbig2StencilPolarity::PaintOne,
+            working_coverage: exprim::GraySurface {
+                width: 150,
+                height: 200,
+                stride: 150,
+                pixels: Arc::from(coverage),
+            },
+        };
+        let processed = process_planned_pdf_products(
+            config,
+            session,
+            0,
+            0,
+            page,
+            plan,
+            Some(mask),
+            Vec::new(),
+            exprim::CancellationToken::new(),
+            None,
+        )
+        .await
+        .expect("process");
+        assert_eq!(processed.elements.len(), 2);
+
+        match &processed.elements[1].content {
+            crate::accumulator::ContentType::Jbig2Mask {
+                page_data: out_page,
+                global_data: out_globals,
+                pixel_width,
+                pixel_height,
+                paint_one,
+            } => {
+                assert_eq!(&out_page[..], &page_data[..]);
+                assert_eq!(&out_globals[..], &global_data[..]);
+                assert_eq!((*pixel_width, *pixel_height), (300, 400));
+                assert!(*paint_one);
+            }
+            other => panic!("foreground is not the source mask: {other:?}"),
+        }
+        (base_format, processed.elements[0].content.clone())
+    }
+
+    /// Preserve mode on a page whose source JBIG2 `/SMask` passes through:
+    /// the planned base renders in colour, the background is an RGB JPX
+    /// whitened under the mask's coverage, and the source mask bytes and
+    /// globals reach the output unchanged.
+    #[tokio::test(flavor = "current_thread")]
+    async fn preserve_source_mrc_keeps_colour_background_and_source_mask_bytes() {
+        let (base_format, background) =
+            preserve_source_mrc_run(crate::pipeline::config::PageMode::Preserved).await;
+        assert_eq!(base_format, exprim::RasterFormat::Rgb8);
+        let crate::accumulator::ContentType::EncodedImage {
+            data,
+            format,
+            pixel_width,
+            pixel_height,
+        } = &background
+        else {
+            panic!("background is not an encoded image");
+        };
+        assert_eq!(format, "jp2");
+        assert_eq!((*pixel_width, *pixel_height), (150, 200));
+        let (width, _, rgb) = crate::encoding::jp2::decode_jp2_bytes(data).expect("decode");
+        let pixel = |x: usize, y: usize| {
+            let i = (y * width as usize + x) * 3;
+            [rgb[i], rgb[i + 1], rgb[i + 2]]
+        };
+        // Outside the mask the page keeps its colour...
+        let [r, g, b] = pixel(10, 10);
+        assert!(
+            r > 180 && g < 90 && b < 90,
+            "background lost its colour: {r},{g},{b}"
+        );
+        // ...and under full coverage it is whitened.
+        let [r, g, b] = pixel(75, 100);
+        assert!(
+            r > 200 && g > 200 && b > 200,
+            "ink not whitened: {r},{g},{b}"
+        );
+    }
+
+    /// Outside preservation mode the same page keeps its grey base and the
+    /// source mask still passes through: the colour base is preservation
+    /// mode's alone.
+    #[tokio::test(flavor = "current_thread")]
+    async fn preserve_source_mrc_grey_modes_keep_a_grey_base() {
+        use crate::pipeline::config::PageMode;
+        for mode in [PageMode::Grayscale, PageMode::Binarized] {
+            let (base_format, background) = preserve_source_mrc_run(mode).await;
+            assert_eq!(base_format, exprim::RasterFormat::Gray8, "{mode:?}");
+            assert!(
+                matches!(
+                    background,
+                    crate::accumulator::ContentType::EncodedImage { .. }
+                ),
+                "{mode:?}"
+            );
+        }
     }
 }

@@ -5700,7 +5700,8 @@ record lege-ecosystem.work.preservation-mode/3 : work {
     trace [
         "Retired the grayscale byte-identity gate: its pre-refactor baseline predates the binarizer and layout reworks; rgb_coverage_matches_grey_per_channel remains the guard.",
         "Deferred coloured ink: both writers need new layers and no corpus book with rubrics or stamps is known; --help says ink is black.",
-        "Split the dark-painting binarizer defect into its own work; Preserve is insulated by keeping full-page pictures as premasked regions."
+        "Split the dark-painting binarizer defect into its own work; Preserve is insulated by keeping full-page pictures as premasked regions.",
+        "Always Rgb8 under a passed-through mask in preserve mode: gray_suitability measures render fidelity, not colour, so it cannot single out grey scans."
     ]
     claim coverage-has-no-producer {
         text """

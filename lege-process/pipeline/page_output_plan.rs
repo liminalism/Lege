@@ -40,6 +40,39 @@ pub fn base_is_gray(config: &PipelineConfig, suitability: GraySuitability) -> bo
     }
 }
 
+/// The gray suitability a planned page's base is chosen with.
+///
+/// On a page whose source JBIG2 `/SMask` passes through, the base is the
+/// continuous-tone layer under that mask. Outside preservation mode the
+/// layer is cleaned and written grey, so a grey render serves whatever the
+/// page's features report. Preservation mode keeps the page's colour, so its
+/// base renders in colour. The page's own suitability cannot decide that: it
+/// says how closely a grey render matches a grey conversion, not whether the
+/// page has colour, and an image under a soft mask never reports `Exact`.
+pub fn planned_gray_suitability(
+    config: &PipelineConfig,
+    has_preserved_mask: bool,
+    page: GraySuitability,
+) -> GraySuitability {
+    match (has_preserved_mask, config.is_preserve_mode()) {
+        (true, true) => GraySuitability::ColorFallback,
+        (true, false) => GraySuitability::AcceptableForBilevel,
+        (false, _) => page,
+    }
+}
+
+/// Whether the planned path processes a base of `format`: Gray8 always, Rgb8
+/// only as preservation mode's colour layer under a preserved source mask.
+/// Any other page goes back to the per-page path.
+pub fn planned_base_is_supported(
+    config: &PipelineConfig,
+    has_preserved_mask: bool,
+    format: exprim::RasterFormat,
+) -> bool {
+    format == exprim::RasterFormat::Gray8
+        || (format == exprim::RasterFormat::Rgb8 && has_preserved_mask && config.is_preserve_mode())
+}
+
 /// The base output raster's size: the decode reference of every product of
 /// the page (see the module documentation).
 fn base_size(input: PagePlanInput) -> (u32, u32) {
@@ -257,6 +290,64 @@ mod tests {
         // Too large to scale: falls back to the device crop.
         let huge = region_target([0.0, 0.0, 5000.0, 5000.0], 5000, 5000, 2).expect("region");
         assert_eq!((huge.product.width, huge.product.height), (5000, 5000));
+    }
+
+    /// Under a preserved source mask the base is colour in preservation mode
+    /// and grey in every other mode, whatever the page reports; without one
+    /// the page's own suitability decides, as before.
+    #[test]
+    fn preserve_source_mrc_plan_is_rgb_only_in_preservation_mode() {
+        use crate::pipeline::config::PageMode;
+        for (mode, expected) in [
+            (PageMode::Preserved, RasterFormat::Rgb8),
+            (PageMode::Grayscale, RasterFormat::Gray8),
+            (PageMode::Binarized, RasterFormat::Gray8),
+        ] {
+            let mut config = base_config();
+            config.set_page_mode(mode);
+            for page in [
+                GraySuitability::Exact,
+                GraySuitability::AcceptableForBilevel,
+                GraySuitability::ColorFallback,
+            ] {
+                let suitability = planned_gray_suitability(&config, true, page);
+                let plan = plan_page_output(&config, input(suitability));
+                assert_eq!(plan.base.product.format, expected, "{mode:?} {page:?}");
+                assert!(planned_base_is_supported(
+                    &config,
+                    true,
+                    plan.base.product.format
+                ));
+                assert_eq!(planned_gray_suitability(&config, false, page), page);
+            }
+        }
+    }
+
+    /// An RGB base stays on the planned path only as preservation mode's
+    /// layer under a preserved mask; Gray8 is always accepted.
+    #[test]
+    fn preserve_source_mrc_rgb_base_needs_mask_and_preservation_mode() {
+        use crate::pipeline::config::PageMode;
+        let mut config = base_config();
+        for mode in [
+            PageMode::Binarized,
+            PageMode::Grayscale,
+            PageMode::Preserved,
+        ] {
+            config.set_page_mode(mode);
+            for has_mask in [false, true] {
+                assert!(planned_base_is_supported(
+                    &config,
+                    has_mask,
+                    RasterFormat::Gray8
+                ));
+                assert_eq!(
+                    planned_base_is_supported(&config, has_mask, RasterFormat::Rgb8),
+                    has_mask && mode == PageMode::Preserved,
+                    "{mode:?} mask={has_mask}"
+                );
+            }
+        }
     }
 
     #[test]
