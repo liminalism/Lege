@@ -3,7 +3,7 @@ project lege-ecosystem
 
 record lege-ecosystem-perf.renderer.final-buffer-ownership/1 : decision {
     title "Allocate renderer and JPEG final buffers in their shared Arc layout"
-    state proposed
+    state active
     scope [
         path "lege-pdf/render/crates/pdf-image/src/jpeg/**",
         path "lege-pdf/render/crates/pdf-render-cpu/**"
@@ -38,17 +38,21 @@ record lege-ecosystem-perf.renderer.final-buffer-ownership/1 : decision {
             """
     }
     depends_on [ @lege-ecosystem-perf.renderer.mrc-masked-draw-fast-path/1 ]
+    supported_by [
+        @lege-ecosystem-perf.evidence.jpeg-direct-arc-decode-profile/2,
+        @lege-ecosystem-perf.evidence.jpeg-sweep-final-buffer-profile/2
+    ]
 }
 
 record lege-ecosystem-perf.renderer.gray8-draws-take-the-rgb8-fast-paths/1 : decision {
-    title "Gray8 image draws take the axis-aligned RGB8 fast paths through a one-time promotion; reduced-resolution decodes are cached by their decode level"
-    state proposed
+    title "Gray8 image draws take the axis-aligned fast paths, byte-identical to RGB8; reduced-resolution decodes are cached by their decode level"
+    state active
     scope [
         path "lege-pdf/read/src/session.rs",
         path "lege-pdf/render/crates/pdf-render-cpu/**"
     ]
     decision """
-        In `paint_image`, an opaque, normal-blend, unclipped, axis-aligned 8-bit gray image with no `/Decode` and no colour-key mask is re-expressed once as RGB8 (`PreparedImage::gray8_promoted_to_rgb8`: each byte tripled straight into the shared allocation, colour space marked RGB, everything else cloned) before the fast-path eligibility tests, so the nearest, bilinear, area-minified and masked area-minified RGB8 painters apply to it. `pixel()` answers `[g, g, g, 255]` for such a gray texel and `[r, g, b, 255]` for RGB8, so the promoted draw is byte-identical to the RGB8 twin by construction (test `gray8_draws_match_their_rgb8_twins`). Colour-keyed gray images are not promoted (B5, 2026-11-08: the one-pair key was rejected after promotion). A magnified draw under a mask has no fast path either way and is not expanded. Separately, `ImageCacheKey` keys DCT and JPX entries by the codec's reported decode level and by the declared colour space (B1, 2026-11-08, branch jolly-ride); JBIG2 and CCITT payloads are the same whatever the draw size and are keyed without a level, so a page rendered at two sizes decodes them once.
+        An opaque, normal-blend, unclipped, axis-aligned 8-bit gray image with no `/Decode` and no colour-key mask takes the same nearest, bilinear, area-minified and masked area-minified fast paths as RGB8, and paints byte-identically to its RGB8 twin. From 2026-09-03 this was done by promoting the samples once to RGB8; since exprim b1e5b8b (2026-11-24) native single-channel Gray8 kernels do it without the threefold copy, and the promotion survives only as the test oracle they are checked against. Colour-keyed gray images take neither (B5, 2026-11-08). Separately, the image cache keys DCT and JPX entries by the codec's reported decode level and the declared colour space (B1, 2026-11-08); JBIG2 and CCITT payloads are keyed without a level, so a page rendered at two sizes decodes them once.
         """
     context """
         The existing fast paths (@lege-ecosystem-perf.renderer.mrc-masked-draw-fast-path) accepted only RGB8 and CMYK sources. Scanned books and Lege's own MRC output are 8-bit DeviceGray almost without exception, so every page draw of Lege's main workload was taking the generic per-pixel sampler at roughly 250 ns per destination pixel: 1.0 s for a 1697x2400 page, 0.4 s at 1200 px, and the analysis render on top. Lege renders each page twice (bounded analysis render, then the output render), and the JBIG2 mask was decoded for both because the cache key carried the target size. The 2026-11-08 scoping review then found that DCT also decodes at a reduced scale chosen from the target, so a key without the level served a quarter-area decode to the base render (B1).
@@ -68,11 +72,15 @@ record lege-ecosystem-perf.renderer.gray8-draws-take-the-rgb8-fast-paths/1 : dec
     }
     retired_claims [ promotion-is-exact, target-only-for-jpx ]
     derived_from [ @lege-ecosystem-perf.renderer.mrc-masked-draw-fast-path ]
+    supported_by [
+        @lege-ecosystem.evidence.glyphfont-pass7-render-cost-verification/1,
+        @lege-ecosystem.evidence.layout-detection-ab-jolly-merge-20261108/1
+    ]
 }
 
 record lege-ecosystem-perf.renderer.mrc-masked-draw-fast-path/1 : decision {
     title "MRC pages are shading-bound, not decode-bound: masked area-min fast path in pdf-render-cpu"
-    state proposed
+    state active
     scope [ path "lege-pdf/render/crates/pdf-render-cpu/**" ]
     decision """
         Add `paint_axis_aligned_rgb8_area_min_masked` to `pdf-render-cpu/src/exec.rs`: an axis-aligned area-minification fast path for RGB8 image draws carrying a bilevel cut-out, covering both MRC mask encodings (1-bit `/SMask` coverage layer, and hard `/Mask` over an `/ImageMask` stencil). Per-column and per-row preparation of the inverse map, the base box-filter taps, and the mask's per-axis lookup replaces per-pixel recomputation. Byte-identical to the generic path, edge anti-aliasing included. Measured 2026-08-08; full record in lege-pdf/render/docs/refinement/performance-history/optimization-mrc-mask-20260808.md
@@ -102,6 +110,11 @@ record lege-ecosystem-perf.renderer.mrc-masked-draw-fast-path/1 : decision {
             MRC producers emit two distinct mask encodings and a fast path must cover both: a 1-bit grayscale `/SMask` coverage layer that is box-filtered with the base image (Acrobat/Kakadu, e.g. Structures.pdf), and a hard `/Mask` referencing an `/ImageMask true` JBIG2 bitmap that is point-sampled all-or-nothing (ABBYY/LuraDocument, e.g. Zen-essence.pdf). Covering only `/SMask` leaves the corpus MRC page on the generic path.
             """
     }
+    retired_claims [ edge-aa-separates ]
+    supported_by [
+        @lege-ecosystem-perf.evidence.structures-smask-followup-profile/2,
+        @lege-ecosystem.evidence.renderer-scoping-ring-gate-20261108/1
+    ]
     source {
         kind internal
         path "lege-pdf/render/docs/refinement/performance-history/optimization-mrc-mask-20260808.md"

@@ -3,7 +3,7 @@ project lege-ecosystem
 
 record lege-ecosystem.decision.a-fold-may-not-change-a-letters-counters/1 : decision {
     title "Truetyping never folds shapes that enclose different counters, and a stroke is far even when it is a hairline"
-    state proposed
+    state active
     scope [ path "lege-process/encoding/bitrows.rs", path "lege-process/encoding/glyphfont.rs" ]
     decision """
         Two gates now guard the glyph dictionary against folding one letter into another. First, topology: a shape's enclosed counters are counted (`holes`, a flood fill from the border) and no match is considered across a different count — `c` never becomes `e`, `h` never becomes `b`, `a` never becomes `u`. The count is only trusted where the strokes have an interior, because a wall one pixel thick is opened or closed by a single speck. Second, the strict gate gained the far-pixel test the tolerant gate already had: ink that has none of the other shape's within a pixel of it, capped at 1% of the ink (minimum 2) with no far group larger than 2. A change of impression puts its difference along the strokes it thickens, so it is never far; a stroke one shape has and the other lacks is far along its length, however thin it is. Strict matches are also ranked by that structural agreement first, so rejecting a candidate never hands the instance to a worse one that survived.
@@ -30,11 +30,15 @@ record lege-ecosystem.decision.a-fold-may-not-change-a-letters-counters/1 : deci
             """
     }
     derived_from [ @lege-ecosystem.work.glyph-font-text-output ]
+    supported_by [
+        @lege-ecosystem.observation.truetyping-halftone-review-fixes-20260905/2,
+        @lege-ecosystem.observation.truetyping-text-identity-moved-letters-off-their-baseline/2
+    ]
 }
 
 record lege-ecosystem.decision.annotator-abandon-takes-pp-label/1 : decision {
     title "Liminal Annotator: a YOLO abandon box takes PP-DocLayout-L's label for the same region"
-    state proposed
+    state active
     scope [ path "lege-misc/liminal-annotator/**" ]
     decision """
         When a teacher-pool folder is pre-filled from DocLayout-YOLO, each abandon box takes the label of the best-overlapping PP-DocLayout-L detection (PP score >= 0.15, IoU >= 0.3), keeping YOLO's geometry and recording both labels in provenance. Older projects get the same pass once on the next folder open, as one undoable bulk change; hand-converted boxes are untouched. Only unmatched boxes stay in the abandon holding class.
@@ -45,12 +49,13 @@ record lege-ecosystem.decision.annotator-abandon-takes-pp-label/1 : decision {
     consequences """
         On the user's pool project the pass labelled 441,661 of 452,569 abandon boxes in 17 s; 10,908 remain on 9,581 pages. PP's own errors (e.g. running heads called paragraph titles) now appear as ordinary labels to correct in review.
         """
+    supported_by [ @lege-ecosystem.evidence.liminal-annotator-folder-projects-tests-20261109/1 ]
     author "dk"
 }
 
 record lege-ecosystem.decision.binarization-best-model-fast-adaptive/1 : decision {
     title "Two binarizers: Best (the tileable model, default) and Fast (adaptive on the wgpu kernels); the fixed threshold is gone"
-    state proposed
+    state active
     scope [
         path "lege-gpu/src/binarization/**",
         path "lege-ocr/src/normalize.rs",
@@ -106,8 +111,8 @@ record lege-ecosystem.decision.binarizer-model-is-the-only-binarization-method/1
 }
 
 record lege-ecosystem.decision.flatten-page-uses-lege-dewarp/1 : decision {
-    title "\"Flatten page\" flattens photographed pages with the own Lege-Dewarp model; off by default, folder and ZIP input"
-    state proposed
+    title "Flatten"
+    state superseded
     scope [
         path "lege-gpu/src/vision/api.rs",
         path "lege-process/GUI/liminalUI/**",
@@ -116,7 +121,7 @@ record lege-ecosystem.decision.flatten-page-uses-lege-dewarp/1 : decision {
         path "lege-process/pipeline/source.rs"
     ]
     decision """
-        Lege flattens photographed book pages with its own model, Lege-Dewarp (checkpoint ft4, 2026-11-14; two static-shape fp16 files, 10.58 MB each, embedded behind the default `dewarp` feature). The GUI calls it 'Flatten page' (a row of the left card, where the binarization row was); the CLI flag is --flatten, with --flatten-pages 1|2 and --flatten-fast (--dewarp* are aliases). It applies to folder and ZIP input, before the resize to the target height, on the photo's own pixels with its EXIF orientation applied; one photographed spread becomes two pages. Flat scans are recognised by a gate and returned untouched. It is off by default.
+        Lege flattens photographed book pages with its own model, Lege-Dewarp (checkpoint ft4, 2026-11-14; two static-shape fp16 files, 10.58 MB each, embedded behind the default `dewarp` feature). The GUI calls it 'Flatten page' (a row of the left card, where the binarization row was); the CLI flag is --flatten, with --flatten-pages 1|2 and --flatten-fast (--dewarp* are aliases). It applies to folder, ZIP and PDF input (a PDF's pages are rendered as photos and run through the image pipeline, so its outline and text layer do not carry over; EPUB and reflow jobs ignore it), before the resize to the target height, on the photo's own pixels with its EXIF orientation applied; one photographed spread becomes two pages. Flat scans are recognised by a gate and returned untouched. It is off by default.
         """
     context """
         Owner's ruling on 2026-11-14 after the training work closed: the trained model is better than Paddle's UVDoc, so it goes into Lege, named 'Flatten page' rather than deskew. Why this model and not Paddle UVDoc, DocScanner-L or flattener, as measured in the standalone tester: distortion left after flattening, in % of the page diagonal against a flat scan of the same page, is 0.25 on an illustrated cookbook's unseen spreads and 0.25 on a text book never trained on, against 0.53/0.51 (Paddle UVDoc), 0.43/0.45 (DocScanner-L) and 0.43/0.45 (flattener); and it alone leaves flat pages alone (6 of 6 test pages and 406 of 408 held-out scans untouched, none of 590 curved photos), where the other three alter every flat page. On 26 hand-held spread photos it is level with Paddle UVDoc on text-line straightness, not ahead. It runs in lege-gpu unchanged at 13 ms per call (0.26 s for a 10 MP spread, 0.69 s for 24 MP, 0.02 to 0.03 s for a flat page).
@@ -138,12 +143,46 @@ record lege-ecosystem.decision.flatten-page-uses-lege-dewarp/1 : decision {
     author "dk"
 }
 
+record lege-ecosystem.decision.flatten-page-uses-lege-dewarp/2 : decision {
+    title "Flatten"
+    state active
+    scope [
+        path "lege-gpu/src/vision/api.rs",
+        path "lege-process/GUI/liminalUI/**",
+        path "lege-process/dewarp/**",
+        path "lege-process/models/lege-dewarp.md",
+        path "lege-process/pipeline/source.rs"
+    ]
+    decision """
+        Lege flattens photographed book pages with its own model, Lege-Dewarp (checkpoint ft4, 2026-11-14; two static-shape fp16 files, 10.58 MB each, embedded behind the default `dewarp` feature). The GUI calls it 'Flatten page' (a row of the left card, where the binarization row was); the CLI flag is --flatten, with --flatten-pages 1|2 and --flatten-fast (--dewarp* are aliases). It applies to folder, ZIP and PDF input (a PDF's pages are rendered as photos and run through the image pipeline, so its outline and text layer do not carry over; EPUB and reflow jobs ignore it), before the resize to the target height, on the photo's own pixels with its EXIF orientation applied; one photographed spread becomes two pages. Flat scans are recognised by a gate and returned untouched. It is off by default.
+        """
+    context """
+        Owner's ruling on 2026-11-14 after the training work closed: the trained model is better than Paddle's UVDoc, so it goes into Lege, named 'Flatten page' rather than deskew. Why this model and not Paddle UVDoc, DocScanner-L or flattener, as measured in the standalone tester: distortion left after flattening, in % of the page diagonal against a flat scan of the same page, is 0.25 on an illustrated cookbook's unseen spreads and 0.25 on a text book never trained on, against 0.53/0.51 (Paddle UVDoc), 0.43/0.45 (DocScanner-L) and 0.43/0.45 (flattener); and it alone leaves flat pages alone (6 of 6 test pages and 406 of 408 held-out scans untouched, none of 590 curved photos), where the other three alter every flat page. On 26 hand-held spread photos it is level with Paddle UVDoc on text-line straightness, not ahead. It runs in lege-gpu unchanged at 13 ms per call (0.26 s for a 10 MP spread, 0.69 s for 24 MP, 0.02 to 0.03 s for a flat page).
+        """
+    consequences """
+        Off by default because flat pages that are full-page photographs are sometimes altered (47 of 400 scan pages of an illustrated cookbook; text scans 263 of 264 untouched). No CPU path: without a hardware GPU the step is skipped with one line. PDF input is flattened from photos rendered off its pages, at the cost of its outline and text layer. Every photo is surveyed before the first page appears (one extra decode and the model calls), because PageSource promises a fixed page count. The lege-process module is a port of the tester and matches its grids exactly; its constants are changed only against the tester. Open before a public release: the training mix includes Book3D, tagged MIT on Hugging Face while its authors' repository words it as non-commercial research (it sits in its own shard sets, so the model can be retrained without it). The *.onnx files are ignored by lege-process/.gitignore and must be force-added like the other models. Seen while testing, not a flatten matter: on a flattened glossy cookbook photo with layout detection off, the binarizer model dropped parts of some text lines and most of a large display heading that the adaptive CPU fallback kept.
+        """
+    supersedes [ @lege-ecosystem.decision.flatten-page-uses-lege-dewarp/1 ]
+    supported_by [
+        @lege-ecosystem.evidence.flatten-flat-pages-untouched-in-lege-20261114,
+        @lege-ecosystem.evidence.flatten-grids-match-tester-20261114,
+        @lege-ecosystem.evidence.flatten-no-gpu-passes-through-20261114,
+        @lege-ecosystem.evidence.flatten-spread-page-count-20261114,
+        @lege-ecosystem.evidence.lege-dewarp-flat-pages-untouched-20261113,
+        @lege-ecosystem.evidence.lege-dewarp-loads-in-lege-gpu-20261113,
+        @lege-ecosystem.evidence.lege-dewarp-picture-book-finetune-20261114,
+        @lege-ecosystem.evidence.lege-dewarp-real-pairs-finetune-20261113,
+        @lege-ecosystem.evidence.lege-dewarp-spreads-level-with-paddle-20261113
+    ]
+    author "dk"
+}
+
 record lege-ecosystem.decision.jbig2-is-the-default-pdf-text-format-again/1 : decision {
     title "JBIG2 is the Freya GUI's default PDF text encoder again; truetyping is the opt-in checkbox"
-    state proposed
+    state superseded
     scope [ path "lege-process/GUI/liminalUI/**", path "lege-process/language_service/**" ]
     decision """
-        The Freya GUI's default PDF text encoder is JBIG2 symbol mode again. Truetyping stays a first-class format, keeps its name everywhere, and is offered as a checkbox (TrueTyping text) that excludes compatibility mode; clearing either checkbox returns to JBIG2. CompressionType::default() is Jbig2 and ProcessingOptions::new() starts there. The CLI is unchanged: its non-interactive default was and is ccitt4, truetyping is --truetyping or format 4.
+        The GUI's default PDF text encoder is JBIG2 (the bit-exact generic region; symbol mode is opt-in). Truetyping stays a first-class format, keeps its name everywhere, and is offered as a checkbox (TrueTyping text) that excludes compatibility mode; clearing either checkbox returns to JBIG2. CompressionType::default() is Jbig2 and ProcessingOptions::new() starts there (lege-process/GUI/liminalUI/src/models.rs). The CLI is unchanged: its non-interactive default was and is ccitt4, truetyping is --truetyping or format 4. Decided for the Freya GUI; carried unchanged into liminalUI, now the only GUI.
         """
     context """
         On the 886-page archive.org scan crusadeswholesto0000lamb_1.pdf (RGB JPEG pages), after the glyph dictionary was made parallel, the three text encoders on the same debug-fast build and machine came out at: JBIG2 33 s and 21.2 MB, CCITT4 35 s and 27.7 MB, truetyping 120 s and 45.3 MB. Truetyping is 3.6x slower and 2.1x larger than JBIG2 on a real long book, and 41 MB of its output is 22 embedded fonts: position variants, compounds and text variants use about 1000 glyph ids per page, so a 65533-id font fills every 40-odd pages and each new font re-learns the alphabet. The 20-page comparison that justified the earlier default (183 KB against 378 KB) did not see this. The user asked for the reversal on 2026-09-05 once the numbers were confirmed.
@@ -153,14 +192,57 @@ record lege-ecosystem.decision.jbig2-is-the-default-pdf-text-format-again/1 : de
         """
     supersedes [ @lege-ecosystem.decision.truetyping-is-the-default-pdf-text-format/1 ]
     supported_by [
-        @lege-ecosystem.evidence.truetyping-parallel-probe-benchmark-2026-09-05,
-        @lege-ecosystem.observation.truetyping-dictionary-lock-serialized-every-page
+        @lege-ecosystem.evidence.jbig2-generic-default-costs-little-20260906/1,
+        @lege-ecosystem.observation.truetyping-dictionary-lock-serialized-every-page/2
     ]
+}
+
+record lege-ecosystem.decision.jbig2-is-the-default-pdf-text-format-again/2 : decision {
+    title "JBIG2 is the GUI's default PDF text encoder again; truetyping is the opt-in checkbox"
+    state superseded
+    scope [ path "lege-process/GUI/liminalUI/**", path "lege-process/language_service/**" ]
+    decision """
+        The GUI's default PDF text encoder is JBIG2 (the bit-exact generic region; symbol mode is opt-in). Truetyping stays a first-class format, keeps its name everywhere, and is offered as a checkbox (TrueTyping text) that excludes compatibility mode; clearing either checkbox returns to JBIG2. CompressionType::default() is Jbig2 and ProcessingOptions::new() starts there (lege-process/GUI/liminalUI/src/models.rs). The CLI is unchanged: its non-interactive default was and is ccitt4, truetyping is --truetyping or format 4. Decided for the Freya GUI; carried unchanged into liminalUI, now the only GUI.
+        """
+    context """
+        On the 886-page archive.org scan crusadeswholesto0000lamb_1.pdf (RGB JPEG pages), after the glyph dictionary was made parallel, the three text encoders on the same debug-fast build and machine came out at: JBIG2 33 s and 21.2 MB, CCITT4 35 s and 27.7 MB, truetyping 120 s and 45.3 MB. Truetyping is 3.6x slower and 2.1x larger than JBIG2 on a real long book, and 41 MB of its output is 22 embedded fonts: position variants, compounds and text variants use about 1000 glyph ids per page, so a 65533-id font fills every 40-odd pages and each new font re-learns the alphabet. The 20-page comparison that justified the earlier default (183 KB against 378 KB) did not see this. The user asked for the reversal on 2026-09-05 once the numbers were confirmed.
+        """
+    consequences """
+        Users who saved settings while truetyping was the default keep an explicit Truetyping in their saved options and stay on it until they clear the checkbox; nothing migrates them. The JBIG2 no-symbol toggle is visible again on the default path. Truetyping's remaining cost to bring down before it can be a default is glyph-id consumption per page, not matching speed.
+        """
+    supersedes [ @lege-ecosystem.decision.jbig2-is-the-default-pdf-text-format-again/1 ]
+    supported_by [
+        @lege-ecosystem.evidence.jbig2-generic-default-costs-little-20260906/1,
+        @lege-ecosystem.observation.truetyping-dictionary-lock-serialized-every-page/2
+    ]
+    author "dk"
+}
+
+record lege-ecosystem.decision.jbig2-is-the-default-pdf-text-format-again/3 : decision {
+    title "JBIG2 is the GUI's default PDF text encoder again; truetyping is the opt-in checkbox"
+    state active
+    scope [ path "lege-process/GUI/liminalUI/**", path "lege-process/language_service/**" ]
+    decision """
+        The GUI's default PDF text encoder is JBIG2 (the bit-exact generic region; symbol mode is opt-in). Truetyping stays a first-class format, keeps its name everywhere, and is offered as a checkbox (TrueTyping text) that excludes compatibility mode; clearing either checkbox returns to JBIG2. CompressionType::default() is Jbig2 and ProcessingOptions::new() starts there (lege-process/GUI/liminalUI/src/models.rs). The CLI is unchanged: its non-interactive default was and is ccitt4, truetyping is --truetyping or format 4. Decided for the Freya GUI; carried unchanged into liminalUI, now the only GUI.
+        """
+    context """
+        On the 886-page archive.org scan crusadeswholesto0000lamb_1.pdf (RGB JPEG pages), after the glyph dictionary was made parallel, the three text encoders on the same debug-fast build and machine came out at: JBIG2 33 s and 21.2 MB, CCITT4 35 s and 27.7 MB, truetyping 120 s and 45.3 MB. Truetyping is 3.6x slower and 2.1x larger than JBIG2 on a real long book, and 41 MB of its output is 22 embedded fonts: position variants, compounds and text variants use about 1000 glyph ids per page, so a 65533-id font fills every 40-odd pages and each new font re-learns the alphabet. The 20-page comparison that justified the earlier default (183 KB against 378 KB) did not see this. The user asked for the reversal on 2026-09-05 once the numbers were confirmed.
+        """
+    consequences """
+        Users who saved settings while truetyping was the default keep an explicit Truetyping in their saved options and stay on it until they clear the checkbox; nothing migrates them. The JBIG2 no-symbol toggle is visible again on the default path. Truetyping's remaining cost to bring down before it can be a default is glyph-id consumption per page, not matching speed.
+        """
+    supersedes [ @lege-ecosystem.decision.jbig2-is-the-default-pdf-text-format-again/2 ]
+    supported_by [
+        @lege-ecosystem.evidence.jbig2-generic-default-costs-little-20260906/1,
+        @lege-ecosystem.evidence.truetyping-parallel-probe-benchmark-2026-09-05/1,
+        @lege-ecosystem.observation.truetyping-dictionary-lock-serialized-every-page/2
+    ]
+    author "dk"
 }
 
 record lege-ecosystem.decision.jbig2-symbol-substitution-is-opt-in/1 : decision {
     title "JBIG2 writes the bit-exact generic region unless symbol mode is asked for"
-    state proposed
+    state active
     scope [ path "lege-process/**" ]
     topic jbig2-symbol-default
     decision """
@@ -172,12 +254,16 @@ record lege-ecosystem.decision.jbig2-symbol-substitution-is-opt-in/1 : decision 
     consequences """
         Default JBIG2 output grows by a few percent on scans and more on clean text, where symbol matching pays best. PipelineConfig, Jbig2Settings and the interactive menu all default to Generic, so a library caller that never sets a mode now gets bit-exact output. set_jbig2_symbol_mode(true) selects SymUnify.
         """
+    supported_by [
+        @lege-ecosystem.evidence.jbig2-generic-default-costs-little-20260906/1,
+        @lege-ecosystem.observation.jbig2-symbol-mode-is-lossy/4
+    ]
     author "GitHub Uploader"
 }
 
 record lege-ecosystem.decision.jp2-region-floor-splits-by-region-size/1 : decision {
     title "The verified JP2 display floor for an ordinary figure region is 65 when it covers under a quarter of the page and 70 otherwise"
-    state proposed
+    state active
     scope [
         path "lege-process/pipeline/helper_functions.rs",
         path "lege-process/pipeline/quality_policy.rs"
@@ -191,12 +277,17 @@ record lege-ecosystem.decision.jp2-region-floor-splits-by-region-size/1 : decisi
     consequences """
         Small figures cost fewer bytes; large plates and covers look as before. Size is measured on the region's placement box against the output page (RegionSize::of), threaded through region_encoding_settings and encode_region_image. Not yet measured on a corpus; the sweep in quality_policy.rs's comment covered the 70 floor only.
         """
+    supported_by [
+        @lege-ecosystem.encode-quality.evidence.lege-process-display-preset-integration-2026-09-05/1,
+        @lege-ecosystem.encode-quality.evidence.lege-verified-regions-and-2x-render-2026-09-05/1,
+        @lege-ecosystem.jp2lam.lege-jp2-call-sites/1
+    ]
     author "GitHub Uploader"
 }
 
 record lege-ecosystem.decision.jp2lam-ssim-canonical-metric/1 : decision {
     title "jp2lam encode-time quality is shared JPXL SSIMULACRA2"
-    state proposed
+    state active
     scope [ path "lege-codecs/jp2lam/**" ]
     topic jp2lam-ssim-controller
     decision """
@@ -208,11 +299,15 @@ record lege-ecosystem.decision.jp2lam-ssim-canonical-metric/1 : decision {
     consequences """
         jp2lam depends on jpxl-perceptual (path, default-features=false). RateControl::Perceptual will take a SSIMULACRA2 score and effort, not a Butteraugli distance. Quality(u8) stays the legacy baseline until an explicit mapping session. lege-ecosystem.encode-quality.improve-photographic-rate-control's remaining 'butteraugli-anchored quality mapping' is no longer the encode-time objective.
         """
+    supported_by [
+        @lege-ecosystem.encode-quality.evidence.jp2lam-unified-quality-scale-2026-09-05/1,
+        @lege-ecosystem.evidence.ssim-controller-source-review-20261027/1
+    ]
 }
 
 record lege-ecosystem.decision.jp2lam-verified-quality-scale/1 : decision {
     title "jp2lam quality number is the verified SSIMULACRA2 scale; legacy ladder is ApproxQuality"
-    state proposed
+    state active
     scope [ path "lege-codecs/jp2lam/**" ]
     topic jp2lam-quality-scale
     decision """
@@ -224,11 +319,15 @@ record lege-ecosystem.decision.jp2lam-verified-quality-scale/1 : decision {
     consequences """
         q80 means SSIMULACRA2 >= 80 in both JPXL and jp2lam; sizes differ by codec, meaning does not. Verified quality requires 8-bit gray/sRGB (documents, ICC and CMYK stay on ApproxQuality / explicit rate targets). The per-image feature predictor is added only if the static bpp prior cannot keep Fast in the 1-3 probe range.
         """
+    supported_by [
+        @lege-ecosystem.encode-quality.evidence.jp2lam-verified-quality-api-2026-09-05/1,
+        @lege-ecosystem.encode-quality.evidence.lege-verified-regions-and-2x-render-2026-09-05/1
+    ]
 }
 
 record lege-ecosystem.decision.layout-model-v2-without-old-model-corrections/1 : decision {
     title "Lege 1.6 embeds layout model v2 and uses its boxes as they are; the old-model corrections are removed"
-    state proposed
+    state active
     scope [
         path "lege-process/core/**",
         path "lege-process/models/**",
@@ -253,7 +352,7 @@ record lege-ecosystem.decision.layout-model-v2-without-old-model-corrections/1 :
 
 record lege-ecosystem.decision.lege-pdf-mcp-results-are-text-with-stated-coverage/1 : decision {
     title "lege-pdf MCP tools answer in readable text, state their coverage, and return images inline"
-    state proposed
+    state active
     scope [
         path "lege-pdf/agent/src/commands/mcp.rs",
         path "lege-pdf/agent/src/commands/serve.rs"
@@ -269,11 +368,12 @@ record lege-ecosystem.decision.lege-pdf-mcp-results-are-text-with-stated-coverag
         Clients that parsed structuredContent must pass response_format="json". The JSONL serve protocol is unchanged in being structured-only and still requires an output path for pdf_render. Text formats (the search line, the page header, the coverage warning) are now part of what agents rely on and are pinned by tests/agent_tools.rs and tests/mcp_protocol.rs.
         """
     derived_from [ @lege-ecosystem.work.lege-pdf-agent-over-poppler ]
+    supported_by [ @lege-ecosystem.evidence.exprim-agent-mcp-result-shape-20261127/1 ]
 }
 
 record lege-ecosystem.decision.nup-grid-is-read-in-the-sheets-own-frame/1 : decision {
     title "The N-up cell grid is read in the sheet's own frame, not transposed for a landscape sheet"
-    state proposed
+    state active
     scope [ path "lege-pdf/print/src/layout.rs" ]
     decision """
         NUp::grid() is applied to whichever way the sheet is turned, rather than being treated as portrait-relative and transposed when the sheet is landscape. A booklet is the exception: it is always two cells side by side, because the fold is always the vertical centre line.
@@ -285,11 +385,15 @@ record lege-ecosystem.decision.nup-grid-is-read-in-the-sheets-own-frame/1 : deci
         Reading the grid in the sheet's frame is also exactly the conventional CUPS arrangement: a landscape sheet with two columns for two-up, three-by-two for six-up. Orientation::Auto finds those arrangements unaided, because they score strictly better on the visible-fraction-then-coverage metric it already uses.
         """
     derived_from [ @lege-ecosystem.work.office-printing ]
+    supported_by [
+        @lege-ecosystem.evidence.office-printing-tests-2026-09-04/1,
+        @lege-ecosystem.evidence.pdf-print-geometry-preview-tests-20261104/1
+    ]
 }
 
 record lege-ecosystem.decision.pagepress-boundary-rasterizer-vs-editor/1 : decision {
     title "PagePress boundary: rasterizer stays in lege-process, editor suite starts in PagePress"
-    state proposed
+    state active
     scope [ all ]
     decision """
         lege-process stays the rasterizer pipeline; PagePress (sibling repo) is the start of a PDF-editor suite with its own page model, depending only on lege-pdf-write and lege-codecs via path deps.
@@ -300,12 +404,16 @@ record lege-ecosystem.decision.pagepress-boundary-rasterizer-vs-editor/1 : decis
     consequences """
         Rasterizer work stays in lege-process; editor/assembly features go to PagePress. PagePress must not gain a lege-process dependency; merge stays clean.
         """
+    supported_by [
+        @lege-ecosystem.evidence.pagepress-boundary-clean/1,
+        @lege-ecosystem.evidence.pagepress-tests/1
+    ]
     author "dk"
 }
 
 record lege-ecosystem.decision.pipeline-memory-policy-from-external-review/1 : decision {
     title "Pipeline memory policy adopted from external review"
-    state proposed
+    state active
     scope [
         path "lege-process/core/runtime_stats.rs",
         path "lege-process/ocr/fast.rs",
@@ -317,12 +425,13 @@ record lege-ecosystem.decision.pipeline-memory-policy-from-external-review/1 : d
     context """
         An external static review of lege-process at 883393dc (Tokio pipeline memory behavior; dagrs comparison explicitly out of scope) recommended source-aware admission, a genuine one-session GPU mode, margin/DjVu memory policy, shorter raster lifetimes, cancellation-safe reservations, and moving writer blocking work off the control thread. Verified against code at b4fb52b5: all cited behaviors were still present.
         """
+    supported_by [ @lege-ecosystem.evidence.pipeline-memory-policy-in-source-20261127/1 ]
     author "dk"
 }
 
 record lege-ecosystem.decision.printing-defers-prepress-to-lege-pdf-write/1 : decision {
     title "Office printing is built; prepress is deferred, and belongs in lege-pdf/write rather than the rasterizer"
-    state proposed
+    state active
     scope [ path "lege-pdf/print/**", path "lege-pdf/render/**", path "lege-pdf/write/**" ]
     decision """
         lege-pdf-print implements office printing only -- paper, imposition, sheet composition, spooling -- and explicitly defers prepress: CMYK separations, an output ICC profile and rendering intent, overprint simulation, halftone screening and PDF/X conformance. When prepress is wanted, it is to be built in lege-pdf/write emitting PDF/X, not by teaching the display rasterizer to produce CMYK.
@@ -334,14 +443,18 @@ record lege-ecosystem.decision.printing-defers-prepress-to-lege-pdf-write/1 : de
         A commercial printer wants a file, not a bitmap, and that file is a PDF/X -- which lege-pdf/write already has the OutputIntent and font-embedding machinery for, and which phase 0's Trim and Bleed parsing now supplies boxes to. The renderer would be involved only for on-screen soft-proofing, which is the last piece to build rather than the first.
         """
     derived_from [ @lege-ecosystem.work.office-printing ]
+    supported_by [
+        @lege-ecosystem.evidence.office-printing-tests-2026-09-04/1,
+        @lege-ecosystem.evidence.pdf-print-geometry-preview-tests-20261104/1
+    ]
 }
 
 record lege-ecosystem.decision.renderer-extracted-as-exprim/1 : decision {
     title "The PDF engine leaves Lege as exprim: one MIT crate in its own repository, codecs alongside"
-    state proposed
+    state active
     scope [ path "Cargo.toml", path "lege-pdf/**", path "lege-render-wgpu/**" ]
     decision """
-        The renderer is renamed exprim (from Latin exprimo, the owner's choice) and moved out of lege-ecosystem into the sibling repository D:/projects/exprim (Rust-projects/exprim on Linux). It publishes as ONE package, `exprim` (CRATES-IO-PLAN option A): the 21 pdf-* engine crates become modules, lege-pdf-read becomes the crate root, lege-pdf-print becomes `exprim::print` behind the `print` feature, pdf-test-support becomes `exprim::test_support` behind `test-support`. The agent CLI/MCP server becomes exprim-agent (binary `exprim`, unpublished, own workspace). jp2lam, jbig2enc-rust and djvulibrust move to exprim/codecs. The wgpu image backend and GPU postprocess executor stay in Lege as lege-render-wgpu because they need lege-gpu. Licence MIT. Lege, Liminaldoc and other siblings depend on ../exprim by path.
+        The renderer is renamed exprim (from Latin exprimo, the owner's choice) and moved out of lege-ecosystem into the sibling repository D:/projects/exprim (Rust-projects/exprim on Linux). It publishes as ONE package, `exprim` (CRATES-IO-PLAN option A): the 21 pdf-* engine crates become modules, lege-pdf-read becomes the crate root, lege-pdf-print becomes `exprim::print` behind the `print` feature, pdf-test-support becomes `exprim::test_support` behind `test-support`. The agent CLI/MCP server becomes exprim-agent (binary `exprim`, unpublished, own workspace). jp2lam, jbig2enc-rust and djvulibrust move to exprim/codecs. The wgpu image backend and GPU postprocess executor stay in Lege as lege-render-wgpu because they need lege-gpu. Licence MIT. Lege depends on exprim and the codecs as git dependencies on liminalism/exprim `main` (path dependencies on ../exprim until 2026-11-15).
         """
     context """
         Owner, 2026-11-09: 'no more lege branding for the renderer, which has taken on a life of its own'; chose one crate over an exprim-* family, chose to move it and the codecs out of lege-ecosystem, and to fold read, print and the agent in. The crates.io audit of the same day found six pdf-* names taken and path-only internal dependencies, so the graph could not publish as it stood.
@@ -349,7 +462,10 @@ record lege-ecosystem.decision.renderer-extracted-as-exprim/1 : decision {
     consequences """
         exprim never depends on a Lege crate (the unpublished agent's lege-ocr edge is the one exception). Lege's CI that builds against exprim needs the exprim checkout beside it. Ledger records scoped to lege-pdf/render/**, lege-pdf/read/**, lege-pdf/print/**, lege-pdf/agent/** or lege-codecs/** are history and now match no tracked path. Publication still waits on jp2lam 0.3.1 reaching crates.io.
         """
-    supported_by [ @lege-ecosystem.observation.renderer-crates-io-readiness-20261109 ]
+    supported_by [
+        @lege-ecosystem.evidence.exprim-extraction-suites-20261109/1,
+        @lege-ecosystem.evidence.exprim-lege-process-integrity-20261109/1
+    ]
     author "dk"
 }
 
@@ -408,7 +524,7 @@ record lege-ecosystem.decision.sauvola-model-out-of-default-build/1 : decision {
 
 record lege-ecosystem.decision.sideways-pages-are-turned-upright-with-rotate/1 : decision {
     title "A sideways page is turned upright with /Rotate, never on its head"
-    state proposed
+    state active
     scope [
         path "lege-pdf/write/src/artifact.rs",
         path "lege-pdf/write/src/pages.rs",
@@ -435,6 +551,7 @@ record lege-ecosystem.decision.sideways-pages-are-turned-upright-with-rotate/1 :
             """
     }
     derived_from [ @lege-ecosystem.work.glyph-font-text-output ]
+    supported_by [ @lege-ecosystem.evidence.sideways-pages-rotate-in-source-20261127/1 ]
 }
 
 record lege-ecosystem.decision.simple-cli-default-binarization-is-adaptive/1 : decision {
@@ -515,8 +632,8 @@ record lege-ecosystem.decision.top-level-application-license-agpl/2 : decision {
 }
 
 record lege-ecosystem.decision.truetyping-banks-fonts-and-respects-a-bilevel-source/1 : decision {
-    title "A document may carry several glyph fonts, and a book already black and white is traced at its own resolution"
-    state proposed
+    title "A document may carry several glyph fonts, one per 65536-id bank"
+    state active
     scope [
         path "lege-pdf/read/src/session.rs",
         path "lege-pdf/write/src/**",
@@ -525,7 +642,7 @@ record lege-ecosystem.decision.truetyping-banks-fonts-and-respects-a-bilevel-sou
         path "lege-process/pipeline/pdf_tokio_pipeline.rs"
     ]
     decision """
-        Two changes take the ceiling off long books. A TrueType font holds 65536 glyph ids, so the session now keeps a dictionary per *bank*: a page whose components would carry the current dictionary past that limit starts the next one, every page draws from exactly one font, and the writer emits `/F2`, `/F3`, … with a reserved id per bank. And a page whose ink is already one bit — a full-page stencil, or a full-page image with a one-bit soft mask — has no more detail to give at any scale, so truetyping is rendered at that resolution rather than at its own working height. A greyscale or colour scan keeps the raised height: its soft edges resolve *better* the finer they are sampled.
+        A document may carry several glyph fonts. A TrueType font holds 65536 glyph ids, so the session keeps a dictionary per *bank*: a page whose components would carry the current dictionary past that limit starts the next one, every page draws from exactly one font, and the writer emits `/F2`, `/F3`, … with a reserved id per bank. (This record once also lowered the truetyping height to a bilevel source's own resolution; that half was replaced on 2026-09-06 by truetyping-leaves-bilevel-sources-alone, which skips truetyping on bilevel sources instead.)
         """
     context """
         An 836-page book failed after about seven minutes with `PDF writer actor has stopped`. It was the 16-bit glyph id space: the page adapter rejects an id past 65535 and the writer actor died on it, while the real message was lost because the sender only sees a closed channel. The same run was slow for a second reason — the book was itself a Lege output, a greyscale JP2 under a JBIG2 stencil at 1200 px, and rendering it at 2400 invented interpolated edges that no two impressions of a letter shared: 120 pages made 24 381 glyphs in 3 minutes at 2400 px and 9 363 in 18 seconds at 1400.
@@ -548,7 +665,9 @@ record lege-ecosystem.decision.truetyping-banks-fonts-and-respects-a-bilevel-sou
             The writer actor stores its error in a `OnceLock` the handle shares before it drops the receiver, so a send that finds the channel closed reports `PDF writer failed: <cause>` instead of `PDF writer actor has stopped`.
             """
     }
+    retired_claims [ bilevel-sources-have-a-ceiling ]
     derived_from [ @lege-ecosystem.work.glyph-font-text-output ]
+    supported_by [ @lege-ecosystem.evidence.glyph-font-banks-in-source-20261127/1 ]
 }
 
 record lege-ecosystem.decision.truetyping-is-the-default-pdf-text-format/1 : decision {
@@ -640,7 +759,7 @@ record lege-ecosystem.decision.truetyping-is-the-default-pdf-text-format/2 : dec
 
 record lege-ecosystem.decision.truetyping-leaves-bilevel-sources-alone/1 : decision {
     title "Truetyping is skipped when the source's ink is already one bit; source masks pass through"
-    state proposed
+    state active
     scope [ path "lege-process/encoding/glyphfont.rs", path "lege-process/pipeline/**" ]
     decision """
         A source page whose ink already comes from a one-bit image or a one-bit soft mask (a JBIG2 or CCITT text layer, an MRC mask) is original text: truetyping does not trace it. If the sampled pages of a document are mostly bilevel (bilevel_source_height), the run switches its text format to jbig2 before any page is processed and gives back the height the caller asked for; a single bilevel page in a scanned book drops its glyph session and is encoded as the jbig2 format would (page_ink_is_bilevel); and a preserved JBIG2 SMask passes through untouched under truetyping exactly as it does under jbig2 and ccitt4.
@@ -652,16 +771,20 @@ record lege-ecosystem.decision.truetyping-leaves-bilevel-sources-alone/1 : decis
         Truetyping on a lege JBIG2 output is a JBIG2 re-encode at the requested height (20 pages: 0.56 MB in 8 s). clamp_truetyping_render_height is gone; set_text_format restores the requested height when leaving truetyping. Implemented 2026-09-06 in lege-process/pipeline/pdf_tokio_pipeline.rs and config.rs.
         """
     depends_on [ @lege-ecosystem.decision.jbig2-is-the-default-pdf-text-format-again ]
+    supported_by [
+        @lege-ecosystem.evidence.jbig2-generic-default-costs-little-20260906/1,
+        @lege-ecosystem.observation.grayscale-mode-makes-truetyping-smaller-and-cleaner/2
+    ]
     author "GitHub Uploader"
 }
 
 record lege-ecosystem.decision.truetyping-renders-in-grayscale-by-default/1 : decision {
     title "Truetyping renders its ink mask through the MRC clean path"
-    state proposed
+    state active
     scope [ path "lege-process/**" ]
     topic truetyping-render-mode
     decision """
-        Choosing truetyping selects grayscale/MRC rendering. In the CLI, --text-format truetyping implies --grayscale unless a bilevel mode is named (--binarization, --threshold, --sauvola-k); in the GUI, ticking TrueTyping flips the Binarized/Grayscale pair to Grayscale, which the user can flip back.
+        Choosing truetyping selects grayscale/MRC rendering. In the CLI, --text-format truetyping implies --grayscale unless --binarization names a bilevel method (--threshold and --sauvola-k are accepted no-ops since 2026-11-14 and no longer opt out); in the GUI, ticking TrueTyping flips the Binarized/Grayscale pair to Grayscale, and leaving Grayscale returns the encoder to JBIG2.
         """
     context """
         Truetyping draws the text as outlines over a background, so the ink mask only decides where the outlines go. Sauvola on a raw scan keeps the paper grain and every speck becomes a glyph; the MRC clean path despeckles it. On 41 pages of the crusades scan: 0.77 MB and 1347 shapes grayscale against 2.56 MB and 13087 bilevel, and the grayscale run was faster. Tested on a Kobo Clara BW: both load and page-turn acceptably, grayscale is considerably smaller.
@@ -669,6 +792,9 @@ record lege-ecosystem.decision.truetyping-renders-in-grayscale-by-default/1 : de
     consequences """
         Bilevel truetyping stays reachable by naming a binarization mode or unticking Grayscale. Truetyping remains opt-in overall (see @lege-ecosystem.decision.jbig2-is-the-default-pdf-text-format-again): dictionary matching still makes occasional substitution errors on bold text.
         """
+    supported_by [
+        @lege-ecosystem.observation.grayscale-mode-makes-truetyping-smaller-and-cleaner/2
+    ]
     author "GitHub Uploader"
 }
 

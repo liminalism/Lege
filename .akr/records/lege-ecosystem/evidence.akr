@@ -523,6 +523,26 @@ record lege-ecosystem.evidence.decode-fix-plan-import-dispositioned-20260908/1 :
         """
 }
 
+record lege-ecosystem.evidence.decode-plan-normative-imports-withdrawn-20261127/1 : evidence {
+    title "Normative records imported from the jp2lam decode-fix-plan and decoder audit were withdrawn"
+    state verified
+    result pass
+    method observation
+    observed_at git:bcaccd238c69216db6deaf40eb9e8da5829881c7
+    summary """
+        Ledger audit of 2026-11-27. The 2026-09-08 cleanup (decode-fix-plan-import-dispositioned-20260908)
+        abandoned the work records the 2026-08 bulk import made from the jp2lam decode-fix-plan documents,
+        but left 18 policy and requirement records the same importer made from their section headings,
+        status-update paragraphs and how-to notes (titles such as "1. Precincts / SOP / EPH" or
+        "2026-07-22 update"). None states a standing rule. Each was checked against exprim/codecs/jp2lam
+        (jp2lam 0.4.0) and exprim src/image/jpx.rs: the correctness classes they describe are fixed, the
+        eager packet sort and Tier-2 hash map are gone, and the orientation note names paths that no longer
+        exist. All 18 were withdrawn; their still-open content (windowed ROI IDWT, PGO/SIMD) lives in
+        lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan. Withdrawn: lege-ecosystem-perf.policy.phase-5-true-windowed-line-based-decode, lege-ecosystem.policy.implementation-update, lege-ecosystem.policy.later-update-section-2-resolved-and-sub-8-bit, lege-ecosystem.policy.renderer-integration-policy, lege-ecosystem.policy.replace-eager-packet-position-sorting-where, lege-ecosystem.policy.reuse-per-packet-contribution-storage, lege-ecosystem.policy.the-census-extraction-tool-your-main-instrument, lege-ecosystem.policy.tpsot-tnsot-non-conformant-tile-parts-2-files, lege-ecosystem.requirement.degenerate-1-sample-dwt-split-8-files-resolved, lege-ecosystem.requirement.orientation-environment, lege-ecosystem.requirement.precincts-sop-eph-10-files-largest-remaining, lege-ecosystem.requirement.reduced-reconstruction-geometry, lege-ecosystem.requirement.update-sections-3-and-4-resolved-the-4, lege-ecosystem-perf.policy.gpu-path-useful-but-only-with-renderer, lege-ecosystem-perf.policy.parallelism-policy-for-a-pdf-renderer, lege-ecosystem-perf.policy.recommended-renderer-api-and-policy, lege-ecosystem-perf.policy.scratch-allocation-per-parallel-row, lege-ecosystem-perf.requirement.what-large-render-means-for-this-problem.
+        """
+    author "dk"
+}
+
 record lege-ecosystem.evidence.det-limit-side-sweep-20260822/1 : evidence {
     title "Detector limit_side 1280 beats 960 and 1600 for PP-OCRv6 on wgpu"
     state verified
@@ -1001,6 +1021,18 @@ record lege-ecosystem.evidence.evidence-broker-ocr-provider-20260822/1 : evidenc
     author "GitHub Uploader"
 }
 
+record lege-ecosystem.evidence.exprim-agent-mcp-result-shape-20261127/1 : evidence {
+    title "exprim agent MCP tools answer in text with stated coverage and inline images"
+    state verified
+    result pass
+    method observation
+    observed_at git:bcaccd238c69216db6deaf40eb9e8da5829881c7
+    summary """
+        Read at exprim 853afbe (agent/, where the lege-pdf MCP server moved): agent/src/commands/mcp.rs returns one text block, or JSON text plus structuredContent only with response_format=json, never both; images are inline image content (1568 px default edge, INLINE_MAX_EDGE 4096 cap in serve.rs, 6-page render limit, contact_sheet); truncated results name next_page/start_char; unsupported poppler options are refused by name. Covered by agent/tests/mcp_protocol.rs and agent_tools.rs.
+        """
+    author "dk"
+}
+
 record lege-ecosystem.evidence.exprim-extraction-suites-20261109/1 : evidence {
     title "Uncommitted trees on lege-ecosystem fd17bdd9 + new exprim repo (no commits). exprim workspace 1,224 passed / 0 failed (twice: after consolidation, and after the comment scrub + cargo fmt); exprim-agent 106 passed / 0 failed; clippy 0 errors in both exprim workspaces. lege-ecosystem check --workspace --all-targets clean (pre-existing GUI dead-code warnings only); Lege exprim consumers 144 passed / 0 failed. pdf-integrity, fuzz (check), pdfium-diff (with bench-profiling), pdfium-text-diff, liminaldoc --workspace --all-targets, render-lege, templar-preview-codecs and the four scoping harnesses all build against exprim."
     state verified
@@ -1129,6 +1161,21 @@ record lege-ecosystem.evidence.freya-viewer-build-aliases/1 : evidence {
     summary """
         The standard Freya processor GUI/worker build and the separate native viewer build both completed successfully.
         """
+}
+
+record lege-ecosystem.evidence.glyph-font-banks-in-source-20261127/1 : evidence {
+    title "Truetyping keeps one glyph dictionary per 65536-id font bank, and a writer failure names its cause"
+    state verified
+    result pass
+    method observation
+    observed_at git:bcaccd238c69216db6deaf40eb9e8da5829881c7
+    summary """
+        Read at Lege bcaccd23 in the 2026-11-27 ledger audit. lege-process/encoding/glyphfont.rs carries
+        bank: u16 on a page's glyph runs (line 427), keeps one dictionary per bank and starts the next when
+        a page would overflow the 16-bit id space (3199-3298), and emits one font program per bank. A failed
+        writer reports "PDF writer failed: <reason>" (pipeline/helper_functions.rs:1436).
+        """
+    author "dk"
 }
 
 record lege-ecosystem.evidence.glyphfont-pass5-straighten-dedup-verification/1 : evidence {
@@ -3047,6 +3094,25 @@ record lege-ecosystem.evidence.pdf-titler-tests-20261109/1 : evidence {
     author "dk"
 }
 
+record lege-ecosystem.evidence.pipeline-memory-policy-in-source-20261127/1 : evidence {
+    title "The external memory review's pipeline policy is in source, except the DjVu stages"
+    state verified
+    result pass
+    method observation
+    observed_at git:bcaccd238c69216db6deaf40eb9e8da5829881c7
+    summary """
+        Read at Lege bcaccd23 in the 2026-11-27 ledger audit. LEGE_GPU_SESSIONS sizes the resident GPU
+        sessions (pipeline/inference.rs:45); LEGE_MEMORY_BUDGET_MB overrides the page-memory budget with an
+        oversized-page warning (pipeline/source.rs:524); reserve_encoded_bytes admits an oversized page with
+        a clamped reservation (pipeline/helper_functions.rs:1335, with a test); the margin pass admits
+        oversized pages through note_oversized_page (pipeline/margin_pipeline.rs:336); the runtime report
+        carries gpu_sessions (core/runtime_stats.rs). Not covered: the staged DjVu pipeline still does not
+        share the page-job governor (pipeline/djvu_pipeline.rs:208), the open item of
+        lege-ecosystem.work.pipeline-memory-follow-ups.
+        """
+    author "dk"
+}
+
 record lege-ecosystem.evidence.pipeline-writer-and-spooled-epub-tests/1 : evidence {
     title "Uncommitted working tree on top of b4fb52b5: spawn_pdf_writer_actor now runs its blocking DocumentWriter loop on a dedicated blocking worker thread (runtime_stats::spawn_blocking + blocking_recv) off the current-thread control executor, and PDF EPUB sidecar packaging streams spooled hOCR files into PageText one page at a time via build_epub_from_spooled_hocr_pages_with_outline_cancellable without collecting all raw hOCR strings into memory at once. 15 helper_functions tests and 15 epub_pipeline tests (including new spooled_hocr_pages_stream_in_page_order_into_epub) pass."
     state verified
@@ -3661,6 +3727,21 @@ record lege-ecosystem.evidence.sdk-isolated-cold-tensorrt-package-smoke-20260815
         The exact final staged package cold-built detector and recognizer engines without SDK paths, selected tensorrt-paddle through Auto, processed all 10 pages, and produced 10 page shards plus JSON and text exports.
         """
     supersedes [ @lege-ecosystem.evidence.sdk-isolated-cold-tensorrt-package-smoke-20260815/1 ]
+}
+
+record lege-ecosystem.evidence.sideways-pages-rotate-in-source-20261127/1 : evidence {
+    title "Sideways pages are written upright with /Rotate 90 or 270, never 180"
+    state verified
+    result pass
+    method observation
+    observed_at git:bcaccd238c69216db6deaf40eb9e8da5829881c7
+    summary """
+        Read at Lege bcaccd23 in the 2026-11-27 ledger audit. lege-process/core/pdf_artifact.rs:121
+        display_rotation maps one quarter turn to Clockwise90 and three to Clockwise270, and zero and two to
+        Upright. The unit test built on page_turned (line 589) asserts Clockwise270. The behaviour shipped
+        in c38f8eed (2026-09-03).
+        """
+    author "dk"
 }
 
 record lege-ecosystem.evidence.single-binarizer-tests-20261114/1 : evidence {

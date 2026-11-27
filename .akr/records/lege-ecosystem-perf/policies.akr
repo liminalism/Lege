@@ -3,7 +3,7 @@ project lege-ecosystem
 
 record lege-ecosystem-perf.policy.gpu-path-useful-but-only-with-renderer/1 : policy {
     title "13. GPU path: useful, but only with renderer integration"
-    state proposed
+    state withdrawn
     scope [ all ]
     rule """
         NVIDIA’s current nvJPEG2000 library offloads every decode stage except Tier-2 to Pascal-or-newer GPUs, supports 5/3 and 9/7, multiple tiles, up to four components, common chroma subsampling, resolution/tile decode, partial decode, RGB output controls, and reusable decode state. On an RTX 4060, it is a viable experimental control or optional backend.
@@ -19,7 +19,7 @@ record lege-ecosystem-perf.policy.gpu-path-useful-but-only-with-renderer/1 : pol
 
 record lege-ecosystem-perf.policy.parallelism-policy-for-a-pdf-renderer/1 : policy {
     title "11. Parallelism policy for a PDF renderer"
-    state proposed
+    state withdrawn
     scope [ all ]
     rule """
         The decoder cannot choose thread count in isolation. The renderer already runs pages/images concurrently. Nested unrestricted Rayon work can reduce document throughput and increase tail latency.
@@ -35,7 +35,7 @@ record lege-ecosystem-perf.policy.parallelism-policy-for-a-pdf-renderer/1 : poli
 
 record lege-ecosystem-perf.policy.phase-5-true-windowed-line-based-decode/1 : policy {
     title "Phase 5 — true windowed/line-based decode"
-    state proposed
+    state withdrawn
     scope [ all ]
     rule """
         1. Windowed subband allocation.
@@ -59,7 +59,7 @@ record lege-ecosystem-perf.policy.phase-5-true-windowed-line-based-decode/1 : po
 
 record lege-ecosystem-perf.policy.recommended-renderer-api-and-policy/1 : policy {
     title "16. Recommended renderer API and policy"
-    state proposed
+    state withdrawn
     scope [ all ]
     rule """
         A renderer-specific constructor should make the fast path explicit and difficult to bypass:
@@ -75,7 +75,7 @@ record lege-ecosystem-perf.policy.recommended-renderer-api-and-policy/1 : policy
 
 record lege-ecosystem-perf.policy.scratch-allocation-per-parallel-row/1 : policy {
     title "5.1 Scratch allocation per parallel row"
-    state proposed
+    state withdrawn
     scope [ all ]
     rule """
         At `src/dwt/irrev97.rs:871–877`, every row handled by `par_chunks_mut()` allocates:

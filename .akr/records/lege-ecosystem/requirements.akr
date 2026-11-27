@@ -3,7 +3,7 @@ project lege-ecosystem
 
 record lege-ecosystem.requirement.degenerate-1-sample-dwt-split-8-files-resolved/1 : requirement {
     title "2. Degenerate 1-sample DWT split — ~8 files  [RESOLVED 2026-07-22 — root cause was a K/INV_K scaling on a one-row resolution in the *vertical* pass; see the update near the top. The \"relaxing the bound drifts\" note below is accurate but the cause is now fixed.]"
-    state proposed
+    state withdrawn
     scope [ all ]
     statement """
         - **Error:** `COD decomposition levels N exceed DWT limit N for image
@@ -65,7 +65,7 @@ record lege-ecosystem.requirement.degenerate-1-sample-dwt-split-8-files-resolved
 
 record lege-ecosystem.requirement.orientation-environment/1 : requirement {
     title "0. Orientation & environment"
-    state proposed
+    state withdrawn
     scope [ all ]
     statement """
         - **Repo:** `D:\Rust-projects\jp2lam` on Windows; the same disk boots Linux
@@ -111,7 +111,7 @@ record lege-ecosystem.requirement.orientation-environment/1 : requirement {
 
 record lege-ecosystem.requirement.precincts-sop-eph-10-files-largest-remaining/1 : requirement {
     title "1. Precincts / SOP / EPH — ~10 files (LARGEST remaining class)"
-    state proposed
+    state withdrawn
     scope [ all ]
     statement """
         - **Error:** `unsupported packet syntax: precinct partitioning, SOP markers,
@@ -197,7 +197,7 @@ record lege-ecosystem.requirement.precincts-sop-eph-10-files-largest-remaining/1
 
 record lege-ecosystem.requirement.reduced-reconstruction-geometry/1 : requirement {
     title "8. Reduced reconstruction geometry"
-    state proposed
+    state withdrawn
     scope [ all ]
     statement """
         Reconstruction must use the dimensions and reference-grid phase associated with the selected resolution, not simply divide the full dimensions by a power of two.
@@ -213,7 +213,7 @@ record lege-ecosystem.requirement.reduced-reconstruction-geometry/1 : requiremen
 
 record lege-ecosystem.requirement.update-sections-3-and-4-resolved-the-4/1 : requirement {
     title "2026-07-22 update — Sections 3 and 4 RESOLVED (the §4 diagnosis below was WRONG)"
-    state proposed
+    state withdrawn
     scope [ all ]
     statement """
         - **Section 4 was NOT a tile-part assembly bug.** That diagnosis is disproven:

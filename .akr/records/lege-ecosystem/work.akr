@@ -728,10 +728,10 @@ record lege-ecosystem.decode-optimization-handoff/1 : work {
 }
 
 record lege-ecosystem.encode-quality.improve-photographic-rate-control/1 : work {
-    title "Rework jp2lam lossy rate control for perceptual, resolution-stable photographic quality"
+    title "Measure jp2lam photographic quality per byte against JPEG XL and BPG after the SSIMULACRA2 controller"
     state proposed
     intent """
-        Raise jp2lam lossy photographic quality-per-byte toward JPEG XL/BPG and make a fixed quality hold constant PERCEPTUAL quality across resolutions. The local allocator work is the existing perceptually weighted PCRD (size-matched Annex-J curves). The remaining encode-time quality objective is a SSIMULACRA2 score floor, not a butteraugli-anchored quality mapping: see lege-ecosystem.work.jp2lam-ssim-controller and lege-ecosystem.decision.jp2lam-ssim-canonical-metric. Grade screens with the pinned in-tree metric; keep butteraugli as a reported secondary column only.
+        Measure whether jp2lam's photographic quality per byte has closed on JPEG XL and BPG since the encode-time SSIMULACRA2 floor landed (lege-ecosystem.work.jp2lam-ssim-controller, completed), and tune the perceptually weighted PCRD only if it still trails at equal score. Resolution-stable perceptual quality, the other half of the original goal, is delivered by that controller. Grade with the pinned in-tree metric; butteraugli stays a reported secondary column.
         """
     note """
         Partial implementation landed: native lossy allocator size-matches perceptually weighted Annex-J curves to the established MSE byte target, maps luma masking through tile/subband origins, and uses smooth strength plus actual-bpp gates. Qualified same-size improvements at q25/q50/q75; q90 remains deliberately weak and mixed; q98 stays on the byte-identical baseline. The global quality controller is now tracked as lege-ecosystem.work.jp2lam-ssim-controller (shared JPXL SSIMULACRA2 metric; two-dimensional quant+PCRD search). Butteraugli is measurement-only.
@@ -1879,10 +1879,10 @@ record lege-ecosystem.work.glyph-font-text-output/1 : work {
         path "lege-process/pipeline/pdf_tokio_pipeline.rs"
     ]
     intent """
-        Improve the shipped per-document glyph-font text output. Investigate and correct remaining small-bold substitutions and excessive font and glyph growth on long books, with representative quality and performance measurements.
+        Only if truetyping is to become more than an opt-in encoder: cut its font and glyph growth on long books (an 886-page scan made 2.1x the JBIG2 file in 3.6x the time) and re-measure residual small-bold substitutions on a representative corpus.
         """
     note """
-        TrueTyping output, outline fitting, OCR ToUnicode, orientation and font banking are implemented. Earlier feature stages are historical context; residual quality and long-book growth remain open.
+        Audit 2026-11-27: outline fitting, OCR ToUnicode, /Rotate orientation, font banking and the counter and far-pixel fold gates shipped by 2026-09-06; truetyping was demoted to opt-in that day and glyphfont.rs has had no functional change since. Parked, not scheduled.
         """
     claim the-user-found-it-on-two-books {
         text """
@@ -3307,73 +3307,8 @@ record lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan/1 : work {
         path "lege-pdf/render/crates/pdf-image/src/jpx.rs"
     ]
     intent """
-        The single live record for the jp2lam JPEG 2000 decoder optimisation effort. It
-        replaces the ~125 work records the 2026-08 bulk import created from the five
-        planning documents in lege-codecs/jp2lam/decode-fix-plan/; those were abandoned on
-        2026-09-08 as mis-imported markdown headings. The documents themselves stay on disk
-        and remain the detailed authority.
-
-        Status re-verified against lege-codecs/jp2lam/src on 2026-09-08 (repo HEAD 823d46dd).
-
-        LANDED, confirmed in current source:
-        - Jp2DecodeStats stage attribution (src/decode/stats.rs).
-        - Renderer-oriented decode API: DecodeRequest / DecodeResolution / DecodeOutputFormat /
-          Jp2Decoder, plus decode_into() writing straight into caller memory (src/decode/mod.rs).
-        - Reduced-resolution decode, including multi-tile (select_reduce_levels,
-          reduced_axis_bounds in src/decode/mod.rs).
-        - Tier-1-fused dequantization with no separate full coefficient plane
-          (src/decode/reconstruct.rs, src/decode/t1.rs).
-        - Fused packed output with byte-identity tests, and a direct sYCC 4:2:0 kernel
-          (reconstruct_fused_packed_into in src/decode/reconstruct.rs).
-        - Banded vertical 9/7 reconstruction at VERTICAL_BAND_COLS = 128 and coarse-chunk
-          horizontal scratch (src/dwt/irrev97.rs).
-        - Lattice-aligned nonzero tile-origin routing into the optimized inverse DWT
-          (lattice_aligned_origin in src/decode/reconstruct.rs).
-        - Weighted largest-processing-time Tier-1 scheduling over a shared work cursor with
-          one persistent Tier1Scratch per pool worker (decode_codeblocks_parallel in
-          src/decode/t1.rs), bit-exact against the serial path.
-        - Tier-2 allocation hygiene: range-based precinct block membership, streaming
-          PacketStats instead of retained packet records, try_reserve from header-derived
-          counts (src/decode/t2.rs).
-        - Renderer integration: thread-local persistent Jp2Decoder, DecodeConcurrency::Budgeted,
-          DecodeResolution::AtLeast from the device footprint
-          (lege-pdf/render/crates/pdf-image/src/jpx.rs).
-        - All four correctness classes of HANDOFF-remaining-jpx-decode.md (precincts/SOP/EPH,
-          degenerate 1-sample DWT, zero-length contribution for the named repros, TPsot==TNsot
-          tail) were resolved before the 2026-08-05 audit was written.
-
-        NEGATIVE RESULT, do not re-land as-is: the wide f32x8 fused ICT/clamp/interleave SIMD
-        experiment (commit c2c8dbf1) was performance-neutral and byte-identical because fat-LTO
-        LLVM already vectorizes the scalar loop; the stage is memory-bandwidth-bound.
-
-        GENUINELY OPEN, in the order the plan itself recommends:
-        1. True windowed / line-based ROI decode (plan Milestone 8, audit section 10,
-           NEXT-audit-phases Phase 5). Today ROI runs the full inverse DWT per tile and clips
-           while packing; see the comment at src/decode/mod.rs around line 421. The interim
-           region-sized destination allocation landed, the windowed subband IDWT with halo did
-           not.
-        2. Tier-2 cleanups: the merged-block HashMap<(usize,usize), MergedBlock> at
-           src/decode/t2.rs:268 is still a HashMap rather than a dense index, and
-           build_packet_positions still eagerly sorts packet positions instead of iterating a
-           progression order.
-        3. Tier-1 style specialization, compact FlagGrid words and stripe-major coefficient
-           layout (plan sections 20-24). Only the stripe_is_clean fast path exists
-           (src/tier1/flags.rs).
-        4. Architecture-specific SIMD and PGO (plan Milestone 5 remainder,
-           NEXT-audit-phases Phase 6). src/simd/x86/mod.rs still carries an empty AVX2 shell:
-           "No AVX2 overrides are installed." No PGO build configuration and no GPU backend.
-        5. Small renderer follow-ups: Rgbx8/Bgra8 exist in the codec but jpx.rs maps only
-           Gray8/GrayA8/Rgb8/Rgba8/Cmyk8, so a 4-byte-pixel GPU compositing path still swizzles.
-        6. sYCC 4:2:2 and 4:4:4 direct kernels (only 4:2:0 landed).
-        7. Tile-part QCC component quantization override is still rejected outright
-           (MARKER_QCC in src/j2k/decode_markers.rs), one of the post-precinct census residuals.
-
-        WHAT THE NEXT SESSION MUST DECIDE FIRST: item 1 and item 4 are the two the plan itself
-        called the hardest and deferred, and both are profiling-gated. The detailed
-        DWT/Tier-1/final-pack flamegraph predates the 128-column vertical band and the
-        direct-output change, so refresh stage attribution with the current decode_benchmark
-        before picking any hot-loop target. Items 2, 3, 5, 6 and 7 are independently landable
-        without that.
+        The single live record for the jp2lam JPEG 2000 decoder optimisation effort; the codec now lives at exprim/codecs/jp2lam (moved 2026-11-09; jp2lam 0.4.0 released 2026-11-24). The detailed authority is still the five decode-fix-plan documents beside it. Re-verified 2026-11-27 against jp2lam 0.4.0: of the seven items open on 2026-09-08, the Tier-2 cleanups (no merged-block hash map, lazy PacketProgression), packed stripe flags with the branch-light MQ decoder and AVX2 kernels, the sYCC kernel for any equal chroma subsampling, and tile-part QCC/QCD/COC overrides have landed.
+        What remains, all profiling-gated or demand-gated: (1) a windowed, line-based inverse DWT for region decode (today only intersecting code blocks are decoded and the IDWT still runs whole per tile; chroma-subsampled region decode is refused); (2) PGO and further SIMD or GPU experiments, after refreshing stage attribution with the current decode benchmark; (3) wiring Rgbx8/Bgra8 decode output through exprim's src/image/jpx.rs once a BGRA or GPU upload consumer exists; (4) POC, PPM, PPT and RGN marker support only if the census finds files that need them. Negative result kept: the wide f32x8 fused ICT/clamp/interleave experiment (c2c8dbf1) was neutral because the stage is bandwidth-bound.
         """
     note """
         Absorbs lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09 (superseded
@@ -3633,7 +3568,7 @@ record lege-ecosystem.work.liminal-annotator-folder-projects/1 : work {
 
 record lege-ecosystem.work.liminal-annotator-pass2/1 : work {
     title "Liminal Annotator pass 2: benchmark and optimize on an unloaded machine (cloud session)"
-    state proposed
+    state completed
     scope [ path "lege-misc/liminal-annotator/**" ]
     intent """
         Measure and tune lege-misc/liminal-annotator (the layout-dataset box review tool, committed fd17bdd9) on a machine without the local CPU saturation: run its tests and headless `bench` at 1080p/1440p/4K, profile page re-rasterization variance and 4K drag frames, optimize only where measured, and record the numbers in its README. Targets from the spec: under 16 ms input-to-feedback at 1080p, under 50 ms to show a prefetched page.
@@ -3641,6 +3576,9 @@ record lege-ecosystem.work.liminal-annotator-pass2/1 : work {
     note """
         Pass 1 (working app) and the pass-2 code changes (pan by raster scroll, skipped unchanged frames, tighter sampling loop, page revert on Ctrl+C) are committed. Local timings after those changes could not be taken: the CPU was at 97-100% from background jobs. Work runs on branch annotator-pass2 in a cloud session.
         """
+    trace [
+        "Closed in the 2026-11-27 ledger audit: f11fee2e put the quiet-VM bench tables in the README; p95 is 14 ms or less and a page switch at most 11.6 ms."
+    ]
     author "dk"
 }
 
@@ -4415,7 +4353,7 @@ record lege-ecosystem.work.office-printing/1 : work {
 
 record lege-ecosystem.work.open-source-monorepo-relaunch/1 : work {
     title "Relaunch Lege as the canonical open-source codec monorepo"
-    state proposed
+    state abandoned
     scope [
         path ".gitignore",
         path "Cargo.toml",
@@ -4428,7 +4366,9 @@ record lege-ecosystem.work.open-source-monorepo-relaunch/1 : work {
     intent """
         Publish one sanitized Lege ecosystem source repository, restore Lege's direct DJVULibRust API integration without rolling back later behavior, retire duplicate codec mirrors, and provide checksum-pinned downloads for excluded Document OCR models.
         """
-    note "Plan of record is to-do-plans/open-source-monorepo-relaunch.md. The top-level AGPL decision and direct DJVULibRust integration have landed. Remaining work includes consistent license declarations, sanitized history and public cutover, clean-clone verification and checksum-pinned optional OCR model bootstrap; publication status has not been verified."
+    note """
+        Overtaken by events: on 2026-11-09 the PDF engine and codecs moved to the separate MIT repository liminalism/exprim (decision renderer-extracted-as-exprim), so Lege is no longer the canonical codec monorepo. liminalism/Lege is already public (reupload d17c696c), and DjVu is linked in-process. Two items are left and unscheduled: checksum-pinned optional model downloads, and license fields for lege-gpu, lege-ocr, lege-pdf/write and xtask.
+        """
     claim asset-policy {
         text """
             The four required embedded Lege ONNX models remain tracked, while optional large Document OCR/TurboOCR model tiers are fetched atomically from an immutable checksum-pinned manifest.
@@ -4538,7 +4478,7 @@ record lege-ecosystem.work.optimize-mqdecoder-only-after-direct-attribution/1 : 
 
 record lege-ecosystem.work.own-page-dewarp-model/1 : work {
     title "Train an own page-dewarp model on Colab that beats Paddle UVDoc, flattener and DocScanner on book spreads and leaves flat pages alone"
-    state proposed
+    state superseded
     scope [ path "lege-gpu/**", path "lege-process/models/**" ]
     intent """
         Train from ImageNet-initialised ResNet-18 trunk + three transformer layers + residual flow head (about 5.3 M parameters, 10-20 MB with fp16 weights) on SyntheticDoc, UVDoc, Book3D spreads and the owner's scanned books (flat pages and textures), on Google Colab within about 90 compute units. The model predicts a correction to the identity map at 1/8 resolution plus a page mask, gutter heat, a bend score and a spread score, so one model serves the whole-frame pass, the page pass and the flat-page gate. Deliverable: one ONNX file with input `image` that lege-gpu loads unchanged, measured with the standalone dewarp tester against the three existing models on 26 hand-held book-spread photos and on a flat-page identity test. Integrating it into the Lege pipeline is a separate follow-up.
@@ -4546,25 +4486,34 @@ record lege-ecosystem.work.own-page-dewarp-model/1 : work {
     note """
         Plan approved by the owner 2026-11-12. Training workspace is a new dewarp folder beside the layout-detection and binarizer Colab workspaces. Book3D is tagged MIT on Hugging Face while its authors' repository words it as non-commercial research only; it is kept in its own shard set so a model can be retrained without it. Status 2026-11-14, 92.3 of 94.1 Colab units spent (the owner released the whole balance): the model is a 576x384 model (the 768x512 phase was not run), 10.58 MB fp16, loads in lege-gpu unchanged at 13 ms per call. Four fine-tunes followed the main run (6.3 M views): the first gave the baseline; a second on failure-driven synthetic renders was rejected (no measurable gain); the third (ft3) added 10 % real samples made from 33 spreads the owner photographed of a book with a true flat scan and cut distortion on a second, unseen book by 41 % (0.485 -> 0.288 % of the page diagonal by registration of flat scans to the outputs); the fourth (ft4, the current model) raised the real share to 25 % with 131 spreads of a large picture cookbook. ft4 by the same measure: held-out spreads of the cookbook 0.489 -> 0.250, the unseen book 0.290 -> 0.247, where Paddle UVDoc, DocScanner and flattener are at 0.43-0.53 on both; one pass per page of it (0.225 and 0.278) is already below all of them. On the 26 spread photos: tilt 1.08 deg, spread 1.36 deg, bow 0.345 %, not established different from Paddle UVDoc (1.17 / 1.38 / 0.363; the 26 photos resolve about 0.2 deg), so the spreads check as worded stays open while the registration measure answers the question it was meant to ask. Book100: local distortion better than ft3, straightness, MS-SSIM and OCR level. Flat-page check: 6 of 6 test pages and 406 of 408 held-out scans untouched (99.5 %), none of 590 curved photos; the fill gate's turn limit was moved twice after seeing test pages (1.0 -> 1.5 -> 2.0 degrees), supported independently by the curved photos and by 664 flat scans not used for tuning. Open weakness: flat pages that are full-page photographs are altered (47 of the cookbook's 400 scan pages); the cure not yet tried is flat training samples from scans of illustrated books. fp16 against fp32 on one call (baseline): mean 0.009 px, max 0.26 px at model width. Lesson: real photo pairs with true flat references moved the result far more than any synthetic data; a reference must be checked for flatness first (one of the owner's books has a phone capture as its archive copy). See the tester README and the training notes.
         """
+    trace [
+        "Original targets missed as worded: 26-photo straightness was level with Paddle UVDoc, and fp16 max error 0.26 px against 0.05; owner shipped on registration.",
+        "Integration shipped as Flatten page (98dd5cc2, decision flatten-page-uses-lege-dewarp). Altered full-page photo scans (47 of 400) remain the known weakness."
+    ]
     acceptance {
         check beats-existing-on-spreads {
             statement """
-                On the 26 book-spread photos the model's text-line angle spread and bow are better than Paddle UVDoc, flattener and DocScanner by more than the measure's noise floor.
+                On held-out spreads of books with a true flat scan, distortion left after flattening (registration of the flat scan to the output, in % of the page diagonal) is below Paddle UVDoc, DocScanner and flattener with the 95 % interval excluding zero; this is the measure the owner shipped the model on (2026-11-14). On the original 26 hand-held spread photos it is level with Paddle UVDoc on text-line straightness, not ahead.
                 """
-            method command
+            method observation
+            verified_by [
+                @lege-ecosystem.evidence.lege-dewarp-picture-book-finetune-20261114/1,
+                @lege-ecosystem.evidence.lege-dewarp-real-pairs-finetune-20261113/1
+            ]
         }
         check flat-pages-untouched {
             statement """
                 On held-out flat pages the identity gate returns at least 99 % untouched, and passes none of the 26 curved photos.
                 """
             method command
-            verified_by [ @lege-ecosystem.evidence.lege-dewarp-flat-pages-untouched-20261113 ]
+            verified_by [ @lege-ecosystem.evidence.lege-dewarp-flat-pages-untouched-20261113/1 ]
         }
         check loads-in-lege-gpu {
             statement """
-                The exported fp16 ONNX file is 10-20 MB, is accepted by lege-gpu unchanged and its grids match the fp32 twin within 0.05 px.
+                The exported fp16 ONNX file is 10-20 MB and is accepted by lege-gpu unchanged; against its fp32 twin its grids differ by 0.009 px on average (0.26 px at most, at model width), which the owner accepted in place of the planned 0.05 px bound.
                 """
-            method command
+            method observation
+            verified_by [ @lege-ecosystem.evidence.lege-dewarp-loads-in-lege-gpu-20261113/1 ]
         }
     }
     derived_from [
@@ -4578,6 +4527,61 @@ record lege-ecosystem.work.own-page-dewarp-model/1 : work {
         @lege-ecosystem.evidence.lege-dewarp-spreads-level-with-paddle-20261113,
         @lege-ecosystem.evidence.lege-dewarp-targeted-finetune-no-gain-20261113
     ]
+}
+
+record lege-ecosystem.work.own-page-dewarp-model/2 : work {
+    title "Train an own page-dewarp model on Colab that beats Paddle UVDoc, flattener and DocScanner on book spreads and leaves flat pages alone"
+    state proposed
+    scope [ path "lege-gpu/**", path "lege-process/models/**" ]
+    intent """
+        Train from ImageNet-initialised ResNet-18 trunk + three transformer layers + residual flow head (about 5.3 M parameters, 10-20 MB with fp16 weights) on SyntheticDoc, UVDoc, Book3D spreads and the owner's scanned books (flat pages and textures), on Google Colab within about 90 compute units. The model predicts a correction to the identity map at 1/8 resolution plus a page mask, gutter heat, a bend score and a spread score, so one model serves the whole-frame pass, the page pass and the flat-page gate. Deliverable: one ONNX file with input `image` that lege-gpu loads unchanged, measured with the standalone dewarp tester against the three existing models on 26 hand-held book-spread photos and on a flat-page identity test. Integrating it into the Lege pipeline is a separate follow-up.
+        """
+    note """
+        Plan approved by the owner 2026-11-12. Training workspace is a new dewarp folder beside the layout-detection and binarizer Colab workspaces. Book3D is tagged MIT on Hugging Face while its authors' repository words it as non-commercial research only; it is kept in its own shard set so a model can be retrained without it. Status 2026-11-14, 92.3 of 94.1 Colab units spent (the owner released the whole balance): the model is a 576x384 model (the 768x512 phase was not run), 10.58 MB fp16, loads in lege-gpu unchanged at 13 ms per call. Four fine-tunes followed the main run (6.3 M views): the first gave the baseline; a second on failure-driven synthetic renders was rejected (no measurable gain); the third (ft3) added 10 % real samples made from 33 spreads the owner photographed of a book with a true flat scan and cut distortion on a second, unseen book by 41 % (0.485 -> 0.288 % of the page diagonal by registration of flat scans to the outputs); the fourth (ft4, the current model) raised the real share to 25 % with 131 spreads of a large picture cookbook. ft4 by the same measure: held-out spreads of the cookbook 0.489 -> 0.250, the unseen book 0.290 -> 0.247, where Paddle UVDoc, DocScanner and flattener are at 0.43-0.53 on both; one pass per page of it (0.225 and 0.278) is already below all of them. On the 26 spread photos: tilt 1.08 deg, spread 1.36 deg, bow 0.345 %, not established different from Paddle UVDoc (1.17 / 1.38 / 0.363; the 26 photos resolve about 0.2 deg), so the spreads check as worded stays open while the registration measure answers the question it was meant to ask. Book100: local distortion better than ft3, straightness, MS-SSIM and OCR level. Flat-page check: 6 of 6 test pages and 406 of 408 held-out scans untouched (99.5 %), none of 590 curved photos; the fill gate's turn limit was moved twice after seeing test pages (1.0 -> 1.5 -> 2.0 degrees), supported independently by the curved photos and by 664 flat scans not used for tuning. Open weakness: flat pages that are full-page photographs are altered (47 of the cookbook's 400 scan pages); the cure not yet tried is flat training samples from scans of illustrated books. fp16 against fp32 on one call (baseline): mean 0.009 px, max 0.26 px at model width. Lesson: real photo pairs with true flat references moved the result far more than any synthetic data; a reference must be checked for flatness first (one of the owner's books has a phone capture as its archive copy). See the tester README and the training notes.
+        """
+    trace [
+        "Original targets missed as worded: 26-photo straightness was level with Paddle UVDoc, and fp16 max error 0.26 px against 0.05; owner shipped on registration.",
+        "Integration shipped as Flatten page (98dd5cc2, decision flatten-page-uses-lege-dewarp). Altered full-page photo scans (47 of 400) remain the known weakness."
+    ]
+    acceptance {
+        check beats-existing-on-spreads {
+            statement """
+                On held-out spreads of books with a true flat scan, distortion left after flattening (registration of the flat scan to the output, in % of the page diagonal) is below Paddle UVDoc, DocScanner and flattener with the 95 % interval excluding zero; this is the measure the owner shipped the model on (2026-11-14). On the original 26 hand-held spread photos it is level with Paddle UVDoc on text-line straightness, not ahead.
+                """
+            method observation
+            verified_by [
+                @lege-ecosystem.evidence.lege-dewarp-picture-book-finetune-20261114/1,
+                @lege-ecosystem.evidence.lege-dewarp-real-pairs-finetune-20261113/1
+            ]
+        }
+        check flat-pages-untouched {
+            statement """
+                On held-out flat pages the identity gate returns at least 99 % untouched, and passes none of the 26 curved photos.
+                """
+            method command
+            verified_by [ @lege-ecosystem.evidence.lege-dewarp-flat-pages-untouched-20261113/1 ]
+        }
+        check loads-in-lege-gpu {
+            statement """
+                The exported fp16 ONNX file is 10-20 MB and is accepted by lege-gpu unchanged; against its fp32 twin its grids differ by 0.009 px on average (0.26 px at most, at model width), which the owner accepted in place of the planned 0.05 px bound.
+                """
+            method observation
+            verified_by [ @lege-ecosystem.evidence.lege-dewarp-loads-in-lege-gpu-20261113/1 ]
+        }
+    }
+    derived_from [
+        @lege-ecosystem.observation.dewarp-models-move-flat-pages-20261112,
+        @lege-ecosystem.observation.flattener-dewarp-models-run-in-lege-gpu
+    ]
+    supersedes [ @lege-ecosystem.work.own-page-dewarp-model/1 ]
+    supported_by [
+        @lege-ecosystem.evidence.lege-dewarp-loads-in-lege-gpu-20261113,
+        @lege-ecosystem.evidence.lege-dewarp-picture-book-finetune-20261114,
+        @lege-ecosystem.evidence.lege-dewarp-real-pairs-finetune-20261113,
+        @lege-ecosystem.evidence.lege-dewarp-spreads-level-with-paddle-20261113,
+        @lege-ecosystem.evidence.lege-dewarp-targeted-finetune-no-gain-20261113
+    ]
+    author "dk"
 }
 
 record lege-ecosystem.work.package-primary-tensorrt-ocr-runtime/1 : work {
@@ -4668,7 +4672,9 @@ record lege-ecosystem.work.pagepress-pdf-import-followup/1 : work {
     title "PagePress followup: PDF page import via lege-pdf-read"
     state proposed
     scope [ all ]
-    intent "Replace or augment PagePress's temporary lopdf PDF import backend with lege-pdf-read. OCR text layers and automatic deskew remain separately scoped."
+    intent """
+        Replace or augment PagePress's temporary lopdf PDF import and merge backend (src/pdf_import.rs, lopdf 0.39) with the exprim reader, or let lege-pdf-write carry existing pages. OCR text layers and automatic deskew stay separately scoped. First repoint PagePress's path dependencies: they still name Lege's removed lege-pdf/read and lege-codecs/*, which moved to exprim on 2026-11-09, so PagePress does not build as checked in.
+        """
     note "PagePress already imports and merges existing PDF pages through its temporary lopdf backend; lege-pdf-read integration is the remaining backend follow-up."
     after [ @lege-ecosystem.milestone.pagepress-mvp ]
     author "dk"
@@ -4732,7 +4738,7 @@ record lege-ecosystem.work.pdf-publication-print-geometry-preview/1 : work {
 
 record lege-ecosystem.work.pdf-render-headsup-20261104/1 : work {
     title "Measure six PDF renderers on the user's eight-document corpus before publication"
-    state proposed
+    state abandoned
     scope [
         path ".agent/scratch/pdf-render-headsup-20261104/**",
         path "lege-pdf/CRATES-IO-PLAN.md"
@@ -4741,7 +4747,7 @@ record lege-ecosystem.work.pdf-render-headsup-20261104/1 : work {
         Reconstruct the July differential/performance methodology and create an isolated temporary reproducible benchmark on D:/pdf-test. Acquire current PDFium from bblanchon/pdfium-binaries (prebuilt), Hayro, MuPDF, pdf-toolkit and PDFluent pdf-render; measure single-thread page latency and concurrent document throughput separately. Compare every page at 72 and 144 DPI using an independent-family majority agreement gate, retain unresolved outcomes and failures, and provide results without changing production renderer/printing APIs.
         """
     note """
-        2026-11-04 user-directed stopping point: accuracy/acquisition complete; timing stopped at 53/384 jobs after the 632-page pdf-toolkit Structures document. A subsequently started MuPDF run was interrupted and excluded. No benchmark workers or queued stages remain. Interim report and all raw data/harness retained in .agent/scratch/pdf-render-headsup-20261104 (kept, about 52 GB). The broad speed claim remains unestablished; dedicated same-page gates, concurrent repetitions, default/20-worker scaling and warm samples remain unexecuted. Do not automatically resume the large matrix. A future bounded production-configuration comparison requires a new scoped task. See evidence.pdf-render-headsup-partial-timing-20261104/1 for observed partial timings.
+        Accuracy, acquisition and the interim report were delivered (3 of 4 checks). The 384-job timing matrix was stopped at the owner's request on 2026-11-04 after 53 jobs and replaced by the idle-machine comparison of 2026-11-06 (lege-ecosystem-perf.renderer-headsup.official-comparison-20261106/2) and exprim's own benchmark (exprim.corpus.benchmark-20261109). The timing check will not be pursued.
         """
     acceptance {
         check accuracy {
@@ -4778,7 +4784,7 @@ record lege-ecosystem.work.pdf-render-headsup-20261104/1 : work {
 
 record lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec/1 : work {
     title "PDF renderer follow-ups (outside pure codec)"
-    state proposed
+    state abandoned
     intent """
         1. Keep using session `Jp2Decoder` + packed Rgb8 (done)
         2. When GPU compositing wants 4-byte pixels: map `DecodeOutputFormat::Bgra8`/`Rgbx8` through a new `DecodedFormat` and skip RGB→BGRA swizzle
@@ -4786,7 +4792,7 @@ record lege-ecosystem.work.pdf-renderer-follow-ups-outside-pure-codec/1 : work {
         4. Re-run pdfium-diff on a JPX-heavy page after Phase 3
         """
     note """
-        2026-10-28: items 1 and 3 are done (pdf-image/src/jpx.rs uses thread-local Jp2Decoder sessions with direct packed output and now emits a one-line stderr trace when JP2LAM_DECODE_TRACE=1/true/yes; evidence: lege-ecosystem.evidence.jpx-decode-trace-landed/1). Remaining: item 2 (Bgra8/Rgbx8 plumbing when GPU/BGRA surface compositing wants 4-byte pixels) and item 4 (fresh pdfium-diff run on a JPX-heavy page).
+        Items 1 and 3 landed (session Jp2Decoder with packed Rgb8; JP2LAM_DECODE_TRACE, evidence jpx-decode-trace-landed). Item 2, mapping Bgra8/Rgbx8 through DecodedFormat, has no consumer: nothing composites 4-byte JPX pixels on the GPU. It is carried as a demand-gated item in jp2lam-jpeg-2000-decoder-optimization-plan. Item 4, the pdfium-diff re-run, was overtaken by the November corpus hash gates and renderer comparisons.
         """
     source {
         kind legacy
@@ -4946,7 +4952,7 @@ record lege-ecosystem.work.pipeline-memory-follow-ups/1 : work {
     state proposed
     scope [ path "lege-process/pipeline/**" ]
     intent """
-        Deferred items from the external memory review: bring DjVu stages under the shared page-memory governor or carry one reservation per page through its queues (source stage is now capped, queues are not byte-bounded); measure peak RSS on the decisive workloads (oversized natives, slow writer, one-worker margin, illustration-heavy pages, mid-decode cancel) to size the savings the review could only identify statically.
+        Two items from the external memory review remain: bring the staged DjVu pipeline under the shared page-memory governor (or carry one reservation per page through its queues; today only its source stage is capped and its queues are not byte-bounded), and measure peak RSS on the decisive workloads (oversized natives, slow writer, one-worker margin, illustration-heavy pages, mid-decode cancel) to size what the review could only identify statically. JP2 native-dimension sniffing, the writer off the control loop and streamed EPUB hOCR landed on 2026-10-28.
         """
     note """
         2026-10-28: three of the five original items have landed:
@@ -5231,13 +5237,13 @@ record lege-ecosystem.work.pixelkit-gui-1-5-2/4 : work {
 
 record lege-ecosystem.work.pixelkit-gui-1-5-2/5 : work {
     title "Replace the Freya processor GUI with PixelKit in 1.5.2"
-    state active
+    state abandoned
     scope [ path "lege-process/GUI/**", path "to-do-plans/lege-process-1.5.2-pixelkit-gui.md" ]
     intent """
         Replace the Freya desktop GUI with PixelKit for visual parity and flexible resizing, with Preserve mode available from the start. Keep the existing controls, themes, tooltips, language strings, embedded documentation and worker progress/cancellation. Measure memory against Freya on comparable workloads; a memory reduction is preferred, while improved flexibility may justify comparable use.
         """
     note """
-        Scope accepted 2026-10-27. A runnable preview exists in lege-process/GUI/PixelKit (package/bin lege-gui-pixelkit; cargo gui-pixelkit and cargo gui-pixelkit-run), reusing toolkit-independent frontend support. Preserve is a first-class mode with conflicting preparation flags removed. The current worker builds with it. Theme, resize, locale, lifecycle and real-worker smoke checks pass; the frontend graph excludes Freya/Skia engine/processor. Initial empty-queue Linux/X11 medians at equal 1980x1452 physical size: RSS 47.57 MiB Freya vs 31.90 MiB PixelKit (-32.94%); PSS 37.35 vs 22.35 MiB. docs/PIXELKIT-GUI-PREVIEW.md and docs/measurements/pixelkit-idle-memory-2026-10-27.json retain the checkpoint and measurements. The subsequent compact layout uses equal sibling buttons including Reflow, compact independent parameter fields, row-aligned output controls and a 280px settings band with 110px recovered for the queue. Process is a larger primary action separated from equal small About/Queue/Log utilities. 55 tests pass with 2 worker tests ignored by default; narrow/scaled English/German and dark Preserve render checks pass. Memory was not remeasured after this layout revision. Freya remains default until full visual/control/tooltip, platform and processing-workload gates pass; sheet-music follows afterward.
+        Done under another name: PixelKit became liminalkit, and the migration landed as the liminalUI GUI (95b57137); Freya and freya-main were removed (b62c44da, 4bc1b3cc). liminalUI is the only frontend, with tests for tooltips, progress and cancel. The six unmet checks compare against Freya, which no longer exists, so they cannot be measured. Audited 2026-11-27.
         """
     acceptance {
         check controls {
@@ -5440,7 +5446,7 @@ record lege-ecosystem.work.prepared-onnx-shared-gpu-session/1 : work {
 
 record lege-ecosystem.work.preservation-mode/1 : work {
     title "Preservation mode: an MRC document beside the e-ink preparation mode"
-    state active
+    state superseded
     scope [
         path "dev-notes/lege-process/PRESERVATION-MODE-PLAN.md",
         path "lege-codecs/djvulibrust/**",
@@ -5487,6 +5493,59 @@ record lege-ecosystem.work.preservation-mode/1 : work {
         @lege-ecosystem.evidence.preservation-mode-pdf-e2e,
         @lege-ecosystem.evidence.preservation-mode-unit-tests
     ]
+}
+
+record lege-ecosystem.work.preservation-mode/2 : work {
+    title "Preservation mode: an MRC document beside the e-ink preparation mode"
+    state active
+    scope [
+        path "dev-notes/lege-process/PRESERVATION-MODE-PLAN.md",
+        path "lege-codecs/djvulibrust/**",
+        path "lege-process/GUI/**",
+        path "lege-process/core/clean_gray.rs",
+        path "lege-process/core/djvu.rs",
+        path "lege-process/pipeline/config.rs",
+        path "lege-process/pipeline/pdf_tokio_pipeline.rs"
+    ]
+    intent """
+        Preserve is the second top-level mode beside e-ink Preparation, shipped in the CLI (--preserve) and the liminalUI GUI (Preparation | Preserve): page colour is retained, PDF as a JPEG 2000 background under crisp JBIG2 ink, DjVu as IW44 plus JB2, at the requested resolution; hOCR stays independent and TrueTyping is explicit opt-in. What remains is verification and fidelity: decode and look at DjVu output, a three-book size and time table, the pre-refactor grayscale identity gate, and the deferred fidelity items (coloured ink, which is black in this cut; colour on the source-MRC passthrough; supersampled coverage).
+        """
+    note """
+        Plan: dev-notes/lege-process/PRESERVATION-MODE-PLAN.md §8. GUI integration was first wired in the PixelKit preview, which became liminalUI, now the only GUI. A two-page colour PDF completed through the GUI supervisor with JPX backgrounds and JBIG2 masks; cancellation smoke passed. This does not close DjVu decode-and-look, the three-book size/time measurements, the pre-refactor grayscale identity gate, or deferred fidelity work (coloured ink and colour source-MRC passthrough included). The shared dark-painting binarizer defect predates Preserve. Audit 2026-11-27: no later evidence for the open items was found.
+        """
+    claim coverage-has-no-producer {
+        text """
+            `mrc_background_with_coverage` consumes a continuous 0-255 ink coverage plane, but the only producer is the decoded source /SMask; binarization emits bilevel. The first cut feeds it the Sauvola mask as 0/255 coverage, which under the ×2 gain and box downsample equals an area-averaged coverage at background resolution; a supersampled plane is deferred until glyph rings or background size justify it.
+            """
+    }
+    claim hocr-is-already-independent {
+        text """
+            On the default PP-OCR backend the recognizer reads the RGB raster rather than the bilevel mask and the text reaches the writer on its own channel, so hOCR carries into preservation mode unchanged.
+            """
+    }
+    claim legacy-path-still-has-colour {
+        text """
+            The legacy page path holds the RGB render (`binarization_image`, `adjusted_image`) right up to the grayscale-MRC branch, and the planned path already declines grayscale mode, so a preservation branch there needs no renderer change.
+            """
+    }
+    claim preserved-path-needs-an-mrc-input {
+        text """
+            The source-MRC passthrough fires only when the input PDF is already MRC: `RenderSession::preserved_jbig2_smask` returns None unless the page is one full-page image whose /SMask is itself JBIG2, and no code synthesizes that shape for a plain scan. Its background is built from the planned path's Gray8 base tripled to RGB, so it does not preserve colour either.
+            """
+    }
+    claim the-writers-already-layer {
+        text """
+            Both writers already support MRC layers: the PDF writer stacks a colour JPX background under a JBIG2 ink stencil, and djvulibrust represents colour backgrounds and JB2 masks. Colour segmentation and the --preserve CLI path are implemented; GUI mode selection is now wired in the PixelKit preview. The remaining fidelity and corpus gates are retained in the note.
+            """
+    }
+    derived_from [ @lege-ecosystem.work.glyph-font-text-output ]
+    supersedes [ @lege-ecosystem.work.preservation-mode/1 ]
+    verified_by [
+        @lege-ecosystem.evidence.preservation-mode-djvu-e2e,
+        @lege-ecosystem.evidence.preservation-mode-pdf-e2e,
+        @lege-ecosystem.evidence.preservation-mode-unit-tests
+    ]
+    author "dk"
 }
 
 record lege-ecosystem.work.preserve-jbig2-smask-text-plane/1 : work {
@@ -5762,13 +5821,16 @@ record lege-ecosystem.work.remove-redundant-state-and-traversals/1 : work {
 
 record lege-ecosystem.work.renderer-efficiency-deferrals/1 : work {
     title "Disposition the deferred renderer efficiency findings"
-    state proposed
+    state abandoned
     intent """
         Decide each renderer efficiency finding that the 2026-08-24 review identified but deliberately did not apply, so the reasoning is not lost and each can be picked up or declined on its own evidence.
 
         Provenance: a three-reviewer efficiency pass over lege-pdf/render at 7277babb. Eleven findings were applied and landed; these six were held back because each needs measurement, a dependency decision, or a workload fact that static reading could not supply. None of them is known to be wrong — they are unfunded, not rejected.
 
         Note the shared precondition: the in-tree synthetic rasterizer bench (crates/pdf-render-cpu/benches/raster.rs) draws only vector rects and shows roughly 8-10 percent run-to-run spread, so it can neither confirm nor refute any of these. Anything here that claims a speedup needs the real-PDF corpus (corpus/perf/pages.tsv) or tools/pdfium-diff timing, not that bench.
+        """
+    note """
+        Two findings landed (the CalRgb adaptation-matrix cache and the shared transform_rect helper). The other four were never measured or funded, and the code moved to exprim on 2026-11-09: CCITT bulk skip (omitted on purpose, documented in src/image/ccitt.rs), the CMYK source-conversion cache (reworked to band strips in exprim b1e5b8b), the lexer name bulk scan, and CPU postprocess row parallelism. exprim's renderer attribution profiles do not flag them. Reopen in exprim if a corpus profile does.
         """
     acceptance {
         check calrgb-adaptation-matrix-cache {
@@ -5815,7 +5877,7 @@ record lege-ecosystem.work.renderer-efficiency-deferrals/1 : work {
 
 record lege-ecosystem.work.renderer-scoping-20261108-rounds-1-2/1 : work {
     title "Renderer scoping review 2026-11-08: land rounds 1-2 (correctness, determinism, exact speedups)"
-    state proposed
+    state completed
     scope [
         path "dev-notes/lege-pdf/render-refinement/scoping-20261108/**",
         path "lege-codecs/jp2lam/**",
@@ -5829,6 +5891,10 @@ record lege-ecosystem.work.renderer-scoping-20261108-rounds-1-2/1 : work {
     note """
         2026-11-08, landed on lege-pdf-agent-over-poppler through 0f3a6516 (72 commits over 5b24f8e4, merges included). Cloud: B2 B3 B4 B5 B7 B10 B13 FE1, A2 A3 A4(libm) A5(Arc) A10 A11a/b, RGB8 packing (dazzling-planck); B9 (gifted-pascal); B1 with the layout-detection A/B gate passed (jolly-ride). Local round 2: B6 B8 B11 B12 B14 B15 N1, G1 level 2, Tier B1 stencil fast path (x0.25 on MRC stencil pages), Tier B2 row-band filter (x0.43 more on 600-dpi bilevel), A16 A18 A21, the bilinear alpha fix, Windows harness bring-up. Border ring: option A implemented then reverted after a PDFium probe showed PDFium paints axis-aligned image edges hard; rotated draws stay soft; masked-image rings remain the open follow-up. mimalloc measured only (8-25% faster, +13-65% peak working set), not adopted. Round 3 (fb4d313f..0f3a6516): A20 O(log n) LRU-index eviction in the font/glyph/image caches; A7 per-compile image XObject cache (repeated-image compile 0.615x cold, not cached for resource-named colour spaces); A12 fused finest level for gray 9/7 packed output (0.977-0.984x cold gray JPX page); A9 one RenderSession per lege job and the input read straight into its Arc; B14 timed speed-neutral on 2,800 groups. Round 3 gate 2,202/2,202 identical over 16 documents; 175 suites / 2,153 passed, one pre-existing lege-document-ocr-cli file:// test failure also failing at 7ea2f836; jp2lam 468. Evidence: lege-ecosystem.evidence.renderer-scoping-round3-corpus-gate-20261108, ...-round3-timing-20261108, ...-b14-group-speed-ab-20261108, ...-local-round-corpus-gate-20261108, ...-local-round-suites-20261108, ...-a16-a18-a21-landed-20261108, layout-detection-ab-jolly-merge-20261108, renderer-scoping-merge-suites-20261108. Still open: A5 caching half, A11c/d, A14, A4 hoist (declined); snapping masked-image edges to match PDFium; mimalloc adoption. Log: dev-notes/lege-pdf/render-refinement/scoping-20261108/IMPLEMENTATION-LOG.md.
         """
+    trace [
+        "Rounds 1-3 landed through 0f3a6516; the masked-ring follow-up merged as 9c0b9fe3 (ring-gate evidence). A5 caching, A11c, A14 and the A4 hoist were declined.",
+        "mimalloc was measured, not adopted: peak working set rose 13-65 percent; adopting it is a product decision. Plan and harness now live in exprim dev-notes."
+    ]
     source {
         kind internal
         role origin

@@ -3,7 +3,7 @@ project lege-ecosystem
 
 record lege-ecosystem-perf.requirement.what-large-render-means-for-this-problem/1 : requirement {
     title "1. What “large render” means for this problem"
-    state proposed
+    state withdrawn
     scope [ all ]
     statement """
         There are three sizes that must be recorded separately:

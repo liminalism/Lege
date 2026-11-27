@@ -3,7 +3,7 @@ project lege-ecosystem
 
 record lege-ecosystem.policy.implementation-update/1 : policy {
     title "2026-07-19 implementation update"
-    state proposed
+    state withdrawn
     scope [ all ]
     rule """
         - Sections 1 and 2 are implemented. Tier-2 now models per-resolution precinct
@@ -49,7 +49,7 @@ record lege-ecosystem.policy.implementation-update/1 : policy {
 
 record lege-ecosystem.policy.later-update-section-2-resolved-and-sub-8-bit/1 : policy {
     title "2026-07-22 (later) update — Section 2 RESOLVED, and sub-8-bit precision added"
-    state proposed
+    state withdrawn
     scope [ all ]
     rule """
         - **Section 2 was a real DWT bug, and this is it.** `forward_97_vertical_in_place` /
@@ -123,7 +123,7 @@ record lege-ecosystem.policy.later-update-section-2-resolved-and-sub-8-bit/1 : p
 
 record lege-ecosystem.policy.renderer-integration-policy/1 : policy {
     title "28. Renderer integration policy"
-    state proposed
+    state withdrawn
     scope [ all ]
     rule """
         The PDF renderer is already document-parallel. Hidden codec threading could reduce whole-document throughput through oversubscription.
@@ -139,7 +139,7 @@ record lege-ecosystem.policy.renderer-integration-policy/1 : policy {
 
 record lege-ecosystem.policy.replace-eager-packet-position-sorting-where/1 : policy {
     title "29. Replace eager packet-position sorting where worthwhile"
-    state proposed
+    state withdrawn
     scope [ all ]
     rule """
         `build_packet_positions()` currently constructs every packet position, pairs it with a five-element sort key, sorts the full vector, and then discards the keys.
@@ -155,7 +155,7 @@ record lege-ecosystem.policy.replace-eager-packet-position-sorting-where/1 : pol
 
 record lege-ecosystem.policy.reuse-per-packet-contribution-storage/1 : policy {
     title "31. Reuse per-packet contribution storage"
-    state proposed
+    state withdrawn
     scope [ all ]
     rule """
         `push_tile_part()` creates a fresh `Vec<Contribution>` for every packet.
@@ -171,7 +171,7 @@ record lege-ecosystem.policy.reuse-per-packet-contribution-storage/1 : policy {
 
 record lege-ecosystem.policy.the-census-extraction-tool-your-main-instrument/1 : policy {
     title "The census / extraction tool (your main instrument)"
-    state proposed
+    state withdrawn
     scope [ all ]
     rule """
         `pdf-renderer/crates/pdf-cli/examples/jpxcensus.rs` extracts every `/JPXDecode`
@@ -193,7 +193,7 @@ record lege-ecosystem.policy.the-census-extraction-tool-your-main-instrument/1 :
 
 record lege-ecosystem.policy.tpsot-tnsot-non-conformant-tile-parts-2-files/1 : policy {
     title "4. `TPsot==TNsot` non-conformant tile-parts — ~2 files  [RESOLVED 2026-07-22 — the assembly-bug diagnosis in this section is WRONG; real cause was a missing `inalign` byte-realignment. See the 2026-07-22 update near the top.]"
-    state proposed
+    state withdrawn
     scope [ all ]
     rule """
         - **Error:** `tile-part contains data after the tile's packet sequence`
