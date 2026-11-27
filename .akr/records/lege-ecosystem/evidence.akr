@@ -4188,6 +4188,18 @@ record lege-ecosystem.evidence.transform-rect-shared-helper-landed/1 : evidence 
     author "dk"
 }
 
+record lege-ecosystem.evidence.truetyping-corpus-and-small-bold-20261127/1 : evidence {
+    title "TrueTyping 886-page Crusades (96.0% recall, 1 font, 8.58 MB) and ITU T.88 (98.5% recall, small-bold folds fixed)"
+    state verified
+    result pass
+    method observation
+    observed_at git:d75b41f7ee4fe34ccc19dfcda444a97379f779c9
+    summary """
+        405 lege lib tests and 66 lege-pdf-write tests pass. On the 886-page Crusades scan, TrueTyping emits 8.58 MB in 1 glyph font (55,568 ids) with 96.0% word recall, 94.6% precision, 94.4% in-order accuracy, joined words on pages 1-360 cut from 813 to 276, and periods (1539/1446) and commas (1756/1745) recovered on pages 40-120. On ITU-T T.88 pages 10-14, word recall rises from 87.8% to 98.5%, joined words fall from 98 to 2, and u/n, 1/I, rn/m, fl/ft, nn/un tolerant folds are eliminated.
+        """
+    author "dk"
+}
+
 record lege-ecosystem.evidence.truetyping-exact-placement-lege-lib/1 : evidence {
     title "Lege library suite passes with exact truetyping placement"
     state verified

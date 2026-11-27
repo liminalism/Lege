@@ -1042,7 +1042,7 @@ record lege-ecosystem.observation.truetyping-text-accuracy-20261127/1 : observat
 
 record lege-ecosystem.observation.truetyping-text-accuracy-20261127/2 : observation {
     title "Truetyping's searchable text kept 61% of a scan's words; after the alignment fixes 94%"
-    state verified
+    state superseded
     statement """
         Measured on the 886-page archive.org Crusades scan (RGB JPEG pages with a hidden OCR text layer), debug-fast build, no OCR flag so the source text layer labels the glyphs. Words were scored by extracting each output's text with exprim and comparing lower-cased word lists against the source's own text layer (bag-of-words recall and precision, difflib in-order accuracy; script textscore.py in .agent/scratch/truetyping-growth-20261127).
 
@@ -1058,6 +1058,34 @@ record lege-ecosystem.observation.truetyping-text-accuracy-20261127/2 : observat
     confidence high
     derived_from [ @lege-ecosystem.work.glyph-font-text-output ]
     supersedes [ @lege-ecosystem.observation.truetyping-text-accuracy-20261127/1 ]
+    author "dk"
+}
+
+record lege-ecosystem.observation.truetyping-text-accuracy-20261127/3 : observation {
+    title "Truetyping's searchable text kept 61% of a scan's words; after alignment, punctuation, spacing, and fold fixes 96% (98.5% on T.88)"
+    state verified
+    statement """
+        Measured on the 886-page archive.org Crusades scan (RGB JPEG pages with a hidden OCR text layer) and pages 10-14 of the ITU-T T.88 specification, debug-fast build, no OCR flag so the source text layer labels the glyphs. Words were scored with textscore.py and splitjoin.py in .agent/scratch/truetyping-growth-20261127.
+
+        At f88bae27: truetyping 10.9 MB in 3 fonts (147k glyph ids, 62% text variants), word recall 61.1%, precision 52.7%, in-order 50.9%. JBIG2 on the same build: 15.1 MB, recall 99.0%.
+
+        At bb31a44b (vote-settled text identities, ligatures, width-shared loose words): 8.55 MB in 1 glyph font (47.1k ids, 5.5k text variants), recall 94.2%, precision 91.8%, in-order 92.6%, but 813 joined and 960 split words on pages 1-360, most periods (67/1446 on pages 40-120) and commas (174/1745) dropped, specks mapped to letters, and small-bold u/n, 1/I, rn/m, fl/ft, nn/un folded together on ITU-T T.88 (87.8% recall, 98 joined words on pages 10-14).
+
+        After two-stage body/mark line grouping, single-line word ownership with downward small-mark reach, tighter overhanging-letter advance limits, speck alphanumeric filtering, 512-px component cap, compound root canonicalization, and directional tolerant-fold plus >=2-vote text guards:
+        - Crusades (886 pages): 8.58 MB in 1 glyph font (55.6k ids, 3.7k text variants; font + ToUnicode 1.26 MB), recall 96.0%, precision 94.6%, in-order 94.4%; joined words on pages 1-360 fall 813 to 276 (splits 1092), and on pages 40-120 periods rise 67 to 1539 (of 1446) and commas 174 to 1756 (of 1745).
+        - ITU-T T.88 (pages 10-14): recall rises 87.8% to 98.5%, precision 90.0% to 98.6%, in-order 83.3% to 93.5%, joined words fall 98 to 2, periods 181/181, and u/n, 1/I, rn/m, fl/ft, nn/un tolerant folds are eliminated (40 of 41 folds in folds.png are same-character; one single-use bold l folded into I).
+        - Windows OCR scans without a text layer (against JBIG2+OCR): recall 86.4% (was 83.7% -> 85.6%) and 63.9% (was 61%).
+        """
+    observed_at git:d75b41f7ee4fe34ccc19dfcda444a97379f779c9
+    method command
+    watches [
+        "lege-process/encoding/glyphfont.rs",
+        "lege-process/encoding/bitrows.rs",
+        "lege-process/core/pdf_artifact.rs"
+    ]
+    confidence high
+    derived_from [ @lege-ecosystem.work.glyph-font-text-output ]
+    supersedes [ @lege-ecosystem.observation.truetyping-text-accuracy-20261127/2 ]
     author "dk"
 }
 

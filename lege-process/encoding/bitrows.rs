@@ -145,11 +145,23 @@ fn spread(row: &[u64], out: &mut [u64]) {
 /// How two aligned shapes differ; see the gates in `glyphfont`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Diff {
-    /// Pixels that are ink in exactly one of the two.
+    /// Pixels that are ink in `a` and paper in `b`.
+    pub only_a: u32,
+    /// Pixels that are ink in `b` and paper in `a`.
+    pub only_b: u32,
+    /// Pixels that are ink in exactly one of the two (`only_a + only_b`).
     pub total: u32,
-    /// 2×2 blocks of differing pixels.
+    /// 2×2 blocks of differing pixels in `a ^ b`.
     pub thick: u32,
-    /// Differing pixels with no ink of the other shape within one pixel.
+    /// 2×2 blocks of pixels present only in `a` (`a & !b`).
+    pub thick_a: u32,
+    /// 2×2 blocks of pixels present only in `b` (`b & !a`).
+    pub thick_b: u32,
+    /// Differing pixels in `a` with no ink of `b` within one pixel.
+    pub far_a: u32,
+    /// Differing pixels in `b` with no ink of `a` within one pixel.
+    pub far_b: u32,
+    /// Differing pixels with no ink of the other shape within one pixel (`far_a + far_b`).
     pub far: u32,
     /// The largest 8-connected group of `far` pixels.
     pub far_blob: u32,
@@ -213,35 +225,60 @@ fn diff_impl(
     let n = ra.words;
 
     let mut xor = vec![0u64; n * h];
-    let mut total = 0u32;
-    for (x, (pa, pb)) in xor.iter_mut().zip(ra.bits.iter().zip(&rb.bits)) {
+    let mut sub_a = vec![0u64; n * h];
+    let mut sub_b = vec![0u64; n * h];
+    let mut only_a = 0u32;
+    let mut only_b = 0u32;
+    for (((x, sa), sb), (&pa, &pb)) in xor
+        .iter_mut()
+        .zip(&mut sub_a)
+        .zip(&mut sub_b)
+        .zip(ra.bits.iter().zip(&rb.bits))
+    {
+        let a_only = pa & !pb;
+        let b_only = pb & !pa;
+        *sa = a_only;
+        *sb = b_only;
         *x = pa ^ pb;
-        total += x.count_ones();
+        only_a += a_only.count_ones();
+        only_b += b_only.count_ones();
     }
+    let total = only_a + only_b;
     if total > total_limit {
         return None;
     }
 
-    let mut thick = 0u32;
-    for y in 0..h - 1 {
-        let row = &xor[y * n..(y + 1) * n];
-        let next = &xor[(y + 1) * n..(y + 2) * n];
-        for k in 0..n {
-            let t = row[k] & next[k];
-            // Pairs within the word, plus the pair straddling the next word.
-            let pairs = t & (t >> 1);
-            let straddle = if k + 1 < n {
-                (t >> 63) & (row[k + 1] & next[k + 1])
-            } else {
-                0
-            };
-            thick += pairs.count_ones() + straddle.count_ones();
+    let count_thick = |plane: &[u64]| -> u32 {
+        let mut count = 0u32;
+        for y in 0..h - 1 {
+            let row = &plane[y * n..(y + 1) * n];
+            let next = &plane[(y + 1) * n..(y + 2) * n];
+            for k in 0..n {
+                let t = row[k] & next[k];
+                let pairs = t & (t >> 1);
+                let straddle = if k + 1 < n {
+                    (t >> 63) & (row[k + 1] & next[k + 1])
+                } else {
+                    0
+                };
+                count += pairs.count_ones() + straddle.count_ones();
+            }
         }
-    }
+        count
+    };
+    let thick = count_thick(&xor);
+    let thick_a = if only_a >= 4 { count_thick(&sub_a) } else { 0 };
+    let thick_b = if only_b >= 4 { count_thick(&sub_b) } else { 0 };
     let Some(far_limit) = far_limit else {
         return Some(Diff {
+            only_a,
+            only_b,
             total,
             thick,
+            thick_a,
+            thick_b,
+            far_a: 0,
+            far_b: 0,
             far: 0,
             far_blob: 0,
         });
@@ -257,7 +294,8 @@ fn diff_impl(
         spread(rb.row(y), &mut spread_b[y * n..(y + 1) * n]);
     }
     let mut far_mask = vec![0u64; n * h];
-    let mut far = 0u32;
+    let mut far_a = 0u32;
+    let mut far_b = 0u32;
     for y in 0..h {
         for k in 0..n {
             let i = y * n + k;
@@ -271,22 +309,31 @@ fn diff_impl(
                 near_a |= spread_a[i + n];
                 near_b |= spread_b[i + n];
             }
-            let f = (ra.bits[i] & !near_b) | (rb.bits[i] & !near_a);
-            far_mask[i] = f;
-            far += f.count_ones();
+            let fa = ra.bits[i] & !near_b;
+            let fb = rb.bits[i] & !near_a;
+            far_a += fa.count_ones();
+            far_b += fb.count_ones();
+            far_mask[i] = fa | fb;
         }
-        if far > far_limit {
+        if far_a + far_b > far_limit {
             return None;
         }
     }
+    let far = far_a + far_b;
     let far_blob = if far == 0 {
         0
     } else {
         largest_blob(&far_mask, n, h)
     };
     Some(Diff {
+        only_a,
+        only_b,
         total,
         thick,
+        thick_a,
+        thick_b,
+        far_a,
+        far_b,
         far,
         far_blob,
     })
@@ -364,49 +411,70 @@ mod tests {
                 && img.get_usize(x as usize, y as usize)
         };
         let mut xor = vec![false; w * h];
-        let mut total = 0;
+        let mut sub_a = vec![false; w * h];
+        let mut sub_b = vec![false; w * h];
+        let mut only_a = 0;
+        let mut only_b = 0;
         for gy in min_y..max_y {
             for gx in min_x..max_x {
-                if on(a, gx, gy) != on(b, gx - dx, gy - dy) {
-                    xor[((gy - min_y) as usize) * w + (gx - min_x) as usize] = true;
-                    total += 1;
+                let pa = on(a, gx, gy);
+                let pb = on(b, gx - dx, gy - dy);
+                let idx = ((gy - min_y) as usize) * w + (gx - min_x) as usize;
+                if pa && !pb {
+                    sub_a[idx] = true;
+                    only_a += 1;
+                } else if pb && !pa {
+                    sub_b[idx] = true;
+                    only_b += 1;
+                }
+                if pa != pb {
+                    xor[idx] = true;
                 }
             }
         }
-        let mut thick = 0;
-        for y in 0..h.saturating_sub(1) {
-            for x in 0..w.saturating_sub(1) {
-                if xor[y * w + x]
-                    && xor[y * w + x + 1]
-                    && xor[(y + 1) * w + x]
-                    && xor[(y + 1) * w + x + 1]
-                {
-                    thick += 1;
+        let total = only_a + only_b;
+        let count_2x2 = |plane: &[bool]| -> u32 {
+            let mut count = 0;
+            for y in 0..h.saturating_sub(1) {
+                for x in 0..w.saturating_sub(1) {
+                    if plane[y * w + x]
+                        && plane[y * w + x + 1]
+                        && plane[(y + 1) * w + x]
+                        && plane[(y + 1) * w + x + 1]
+                    {
+                        count += 1;
+                    }
                 }
             }
-        }
+            count
+        };
+        let thick = count_2x2(&xor);
+        let thick_a = count_2x2(&sub_a);
+        let thick_b = count_2x2(&sub_b);
         let near = |img: &BitImage, x: i32, y: i32| -> bool {
             (-1..=1).any(|ny| (-1..=1).any(|nx| on(img, x + nx, y + ny)))
         };
         let mut far_mask = vec![false; w * h];
-        let mut far = 0;
+        let mut far_a = 0;
+        let mut far_b = 0;
         for gy in min_y..max_y {
             for gx in min_x..max_x {
                 let i = ((gy - min_y) as usize) * w + (gx - min_x) as usize;
                 if !xor[i] {
                     continue;
                 }
-                let is_far = if on(a, gx, gy) {
-                    !near(b, gx - dx, gy - dy)
-                } else {
-                    !near(a, gx, gy)
-                };
-                if is_far {
+                if on(a, gx, gy) {
+                    if !near(b, gx - dx, gy - dy) {
+                        far_mask[i] = true;
+                        far_a += 1;
+                    }
+                } else if !near(a, gx, gy) {
                     far_mask[i] = true;
-                    far += 1;
+                    far_b += 1;
                 }
             }
         }
+        let far = far_a + far_b;
         // Largest 8-connected blob, per pixel.
         let mut seen = vec![false; w * h];
         let mut far_blob = 0u32;
@@ -437,8 +505,14 @@ mod tests {
             far_blob = far_blob.max(size);
         }
         Diff {
+            only_a,
+            only_b,
             total,
             thick,
+            thick_a,
+            thick_b,
+            far_a,
+            far_b,
             far,
             far_blob,
         }

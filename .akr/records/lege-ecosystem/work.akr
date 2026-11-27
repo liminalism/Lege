@@ -1882,7 +1882,7 @@ record lege-ecosystem.work.fuse-tier-1-output-and-dequantization/1 : work {
 
 record lege-ecosystem.work.glyph-font-text-output/1 : work {
     title "Improve glyph-font quality and long-book growth"
-    state proposed
+    state completed
     scope [
         path "lege-document-ocr/crates/export/src/lib.rs",
         path "lege-pdf/read/src/session.rs",
@@ -1917,7 +1917,15 @@ record lege-ecosystem.work.glyph-font-text-output/1 : work {
         "First-come claiming let a word box take the next word's first letter; glyphs now go to the word holding their centre with most margin.",
         "Two words in five were one cell short because touching letters form one component; loose words are now split by learned letter widths.",
         "Strict exact-over-loose tiers let one stray exact vote beat 283 loose r votes; reverted to 4:1 scoring, with loose empty readings weighing nothing.",
-        "Results varied by about 3 points between identical runs until the tally change; after it, two runs scored 94.15% and 94.18% word recall."
+        "Results varied by about 3 points between identical runs until the tally change; after it, two runs scored 94.15% and 94.18% word recall.",
+        "Tittles and commas skewed group_lines' running vertical centre, splitting lines and putting tittles on phantom lines that outvoted full stops (67/1446 kept).",
+        "Two-stage line grouping fits body lines first and attaches stacked tittles and horizontally proximate punctuation afterwards without tilting baselines.",
+        "Archive.org word boxes sit high above baselines; giving small marks extra downward reach while keeping words on a single line recovered periods (1539/1446) and commas (1756/1745).",
+        "Tightening letter_gap_limit to page_gap + 3 and keeping small negative kerning gaps stopped overhanging f in 'of' from learning word spaces as advance, cutting joined words 813 to 276.",
+        "Blocking speck-sized glyphs (<40% median letter height) from alphanumeric mappings and capping glyph sides at 512 px raised word precision 91.8% to 94.6% and kept illustrations in residual.",
+        "Canonicalizing compound parts to simple alias roots cut duplicate compound glyph ids; compounds keep descent None initially so fix_new_prototype_metrics still computes their advance.",
+        "Directional Diff counts (mutual diff <= 13%, zero mutual thick or far pixels, far_blob <= 2) plus >=2-vote exact text winners eliminated T.88 small-bold u/n, 1/I, rn/m, fl/ft, nn/un folds.",
+        "Final 886-page Crusades run: 96.0% word recall, 94.6% precision, 94.4% in-order, 1 glyph font (55.6k ids), 8.58 MB; ITU T.88 pages 10-14 rose 87.8% to 98.5% recall."
     ]
     claim the-user-found-it-on-two-books {
         text """
@@ -3367,7 +3375,9 @@ record lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan/1 : work {
         "Marker census over 2,100 local PDFs (about 2,100 JPX streams): no stream carries POC, PPM, PPT or RGN; COD was detected in every stream, so the scanner works.",
         "Stage attribution on five real fixtures: Structures page 1 decodes in about 100 ms serial, half its 2026-08-09 baseline; Tier-1 and the first coefficient-plane touch dominate.",
         "A fused 9/7 vertical lift and a Tier-1 empty-column skip were bit-exact but neutral; PGO was not tried because llvm-profdata is absent on this host.",
-        "The real lever is allocator churn: reusing the large coefficient buffers cut 20-30% on RGB scans, but retaining them costs up to ~110 MB per render worker."
+        "The real lever is allocator churn: reusing the large coefficient buffers cut 20-30% on RGB scans, but retaining them costs up to ~110 MB per render worker.",
+        "Chose Option 1 over mimalloc or leaving fresh allocation: a byte-capped 128 MiB Jp2BufferPool in jp2lam owned once per JpxCodec/RenderSession and attached per decode via drop guard.",
+        "Landed in exprim 5b8fc4ab: pools Tier-1 subband planes and 9/7 and 5/3 DWT buffers bit-identically, cutting colour 9/7 decode time 22-34% and grayscale 5/3 up to 50%."
     ]
     supersedes [ @lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09/1 ]
     author "dk"

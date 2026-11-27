@@ -137,12 +137,19 @@ fn text_score(text: &str, tally: u64) -> u64 {
 /// Gaps beyond twice the page's typical letter gap plus this are word spaces.
 const LETTER_GAP_SLACK_PX: i32 = 3;
 
+/// Largest component side (pixels) eligible to become a font glyph. Larger
+/// connected components (illustrations, frames, page-wide rules) are painted
+/// into [`PageGlyphRuns::residual`] instead so they neither inflate the font's
+/// bounding box nor spend outline-fitting time on non-text art.
+const MAX_COMPONENT_SIDE_PX: usize = 512;
+
 /// Whether a component can become a valid simple TrueType glyph: it must fit
-/// the outline coordinate range and the `glyf` contour/point counts. Nothing
-/// that fails this is dropped — the page keeps it in a lossless residual
-/// raster instead (see [`PageGlyphRuns::residual`]).
+/// the glyph size cap, the outline coordinate range, and the `glyf`
+/// contour/point counts. Nothing that fails this is dropped — the page keeps
+/// it in a lossless residual raster instead (see [`PageGlyphRuns::residual`]).
 fn component_fits(bitmap: &BitImage) -> bool {
-    if bitmap.width > MAX_GLYPH_PIXELS || bitmap.height > MAX_GLYPH_PIXELS {
+    let limit = MAX_COMPONENT_SIDE_PX.min(MAX_GLYPH_PIXELS);
+    if bitmap.width > limit || bitmap.height > limit {
         return false;
     }
     // Every traced point sits on a boundary edge and every boundary edge
@@ -285,7 +292,18 @@ fn share_by_width(
     let known_mean = known.iter().flatten().sum::<f32>() / known_count as f32;
     let expected: Vec<f32> = known.iter().map(|w| w.unwrap_or(known_mean)).collect();
     let total: f32 = widths.iter().map(|&w| w.max(1) as f32).sum();
-    let scale = total / expected.iter().sum::<f32>().max(1.0);
+    let expected_sum = expected.iter().sum::<f32>().max(1.0);
+    let scale = total / expected_sum;
+    // A word box that clipped off an edge letter leaves fewer cells than
+    // characters with a total width far narrower than the characters' normal
+    // widths; scaling down unconditionally would stuff two letters into one
+    // normal-width cell ("the" -> ["t", "he"]).
+    if n == 1 && m > 1 && !(0.72..=1.40).contains(&scale) {
+        return None;
+    }
+    if known_count * 2 >= m && scale < 0.65 {
+        return None;
+    }
     // prefix[j]: scaled expected width of the first `j` characters.
     let mut prefix = vec![0.0f32; m + 1];
     for (j, w) in expected.iter().enumerate() {
@@ -722,7 +740,8 @@ impl Prototype {
     }
 
     /// A compound of `parts` (prototype, frame origin in the compound's
-    /// frame) with the given frame size. Never matched against.
+    /// frame) with the given frame size. `descent` and `advance` stay `None`
+    /// so `fix_new_prototype_metrics` computes both on the compound's first page.
     fn compound(frame_w: usize, frame_h: usize, parts: Vec<(u32, i32, i32)>) -> Self {
         Self {
             frame_w,
@@ -1099,14 +1118,22 @@ const BLACK_DIFF_PERCENT: u32 = 20;
 /// Ink may differ by this much (a heavier impression; bold *type* is
 /// heavier still and stays apart).
 const TOLERANT_BLACK_DIFF_PERCENT: u32 = 30;
-/// Total difference sanity bound.
-const TOLERANT_TOTAL_DIFF_PERCENT: u32 = 60;
+/// Total difference sanity bound. A 1-px heavier impression around the whole
+/// perimeter of a small glyph adds ~40-50% one-sided ink, while `MUTUAL_DIFF`
+/// below keeps two-sided shape substitutions near zero.
+const TOLERANT_TOTAL_DIFF_PERCENT: u32 = 55;
+/// At most this share of ink may be missing from the heavier shape while
+/// simultaneously added elsewhere (`min(|a \ b|, |b \ a|)`). A heavier
+/// impression is one-sided; two different letters (`u` vs `n`, `1` vs `I`)
+/// trade ink in opposite places while keeping similar total ink counts.
+const TOLERANT_MUTUAL_DIFF_PERCENT: u32 = 13;
+const TOLERANT_MUTUAL_DIFF_MIN: u32 = 2;
 /// Far pixels allowed in all (specks and breaks), relative to ink.
-const TOLERANT_FAR_PERCENT: u32 = 6;
-const TOLERANT_FAR_MIN: u32 = 3;
+const TOLERANT_FAR_PERCENT: u32 = 5;
+const TOLERANT_FAR_MIN: u32 = 2;
 /// Largest group of far pixels allowed: anything bigger is a part of a
 /// letter that one shape has and the other lacks.
-const TOLERANT_FAR_BLOB_MAX: u32 = 3;
+const TOLERANT_FAR_BLOB_MAX: u32 = 2;
 /// The tolerant gate needs strokes to have an interior: the ink pixels
 /// whose four neighbours are all ink must be at least this share of the
 /// ink. On type so small that strokes are one or two pixels wide, a pixel
@@ -1156,7 +1183,11 @@ impl Gate {
         }
         match self {
             Gate::Strict => diff.thick <= (ink / THICK_DIFF_DIVISOR).max(THICK_DIFF_MIN),
-            Gate::Tolerant => true,
+            Gate::Tolerant => {
+                let mutual_limit =
+                    (ink * TOLERANT_MUTUAL_DIFF_PERCENT / 100).max(TOLERANT_MUTUAL_DIFF_MIN);
+                diff.only_a.min(diff.only_b) <= mutual_limit && diff.thick_a.min(diff.thick_b) == 0
+            }
         }
     }
 
@@ -1179,6 +1210,14 @@ impl Gate {
                 ))
             }
             Gate::Tolerant => {
+                let mutual_limit =
+                    (ink * TOLERANT_MUTUAL_DIFF_PERCENT / 100).max(TOLERANT_MUTUAL_DIFF_MIN);
+                if diff.only_a.min(diff.only_b) > mutual_limit
+                    || diff.thick_a.min(diff.thick_b) > 0
+                    || diff.far_a.min(diff.far_b) > 0
+                {
+                    return None;
+                }
                 let far_limit = self.far_limit(ink).unwrap_or(0);
                 (diff.far <= far_limit && diff.far_blob <= TOLERANT_FAR_BLOB_MAX).then_some((
                     diff.far_blob,
@@ -1589,17 +1628,21 @@ impl GlyphDictionary {
                     let gap = next.x - (g.x + g.width as i32);
                     if gap >= 0 {
                         page_gaps.push(gap);
-                        if is_new {
-                            gaps.entry(g.glyph).or_default().push(gap);
-                        }
+                    }
+                    // Keep small negative kerning gaps (letters tucked under
+                    // an overhanging `f` or `T`) so overhanging letters do not
+                    // learn only word-final spaces as their advance.
+                    if is_new && gap >= -4 {
+                        gaps.entry(g.glyph).or_default().push(gap);
                     }
                 }
             }
         }
         let page_gap = lower_median(&mut page_gaps).unwrap_or(0);
         // Word spaces must not count as letter gaps, or a letter that often
-        // ends a word (`y`, `e`, `d`) would advance past the space after it.
-        let letter_gap_limit = 2 * page_gap + LETTER_GAP_SLACK_PX;
+        // ends a word (`f` in "of", `y`, `e`, `d`) would advance past the
+        // tight word space after it ("ofthe").
+        let letter_gap_limit = page_gap + LETTER_GAP_SLACK_PX;
         for (idx, mut ds) in descents {
             let proto = &mut self.protos[idx as usize];
             proto.descent = lower_median(&mut ds);
@@ -1610,9 +1653,9 @@ impl GlyphDictionary {
                 .filter(|&g| g <= letter_gap_limit)
                 .collect();
             let gap = lower_median(&mut gs).unwrap_or(page_gap);
-            // Sanity bound: no glyph advances by more than its own height
-            // past its frame.
-            let gap = gap.min(proto.frame_h as i32);
+            // Sanity bound: never negative, and no glyph advances by more than
+            // its own height past its frame.
+            let gap = gap.clamp(0, proto.frame_h as i32);
             proto.advance = Some(proto.frame_w as u32 + gap as u32);
         }
     }
@@ -1629,42 +1672,40 @@ impl GlyphDictionary {
     /// convention.
     fn merge_stacked(&mut self, lines: &mut [GlyphLine]) {
         for line in lines {
-            let mut merged: Vec<PlacedGlyph> = Vec::with_capacity(line.glyphs.len());
-            let mut cell: Vec<PlacedGlyph> = Vec::new();
-            let (mut cx0, mut cx1) = (0, 0);
-            let (mut ctop, mut cbottom) = (0, 0);
-            let flush =
-                |cell: &mut Vec<PlacedGlyph>, merged: &mut Vec<PlacedGlyph>, dict: &mut Self| {
-                    match cell.len() {
-                        0 => {}
-                        1 => merged.push(cell[0]),
-                        _ => merged.push(dict.compound_of(cell, line.baseline_y)),
-                    }
-                    cell.clear();
-                };
-            for g in &line.glyphs {
+            // Collect `(x0, x1, top, bottom, Vec<PlacedGlyph>)` cells; check
+            // any still-overlapping recent cell on the line so an intervening
+            // non-stacked mark (like a kerned quote or overhang) cannot split
+            // a stem from its tittle.
+            let mut cells: Vec<(i32, i32, i32, i32, Vec<PlacedGlyph>)> =
+                Vec::with_capacity(line.glyphs.len());
+            for &g in &line.glyphs {
                 let x1 = g.x + g.width as i32;
                 let bottom = line.baseline_y + g.rise_px;
                 let top = bottom - self.protos[g.glyph as usize].frame_h as i32;
-                let overlap = cx1.min(x1) - cx0.max(g.x);
-                if !cell.is_empty()
-                    && overlap * 2 >= (cx1 - cx0).min(g.width as i32)
-                    && stacked(ctop, cbottom, top, bottom)
-                {
-                    cx0 = cx0.min(g.x);
-                    cx1 = cx1.max(x1);
-                    ctop = ctop.min(top);
-                    cbottom = cbottom.max(bottom);
+                let target = cells.iter_mut().rev().find(|(cx0, cx1, ctop, cbottom, _)| {
+                    let overlap = (*cx1).min(x1) - (*cx0).max(g.x);
+                    overlap * 2 >= (*cx1 - *cx0).min(g.width as i32)
+                        && stacked(*ctop, *cbottom, top, bottom)
+                });
+                if let Some((cx0, cx1, ctop, cbottom, members)) = target {
+                    *cx0 = (*cx0).min(g.x);
+                    *cx1 = (*cx1).max(x1);
+                    *ctop = (*ctop).min(top);
+                    *cbottom = (*cbottom).max(bottom);
+                    members.push(g);
                 } else {
-                    flush(&mut cell, &mut merged, self);
-                    cx0 = g.x;
-                    cx1 = x1;
-                    ctop = top;
-                    cbottom = bottom;
+                    cells.push((g.x, x1, top, bottom, vec![g]));
                 }
-                cell.push(*g);
             }
-            flush(&mut cell, &mut merged, self);
+            let mut merged: Vec<PlacedGlyph> = Vec::with_capacity(cells.len());
+            for (_, _, _, _, members) in &cells {
+                if members.len() == 1 {
+                    merged.push(members[0]);
+                } else {
+                    merged.push(self.compound_of(members, line.baseline_y));
+                }
+            }
+            merged.sort_by_key(|g| g.x);
             line.glyphs = merged;
         }
     }
@@ -1676,13 +1717,24 @@ impl GlyphDictionary {
     /// placement in `group_lines` convention.
     fn compound_of(&mut self, cell: &[PlacedGlyph], baseline_y: i32) -> PlacedGlyph {
         // Parts in reading order (top to bottom, then left to right), each
-        // with its box in page pixels.
+        // canonicalized to its simple alias root and box in page pixels so
+        // aliased stems or tittles reuse one compound glyph id.
         let mut parts: Vec<(u32, i32, i32, i32, i32)> = cell
             .iter()
             .map(|g| {
                 let bottom = baseline_y + g.rise_px;
                 let top = bottom - self.protos[g.glyph as usize].frame_h as i32;
-                (g.glyph, g.x, top, g.x + g.width as i32, bottom)
+                let (root, rx, ry) = self.resolve_alias(g.glyph);
+                let r = &self.protos[root as usize];
+                let rx0 = g.x + rx;
+                let rtop = top + ry;
+                (
+                    root,
+                    rx0,
+                    rtop,
+                    rx0 + r.frame_w as i32,
+                    rtop + r.frame_h as i32,
+                )
             })
             .collect();
         parts.sort_by_key(|p| (p.2, p.1));
@@ -1690,6 +1742,7 @@ impl GlyphDictionary {
         let top = parts.iter().map(|p| p.2).min().unwrap_or(0);
         let x1 = parts.iter().map(|p| p.3).max().unwrap_or(0);
         let bottom = parts.iter().map(|p| p.4).max().unwrap_or(0);
+        let descent = bottom - baseline_y;
         let key: Vec<u32> = parts.iter().map(|p| p.0).collect();
         let offsets: Vec<(u32, i32, i32)> =
             parts.iter().map(|p| (p.0, p.1 - x0, p.2 - top)).collect();
@@ -1723,7 +1776,7 @@ impl GlyphDictionary {
             glyph: idx,
             x: x0,
             width: (x1 - x0) as u32,
-            rise_px: bottom - baseline_y,
+            rise_px: descent,
         }
     }
 
@@ -1836,23 +1889,31 @@ impl GlyphDictionary {
     /// string, which keeps them out of extracted text.
     pub fn record_text(&mut self, runs: &mut PageGlyphRuns, words: &[TextWord]) {
         let mut remap: Vec<(usize, u32)> = Vec::new();
-        let boxes: Vec<GlyphBox> = runs
+        let boxes: Vec<(usize, GlyphBox)> = runs
             .lines
             .iter()
-            .flat_map(|line| line.glyphs.iter().map(move |g| (line.baseline_y, g)))
             .enumerate()
-            .map(|(slot, (baseline, g))| {
+            .flat_map(|(line_idx, line)| {
+                line.glyphs
+                    .iter()
+                    .map(move |g| (line_idx, line.baseline_y, g))
+            })
+            .enumerate()
+            .map(|(slot, (line_idx, baseline, g))| {
                 let p = &self.protos[g.glyph as usize];
                 let bottom = baseline + p.descent.unwrap_or(0) - g.rise_px;
-                GlyphBox {
-                    glyph: g.glyph,
-                    slot,
-                    x0: g.x,
-                    x1: g.x + p.frame_w as i32,
-                    top: bottom - p.frame_h as i32,
-                    bottom,
-                    area: (p.frame_w * p.frame_h) as u32,
-                }
+                (
+                    line_idx,
+                    GlyphBox {
+                        glyph: g.glyph,
+                        slot,
+                        x0: g.x,
+                        x1: g.x + p.frame_w as i32,
+                        top: bottom - p.frame_h as i32,
+                        bottom,
+                        area: (p.frame_w * p.frame_h) as u32,
+                    },
+                )
             })
             .collect();
 
@@ -1869,16 +1930,34 @@ impl GlyphDictionary {
         // word's first letter, which then voted one letter off.
         let reach = |word: &TextWord, b: &GlyphBox| -> Option<f32> {
             let (cx, cy) = b.centre();
-            let reach_y = (word.y1 - word.y0) * 0.5;
-            (cx >= word.x0 - 2.0
-                && cx <= word.x1 + 2.0
-                && cy >= word.y0 - reach_y
-                && cy <= word.y1 + reach_y)
-                .then(|| (cx - word.x0).min(word.x1 - cx))
+            let h = word.y1 - word.y0;
+            let bh = (b.bottom - b.top) as f32;
+            let reach_above = h * 0.5;
+            // Source text layers (e.g. archive.org) often place word boxes
+            // ~0.4h above the baseline; small marks (commas, full stops) get
+            // extra downward reach while body glyphs stay at 0.5h so a word
+            // never reaches into the next line's ascenders.
+            let reach_below = if bh <= h * 0.65 { h * 0.85 } else { h * 0.5 };
+            let right_slack = if !word.text.ends_with(|c: char| c.is_alphanumeric())
+                && (b.x1 - b.x0) as f32 <= h * 0.6
+            {
+                (h * 0.3).clamp(2.0, 7.0)
+            } else {
+                2.0
+            };
+            if cx < word.x0 - 2.0
+                || cx > word.x1 + right_slack
+                || cy < word.y0 - reach_above
+                || cy > word.y1 + reach_below
+            {
+                return None;
+            }
+            let y_excess = (word.y0 - cy).max(cy - word.y1).max(0.0);
+            Some((cx - word.x0).min(word.x1 - cx) - 2.0 * y_excess)
         };
         let owners: Vec<Option<usize>> = boxes
             .iter()
-            .map(|b| {
+            .map(|(_, b)| {
                 words
                     .iter()
                     .enumerate()
@@ -1894,15 +1973,31 @@ impl GlyphDictionary {
             if chars.is_empty() || word.x1 <= word.x0 || word.y1 <= word.y0 {
                 continue;
             }
-            let mut members: Vec<GlyphBox> = boxes
+            let mut line_members: Vec<(usize, GlyphBox)> = boxes
                 .iter()
                 .zip(&owners)
                 .filter(|(_, owner)| **owner == Some(k))
-                .map(|(b, _)| *b)
+                .map(|(entry, _)| *entry)
                 .collect();
-            if members.is_empty() {
+            if line_members.is_empty() {
                 continue;
             }
+            // A word sits on one text line; discard any stray mark from a
+            // neighbouring line so cross-line glyphs never stack into a cell.
+            let first_line = line_members[0].0;
+            if line_members.iter().any(|(l, _)| *l != first_line) {
+                let mut line_area: HashMap<usize, u64> = HashMap::new();
+                for &(l, ref b) in &line_members {
+                    *line_area.entry(l).or_insert(0) += u64::from(b.area) + 1;
+                }
+                if let Some((&best_line, _)) = line_area
+                    .iter()
+                    .max_by_key(|&(l, area)| (*area, std::cmp::Reverse(*l)))
+                {
+                    line_members.retain(|(l, _)| *l == best_line);
+                }
+            }
+            let mut members: Vec<GlyphBox> = line_members.into_iter().map(|(_, b)| b).collect();
             members.sort_by_key(|b| (b.x0, b.x1));
 
             // Cells: runs of glyphs whose horizontal extents overlap by at
@@ -1910,22 +2005,22 @@ impl GlyphDictionary {
             // `merge_stacked` groups them.
             let mut cells: Vec<(i32, i32, Vec<GlyphBox>)> = Vec::new();
             for b in members {
-                let joins = cells.last().is_some_and(|(cx0, cx1, cell)| {
-                    let overlap = cx1.min(&b.x1) - cx0.max(&b.x0);
+                let target = cells.iter_mut().rev().find(|(cx0, cx1, cell)| {
+                    let overlap = (*cx1).min(b.x1) - (*cx0).max(b.x0);
                     let top = cell.iter().map(|c| c.top).min().unwrap_or(b.top);
                     let bottom = cell.iter().map(|c| c.bottom).max().unwrap_or(b.bottom);
-                    overlap * 2 >= (cx1 - cx0).min(b.x1 - b.x0)
+                    overlap * 2 >= (*cx1 - *cx0).min(b.x1 - b.x0)
                         && stacked(top, bottom, b.top, b.bottom)
                 });
-                match cells.last_mut() {
-                    Some((cx0, cx1, cell)) if joins => {
-                        *cx0 = (*cx0).min(b.x0);
-                        *cx1 = (*cx1).max(b.x1);
-                        cell.push(b);
-                    }
-                    _ => cells.push((b.x0, b.x1, vec![b])),
+                if let Some((cx0, cx1, cell)) = target {
+                    *cx0 = (*cx0).min(b.x0);
+                    *cx1 = (*cx1).max(b.x1);
+                    cell.push(b);
+                } else {
+                    cells.push((b.x0, b.x1, vec![b]));
                 }
             }
+            cells.sort_by_key(|(cx0, cx1, _)| (*cx0, *cx1));
             let n = cells.len();
             if n > 2 * chars.len() + 2 {
                 continue;
@@ -1957,11 +2052,21 @@ impl GlyphDictionary {
                 let span = (cells[n - 1].1 as f32 - x0).max(1.0);
                 let nominal = |k: usize| x0 + (k as f32 + 0.5) * span / m as f32;
                 let widths: Vec<i32> = cells.iter().map(|(x0, x1, _)| x1 - x0).collect();
+                let known_chars = chars
+                    .iter()
+                    .filter(|c| self.char_width(c).is_some())
+                    .count();
                 let by_width = (n < m)
                     .then(|| share_by_width(&widths, &chars, |c| self.char_width(c)))
                     .flatten();
                 if let Some(texts) = by_width {
                     cell_text = texts;
+                } else if n < m && known_chars * 2 >= m {
+                    // Letter widths are already known and the cells cannot
+                    // plausibly hold all `m` characters (e.g. a clipped word
+                    // box missed an edge letter): skip voting rather than
+                    // stuffing extra letters into a normal-width cell.
+                    continue;
                 } else if n < m {
                     // Each character goes to the cell under it.
                     for (k, c) in chars.iter().enumerate() {
@@ -2069,6 +2174,26 @@ impl GlyphDictionary {
                 *tally.entry(text.as_str()).or_insert(0) += n;
             }
         }
+        let mut alpha_heights: Vec<usize> = tallies
+            .iter()
+            .filter_map(|(&key, tally)| {
+                let (text, &votes) = tally
+                    .iter()
+                    .filter(|(t, v)| !t.is_empty() && (**v >> 32) > 0)
+                    .max_by_key(|(_, v)| **v)?;
+                text.chars()
+                    .any(char::is_alphanumeric)
+                    .then_some((self.protos[key as usize].frame_h, votes >> 32))
+            })
+            .filter(|&(_, exact)| exact >= 1)
+            .map(|(h, _)| h)
+            .collect();
+        alpha_heights.sort_unstable();
+        let med_alpha_h = alpha_heights
+            .get(alpha_heights.len() / 2)
+            .copied()
+            .unwrap_or(0);
+
         let mut out = Vec::new();
         if !tallies.is_empty() {
             out.push((SPACE_GID, " ".to_string()));
@@ -2088,7 +2213,19 @@ impl GlyphDictionary {
                     .then_with(|| b.0.cmp(a.0))
             });
             if let Some((text, _)) = winner {
-                out.push((gid, text.to_string()));
+                let frame_h = self.protos[idx as usize].frame_h;
+                // A speck-sized mark (< 40% of normal letter height) can be
+                // punctuation (`.`, `,`, `'`, `-`), never an alphanumeric
+                // letter or digit from a stray box edge.
+                let speck_alpha = med_alpha_h >= 10
+                    && frame_h * 5 < med_alpha_h * 2
+                    && text.chars().any(char::is_alphanumeric);
+                let mapped = if speck_alpha {
+                    String::new()
+                } else {
+                    (*text).to_string()
+                };
+                out.push((gid, mapped));
             }
         }
         out
@@ -2558,6 +2695,24 @@ impl GlyphDictionary {
         }
     }
 
+    /// Winning non-empty exact-alignment text recorded directly on `idx` when
+    /// backed by at least two independent 1:1 word alignments. A single
+    /// misread OCR word ("shaduw" for "shadow") only casts one vote and must
+    /// not keep a noisy impression from folding into its true letter, whereas
+    /// repeated exact alignments prove two shapes are different characters.
+    fn exact_text_winner(&self, idx: u32) -> Option<&str> {
+        let votes = self.text_votes.get(&idx)?;
+        votes
+            .iter()
+            .filter(|(text, tally)| !text.is_empty() && (*tally >> 32) >= 2)
+            .max_by(|a, b| {
+                ((*a.1) >> 32)
+                    .cmp(&((*b.1) >> 32))
+                    .then_with(|| b.0.cmp(a.0))
+            })
+            .map(|(text, _)| text.as_str())
+    }
+
     /// The read-only half of [`Self::try_alias`]: the heavier prototype
     /// `idx`'s current shape matches under `gate`, with the target's matcher
     /// at `(dx, dy)` in `idx`'s matcher, if there is one.
@@ -2571,6 +2726,7 @@ impl GlyphDictionary {
         if gate == Gate::Tolerant && !p.stroked {
             return (None, SearchStats::default());
         }
+        let own_text = self.exact_text_winner(idx);
         let features = ShapeFeatures {
             profile: p.profile.clone(),
             black: p.black,
@@ -2578,7 +2734,17 @@ impl GlyphDictionary {
             counters: p.counters,
         };
         let uses = p.uses;
-        let heavier = |i: u32, q: &Prototype| q.uses > uses || (q.uses == uses && i < idx);
+        let heavier = |i: u32, q: &Prototype| {
+            if !(q.uses > uses || (q.uses == uses && i < idx)) {
+                return false;
+            }
+            if let (Some(ta), Some(tb)) = (own_text, self.exact_text_winner(i)) {
+                if ta != tb {
+                    return false;
+                }
+            }
+            true
+        };
         self.search(comparator, &p.matcher, &features, gate, heavier)
     }
 
@@ -2882,7 +3048,7 @@ impl GlyphDictionary {
                 let b = self.protos[root as usize].matcher.clone();
                 let Some((dx, dy)) = self
                     .comparator
-                    .compare_for_symbol_unify(&a, &b, u32::MAX, SHIFT_LIMIT, SHIFT_LIMIT)
+                    .compare_for_refine_family(&a, &b, u32::MAX, SHIFT_LIMIT, SHIFT_LIMIT)
                     .map(|r| (r.dx, r.dy))
                 else {
                     continue;
@@ -2933,7 +3099,7 @@ impl GlyphDictionary {
                 let b = self.protos[root as usize].matcher.clone();
                 let (dx, dy) = self
                     .comparator
-                    .compare_for_symbol_unify(&a, &b, u32::MAX, SHIFT_LIMIT, SHIFT_LIMIT)
+                    .compare_for_refine_family(&a, &b, u32::MAX, SHIFT_LIMIT, SHIFT_LIMIT)
                     .map(|r| (r.dx, r.dy))
                     .unwrap_or((0, 0));
                 let on = |img: &BitImage, x: i32, y: i32| -> bool {
@@ -3199,11 +3365,24 @@ fn upright_word(frame: &PageFrame, word: &TextWord) -> TextWord {
     }
 }
 
-fn group_lines(mut instances: Vec<GlyphInstance>) -> Vec<GlyphLine> {
+fn group_lines(instances: Vec<GlyphInstance>) -> Vec<GlyphLine> {
     if instances.is_empty() {
         return Vec::new();
     }
-    instances.sort_by_key(|i| (2 * i.y + i.height as i32, i.x));
+
+    // Separate body-sized glyphs from small marks (tittles, quotes, periods,
+    // commas, hyphens) so tittles and commas never skew a line's running
+    // vertical centre — which split ascenders off x-height letters and left
+    // tittles on phantom lines whose baseline offset matched full stops.
+    let mut heights: Vec<u32> = instances.iter().map(|i| i.height).collect();
+    heights.sort_unstable();
+    let ref_h = heights.get(heights.len() * 3 / 4).copied().unwrap_or(0);
+
+    let (mut body, mut marks): (Vec<GlyphInstance>, Vec<GlyphInstance>) =
+        instances.into_iter().partition(|i| i.height * 2 >= ref_h);
+    if body.is_empty() {
+        body = std::mem::take(&mut marks);
+    }
 
     struct Line {
         members: Vec<GlyphInstance>,
@@ -3219,44 +3398,141 @@ fn group_lines(mut instances: Vec<GlyphInstance>) -> Vec<GlyphLine> {
         }
     }
 
-    let mut lines: Vec<Line> = Vec::new();
-    for inst in instances {
-        let centre2 = 2 * inst.y as i64 + inst.height as i64;
-        let joins = lines.last().is_some_and(|line| {
-            let tolerance = 0.5 * line.mean_height().max(inst.height as f64);
-            (centre2 as f64 / 2.0 - line.mean_centre()).abs() <= tolerance
-        });
-        if joins {
-            let line = lines.last_mut().unwrap();
-            line.members.push(inst);
-            line.centre_sum += centre2;
-            line.height_sum += inst.height as i64;
-        } else {
-            lines.push(Line {
-                members: vec![inst],
-                centre_sum: centre2,
-                height_sum: inst.height as i64,
+    let sweep_lines = |mut items: Vec<GlyphInstance>| -> Vec<Line> {
+        items.sort_by_key(|i| (2 * i.y + i.height as i32, i.x));
+        let mut out: Vec<Line> = Vec::new();
+        for inst in items {
+            let centre2 = 2 * inst.y as i64 + inst.height as i64;
+            let joins = out.last().is_some_and(|line| {
+                let tolerance = 0.5 * line.mean_height().max(inst.height as f64);
+                (centre2 as f64 / 2.0 - line.mean_centre()).abs() <= tolerance
             });
+            if let Some(line) = out.last_mut().filter(|_| joins) {
+                line.members.push(inst);
+                line.centre_sum += centre2;
+                line.height_sum += inst.height as i64;
+            } else {
+                out.push(Line {
+                    members: vec![inst],
+                    centre_sum: centre2,
+                    height_sum: inst.height as i64,
+                });
+            }
+        }
+        out
+    };
+
+    let mut lines = sweep_lines(body);
+
+    if !marks.is_empty() {
+        // Estimate each body line's `[top, baseline]` band and horizontal span
+        // before attaching marks so tittles above x-height and commas below
+        // baseline land on their own line without affecting `mean_centre`, and
+        // marks in margins, illustrations, or adjacent columns stay separate.
+        let bands: Vec<(f64, f64, f64, i32, i32)> = lines
+            .iter()
+            .map(|line| {
+                let mut bottoms: Vec<i32> =
+                    line.members.iter().map(|i| i.y + i.height as i32).collect();
+                bottoms.sort_unstable();
+                let base = bottoms[(bottoms.len() - 1) / 2] as f64;
+                let h = line.mean_height().max(1.0);
+                let min_x = line.members.iter().map(|i| i.x).min().unwrap_or(0);
+                let max_x = line
+                    .members
+                    .iter()
+                    .map(|i| i.x + i.width as i32)
+                    .max()
+                    .unwrap_or(0);
+                (base - h, base, h, min_x, max_x)
+            })
+            .collect();
+
+        let mut unattached: Vec<GlyphInstance> = Vec::new();
+        for mark in marks {
+            let m_top = mark.y;
+            let m_bottom = mark.y + mark.height as i32;
+            let m_x1 = mark.x + mark.width as i32;
+            let m_cy = mark.y as f64 + mark.height as f64 * 0.5;
+
+            // Prefer the closest line with a body glyph directly stacked
+            // over/under this mark (an `i`/`j` stem under its tittle, or a
+            // letter over an accent).
+            let stacked_line = lines
+                .iter()
+                .enumerate()
+                .filter_map(|(li, line)| {
+                    let (top_est, base_est, h, min_x, max_x) = bands[li];
+                    if m_x1 < min_x - h as i32
+                        || mark.x > max_x + h as i32
+                        || m_cy < top_est - 0.80 * h
+                        || m_cy > base_est + 0.60 * h
+                    {
+                        return None;
+                    }
+                    line.members
+                        .iter()
+                        .filter(|b| b.height * 2 >= ref_h)
+                        .filter_map(|b| {
+                            let bx1 = b.x + b.width as i32;
+                            let overlap = bx1.min(m_x1) - b.x.max(mark.x);
+                            let b_bottom = b.y + b.height as i32;
+                            let vgap = (b.y - m_bottom).max(m_top - b_bottom).max(0) as f64;
+                            (overlap * 2 >= (bx1 - b.x).min(mark.width as i32)
+                                && stacked(b.y, b_bottom, m_top, m_bottom)
+                                && vgap <= 0.70 * h)
+                                .then_some((li, vgap))
+                        })
+                        .min_by(|a, b| a.1.total_cmp(&b.1))
+                })
+                .min_by(|a, b| a.1.total_cmp(&b.1));
+
+            let chosen = stacked_line.map(|(li, _)| li).or_else(|| {
+                bands
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(li, &(top_est, base_est, h, min_x, max_x))| {
+                        let x_pad = (2.0 * h).round() as i32;
+                        if m_x1 < min_x - x_pad || mark.x > max_x + x_pad {
+                            return None;
+                        }
+                        let dist = if m_cy < top_est {
+                            let d = top_est - m_cy;
+                            (d <= 0.20 * h).then_some(d)?
+                        } else if m_cy > base_est {
+                            let d = m_cy - base_est;
+                            (d <= 0.35 * h).then_some(d)?
+                        } else {
+                            0.0
+                        };
+                        Some((li, dist))
+                    })
+                    .min_by(|a, b| a.1.total_cmp(&b.1))
+                    .map(|(li, _)| li)
+            });
+
+            if let Some(li) = chosen {
+                lines[li].members.push(mark);
+            } else {
+                unattached.push(mark);
+            }
+        }
+        if !unattached.is_empty() {
+            lines.extend(sweep_lines(unattached));
         }
     }
 
-    lines
+    let mut out: Vec<GlyphLine> = lines
         .into_iter()
         .map(|mut line| {
             line.members.sort_by_key(|i| (i.x, i.y));
-            // The baseline: a fit through the bottoms where the line is
-            // long enough to support one (page curl leaves a line tilted
-            // after the page-wide skew is gone), evaluated at the line's
-            // midpoint, else the median bottom. The PDF draws the whole
-            // line level at that one height — the text matrix is never
-            // tilted — so every glyph's descent is measured from that same
-            // height, not from the fit under it: measured from a tilted fit
-            // and drawn on a level line, glyphs at the ends of a tilted
-            // line (or of one whose fit a stray shape has tilted) would
-            // ride above or below their ink by the tilt.
+            // Fit the baseline through body-sized members where available so
+            // tittles and descending commas do not tilt or shift it.
+            let has_body = line.members.iter().any(|i| i.height * 2 >= ref_h);
             let points: Vec<(f64, f64)> = line
                 .members
                 .iter()
+                .filter(|i| !has_body || i.height * 2 >= ref_h)
                 .map(|i| {
                     (
                         (2 * i.x + i.width as i32) as f64 / 2.0,
@@ -3270,8 +3546,12 @@ fn group_lines(mut instances: Vec<GlyphInstance>) -> Vec<GlyphLine> {
                     (intercept + slope * mid_x).round() as i32
                 }
                 None => {
-                    let mut bottoms: Vec<i32> =
-                        line.members.iter().map(|i| i.y + i.height as i32).collect();
+                    let mut bottoms: Vec<i32> = line
+                        .members
+                        .iter()
+                        .filter(|i| !has_body || i.height * 2 >= ref_h)
+                        .map(|i| i.y + i.height as i32)
+                        .collect();
                     bottoms.sort_unstable();
                     bottoms[(bottoms.len() - 1) / 2]
                 }
@@ -3288,7 +3568,9 @@ fn group_lines(mut instances: Vec<GlyphInstance>) -> Vec<GlyphLine> {
                 .collect();
             GlyphLine { baseline_y, glyphs }
         })
-        .collect()
+        .collect();
+    out.sort_by_key(|l| l.baseline_y);
+    out
 }
 
 /// Trace the pixel edges of a bitmap into closed TrueType contours in font
@@ -4911,5 +5193,224 @@ mod tests {
         assert!(stacked(8, 10, 12, 20));
         assert!(stacked(0, 3, 2, 20));
         assert!(!stacked(17, 20, 0, 20));
+    }
+
+    #[test]
+    fn tittles_ascenders_and_commas_stay_on_one_line_and_preserve_periods() {
+        // Mirrors the Crusades scan geometry (baseline y = 40):
+        // ascender `l` (h=34, y=6..40), x-height `o` (h=21, y=19..40),
+        // `i` stem (h=21, y=19..40) + tittle (h=6, y=8..14),
+        // comma (h=10, y=35..45), then a second word ending with a period
+        // (h=6, y=34..40). Tittles and commas must not split the line or
+        // strand tittles on a phantom baseline where they collide with `.`.
+        let asc: Vec<&str> = vec!["####"; 34];
+        let xh: Vec<&str> = vec!["######"; 21];
+        let stem: Vec<&str> = vec!["####"; 21];
+        let dot6: Vec<&str> = vec!["####"; 6];
+        let comma: Vec<&str> = vec!["####"; 10];
+        let page = page_with(
+            &[
+                (&asc, 4, 6),
+                (&xh, 12, 19),
+                (&stem, 22, 19),
+                (&dot6, 22, 8),
+                (&comma, 30, 35),
+                (&xh, 44, 19),
+                (&dot6, 54, 34),
+            ],
+            70,
+            56,
+        );
+        let mut dict = GlyphDictionary::new();
+        let mut runs = dict.process_page(&page, 72);
+        assert_eq!(runs.lines.len(), 1, "all glyphs belong to one text line");
+        assert_eq!(runs.lines[0].baseline_y, 40);
+        assert_eq!(runs.lines[0].glyphs.len(), 6, "tittle merged with stem");
+
+        // High archive.org-style word boxes (sitting ~8 px above baseline 40).
+        dict.record_text(
+            &mut runs,
+            &[
+                word("loi,", 3.0, 10.0, 33.0, 32.0),
+                word("o.", 43.0, 10.0, 56.0, 32.0),
+            ],
+        );
+        let comma_glyph = glyph_at(&runs, 30)[0];
+        let period_glyph = glyph_at(&runs, 54)[0];
+        assert_eq!(text_of_glyph(&dict, comma_glyph), ",");
+        assert_eq!(text_of_glyph(&dict, period_glyph), ".");
+    }
+
+    #[test]
+    fn clipped_word_box_does_not_vote_two_letters_onto_one_cell() {
+        let learned = |c: &str| match c {
+            "t" => Some(11.0),
+            "h" => Some(21.0),
+            "e" => Some(18.0),
+            _ => None,
+        };
+        let chars: Vec<String> = ["t", "h", "e"].into_iter().map(String::from).collect();
+        assert_eq!(
+            share_by_width(&[11, 21], &chars, learned),
+            None,
+            "two normal-width cells missing `e` must not absorb `he`"
+        );
+        let two_chars: Vec<String> = ["h", "e"].into_iter().map(String::from).collect();
+        assert_eq!(
+            share_by_width(&[21], &two_chars, learned),
+            None,
+            "one normal-width `h` cell must not absorb `he`"
+        );
+    }
+
+    #[test]
+    fn speck_sized_glyph_cannot_map_to_an_alphanumeric_letter() {
+        let tall: Vec<&str> = vec!["######"; 22];
+        let speck: Vec<&str> = vec!["##"; 3];
+        let dot: Vec<&str> = vec!["###"; 4];
+        let page = page_with(
+            &[
+                (&tall, 2, 4),
+                (&tall, 12, 4),
+                (&speck, 24, 23),
+                (&dot, 32, 22),
+            ],
+            44,
+            32,
+        );
+        let mut dict = GlyphDictionary::new();
+        let mut runs = dict.process_page(&page, 72);
+        dict.record_text(
+            &mut runs,
+            &[
+                word("aa", 2.0, 4.0, 19.0, 26.0),
+                word("l", 23.0, 18.0, 27.0, 26.0),
+                word(".", 31.0, 18.0, 36.0, 26.0),
+            ],
+        );
+        let speck_glyph = glyph_at(&runs, 24)[0];
+        let dot_glyph = glyph_at(&runs, 32)[0];
+        assert_eq!(
+            text_of_glyph(&dict, speck_glyph),
+            "",
+            "3-px speck must not emit alphanumeric `l`"
+        );
+        assert_eq!(
+            text_of_glyph(&dict, dot_glyph),
+            ".",
+            "small punctuation still maps to `.`"
+        );
+    }
+
+    #[test]
+    fn small_bold_u_and_n_and_1_and_i_stay_distinct_under_finalize() {
+        // 12x14 small bold `u` and `n` with 4-pixel stems and a 4-pixel gap:
+        // both pass `has_stroke_interior`, have identical ink counts, and
+        // 1-px dilation bridges much of the interior, yet they trade ink in
+        // opposite arches (`only_a` and `only_b` both large) and must never fold.
+        const BOLD_U: &[&str] = &[
+            "####....####",
+            "####....####",
+            "####....####",
+            "####....####",
+            "####....####",
+            "####....####",
+            "####....####",
+            "####....####",
+            "####....####",
+            "####....####",
+            "####....####",
+            "############",
+            ".##########.",
+            "..########..",
+        ];
+        let bold_n: Vec<&str> = BOLD_U.iter().copied().rev().collect();
+        assert!(has_stroke_interior(&bitmap(BOLD_U)));
+        assert!(has_stroke_interior(&bitmap(&bold_n)));
+
+        const BOLD_1: &[&str] = &[
+            "....###...",
+            "...####...",
+            ".######...",
+            "###.###...",
+            "#...###...",
+            "....###...",
+            "....###...",
+            "....###...",
+            "....###...",
+            "....###...",
+            "....###...",
+            "....###...",
+            "....###...",
+            "....###...",
+            "....###...",
+            "....###...",
+            ".########.",
+            ".########.",
+        ];
+        const BOLD_I: &[&str] = &[
+            ".########.",
+            ".########.",
+            "...####...",
+            "...####...",
+            "...####...",
+            "...####...",
+            "...####...",
+            "...####...",
+            "...####...",
+            "...####...",
+            "...####...",
+            "...####...",
+            "...####...",
+            "...####...",
+            "...####...",
+            "...####...",
+            ".########.",
+            ".########.",
+        ];
+        assert!(has_stroke_interior(&bitmap(BOLD_1)));
+        assert!(has_stroke_interior(&bitmap(BOLD_I)));
+
+        let mut dict = GlyphDictionary::new();
+        let n_idx = dict.insert_prototype(bitmap(&bold_n), 40, 0);
+        let u_idx = dict.insert_prototype(bitmap(BOLD_U), 5, 0);
+        let i_idx = dict.insert_prototype(bitmap(BOLD_I), 30, 0);
+        let one_idx = dict.insert_prototype(bitmap(BOLD_1), 4, 0);
+        dict.finalize();
+
+        assert_ne!(
+            dict.resolve_alias(u_idx).0,
+            n_idx,
+            "bold `u` must not fold into `n`"
+        );
+        assert_ne!(
+            dict.resolve_alias(one_idx).0,
+            i_idx,
+            "bold `1` must not fold into `I`"
+        );
+        assert_eq!(dict.distinct(), 4);
+    }
+
+    #[test]
+    fn oversized_illustration_goes_to_residual() {
+        // 600x600 thin border: simple enough for `glyf` point limits, but far
+        // larger than any character glyph.
+        let (w, h) = (640usize, 640usize);
+        let mut page = BitImage::new(w as u32, h as u32).unwrap();
+        for i in 20..620 {
+            page.set_usize(i, 20, true);
+            page.set_usize(i, 21, true);
+            page.set_usize(i, 618, true);
+            page.set_usize(i, 619, true);
+            page.set_usize(20, i, true);
+            page.set_usize(21, i, true);
+            page.set_usize(618, i, true);
+            page.set_usize(619, i, true);
+        }
+        let mut dict = GlyphDictionary::new();
+        let runs = dict.process_page(&page, 300);
+        assert_eq!(runs.glyph_count, 0);
+        assert_eq!(dict.residual_components(), 1);
+        assert!(runs.residual.is_some());
     }
 }

@@ -5338,6 +5338,17 @@ record lege-ecosystem.papercut.the-windows-tensorrt-cache-canonicalized/2 : pape
     created_at 2026-08-14
 }
 
+record lege-ecosystem.papercut.tried-running-lege-cli-with-pages-10-14/1 : papercut {
+    title "Tried running lege CLI with --pages 10-14 (matching exprim's flag name)…"
+    state verified
+    statement """
+        Tried running lege CLI with --pages 10-14 (matching exprim's flag name) and hit Unrecognized argument: --pages; checking lege --help for the page-range flag.
+        """
+    observed_at git:d75b41f7ee4fe34ccc19dfcda444a97379f779c9
+    author "gemini"
+    created_at 2026-11-27
+}
+
 record lege-ecosystem.papercut.while-auditing-proposed-records-the-cli/1 : papercut {
     title "While auditing proposed records, the CLI spelling of knowledge.start's…"
     state superseded

@@ -20,9 +20,11 @@
   word read over it, often a letter off, and kept it; an 886-page scan's text came out with 61% of
   its words right. The letters are now settled by vote across the book, ligatures (fi, fl, ff)
   and touching letters are read as the letters they are, word breaks follow the recognized words,
-  and short words are no longer written a second time as invisible text: 94% of the words are
-  right. The same book also needs one embedded font instead of three and comes out 22% smaller
-  (8.5 MB; JBIG2 makes 15 MB).
+  small punctuation stays off body baselines while keeping full stops and commas, specks cannot map
+  to letters, small bold letters no longer fold into look-alikes, and short words are no longer
+  written a second time as invisible text: 96% of the words are right (99% on technical body text).
+  The same book also needs one embedded font instead of three and comes out 21% smaller (8.6 MB;
+  JBIG2 makes 15 MB).
 
 ### Faster, leaner PDF reading (exprim)
 
