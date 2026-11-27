@@ -153,48 +153,6 @@ What should not be trusted without re-checking: records the build flagged `stale
 
 **Cause** — `watches "lege-codecs/jp2lam/src/jp2.rs"` was matched by `63059aae`, which touched `lege-codecs/jp2lam/src/jp2.rs`.
 
-### Small pre-existing defects seen during the flat-control-flow review, kept as they were
-
-`verified` · `@lege-ecosystem.observation.defects-seen-in-flat-control-flow-review/1` · observation · **stale** · [Small pre-existing defects seen during the flat-control-flow review, kept as they were](CURRENT-STATE.md#small-pre-existing-defects-seen-during-the-flat-control-flow-review-kept-as-they-were)
-
-**Cause** — `watches "lege-process/core/djvu.rs"` was matched by `6a50595e`, which touched `lege-process/core/djvu.rs`.
-
-### flattener 1.1.0 dewarp and page-gate models run in lege-gpu after a preparation step; its orientation model does not load
-
-`verified` · `@lege-ecosystem.observation.flattener-dewarp-models-run-in-lege-gpu/1` · observation · **stale** · [flattener 1.1.0 dewarp and page-gate models run in lege-gpu after a preparation step; its orientation model does not load](CURRENT-STATE.md#flattener-110-dewarp-and-page-gate-models-run-in-lege-gpu-after-a-preparation-step-its-orientation-model-does-not-load)
-
-**Cause** — `watches "lege-gpu/src/vision/onnx/**"` was matched by `6a50595e`, which touched `lege-gpu/src/vision/onnx/patchify_rewrite.rs`.
-
-### Grayscale/MRC mode makes truetyping 3.3x smaller and cleaner on the crusades scan; the win is the MRC despeckle, not antialiasing
-
-`verified` · `@lege-ecosystem.observation.grayscale-mode-makes-truetyping-smaller-and-cleaner/2` · observation · **stale** · [Grayscale/MRC mode makes truetyping 3.3x smaller and cleaner on the crusades scan; the win is the MRC despeckle, not antialiasing](CURRENT-STATE.md#grayscalemrc-mode-makes-truetyping-33x-smaller-and-cleaner-on-the-crusades-scan-the-win-is-the-mrc-despeckle-not-antialiasing)
-
-**Cause** — `watches "lege-process/encoding/glyphfont.rs"` was matched by `6a50595e`, which touched `lege-process/encoding/glyphfont.rs`.
-
-### PP-OCRv6 on wgpu was blocked by four concrete gaps, all now closed
-
-`verified` · `@lege-ecosystem.observation.ppocrv6-wgpu-blockers-resolved-20260822/2` · observation · **stale** · [PP-OCRv6 on wgpu was blocked by four concrete gaps, all now closed](CURRENT-STATE.md#pp-ocrv6-on-wgpu-was-blocked-by-four-concrete-gaps-all-now-closed)
-
-**Cause** — `watches "lege-gpu/src/vision/onnx/**"` was matched by `6a50595e`, which touched `lege-gpu/src/vision/onnx/patchify_rewrite.rs`.
-
-### Truetyping's shared glyph dictionary serialized every page's matching behind one mutex, and that lock was the whole critical path
-
-`verified` · `@lege-ecosystem.observation.truetyping-dictionary-lock-serialized-every-page/2` · observation · **stale** · [Truetyping's shared glyph dictionary serialized every page's matching behind one mutex, and that lock was the whole critical path](CURRENT-STATE.md#truetypings-shared-glyph-dictionary-serialized-every-pages-matching-behind-one-mutex-and-that-lock-was-the-whole-critical-path)
-
-**Cause** — `watches "lege-process/encoding/glyphfont.rs"` was matched by `6a50595e`, which touched `lege-process/encoding/glyphfont.rs`.
-
-### Truetyping's searchable text kept 61% of a scan's words; after alignment, punctuation, spacing, and fold fixes 96% (98.5% on T.88)
-
-`verified` · `@lege-ecosystem.observation.truetyping-text-accuracy-20261127/4` · observation · **stale** · [Truetyping's searchable text kept 61% of a scan's words; after alignment, punctuation, spacing, and fold fixes 96% (98.5% on T.88)](CURRENT-STATE.md#truetypings-searchable-text-kept-61-of-a-scans-words-after-alignment-punctuation-spacing-and-fold-fixes-96-985-on-t88)
-
-**Cause** — `watches "lege-process/encoding/glyphfont.rs"` was matched by `6a50595e`, which touched `lege-process/encoding/glyphfont.rs`.
-
-### Truetyping letters off their baseline came from rises measured against a tilted fit but drawn level, and from OCR text identities handing an occurrence another position variant's id
-
-`verified` · `@lege-ecosystem.observation.truetyping-text-identity-moved-letters-off-their-baseline/2` · observation · **stale** · [Truetyping letters off their baseline came from rises measured against a tilted fit but drawn level, and from OCR text identities handing an occurrence another position variant's id](CURRENT-STATE.md#truetyping-letters-off-their-baseline-came-from-rises-measured-against-a-tilted-fit-but-drawn-level-and-from-ocr-text-identities-handing-an-occurrence-another-position-variants-id)
-
-**Cause** — `watches "lege-process/encoding/glyphfont.rs"` was matched by `6a50595e`, which touched `lege-process/encoding/glyphfont.rs`.
-
 ### DocLayout-M underdetects text and some images
 
 `verified` · `@lege-ecosystem.observation.doclayout-m-underdetects-text-and-images/3` · observation · **stale** · [DocLayout-M underdetects text and some images](CURRENT-STATE.md#doclayout-m-underdetects-text-and-some-images)
@@ -237,6 +195,30 @@ What should not be trusted without re-checking: records the build flagged `stale
 
 **Cause** — `watches "lege-codecs/djvulibrust/src/doc/page_encoder.rs"` was matched by `8745b42d`, which touched `lege-codecs/djvulibrust/src/doc/page_encoder.rs`.
 
+### Grayscale/MRC mode makes truetyping 3.3x smaller and cleaner on the crusades scan; the win is the MRC despeckle, not antialiasing
+
+`verified` · `@lege-ecosystem.observation.grayscale-mode-makes-truetyping-smaller-and-cleaner/2` · observation · **stale** · [Grayscale/MRC mode makes truetyping 3.3x smaller and cleaner on the crusades scan; the win is the MRC despeckle, not antialiasing](CURRENT-STATE.md#grayscalemrc-mode-makes-truetyping-33x-smaller-and-cleaner-on-the-crusades-scan-the-win-is-the-mrc-despeckle-not-antialiasing)
+
+**Cause** — `watches "lege-process/encoding/glyphfont.rs"` was matched by `8745b42d`, which touched `lege-process/encoding/glyphfont.rs`.
+
+### Truetyping's shared glyph dictionary serialized every page's matching behind one mutex, and that lock was the whole critical path
+
+`verified` · `@lege-ecosystem.observation.truetyping-dictionary-lock-serialized-every-page/2` · observation · **stale** · [Truetyping's shared glyph dictionary serialized every page's matching behind one mutex, and that lock was the whole critical path](CURRENT-STATE.md#truetypings-shared-glyph-dictionary-serialized-every-pages-matching-behind-one-mutex-and-that-lock-was-the-whole-critical-path)
+
+**Cause** — `watches "lege-process/encoding/glyphfont.rs"` was matched by `8745b42d`, which touched `lege-process/encoding/glyphfont.rs`.
+
+### Truetyping letters off their baseline came from rises measured against a tilted fit but drawn level, and from OCR text identities handing an occurrence another position variant's id
+
+`verified` · `@lege-ecosystem.observation.truetyping-text-identity-moved-letters-off-their-baseline/2` · observation · **stale** · [Truetyping letters off their baseline came from rises measured against a tilted fit but drawn level, and from OCR text identities handing an occurrence another position variant's id](CURRENT-STATE.md#truetyping-letters-off-their-baseline-came-from-rises-measured-against-a-tilted-fit-but-drawn-level-and-from-ocr-text-identities-handing-an-occurrence-another-position-variants-id)
+
+**Cause** — `watches "lege-process/encoding/glyphfont.rs"` was matched by `8745b42d`, which touched `lege-process/encoding/glyphfont.rs`.
+
+### PP-OCRv6 on wgpu was blocked by four concrete gaps, all now closed
+
+`verified` · `@lege-ecosystem.observation.ppocrv6-wgpu-blockers-resolved-20260822/2` · observation · **stale** · [PP-OCRv6 on wgpu was blocked by four concrete gaps, all now closed](CURRENT-STATE.md#pp-ocrv6-on-wgpu-was-blocked-by-four-concrete-gaps-all-now-closed)
+
+**Cause** — `watches "lege-gpu/src/vision/onnx/**"` was matched by `8f2285d8`, which touched `lege-gpu/src/vision/onnx/attrs.rs`.
+
 ### lege-gpu runs DETR-family layout detectors: tiled GEMM, wide softmax and the RF-DETR op set
 
 `verified` · `@lege-ecosystem.observation.transformer-layout-models-bound-by-naive-matmul/2` · observation · **stale** · [lege-gpu runs DETR-family layout detectors: tiled GEMM, wide softmax and the RF-DETR op set](CURRENT-STATE.md#lege-gpu-runs-detr-family-layout-detectors-tiled-gemm-wide-softmax-and-the-rf-detr-op-set)
@@ -255,6 +237,24 @@ What should not be trusted without re-checking: records the build flagged `stale
 
 **Cause** — `watches "lege-process/models/layout-rfdetr-s.onnx"` was matched by `ae88990d`, which touched `lege-process/models/layout-rfdetr-s.onnx`.
 
+### Small pre-existing defects seen during the flat-control-flow review, kept as they were
+
+`verified` · `@lege-ecosystem.observation.defects-seen-in-flat-control-flow-review/1` · observation · **stale** · [Small pre-existing defects seen during the flat-control-flow review, kept as they were](CURRENT-STATE.md#small-pre-existing-defects-seen-during-the-flat-control-flow-review-kept-as-they-were)
+
+**Cause** — `watches "lege-process/core/djvu.rs"` was matched by `f8fce322`, which touched `lege-process/core/djvu.rs`.
+
+### flattener 1.1.0 dewarp and page-gate models run in lege-gpu after a preparation step; its orientation model does not load
+
+`verified` · `@lege-ecosystem.observation.flattener-dewarp-models-run-in-lege-gpu/1` · observation · **stale** · [flattener 1.1.0 dewarp and page-gate models run in lege-gpu after a preparation step; its orientation model does not load](CURRENT-STATE.md#flattener-110-dewarp-and-page-gate-models-run-in-lege-gpu-after-a-preparation-step-its-orientation-model-does-not-load)
+
+**Cause** — `watches "lege-gpu/src/vision/onnx/**"` was matched by `f8fce322`, which touched `lege-gpu/src/vision/onnx/patchify_rewrite.rs`.
+
+### Truetyping's searchable text kept 61% of a scan's words; after alignment, punctuation, spacing, and fold fixes 96% (98.5% on T.88)
+
+`verified` · `@lege-ecosystem.observation.truetyping-text-accuracy-20261127/4` · observation · **stale** · [Truetyping's searchable text kept 61% of a scan's words; after alignment, punctuation, spacing, and fold fixes 96% (98.5% on T.88)](CURRENT-STATE.md#truetypings-searchable-text-kept-61-of-a-scans-words-after-alignment-punctuation-spacing-and-fold-fixes-96-985-on-t88)
+
+**Cause** — `watches "lege-process/encoding/glyphfont.rs"` was matched by `f8fce322`, which touched `lege-process/encoding/glyphfont.rs`.
+
 ## At risk (13)
 
 ### Truetyping never folds shapes that enclose different counters, and a stroke is far even when it is a hairline
@@ -267,7 +267,7 @@ What should not be trusted without re-checking: records the build flagged `stale
 
 `active` · `@lege-ecosystem.decision.jbig2-is-the-default-pdf-text-format-again/3` · decision · **depth 1** · [JBIG2 is the GUI's default PDF text encoder again; truetyping is the opt-in checkbox](DECISION-HISTORY.md#revision-3--jbig2-is-the-guis-default-pdf-text-encoder-again-truetyping-is-the-opt-in-checkbox)
 
-**Via** `supported_by` → `@lege-ecosystem.observation.truetyping-dictionary-lock-serialized-every-page/2` (stale: `watches "lege-process/encoding/glyphfont.rs"` was matched by `6a50595e`, which touched `lege-process/encoding/glyphfont.rs`.)
+**Via** `supported_by` → `@lege-ecosystem.observation.truetyping-dictionary-lock-serialized-every-page/2` (stale: `watches "lege-process/encoding/glyphfont.rs"` was matched by `8745b42d`, which touched `lege-process/encoding/glyphfont.rs`.)
 
 ### JBIG2 writes the bit-exact generic region unless symbol mode is asked for
 
@@ -291,19 +291,19 @@ What should not be trusted without re-checking: records the build flagged `stale
 
 `active` · `@lege-ecosystem.decision.truetyping-leaves-bilevel-sources-alone/1` · decision · **depth 1** · [Truetyping is skipped when the source's ink is already one bit; source masks pass through](DECISION-HISTORY.md#revision-1--truetyping-is-skipped-when-the-sources-ink-is-already-one-bit-source-masks-pass-through)
 
-**Via** `supported_by` → `@lege-ecosystem.observation.grayscale-mode-makes-truetyping-smaller-and-cleaner/2` (stale: `watches "lege-process/encoding/glyphfont.rs"` was matched by `6a50595e`, which touched `lege-process/encoding/glyphfont.rs`.)
+**Via** `supported_by` → `@lege-ecosystem.observation.grayscale-mode-makes-truetyping-smaller-and-cleaner/2` (stale: `watches "lege-process/encoding/glyphfont.rs"` was matched by `8745b42d`, which touched `lege-process/encoding/glyphfont.rs`.)
 
 ### Truetyping renders its ink mask through the MRC clean path
 
 `active` · `@lege-ecosystem.decision.truetyping-renders-in-grayscale-by-default/1` · decision · **depth 1** · [Truetyping renders its ink mask through the MRC clean path](DECISION-HISTORY.md#revision-1--truetyping-renders-its-ink-mask-through-the-mrc-clean-path)
 
-**Via** `supported_by` → `@lege-ecosystem.observation.grayscale-mode-makes-truetyping-smaller-and-cleaner/2` (stale: `watches "lege-process/encoding/glyphfont.rs"` was matched by `6a50595e`, which touched `lege-process/encoding/glyphfont.rs`.)
+**Via** `supported_by` → `@lege-ecosystem.observation.grayscale-mode-makes-truetyping-smaller-and-cleaner/2` (stale: `watches "lege-process/encoding/glyphfont.rs"` was matched by `8745b42d`, which touched `lege-process/encoding/glyphfont.rs`.)
 
 ### Dropping isolated specks before glyph matching removes 18 percent of occurrences and 7 percent of bytes on the crusades scan
 
 `verified` · `@lege-ecosystem.evidence.glyphfont-speck-filter-crusades-20260906/1` · evidence · **depth 1** · [Dropping isolated specks before glyph matching removes 18 percent of occurrences and 7 percent of bytes on the crusades scan](CURRENT-STATE.md#dropping-isolated-specks-before-glyph-matching-removes-18-percent-of-occurrences-and-7-percent-of-bytes-on-the-crusades-scan)
 
-**Via** `derived_from` → `@lege-ecosystem.observation.grayscale-mode-makes-truetyping-smaller-and-cleaner/2` (stale: `watches "lege-process/encoding/glyphfont.rs"` was matched by `6a50595e`, which touched `lege-process/encoding/glyphfont.rs`.)
+**Via** `derived_from` → `@lege-ecosystem.observation.grayscale-mode-makes-truetyping-smaller-and-cleaner/2` (stale: `watches "lege-process/encoding/glyphfont.rs"` was matched by `8745b42d`, which touched `lege-process/encoding/glyphfont.rs`.)
 
 ### Lege photographs use the verified floor; ApproxQuality remains on backgrounds and on encode failure
 
@@ -315,13 +315,13 @@ What should not be trusted without re-checking: records the build flagged `stale
 
 `verified` · `@lege-ecosystem.observation.dewarp-models-move-flat-pages-20261112/1` · observation · **depth 1** · [Paddle UVDoc, flattener and DocScanner all move already-flat pages; DocScanner matches them on curved spreads but is non-commercial and does not load in lege-gpu](CURRENT-STATE.md#paddle-uvdoc-flattener-and-docscanner-all-move-already-flat-pages-docscanner-matches-them-on-curved-spreads-but-is-non-commercial-and-does-not-load-in-lege-gpu)
 
-**Via** `derived_from` → `@lege-ecosystem.observation.flattener-dewarp-models-run-in-lege-gpu/1` (stale: `watches "lege-gpu/src/vision/onnx/**"` was matched by `6a50595e`, which touched `lege-gpu/src/vision/onnx/patchify_rewrite.rs`.)
+**Via** `derived_from` → `@lege-ecosystem.observation.flattener-dewarp-models-run-in-lege-gpu/1` (stale: `watches "lege-gpu/src/vision/onnx/**"` was matched by `f8fce322`, which touched `lege-gpu/src/vision/onnx/patchify_rewrite.rs`.)
 
 ### Rasterizing truetyping's fitted glyph outlines into a JBIG2 text layer is feasible with existing pieces and would give regular glyphs at JBIG2 size
 
 `verified` · `@lege-ecosystem.assessment.glyph-outlines-rasterized-into-a-jbig2-layer/1` · assessment · **depth 2** · [Rasterizing truetyping's fitted glyph outlines into a JBIG2 text layer is feasible with existing pieces and would give regular glyphs at JBIG2 size](CURRENT-STATE.md#rasterizing-truetypings-fitted-glyph-outlines-into-a-jbig2-text-layer-is-feasible-with-existing-pieces-and-would-give-regular-glyphs-at-jbig2-size)
 
-**Via** `derived_from` → `@lege-ecosystem.decision.jbig2-is-the-default-pdf-text-format-again/3` → `@lege-ecosystem.observation.truetyping-dictionary-lock-serialized-every-page/2` (stale: `watches "lege-process/encoding/glyphfont.rs"` was matched by `6a50595e`, which touched `lege-process/encoding/glyphfont.rs`.)
+**Via** `derived_from` → `@lege-ecosystem.decision.jbig2-is-the-default-pdf-text-format-again/3` → `@lege-ecosystem.observation.truetyping-dictionary-lock-serialized-every-page/2` (stale: `watches "lege-process/encoding/glyphfont.rs"` was matched by `8745b42d`, which touched `lege-process/encoding/glyphfont.rs`.)
 
 ### Generic JBIG2 costs 0.6% over sym-unify on an 886-page scan
 
@@ -333,4 +333,4 @@ What should not be trusted without re-checking: records the build flagged `stale
 
 `verified` · `@lege-ecosystem.evidence.truetyping-skips-a-jbig2-source-20260906/1` · evidence · **depth 2** · [Truetyping on a lege JBIG2 output keeps the text as JBIG2 at the requested height](CURRENT-STATE.md#truetyping-on-a-lege-jbig2-output-keeps-the-text-as-jbig2-at-the-requested-height)
 
-**Via** `derived_from` → `@lege-ecosystem.decision.truetyping-leaves-bilevel-sources-alone/1` → `@lege-ecosystem.observation.grayscale-mode-makes-truetyping-smaller-and-cleaner/2` (stale: `watches "lege-process/encoding/glyphfont.rs"` was matched by `6a50595e`, which touched `lege-process/encoding/glyphfont.rs`.)
+**Via** `derived_from` → `@lege-ecosystem.decision.truetyping-leaves-bilevel-sources-alone/1` → `@lege-ecosystem.observation.grayscale-mode-makes-truetyping-smaller-and-cleaner/2` (stale: `watches "lege-process/encoding/glyphfont.rs"` was matched by `8745b42d`, which touched `lege-process/encoding/glyphfont.rs`.)

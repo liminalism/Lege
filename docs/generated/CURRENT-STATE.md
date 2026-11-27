@@ -151,7 +151,7 @@ The review kept behaviour frozen, so these were left as found: (1) lege-process/
 
 **derived_from** `@lege-ecosystem.work.flat-control-flow-review-20261127/1`
 
-> **Stale** — `watches "lege-process/core/djvu.rs"` was matched by `6a50595e`, which touched `lege-process/core/djvu.rs`. See [REVIEW-REQUIRED.md](REVIEW-REQUIRED.md#small-pre-existing-defects-seen-during-the-flat-control-flow-review-kept-as-they-were).
+> **Stale** — `watches "lege-process/core/djvu.rs"` was matched by `f8fce322`, which touched `lege-process/core/djvu.rs`. See [REVIEW-REQUIRED.md](REVIEW-REQUIRED.md#small-pre-existing-defects-seen-during-the-flat-control-flow-review-kept-as-they-were).
 
 ### Paddle UVDoc, flattener and DocScanner all move already-flat pages; DocScanner matches them on curved spreads but is non-commercial and does not load in lege-gpu
 
@@ -161,7 +161,7 @@ Measured 2026-11-12 with the same standalone Rust tester as the flattener observ
 
 **derived_from** `@lege-ecosystem.observation.flattener-dewarp-models-run-in-lege-gpu/1`
 
-> **At risk** at depth 1 via `derived_from` → `@lege-ecosystem.observation.flattener-dewarp-models-run-in-lege-gpu/1` (stale: `watches "lege-gpu/src/vision/onnx/**"` was matched by `6a50595e`, which touched `lege-gpu/src/vision/onnx/patchify_rewrite.rs`.). See [REVIEW-REQUIRED.md](REVIEW-REQUIRED.md#paddle-uvdoc-flattener-and-docscanner-all-move-already-flat-pages-docscanner-matches-them-on-curved-spreads-but-is-non-commercial-and-does-not-load-in-lege-gpu).
+> **At risk** at depth 1 via `derived_from` → `@lege-ecosystem.observation.flattener-dewarp-models-run-in-lege-gpu/1` (stale: `watches "lege-gpu/src/vision/onnx/**"` was matched by `f8fce322`, which touched `lege-gpu/src/vision/onnx/patchify_rewrite.rs`.). See [REVIEW-REQUIRED.md](REVIEW-REQUIRED.md#paddle-uvdoc-flattener-and-docscanner-all-move-already-flat-pages-docscanner-matches-them-on-curved-spreads-but-is-non-commercial-and-does-not-load-in-lege-gpu).
 
 ### DocLayout-M underdetects text and some images
 
@@ -179,7 +179,7 @@ PP-DocLayout-M on Structures.pdf (Braudel scan) systematically underdetects: who
 
 Measured 2026-11-12 with a standalone Rust tester outside this repository (path dependency on lege-gpu, RTX 4060 Laptop, Vulkan), on 26 hand-held photos of curved two-page book spreads. deveworld/flattener models v1.1.0 (Apache-2.0): dewarp.onnx (UVDoc architecture, input `image` 1x3x712x488, output a 45x31 grid) and gate.onnx (page mask, 1x3x192x144) are rejected by lege-gpu as exported (shape inference is not implemented for `Constant`; gate also has AveragePool count_include_pad=1). After ONNX Runtime basic-level constant folding and rewriting count_include_pad to 0 on the unpadded pools, both load under the existing `image` target with no new operators, and their ONNX Runtime outputs are unchanged. On real inputs lege-gpu matches ONNX Runtime: dewarp grid nodes within 0.0006 px of the model view, gate probabilities within 1e-5 with identical masks; the CPU reference executor agrees. Warm latency: dewarp 38 ms, gate 4 ms (ONNX Runtime CPU dewarp: 155 ms). orient.onnx is rejected: it has two inputs (`global_view` 1x1x256x256 and rank-5 `patches` 1x4x1x128x128) and no input matches a registered model target. A Rust port of flattener's scan path on lege-gpu reproduced the official Python scanner on all 26 photos (same page box, same split decision, grids 1.65 px apart on average in a 3936 px photo; 0.0 px on identical decoded pixels with ONNX Runtime) at 0.43 s per photo. Text-line straightness by a DBNet tracer, means over the 26 photos (tilt deg / angle spread deg / bow % of line length): cropped photo 3.88 / 4.28 / 0.571; Paddle UVDoc export in one pass 1.17 / 1.38 / 0.363; flattener 1.54 / 1.64 / 0.382; flattener with every spread split 1.33 / 1.49 / 0.313. flattener's fold detection found no fold in 11 of the 26 spreads. `OnnxSession::run_gpu` compiles the graph on every call; the tester kept one compiled graph resident by feeding `run_gpu_each` from a channel. yb85/aglaia has no learned dewarp model: its curvature correction is the page-dewarp cubic-sheet fit, and its trained geometry models are two text detectors (PP-OCRv4 det and EAST).
 
-> **Stale** — `watches "lege-gpu/src/vision/onnx/**"` was matched by `6a50595e`, which touched `lege-gpu/src/vision/onnx/patchify_rewrite.rs`. See [REVIEW-REQUIRED.md](REVIEW-REQUIRED.md#flattener-110-dewarp-and-page-gate-models-run-in-lege-gpu-after-a-preparation-step-its-orientation-model-does-not-load).
+> **Stale** — `watches "lege-gpu/src/vision/onnx/**"` was matched by `f8fce322`, which touched `lege-gpu/src/vision/onnx/patchify_rewrite.rs`. See [REVIEW-REQUIRED.md](REVIEW-REQUIRED.md#flattener-110-dewarp-and-page-gate-models-run-in-lege-gpu-after-a-preparation-step-its-orientation-model-does-not-load).
 
 ### freya-main removed; liminalUI embeds Noto Sans from its own fonts/ directory
 
@@ -202,7 +202,7 @@ crusadeswholesto0000lamb_1.pdf pages 1-41 (RGB JPEG scan), same debug-fast build
 
 **supersedes** `@lege-ecosystem.observation.grayscale-mode-makes-truetyping-smaller-and-cleaner/1` · **verified_by** `@lege-ecosystem.evidence.stale-observation-requeue-20260908/1`
 
-> **Stale** — `watches "lege-process/encoding/glyphfont.rs"` was matched by `6a50595e`, which touched `lege-process/encoding/glyphfont.rs`. See [REVIEW-REQUIRED.md](REVIEW-REQUIRED.md#grayscalemrc-mode-makes-truetyping-33x-smaller-and-cleaner-on-the-crusades-scan-the-win-is-the-mrc-despeckle-not-antialiasing).
+> **Stale** — `watches "lege-process/encoding/glyphfont.rs"` was matched by `8745b42d`, which touched `lege-process/encoding/glyphfont.rs`. See [REVIEW-REQUIRED.md](REVIEW-REQUIRED.md#grayscalemrc-mode-makes-truetyping-33x-smaller-and-cleaner-on-the-crusades-scan-the-win-is-the-mrc-despeckle-not-antialiasing).
 
 ### Legacy symbol substitution is lossy; explicit exact symbol presets now preserve input pixels
 
@@ -284,7 +284,7 @@ The earlier finding that a Paddle/WGPU v6 model pack "failed detector constructi
 
 **supersedes** `@lege-ecosystem.observation.ppocrv6-wgpu-blockers-resolved-20260822/1` · **verified_by** `@lege-ecosystem.evidence.stale-observation-requeue-20260908/1`
 
-> **Stale** — `watches "lege-gpu/src/vision/onnx/**"` was matched by `6a50595e`, which touched `lege-gpu/src/vision/onnx/patchify_rewrite.rs`. See [REVIEW-REQUIRED.md](REVIEW-REQUIRED.md#pp-ocrv6-on-wgpu-was-blocked-by-four-concrete-gaps-all-now-closed).
+> **Stale** — `watches "lege-gpu/src/vision/onnx/**"` was matched by `8f2285d8`, which touched `lege-gpu/src/vision/onnx/attrs.rs`. See [REVIEW-REQUIRED.md](REVIEW-REQUIRED.md#pp-ocrv6-on-wgpu-was-blocked-by-four-concrete-gaps-all-now-closed).
 
 ### Renderer crates.io readiness audit: packaging small, manifests and names block publication
 
@@ -323,7 +323,7 @@ On the 886-page archive.org scan crusadeswholesto0000lamb_1.pdf (RGB JPEG pages,
 
 **supersedes** `@lege-ecosystem.observation.truetyping-dictionary-lock-serialized-every-page/1` · **verified_by** `@lege-ecosystem.evidence.stale-observation-requeue-20260908/1`
 
-> **Stale** — `watches "lege-process/encoding/glyphfont.rs"` was matched by `6a50595e`, which touched `lege-process/encoding/glyphfont.rs`. See [REVIEW-REQUIRED.md](REVIEW-REQUIRED.md#truetypings-shared-glyph-dictionary-serialized-every-pages-matching-behind-one-mutex-and-that-lock-was-the-whole-critical-path).
+> **Stale** — `watches "lege-process/encoding/glyphfont.rs"` was matched by `8745b42d`, which touched `lege-process/encoding/glyphfont.rs`. See [REVIEW-REQUIRED.md](REVIEW-REQUIRED.md#truetypings-shared-glyph-dictionary-serialized-every-pages-matching-behind-one-mutex-and-that-lock-was-the-whole-critical-path).
 
 ### All ten findings of the 2026-09-05 TrueTyping/halftone review are fixed and corpus-validated
 
@@ -352,7 +352,7 @@ After two-stage body/mark line grouping, single-line word ownership with downwar
 
 **supersedes** `@lege-ecosystem.observation.truetyping-text-accuracy-20261127/3` · **derived_from** `@lege-ecosystem.work.glyph-font-text-output/1`
 
-> **Stale** — `watches "lege-process/encoding/glyphfont.rs"` was matched by `6a50595e`, which touched `lege-process/encoding/glyphfont.rs`. See [REVIEW-REQUIRED.md](REVIEW-REQUIRED.md#truetypings-searchable-text-kept-61-of-a-scans-words-after-alignment-punctuation-spacing-and-fold-fixes-96-985-on-t88).
+> **Stale** — `watches "lege-process/encoding/glyphfont.rs"` was matched by `f8fce322`, which touched `lege-process/encoding/glyphfont.rs`. See [REVIEW-REQUIRED.md](REVIEW-REQUIRED.md#truetypings-searchable-text-kept-61-of-a-scans-words-after-alignment-punctuation-spacing-and-fold-fixes-96-985-on-t88).
 
 ### Truetyping letters off their baseline came from rises measured against a tilted fit but drawn level, and from OCR text identities handing an occurrence another position variant's id
 
@@ -362,7 +362,7 @@ Two separate causes, both found on page 51 of crusadeswholesto0000lamb_1.pdf and
 
 **supersedes** `@lege-ecosystem.observation.truetyping-text-identity-moved-letters-off-their-baseline/1` · **derived_from** `@lege-ecosystem.observation.truetyping-letters-ride-off-their-baseline/2`, `@lege-ecosystem.work.truetyping-vertical-placement/1` · **verified_by** `@lege-ecosystem.evidence.stale-observation-requeue-20260908/1`
 
-> **Stale** — `watches "lege-process/encoding/glyphfont.rs"` was matched by `6a50595e`, which touched `lege-process/encoding/glyphfont.rs`. See [REVIEW-REQUIRED.md](REVIEW-REQUIRED.md#truetyping-letters-off-their-baseline-came-from-rises-measured-against-a-tilted-fit-but-drawn-level-and-from-ocr-text-identities-handing-an-occurrence-another-position-variants-id).
+> **Stale** — `watches "lege-process/encoding/glyphfont.rs"` was matched by `8745b42d`, which touched `lege-process/encoding/glyphfont.rs`. See [REVIEW-REQUIRED.md](REVIEW-REQUIRED.md#truetyping-letters-off-their-baseline-came-from-rises-measured-against-a-tilted-fit-but-drawn-level-and-from-ocr-text-identities-handing-an-occurrence-another-position-variants-id).
 
 ### Windows OCR first-pass benchmark on a 200-page scanned book
 
@@ -572,7 +572,7 @@ Every piece exists: PageAnalysis/GlyphDictionary give per-page placements of maj
 
 **derived_from** `@lege-ecosystem.decision.jbig2-is-the-default-pdf-text-format-again/3`
 
-> **At risk** at depth 2 via `derived_from` → `@lege-ecosystem.decision.jbig2-is-the-default-pdf-text-format-again/3` → `@lege-ecosystem.observation.truetyping-dictionary-lock-serialized-every-page/2` (stale: `watches "lege-process/encoding/glyphfont.rs"` was matched by `6a50595e`, which touched `lege-process/encoding/glyphfont.rs`.). See [REVIEW-REQUIRED.md](REVIEW-REQUIRED.md#rasterizing-truetypings-fitted-glyph-outlines-into-a-jbig2-text-layer-is-feasible-with-existing-pieces-and-would-give-regular-glyphs-at-jbig2-size).
+> **At risk** at depth 2 via `derived_from` → `@lege-ecosystem.decision.jbig2-is-the-default-pdf-text-format-again/3` → `@lege-ecosystem.observation.truetyping-dictionary-lock-serialized-every-page/2` (stale: `watches "lege-process/encoding/glyphfont.rs"` was matched by `8745b42d`, which touched `lege-process/encoding/glyphfont.rs`.). See [REVIEW-REQUIRED.md](REVIEW-REQUIRED.md#rasterizing-truetypings-fitted-glyph-outlines-into-a-jbig2-text-layer-is-feasible-with-existing-pieces-and-would-give-regular-glyphs-at-jbig2-size).
 
 ### jp2lam photographic quality limited by MSE-only, disabled-perceptual, size-matched rate control
 
@@ -1551,7 +1551,7 @@ PageAnalysis::of now drops a component that is grain: at most dpi^2/24000 ink pi
 
 **derived_from** `@lege-ecosystem.observation.grayscale-mode-makes-truetyping-smaller-and-cleaner/2`
 
-> **At risk** at depth 1 via `derived_from` → `@lege-ecosystem.observation.grayscale-mode-makes-truetyping-smaller-and-cleaner/2` (stale: `watches "lege-process/encoding/glyphfont.rs"` was matched by `6a50595e`, which touched `lege-process/encoding/glyphfont.rs`.). See [REVIEW-REQUIRED.md](REVIEW-REQUIRED.md#dropping-isolated-specks-before-glyph-matching-removes-18-percent-of-occurrences-and-7-percent-of-bytes-on-the-crusades-scan).
+> **At risk** at depth 1 via `derived_from` → `@lege-ecosystem.observation.grayscale-mode-makes-truetyping-smaller-and-cleaner/2` (stale: `watches "lege-process/encoding/glyphfont.rs"` was matched by `8745b42d`, which touched `lege-process/encoding/glyphfont.rs`.). See [REVIEW-REQUIRED.md](REVIEW-REQUIRED.md#dropping-isolated-specks-before-glyph-matching-removes-18-percent-of-occurrences-and-7-percent-of-bytes-on-the-crusades-scan).
 
 ### Glyph font Stage 2 unit tests
 
@@ -3547,7 +3547,7 @@ Log line: The source's ink is already bilevel (1200 px): truetyping is skipped a
 
 **derived_from** `@lege-ecosystem.decision.truetyping-leaves-bilevel-sources-alone/1`
 
-> **At risk** at depth 2 via `derived_from` → `@lege-ecosystem.decision.truetyping-leaves-bilevel-sources-alone/1` → `@lege-ecosystem.observation.grayscale-mode-makes-truetyping-smaller-and-cleaner/2` (stale: `watches "lege-process/encoding/glyphfont.rs"` was matched by `6a50595e`, which touched `lege-process/encoding/glyphfont.rs`.). See [REVIEW-REQUIRED.md](REVIEW-REQUIRED.md#truetyping-on-a-lege-jbig2-output-keeps-the-text-as-jbig2-at-the-requested-height).
+> **At risk** at depth 2 via `derived_from` → `@lege-ecosystem.decision.truetyping-leaves-bilevel-sources-alone/1` → `@lege-ecosystem.observation.grayscale-mode-makes-truetyping-smaller-and-cleaner/2` (stale: `watches "lege-process/encoding/glyphfont.rs"` was matched by `8745b42d`, which touched `lege-process/encoding/glyphfont.rs`.). See [REVIEW-REQUIRED.md](REVIEW-REQUIRED.md#truetyping-on-a-lege-jbig2-output-keeps-the-text-as-jbig2-at-the-requested-height).
 
 ### Letter substitutions, the glyph id wall and the upscaled-scan slowdown all verify
 
