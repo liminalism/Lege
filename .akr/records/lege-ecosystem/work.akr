@@ -1250,6 +1250,9 @@ record lege-ecosystem.work.dark-painting-binarizer-repro/1 : work {
     intent """
         With layout detection off, --grayscale --mrc-adaptive-mask erases full-page photographs: the adaptive (Sauvola) mask over the cleaned grey background marks most of a halftone photo as paper and the clean path whitens it, leaving a few outlines (reproduced 2026-11-27 on 1000ideasforbett0000unse_1.pdf pages 18, 21 and 27 in the private corpus). Plain --grayscale (the Best model's mask) keeps the same photos, and with layout on every mode keeps them because pictures are premasked regions. The October report of such pages turning black does not reproduce with the reworked binarizers. Fix the adaptive-mask path so a large continuous-tone area is not cleaned to paper, or refuse the flag without layout, with a regression test.
         """
+    trace [
+        "Fixed in clean_page_for_mrc_with_mask: outside the mask collar take the ordinary halo clean instead of paper; with layout on, output moves under 1 percent."
+    ]
     acceptance {
         check adaptive-mask-keeps-photos {
             statement """

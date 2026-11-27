@@ -431,9 +431,9 @@ pub fn preserve_ink_mask(
 /// (e.g. the Sauvola binarizer in `mrc_adaptive_mask` mode) and only the
 /// cleaned background is produced.
 ///
-/// The threshold-keyed halo clean is replaced by a **mask-keyed collar**:
-/// gray survives only within `halo.radius` of actual mask ink, everything
-/// else goes to paper white. This matters because an adaptive mask is
+/// Near mask ink the threshold-keyed halo clean is replaced by a
+/// **mask-keyed collar** within `halo.radius` of it; elsewhere the ordinary
+/// halo clean decides, so a picture the mask barely touches is not erased. This matters because an adaptive mask is
 /// thicker than the cleaned-image ink cores — with the ordinary halo the
 /// mask swallows the entire antialiasing skirt and `mrc_background`'s
 /// white-fill then leaves the JP2/IW44 layer empty, so the composite looks
@@ -465,6 +465,13 @@ pub fn clean_page_for_mrc_with_mask(
     let cleaned = clean_gray_page(&luma, width, height, &opts_no_halo)?;
     let mut pixels = cleaned.pixels;
     if let Some(halo) = halo {
+        // Outside the collar, keep what the ordinary threshold-keyed halo
+        // clean keeps rather than painting paper. On text pages that is
+        // white anyway; on a picture the adaptive mask barely touches (a
+        // full-page photo with layout detection off) it is the picture,
+        // which the collar alone would erase.
+        let mut ordinary = pixels.clone();
+        halo_clean(&mut ordinary, width, height, halo);
         let seed: Vec<u8> = ink_mask
             .iter()
             .map(|&v| if v == 0 { 255 } else { 0 })
@@ -494,7 +501,7 @@ pub fn clean_page_for_mrc_with_mask(
             } else {
                 255
             };
-            let real = if keep[i] != 0 { *px } else { 255 };
+            let real = if keep[i] != 0 { *px } else { ordinary[i] };
             *px = real.min(synth);
         });
     }
@@ -935,5 +942,38 @@ mod tests {
         assert!(clean_rgb_page(&[255; 11], 2, 2, &opts).is_err());
         assert!(clean_page_for_mrc(&[], 0, 2, &opts, 0).is_err());
         assert!(clean_page_for_mrc_with_mask(&[255; 12], 2, 2, &opts, &[255; 3]).is_err());
+    }
+
+    /// A full-page photograph with layout detection off: an adaptive mask
+    /// finds only a few edges in it, so the mask-keyed collar alone would
+    /// paint the rest of the picture paper-white. Its dark tones must survive
+    /// in the background exactly as they do on the plain grayscale path.
+    #[test]
+    fn adaptive_mask_keeps_a_photo_the_mask_barely_touches() {
+        let (width, height) = (96usize, 96usize);
+        // Paper with a large dark-grey block (the photo) in the middle.
+        let mut luma = vec![235u8; width * height];
+        for y in 16..80 {
+            for x in 16..80 {
+                luma[y * width + x] = 70;
+            }
+        }
+        let rgb: Vec<u8> = luma.iter().flat_map(|&v| [v, v, v]).collect();
+        // The adaptive mask marks only one short edge of the photo as ink.
+        let mut mask = vec![255u8; width * height];
+        for x in 16..24 {
+            mask[16 * width + x] = 0;
+        }
+        let opts = CleanOptions::production(300, false);
+        let cleaned = clean_page_for_mrc_with_mask(&rgb, width, height, &opts, &mask).unwrap();
+        let (plain, _) = clean_page_for_mrc(&rgb, width, height, &opts, 0).unwrap();
+        let centre = 48 * width + 48;
+        assert!(plain[centre] < 200, "plain grayscale keeps the photo");
+        assert_eq!(
+            cleaned[centre], plain[centre],
+            "the adaptive path keeps it too"
+        );
+        // Paper far from any ink is still cleaned to white.
+        assert_eq!(cleaned[4 * width + 4], 255);
     }
 }
