@@ -5,7 +5,7 @@ build {
     tool "akr 0.8.0"
     grammar "0.1"
     vocabulary "0.3"
-    source_graph "sha256:3271e50c876c5e5f99e7f93628a272591ff676e4604d448b380eeacfbac285c9"
+    source_graph "sha256:e5fa9e43e0783cd3a95dd5e67141b87876f726c81644356edca2138573309a7b"
 }
 
 source ".akr/project.akr" {
@@ -74,8 +74,8 @@ source ".akr/records/lege-ecosystem/milestones.akr" {
 }
 
 source ".akr/records/lege-ecosystem/observations.akr" {
-    hash "sha256:3b2628e457510485e088462b1eec634756196ea6fb39b951577f5c5a363b9711"
-    records 60
+    hash "sha256:99daa8d350cd90ed4d108fa26d5b5cbefff49cac9fbce7c4848fc0d54261ed80"
+    records 61
 }
 
 source ".akr/records/lege-ecosystem/papercuts.akr" {
@@ -99,7 +99,7 @@ source ".akr/records/lege-ecosystem/requirements.akr" {
 }
 
 source ".akr/records/lege-ecosystem/work.akr" {
-    hash "sha256:f149ea19cd8c9499624aea333b84e48639782f68979b579e072c2ca09fb5a0be"
+    hash "sha256:d7f9c9fa450ee07d3d2b5f334c06747c0d31972411ab0f2ab62bd0294b0de211"
     records 177
 }
 
@@ -112,7 +112,7 @@ resolution @lege-ecosystem.assessment.glyph-outlines-rasterized-into-a-jbig2-lay
 resolution @lege-ecosystem.decision.a-fold-may-not-change-a-letters-counters/1 {
     slot derived_from
     to @lege-ecosystem.work.glyph-font-text-output/1
-    hash "sha256:d39ab1284ebdd423d45ee6ad6579f60402c10e2c46a6f46200555200f9e2bf36"
+    hash "sha256:5431000d866027d8e54b370590aeba52845e0035df3c8b2b467dde63c610bd3f"
 }
 
 resolution @lege-ecosystem.decision.binarization-best-model-fast-adaptive/1 {
@@ -292,25 +292,25 @@ resolution @lege-ecosystem.decision.sauvola-model-out-of-default-build/1 {
 resolution @lege-ecosystem.decision.sideways-pages-are-turned-upright-with-rotate/1 {
     slot derived_from
     to @lege-ecosystem.work.glyph-font-text-output/1
-    hash "sha256:d39ab1284ebdd423d45ee6ad6579f60402c10e2c46a6f46200555200f9e2bf36"
+    hash "sha256:5431000d866027d8e54b370590aeba52845e0035df3c8b2b467dde63c610bd3f"
 }
 
 resolution @lege-ecosystem.decision.truetyping-banks-fonts-and-respects-a-bilevel-source/1 {
     slot derived_from
     to @lege-ecosystem.work.glyph-font-text-output/1
-    hash "sha256:d39ab1284ebdd423d45ee6ad6579f60402c10e2c46a6f46200555200f9e2bf36"
+    hash "sha256:5431000d866027d8e54b370590aeba52845e0035df3c8b2b467dde63c610bd3f"
 }
 
 resolution @lege-ecosystem.decision.truetyping-is-the-default-pdf-text-format/1 {
     slot derived_from
     to @lege-ecosystem.work.glyph-font-text-output/1
-    hash "sha256:d39ab1284ebdd423d45ee6ad6579f60402c10e2c46a6f46200555200f9e2bf36"
+    hash "sha256:5431000d866027d8e54b370590aeba52845e0035df3c8b2b467dde63c610bd3f"
 }
 
 resolution @lege-ecosystem.decision.truetyping-is-the-default-pdf-text-format/2 {
     slot derived_from
     to @lege-ecosystem.work.glyph-font-text-output/1
-    hash "sha256:d39ab1284ebdd423d45ee6ad6579f60402c10e2c46a6f46200555200f9e2bf36"
+    hash "sha256:5431000d866027d8e54b370590aeba52845e0035df3c8b2b467dde63c610bd3f"
 }
 
 resolution @lege-ecosystem.decision.truetyping-leaves-bilevel-sources-alone/1 {
@@ -419,6 +419,12 @@ resolution @lege-ecosystem.observation.truetyping-halftone-review-fixes-20260905
     slot derived_from
     to @lege-ecosystem.observation.truetyping-halftone-review-20260905/2
     hash "sha256:9b5b2383b32ada45594bbcf100ac16c31e40e60c8af05ab5d390dfac90183a81"
+}
+
+resolution @lege-ecosystem.observation.truetyping-text-accuracy-20261127/1 {
+    slot derived_from
+    to @lege-ecosystem.work.glyph-font-text-output/1
+    hash "sha256:5431000d866027d8e54b370590aeba52845e0035df3c8b2b467dde63c610bd3f"
 }
 
 resolution @lege-ecosystem.observation.truetyping-text-identity-moved-letters-off-their-baseline/1 {
@@ -1204,7 +1210,7 @@ resolution @lege-ecosystem.work.pipeline-memory-follow-ups/1 {
 resolution @lege-ecosystem.work.preservation-mode/1 {
     slot derived_from
     to @lege-ecosystem.work.glyph-font-text-output/1
-    hash "sha256:d39ab1284ebdd423d45ee6ad6579f60402c10e2c46a6f46200555200f9e2bf36"
+    hash "sha256:5431000d866027d8e54b370590aeba52845e0035df3c8b2b467dde63c610bd3f"
 }
 
 resolution @lege-ecosystem.work.preservation-mode/1 {
@@ -1228,7 +1234,7 @@ resolution @lege-ecosystem.work.preservation-mode/1 {
 resolution @lege-ecosystem.work.preservation-mode/2 {
     slot derived_from
     to @lege-ecosystem.work.glyph-font-text-output/1
-    hash "sha256:d39ab1284ebdd423d45ee6ad6579f60402c10e2c46a6f46200555200f9e2bf36"
+    hash "sha256:5431000d866027d8e54b370590aeba52845e0035df3c8b2b467dde63c610bd3f"
 }
 
 resolution @lege-ecosystem.work.preservation-mode/2 {
@@ -1252,7 +1258,7 @@ resolution @lege-ecosystem.work.preservation-mode/2 {
 resolution @lege-ecosystem.work.preservation-mode/3 {
     slot derived_from
     to @lege-ecosystem.work.glyph-font-text-output/1
-    hash "sha256:d39ab1284ebdd423d45ee6ad6579f60402c10e2c46a6f46200555200f9e2bf36"
+    hash "sha256:5431000d866027d8e54b370590aeba52845e0035df3c8b2b467dde63c610bd3f"
 }
 
 resolution @lege-ecosystem.work.preservation-mode/3 {
@@ -1282,7 +1288,7 @@ resolution @lege-ecosystem.work.truetyping-vertical-placement/1 {
 resolution @lege-ecosystem.work.truetyping-vertical-placement/1 {
     slot derived_from
     to @lege-ecosystem.work.glyph-font-text-output/1
-    hash "sha256:d39ab1284ebdd423d45ee6ad6579f60402c10e2c46a6f46200555200f9e2bf36"
+    hash "sha256:5431000d866027d8e54b370590aeba52845e0035df3c8b2b467dde63c610bd3f"
 }
 
 resolution @lege-ecosystem.work.windows-document-ocr-winsafe-installer/1 {
@@ -1671,6 +1677,11 @@ seal @lege-ecosystem.encode-quality.evidence.perceptual-pcrd-validation-2026-08-
 seal @lege-ecosystem.encode-quality.headsup-measurement-2026-08-11/1 {
     state verified
     hash "sha256:3cc337c74125a83000f74702a830f205cd11ce4ddc73b49527f297499109b76d"
+}
+
+seal @lege-ecosystem.encode-quality.improve-photographic-rate-control/1 {
+    state abandoned
+    hash "sha256:28c9fd475bbb365e495677b01eb9bf6215e798c27001325583c3133922d3a601"
 }
 
 seal @lege-ecosystem.encode-quality.jp2lam-alpha-channel-20261103/1 {
@@ -3621,6 +3632,11 @@ seal @lege-ecosystem.observation.truetyping-letters-ride-off-their-baseline/1 {
 seal @lege-ecosystem.observation.truetyping-letters-ride-off-their-baseline/2 {
     state superseded
     hash "sha256:6f676590cbe7dbefcbcf9613cd04ddffb1247c9415f0ff5cda696b8b3b854154"
+}
+
+seal @lege-ecosystem.observation.truetyping-text-accuracy-20261127/1 {
+    state verified
+    hash "sha256:0d05ac5cefd370082437dbdb35f2608a3abcbe066597adb10aed79f096dc57e2"
 }
 
 seal @lege-ecosystem.observation.truetyping-text-identity-moved-letters-off-their-baseline/1 {

@@ -729,12 +729,12 @@ record lege-ecosystem.decode-optimization-handoff/1 : work {
 
 record lege-ecosystem.encode-quality.improve-photographic-rate-control/1 : work {
     title "Measure jp2lam photographic quality per byte against JPEG XL and BPG after the SSIMULACRA2 controller"
-    state proposed
+    state abandoned
     intent """
         Measure whether jp2lam's photographic quality per byte has closed on JPEG XL and BPG since the encode-time SSIMULACRA2 floor landed (lege-ecosystem.work.jp2lam-ssim-controller, completed), and tune the perceptually weighted PCRD only if it still trails at equal score. Resolution-stable perceptual quality, the other half of the original goal, is delivered by that controller. Grade with the pinned in-tree metric; butteraugli stays a reported secondary column.
         """
     note """
-        Partial implementation landed: native lossy allocator size-matches perceptually weighted Annex-J curves to the established MSE byte target, maps luma masking through tile/subband origins, and uses smooth strength plus actual-bpp gates. Qualified same-size improvements at q25/q50/q75; q90 remains deliberately weak and mixed; q98 stays on the byte-identical baseline. The global quality controller is now tracked as lege-ecosystem.work.jp2lam-ssim-controller (shared JPXL SSIMULACRA2 metric; two-dimensional quant+PCRD search). Butteraugli is measurement-only.
+        Not needed: the owner already benchmarked JPEG XL against JPEG 2000 and found JPEG XL ahead in quality per byte everywhere (stated 2026-11-27), so jp2lam's photographic rate control is not worth measuring further.
         """
     supported_by [
         @lege-ecosystem.encode-quality.evidence.perceptual-pcrd-curve-2026-08-13/2,
@@ -1905,6 +1905,20 @@ record lege-ecosystem.work.glyph-font-text-output/1 : work {
     note """
         Audit 2026-11-27: outline fitting, OCR ToUnicode, /Rotate orientation, font banking and the counter and far-pixel fold gates shipped by 2026-09-06; truetyping was demoted to opt-in that day and glyphfont.rs has had no functional change since. Parked, not scheduled.
         """
+    trace [
+        "Remeasured 2026-11-27 on the 886-page Crusades scan: truetyping 10.9 MB in 3 fonts against JBIG2 15.1 MB; the September 22-font growth was gone.",
+        "Remaining growth was text variants, 62% of glyph ids. Scoring extracted words against the source text layer found only 61% recall, JBIG2 99%.",
+        "Cause: text_identity made a shape's first reading its text, often a loose misalignment; correct readings then became variants and the shape extracted wrong.",
+        "Fix: only exact alignments name a shape's text or split variants; loose readings only vote, and exact votes outrank any number of loose ones.",
+        "Kerned commas joined the bracket or letter beside them as compounds and lost their text; cells and compounds now require pieces to be vertically stacked.",
+        "Source text-layer word boxes sat 10 px above the ink, so short words were written again as invisible text; the traced-word test got more slack below.",
+        "Ligatures (fi, fl, ff) are one cell for two letters, so their words never aligned exactly; regrouping f-sequences to the cell count cut ligature misses 1539 to 260.",
+        "Word spaces came only from gap size, so tight spaces joined words; recorded word starts now get a space when the gap is at least 3 px.",
+        "First-come claiming let a word box take the next word's first letter; glyphs now go to the word holding their centre with most margin.",
+        "Two words in five were one cell short because touching letters form one component; loose words are now split by learned letter widths.",
+        "Strict exact-over-loose tiers let one stray exact vote beat 283 loose r votes; reverted to 4:1 scoring, with loose empty readings weighing nothing.",
+        "Results varied by about 3 points between identical runs until the tally change; after it, two runs scored 94.15% and 94.18% word recall."
+    ]
     claim the-user-found-it-on-two-books {
         text """
             The default's first day in a user's hands found both failures at once: the ITU T.88 specification came back with whole letters replaced in body text, and an 836-page book died after seven minutes on the 16-bit glyph id space while taking twenty minutes to get halfway.
@@ -3348,6 +3362,13 @@ record lege-ecosystem.work.jp2lam-jpeg-2000-decoder-optimization-plan/1 : work {
           slower, overlapping distributions); it is kept for removing one full-image allocation
           and copy, not as a speedup.
         """
+    trace [
+        "2026-11-27 recheck: nothing outside jp2lam calls DecodeRegion and exprim's jpx.rs passes region None, so windowed IDWT and Bgra8 output still lack a consumer.",
+        "Marker census over 2,100 local PDFs (about 2,100 JPX streams): no stream carries POC, PPM, PPT or RGN; COD was detected in every stream, so the scanner works.",
+        "Stage attribution on five real fixtures: Structures page 1 decodes in about 100 ms serial, half its 2026-08-09 baseline; Tier-1 and the first coefficient-plane touch dominate.",
+        "A fused 9/7 vertical lift and a Tier-1 empty-column skip were bit-exact but neutral; PGO was not tried because llvm-profdata is absent on this host.",
+        "The real lever is allocator churn: reusing the large coefficient buffers cut 20-30% on RGB scans, but retaining them costs up to ~110 MB per render worker."
+    ]
     supersedes [ @lege-ecosystem-perf.jp2.decode-optimization-handoff-2026-08-09/1 ]
     author "dk"
     source {

@@ -103,13 +103,37 @@ const SHIFT_LIMIT: i32 = 2;
 /// *character position* — the tittle of an `i` rather than a full stop, an
 /// apostrophe rather than a comma — and keep their own text votes.
 const SEMANTIC_RISE_MIN_PX: i32 = 4;
-/// Vote weight for a word whose glyph cells and characters match one to one.
-/// Loose alignments mislabel neighbours when OCR and segmentation disagree
-/// on where a word's pieces are, and a rare letter's few votes must not be
-/// outvoted by them.
-const EXACT_ALIGNMENT_WEIGHT: u32 = 4;
-/// Vote weight when characters had to be shared out by position.
-const LOOSE_ALIGNMENT_WEIGHT: u32 = 1;
+/// One vote from a word whose glyph cells and characters match one to one.
+/// Exact and loose votes are counted apart, each in its own half of a
+/// `u64` tally (see [`text_score`]).
+const EXACT_ALIGNMENT_WEIGHT: u64 = 1 << 32;
+/// One vote from a word whose characters had to be shared out over its
+/// cells.
+const LOOSE_ALIGNMENT_WEIGHT: u64 = 1;
+/// How much one exact vote counts against loose ones when a glyph's text is
+/// decided. Loose alignments mislabel neighbours when OCR and segmentation
+/// disagree on where a word's pieces are, and a rare letter's few exact
+/// votes must not be outvoted by them.
+const EXACT_VOTE_FACTOR: u64 = 4;
+
+/// The weight of `text`'s tally, kept as exact and loose vote counts (see
+/// [`EXACT_ALIGNMENT_WEIGHT`]), when a glyph's text is decided.
+///
+/// A loose alignment's empty reading only says the word ran out of
+/// characters before its cells, not that the piece carries no text, so it
+/// weighs nothing: it still maps a glyph no word ever read (a broken
+/// letter's smaller piece) to no text, but never outweighs a reading.
+/// Counted, such votes beat the full stop on an 886-page scan (3609 to 616)
+/// and every full stop vanished from its text.
+fn text_score(text: &str, tally: u64) -> u64 {
+    let exact = tally >> 32;
+    let loose = tally & u64::from(u32::MAX);
+    if text.is_empty() {
+        EXACT_VOTE_FACTOR * exact
+    } else {
+        EXACT_VOTE_FACTOR * exact + loose
+    }
+}
 /// Gaps beyond twice the page's typical letter gap plus this are word spaces.
 const LETTER_GAP_SLACK_PX: i32 = 3;
 
@@ -215,6 +239,135 @@ fn semantic_rise_limit(frame_h: usize) -> i32 {
     (frame_h as i32 / 2).max(SEMANTIC_RISE_MIN_PX)
 }
 
+/// Whether two pieces that overlap horizontally sit one above the other
+/// (the stem and dot of an `i`, a letter and its accent, the halves of a
+/// letter broken across) rather than side by side: their rows overlap by at
+/// most a third of the shorter one's height. Boxes are `top..bottom` rows,
+/// y down. A kerned comma after `]` or `y`, or a full stop tucked under an
+/// overhanging `f`, overlaps its neighbour in columns but shares its rows,
+/// and must stay its own character: as part of a compound it lost its text
+/// to the larger piece.
+fn stacked(top_a: i32, bottom_a: i32, top_b: i32, bottom_b: i32) -> bool {
+    let overlap = bottom_a.min(bottom_b) - top_a.max(top_b);
+    let shorter = (bottom_a - top_a).min(bottom_b - top_b);
+    overlap * 3 <= shorter
+}
+
+/// Share a word's `chars` out over fewer cells, in order, each cell taking
+/// one to three characters, so that each cell's width best matches the
+/// widths its characters typically run (`width_of`, learned from exact
+/// alignments; a character not seen yet counts as the word's average). The
+/// expected widths are scaled to the word's own total, so type size does
+/// not matter. `None` when the cells cannot hold the characters or no width
+/// is known yet.
+///
+/// Touching letters are one component, so in a heavy or tightly set scan
+/// most loose words are one cell short. Spreading characters evenly over
+/// the word's span put the extra letter in the wrong cell whenever the
+/// letters' widths differ: "Iron" set as "Ir", "o", "n" was read "I", "ro",
+/// "n", and every cell after the pair voted one letter off. On an 886-page
+/// scan two words in five were one cell short.
+fn share_by_width(
+    widths: &[i32],
+    chars: &[String],
+    width_of: impl Fn(&str) -> Option<f32>,
+) -> Option<Vec<String>> {
+    const MAX_PER_CELL: usize = 3;
+    let (n, m) = (widths.len(), chars.len());
+    if n == 0 || m < n || m > MAX_PER_CELL * n {
+        return None;
+    }
+    let known: Vec<Option<f32>> = chars.iter().map(|c| width_of(c)).collect();
+    let known_count = known.iter().flatten().count();
+    if known_count == 0 {
+        return None;
+    }
+    let known_mean = known.iter().flatten().sum::<f32>() / known_count as f32;
+    let expected: Vec<f32> = known.iter().map(|w| w.unwrap_or(known_mean)).collect();
+    let total: f32 = widths.iter().map(|&w| w.max(1) as f32).sum();
+    let scale = total / expected.iter().sum::<f32>().max(1.0);
+    // prefix[j]: scaled expected width of the first `j` characters.
+    let mut prefix = vec![0.0f32; m + 1];
+    for (j, w) in expected.iter().enumerate() {
+        prefix[j + 1] = prefix[j] + w * scale;
+    }
+    // cost[i][j]: least mismatch putting the first `j` characters in the
+    // first `i` cells; take[i][j]: how many the i-th cell took.
+    let mut cost = vec![vec![f32::INFINITY; m + 1]; n + 1];
+    let mut take = vec![vec![0usize; m + 1]; n + 1];
+    cost[0][0] = 0.0;
+    for i in 1..=n {
+        for j in i..=m {
+            for l in 1..=MAX_PER_CELL.min(j) {
+                let before = cost[i - 1][j - l];
+                if !before.is_finite() {
+                    continue;
+                }
+                let c = before + (widths[i - 1] as f32 - (prefix[j] - prefix[j - l])).abs();
+                if c < cost[i][j] {
+                    cost[i][j] = c;
+                    take[i][j] = l;
+                }
+            }
+        }
+    }
+    if !cost[n][m].is_finite() {
+        return None;
+    }
+    let mut texts = vec![String::new(); n];
+    let mut j = m;
+    for i in (1..=n).rev() {
+        let l = take[i][j];
+        texts[i - 1] = chars[j - l..j].concat();
+        j -= l;
+    }
+    Some(texts)
+}
+
+/// Printed ligatures, longest first: each is one glyph for its characters.
+const LIGATURES: &[&[&str]] = &[
+    &["f", "f", "i"],
+    &["f", "f", "l"],
+    &["f", "f"],
+    &["f", "i"],
+    &["f", "l"],
+];
+
+/// `chars` regrouped so that exactly `cells` tokens remain, by reading some
+/// of its `f` sequences as printed ligatures (longest first), or `None`
+/// when no choice of ligatures gives that count. A book that prints `fi`,
+/// `fl` and `ff` as one glyph otherwise never aligns a word containing one
+/// exactly: on an 886-page scan those words were one in eight of the words
+/// its text lost, the ligature reading as its last letter or its first.
+fn ligature_tokens(chars: &[String], cells: usize) -> Option<Vec<String>> {
+    fn split(chars: &[String], cells: usize, out: &mut Vec<String>) -> bool {
+        if chars.is_empty() {
+            return cells == 0;
+        }
+        // Every token takes at least one character and at most three.
+        if cells == 0 || chars.len() > 3 * cells || chars.len() < cells {
+            return false;
+        }
+        for lig in LIGATURES {
+            if chars.len() >= lig.len() && chars.iter().zip(lig.iter()).all(|(c, l)| c == l) {
+                out.push(chars[..lig.len()].concat());
+                if split(&chars[lig.len()..], cells - 1, out) {
+                    return true;
+                }
+                out.pop();
+            }
+        }
+        out.push(chars[0].clone());
+        if split(&chars[1..], cells - 1, out) {
+            return true;
+        }
+        out.pop();
+        false
+    }
+    let mut out = Vec::with_capacity(cells);
+    split(chars, cells, &mut out).then_some(out)
+}
+
 /// One recognized word on a page, in the page's pixel space (y down).
 #[derive(Clone, Debug, PartialEq)]
 pub struct TextWord {
@@ -238,7 +391,6 @@ struct GlyphBox {
     bottom: i32,
     /// Frame area: the largest glyph of a cell carries the cell's text.
     area: u32,
-    claimed: bool,
 }
 
 impl GlyphBox {
@@ -431,6 +583,11 @@ pub struct PageGlyphRuns {
     /// page this was traced from. The PDF draws it as an image under the
     /// text, so nothing on the page is lost.
     pub residual: Option<Arc<[u8]>>,
+    /// Glyphs that begin a recognized word, as positions in reading order
+    /// over `lines` (sorted). Filled by [`GlyphDictionary::record_text`];
+    /// empty when the page had no words. A word break there gets a space
+    /// even when the gap is narrower than a word space usually is.
+    pub word_starts: Vec<usize>,
 }
 
 impl PageGlyphRuns {
@@ -1223,7 +1380,11 @@ pub struct GlyphDictionary {
     /// be drawn at that other offset.
     text_variants: HashMap<(u32, String), u32>,
     /// Prototype → text it stood for, with vote counts, from `record_text`.
-    text_votes: HashMap<u32, HashMap<String, u32>>,
+    text_votes: HashMap<u32, HashMap<String, u64>>,
+    /// Character → (summed width, count) of the cells exact alignments
+    /// paired it with, pixels: how wide each letter runs in this document,
+    /// for sharing a loose word's characters out by width.
+    char_widths: HashMap<String, (u64, u32)>,
     /// Glyph ids the last build mapped to text.
     mapped: AtomicUsize,
     /// Outline fitting time of the last build.
@@ -1406,6 +1567,7 @@ impl GlyphDictionary {
             bank: 0,
             glyph_count,
             residual: residual.map(Arc::from),
+            word_starts: Vec::new(),
         }
     }
 
@@ -1456,8 +1618,9 @@ impl GlyphDictionary {
     }
 
     /// Replace the pieces stacked on one another within each line — glyphs
-    /// whose horizontal extents overlap by at least half the narrower one —
-    /// with one compound glyph. Pages then draw an `i` as one glyph with one
+    /// whose horizontal extents overlap by at least half the narrower one
+    /// and that sit one above the other (see [`stacked`]) — with one
+    /// compound glyph. Pages then draw an `i` as one glyph with one
     /// advance, text extraction sees one character, and the pen never has
     /// to move back to draw a dot over a stem it has already passed.
     ///
@@ -1469,6 +1632,7 @@ impl GlyphDictionary {
             let mut merged: Vec<PlacedGlyph> = Vec::with_capacity(line.glyphs.len());
             let mut cell: Vec<PlacedGlyph> = Vec::new();
             let (mut cx0, mut cx1) = (0, 0);
+            let (mut ctop, mut cbottom) = (0, 0);
             let flush =
                 |cell: &mut Vec<PlacedGlyph>, merged: &mut Vec<PlacedGlyph>, dict: &mut Self| {
                     match cell.len() {
@@ -1480,14 +1644,23 @@ impl GlyphDictionary {
                 };
             for g in &line.glyphs {
                 let x1 = g.x + g.width as i32;
+                let bottom = line.baseline_y + g.rise_px;
+                let top = bottom - self.protos[g.glyph as usize].frame_h as i32;
                 let overlap = cx1.min(x1) - cx0.max(g.x);
-                if !cell.is_empty() && overlap * 2 >= (cx1 - cx0).min(g.width as i32) {
+                if !cell.is_empty()
+                    && overlap * 2 >= (cx1 - cx0).min(g.width as i32)
+                    && stacked(ctop, cbottom, top, bottom)
+                {
                     cx0 = cx0.min(g.x);
                     cx1 = cx1.max(x1);
+                    ctop = ctop.min(top);
+                    cbottom = cbottom.max(bottom);
                 } else {
                     flush(&mut cell, &mut merged, self);
                     cx0 = g.x;
                     cx1 = x1;
+                    ctop = top;
+                    cbottom = bottom;
                 }
                 cell.push(*g);
             }
@@ -1590,11 +1763,33 @@ impl GlyphDictionary {
         }
     }
 
+    /// How wide `text` typically runs in this document (pixels), from the
+    /// exact alignments so far; `None` before any.
+    fn char_width(&self, text: &str) -> Option<f32> {
+        self.char_widths
+            .get(text)
+            .filter(|(_, count)| *count > 0)
+            .map(|(sum, count)| *sum as f32 / *count as f32)
+    }
+
     /// The glyph id that stands for `text` in glyph `idx`'s shape: `idx`
     /// itself for the first text the shape is recognized as, else a text
     /// variant of `idx` drawing the same outline at the same place with its
     /// own text votes. Whatever comes back sits exactly where `idx` does.
-    fn text_identity(&mut self, idx: u32, text: &str) -> u32 {
+    ///
+    /// Only an exact alignment (a word's cells and characters paired one to
+    /// one) may name a shape's text or split off a variant. A loose one
+    /// shares characters out by position and is often a letter off; letting
+    /// it decide made the first misread the shape's text, sent every correct
+    /// reading after it to a variant, and left the shape's other occurrences
+    /// and every cluster folded into it at the end reading as the misread:
+    /// on an 886-page scan 62% of the glyph ids were such variants and the
+    /// extracted text kept 61% of the source's words. A loose reading keeps
+    /// the occurrence's id and only votes.
+    fn text_identity(&mut self, idx: u32, text: &str, exact: bool) -> u32 {
+        if !exact {
+            return idx;
+        }
         // A text variant votes with the shape it came from, so the primary
         // text is keyed by the shape, not by the occurrence.
         let owner = {
@@ -1641,7 +1836,7 @@ impl GlyphDictionary {
     /// string, which keeps them out of extracted text.
     pub fn record_text(&mut self, runs: &mut PageGlyphRuns, words: &[TextWord]) {
         let mut remap: Vec<(usize, u32)> = Vec::new();
-        let mut boxes: Vec<GlyphBox> = runs
+        let boxes: Vec<GlyphBox> = runs
             .lines
             .iter()
             .flat_map(|line| line.glyphs.iter().map(move |g| (line.baseline_y, g)))
@@ -1657,46 +1852,70 @@ impl GlyphDictionary {
                     top: bottom - p.frame_h as i32,
                     bottom,
                     area: (p.frame_w * p.frame_h) as u32,
-                    claimed: false,
                 }
             })
             .collect();
 
-        for word in words {
-            let mapped = upright_word(&runs.frame, word);
-            let word = &mapped;
+        let words: Vec<TextWord> = words
+            .iter()
+            .map(|word| upright_word(&runs.frame, word))
+            .collect();
+        // Each glyph belongs to the word whose box holds its centre with the
+        // most room to spare. Word boxes are tight on the ink of letters
+        // without ascenders or descenders, so the vertical reach is
+        // generous (the next line's glyphs are a full line height away),
+        // and a box may stop a pixel or two short of its last letter. Taken
+        // first come, first served, that slack let a word take the next
+        // word's first letter, which then voted one letter off.
+        let reach = |word: &TextWord, b: &GlyphBox| -> Option<f32> {
+            let (cx, cy) = b.centre();
+            let reach_y = (word.y1 - word.y0) * 0.5;
+            (cx >= word.x0 - 2.0
+                && cx <= word.x1 + 2.0
+                && cy >= word.y0 - reach_y
+                && cy <= word.y1 + reach_y)
+                .then(|| (cx - word.x0).min(word.x1 - cx))
+        };
+        let owners: Vec<Option<usize>> = boxes
+            .iter()
+            .map(|b| {
+                words
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, w)| w.x1 > w.x0 && w.y1 > w.y0)
+                    .filter_map(|(k, w)| reach(w, b).map(|room| (k, room)))
+                    .max_by(|a, b| a.1.total_cmp(&b.1))
+                    .map(|(k, _)| k)
+            })
+            .collect();
+
+        for (k, word) in words.iter().enumerate() {
             let chars = word_characters(&word.text);
             if chars.is_empty() || word.x1 <= word.x0 || word.y1 <= word.y0 {
                 continue;
             }
-            // Word boxes are tight on the ink of letters without ascenders
-            // or descenders, so the vertical reach is generous; the next
-            // line's glyphs are still a full line height away.
-            let reach_y = (word.y1 - word.y0) * 0.5;
-            let mut members: Vec<GlyphBox> = Vec::new();
-            for b in boxes.iter_mut().filter(|b| !b.claimed) {
-                let (cx, cy) = b.centre();
-                if cx >= word.x0 - 2.0
-                    && cx <= word.x1 + 2.0
-                    && cy >= word.y0 - reach_y
-                    && cy <= word.y1 + reach_y
-                {
-                    b.claimed = true;
-                    members.push(*b);
-                }
-            }
+            let mut members: Vec<GlyphBox> = boxes
+                .iter()
+                .zip(&owners)
+                .filter(|(_, owner)| **owner == Some(k))
+                .map(|(b, _)| *b)
+                .collect();
             if members.is_empty() {
                 continue;
             }
             members.sort_by_key(|b| (b.x0, b.x1));
 
             // Cells: runs of glyphs whose horizontal extents overlap by at
-            // least half the narrower one.
+            // least half the narrower one and that are stacked, as
+            // `merge_stacked` groups them.
             let mut cells: Vec<(i32, i32, Vec<GlyphBox>)> = Vec::new();
             for b in members {
-                let joins = cells.last().is_some_and(|(cx0, cx1, _)| {
+                let joins = cells.last().is_some_and(|(cx0, cx1, cell)| {
                     let overlap = cx1.min(&b.x1) - cx0.max(&b.x0);
+                    let top = cell.iter().map(|c| c.top).min().unwrap_or(b.top);
+                    let bottom = cell.iter().map(|c| c.bottom).max().unwrap_or(b.bottom);
                     overlap * 2 >= (cx1 - cx0).min(b.x1 - b.x0)
+                        && stacked(top, bottom, b.top, b.bottom)
                 });
                 match cells.last_mut() {
                     Some((cx0, cx1, cell)) if joins => {
@@ -1708,22 +1927,42 @@ impl GlyphDictionary {
                 }
             }
             let n = cells.len();
-            let m = chars.len();
-            if n > 2 * m + 2 {
+            if n > 2 * chars.len() + 2 {
                 continue;
             }
+            // Text extraction needs to know where the words begin.
+            if let Some(first) = cells[0].2.first() {
+                runs.word_starts.push(first.slot);
+            }
+            // A printed ligature is one cell for two or three characters;
+            // read as such it pairs the word up exactly.
+            let chars = if n < chars.len() {
+                ligature_tokens(&chars, n).unwrap_or(chars)
+            } else {
+                chars
+            };
+            let m = chars.len();
 
             let mut cell_text: Vec<String> = vec![String::new(); n];
             let weight = if n == m {
-                for (slot, c) in cell_text.iter_mut().zip(&chars) {
+                for ((slot, c), (x0, x1, _)) in cell_text.iter_mut().zip(&chars).zip(&cells) {
                     slot.clone_from(c);
+                    let entry = self.char_widths.entry(c.clone()).or_insert((0, 0));
+                    entry.0 += u64::try_from(x1 - x0).unwrap_or(0);
+                    entry.1 += 1;
                 }
                 EXACT_ALIGNMENT_WEIGHT
             } else {
                 let x0 = cells[0].0 as f32;
                 let span = (cells[n - 1].1 as f32 - x0).max(1.0);
                 let nominal = |k: usize| x0 + (k as f32 + 0.5) * span / m as f32;
-                if n < m {
+                let widths: Vec<i32> = cells.iter().map(|(x0, x1, _)| x1 - x0).collect();
+                let by_width = (n < m)
+                    .then(|| share_by_width(&widths, &chars, |c| self.char_width(c)))
+                    .flatten();
+                if let Some(texts) = by_width {
+                    cell_text = texts;
+                } else if n < m {
                     // Each character goes to the cell under it.
                     for (k, c) in chars.iter().enumerate() {
                         let cx = nominal(k);
@@ -1779,7 +2018,8 @@ impl GlyphDictionary {
                     let glyph = if vote.is_empty() {
                         b.glyph
                     } else {
-                        let id = self.text_identity(b.glyph, vote);
+                        let id =
+                            self.text_identity(b.glyph, vote, weight == EXACT_ALIGNMENT_WEIGHT);
                         if id != b.glyph {
                             remap.push((b.slot, id));
                         }
@@ -1794,6 +2034,8 @@ impl GlyphDictionary {
                 }
             }
         }
+        runs.word_starts.sort_unstable();
+        runs.word_starts.dedup();
 
         if !remap.is_empty() {
             remap.sort_unstable();
@@ -1820,7 +2062,7 @@ impl GlyphDictionary {
     /// stop on the baseline and part of an `i` above it.
     pub fn to_unicode_entries(&self) -> Vec<(u16, String)> {
         let tally_key = |idx: u32| self.tally_key(idx);
-        let mut tallies: HashMap<u32, HashMap<&str, u32>> = HashMap::new();
+        let mut tallies: HashMap<u32, HashMap<&str, u64>> = HashMap::new();
         for (&idx, votes) in &self.text_votes {
             let tally = tallies.entry(tally_key(idx)).or_default();
             for (text, &n) in votes {
@@ -1840,7 +2082,8 @@ impl GlyphDictionary {
             };
             // Most votes; then the shorter text; then the smaller one.
             let winner = tally.iter().max_by(|a, b| {
-                a.1.cmp(b.1)
+                text_score(a.0, *a.1)
+                    .cmp(&text_score(b.0, *b.1))
                     .then_with(|| b.0.len().cmp(&a.0.len()))
                     .then_with(|| b.0.cmp(a.0))
             });
@@ -2536,7 +2779,7 @@ impl GlyphDictionary {
                 v.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
                 v.iter()
                     .take(3)
-                    .map(|(t, n)| format!("{t:?}x{n}"))
+                    .map(|(t, n)| format!("{t:?}x{}+{}", *n >> 32, *n & u64::from(u32::MAX)))
                     .collect::<Vec<_>>()
                     .join(" ")
             });
@@ -4490,5 +4733,183 @@ mod tests {
         dict.finalize();
         let font = dict.build_embedded_font().unwrap();
         exprim::read_face_metrics(&font.data, 0).expect("font parses");
+    }
+
+    fn rings(count: usize) -> (GlyphDictionary, PageGlyphRuns) {
+        let shapes: Vec<(&[&str], usize, usize)> =
+            (0..count).map(|k| (GLYPH_O, 2 + 10 * k, 2)).collect();
+        let page = page_with(&shapes, 10 * count + 4, 12);
+        let mut dict = GlyphDictionary::new();
+        let runs = dict.process_page(&page, 300);
+        (dict, runs)
+    }
+
+    fn text_of_glyph(dict: &GlyphDictionary, glyph: u32) -> String {
+        dict.to_unicode_entries()
+            .into_iter()
+            .find(|(gid, _)| u32::from(*gid) == glyph + FIRST_SHAPE_GID)
+            .map(|(_, t)| t)
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn a_loose_misreading_neither_names_a_shape_nor_splits_it() {
+        // The first word read over a ring has two characters for one cell, a
+        // loose alignment. It used to become the ring's text, and the two
+        // exact readings after it a text variant, so the ring extracted as
+        // "xu" wherever no word covered it.
+        let (mut dict, mut runs) = rings(3);
+        dict.record_text(
+            &mut runs,
+            &[
+                word("xu", 2.0, 2.0, 7.0, 7.0),
+                word("o", 12.0, 2.0, 17.0, 7.0),
+                word("o", 22.0, 2.0, 27.0, 7.0),
+            ],
+        );
+        let ids: Vec<u32> = runs.lines[0].glyphs.iter().map(|g| g.glyph).collect();
+        assert_eq!(ids.len(), 3);
+        assert!(ids.iter().all(|&g| g == ids[0]), "no text variant: {ids:?}");
+        assert_eq!(dict.len(), 1);
+        assert_eq!(text_of_glyph(&dict, ids[0]), "o");
+    }
+
+    #[test]
+    fn an_exact_vote_counts_as_four_loose_ones() {
+        let decide = |rings_count: usize| -> String {
+            let (mut dict, mut runs) = rings(rings_count);
+            let mut words = vec![word("o", 2.0, 2.0, 7.0, 7.0)];
+            for k in 1..rings_count {
+                let x = 2.0 + 10.0 * k as f32;
+                words.push(word("xu", x, 2.0, x + 5.0, 7.0));
+            }
+            dict.record_text(&mut runs, &words);
+            text_of_glyph(&dict, runs.lines[0].glyphs[0].glyph)
+        };
+        assert_eq!(decide(4), "o", "one exact against three loose");
+        assert_eq!(decide(6), "xu", "one exact against five loose");
+    }
+
+    #[test]
+    fn loose_empty_readings_never_outweigh_a_reading() {
+        let (mut dict, runs) = rings(1);
+        let glyph = runs.lines[0].glyphs[0].glyph;
+        // A hundred loose words ran out of characters over the ring; one
+        // read it as "o".
+        dict.text_votes.insert(
+            glyph,
+            HashMap::from([
+                (String::new(), 100 * LOOSE_ALIGNMENT_WEIGHT),
+                ("o".to_string(), LOOSE_ALIGNMENT_WEIGHT),
+            ]),
+        );
+        assert_eq!(text_of_glyph(&dict, glyph), "o");
+        // Read as nothing else, the ring still maps to no text, which keeps
+        // it out of extracted text.
+        dict.text_votes.insert(
+            glyph,
+            HashMap::from([(String::new(), 3 * LOOSE_ALIGNMENT_WEIGHT)]),
+        );
+        let entries = dict.to_unicode_entries();
+        assert!(entries.contains(&((glyph + FIRST_SHAPE_GID) as u16, String::new())));
+        // An exact empty reading (the smaller piece of a cell) still counts.
+        dict.text_votes.insert(
+            glyph,
+            HashMap::from([
+                (String::new(), 2 * EXACT_ALIGNMENT_WEIGHT),
+                ("o".to_string(), 7 * LOOSE_ALIGNMENT_WEIGHT),
+            ]),
+        );
+        assert_eq!(text_of_glyph(&dict, glyph), "");
+    }
+
+    #[test]
+    fn a_kerned_comma_is_not_stacked_onto_its_neighbour() {
+        // An `f`-like overhang with a comma tucked under its arm: the two
+        // overlap in columns but share their rows, so they are two
+        // characters, not one compound whose text the larger piece carries.
+        const OVERHANG: &[&str] = &[
+            "####", "#...", "#...", "#...", "#...", "#...", "#...", "#...", "#...", "#...", "#...",
+            "#...", "#...", "#...", "#...", "#...", "#...", "#...", "#...", "#...",
+        ];
+        const COMMA: &[&str] = &["##", "##", "##"];
+        let page = page_with(&[(OVERHANG, 2, 2), (COMMA, 4, 19)], 12, 24);
+        let mut dict = GlyphDictionary::new();
+        let runs = dict.process_page(&page, 72);
+        let placed: Vec<&PlacedGlyph> = runs.lines.iter().flat_map(|l| l.glyphs.iter()).collect();
+        assert_eq!(placed.len(), 2, "two glyphs: {placed:?}");
+        assert!(
+            dict.protos.iter().all(|p| p.parts.is_empty()),
+            "no compound was made"
+        );
+    }
+
+    #[test]
+    fn ligatures_regroup_a_word_to_its_cell_count() {
+        let tokens = |word: &str, cells: usize| -> Option<Vec<String>> {
+            let chars: Vec<String> = word.chars().map(String::from).collect();
+            ligature_tokens(&chars, cells)
+        };
+        assert_eq!(tokens("first", 4).unwrap(), ["fi", "r", "s", "t"]);
+        assert_eq!(tokens("office", 4).unwrap(), ["o", "ffi", "c", "e"]);
+        // A scan that prints only the `ff`: the longer reading cannot fit.
+        assert_eq!(tokens("office", 5).unwrap(), ["o", "ff", "i", "c", "e"]);
+        assert_eq!(tokens("fleet", 4).unwrap(), ["fl", "e", "e", "t"]);
+        // No ligature explains the missing cell.
+        assert_eq!(tokens("there", 4), None);
+        assert_eq!(tokens("first", 2), None);
+    }
+
+    #[test]
+    fn a_ligature_reads_as_its_letters_and_splits_off_no_variant() {
+        // "fi" printed as one ring-shaped glyph, then "r": two cells for
+        // the three characters of "fir".
+        let page = page_with(&[(GLYPH_O, 2, 2), (GLYPH_H, 12, 2)], 24, 12);
+        let mut dict = GlyphDictionary::new();
+        let mut runs = dict.process_page(&page, 300);
+        dict.record_text(&mut runs, &[word("fir", 2.0, 2.0, 17.0, 7.0)]);
+        let ids: Vec<u32> = runs.lines[0].glyphs.iter().map(|g| g.glyph).collect();
+        assert_eq!(text_of_glyph(&dict, ids[0]), "fi");
+        assert_eq!(text_of_glyph(&dict, ids[1]), "r");
+        assert_eq!(runs.word_starts, vec![0]);
+    }
+
+    #[test]
+    fn a_word_one_cell_short_is_shared_out_by_letter_width() {
+        let chars: Vec<String> = "Iron".chars().map(String::from).collect();
+        let learned = |c: &str| match c {
+            "I" => Some(9.0),
+            "r" => Some(11.0),
+            "o" => Some(18.0),
+            "n" => Some(19.0),
+            _ => None,
+        };
+        // "I" and "r" touch: the first cell is the pair.
+        assert_eq!(
+            share_by_width(&[20, 18, 19], &chars, learned).unwrap(),
+            ["Ir", "o", "n"]
+        );
+        // "r" and "o" touch instead.
+        assert_eq!(
+            share_by_width(&[9, 29, 19], &chars, learned).unwrap(),
+            ["I", "ro", "n"]
+        );
+        // Twice the type size, same letters: the scale does not matter.
+        assert_eq!(
+            share_by_width(&[40, 36, 38], &chars, learned).unwrap(),
+            ["Ir", "o", "n"]
+        );
+        // Nothing learned yet, or more characters than the cells can hold.
+        assert_eq!(share_by_width(&[20, 18, 19], &chars, |_| None), None);
+        assert_eq!(share_by_width(&[57], &chars, learned), None);
+    }
+
+    #[test]
+    fn stacking_needs_pieces_one_above_the_other() {
+        // A tittle two pixels above its stem; an accent touching the top
+        // row; a comma beside a letter's descending stroke.
+        assert!(stacked(8, 10, 12, 20));
+        assert!(stacked(0, 3, 2, 20));
+        assert!(!stacked(17, 20, 0, 20));
     }
 }

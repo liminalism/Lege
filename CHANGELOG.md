@@ -16,6 +16,13 @@
 - **Adaptive masking no longer erases photographs.** With layout detection off,
   `--grayscale --mrc-adaptive-mask` turned a full-page photograph into a few outlines on white;
   the picture now survives as it does with plain `--grayscale`.
+- **TrueTyping's text can be searched and copied.** Each glyph learned its letter from the first
+  word read over it, often a letter off, and kept it; an 886-page scan's text came out with 61% of
+  its words right. The letters are now settled by vote across the book, ligatures (fi, fl, ff)
+  and touching letters are read as the letters they are, word breaks follow the recognized words,
+  and short words are no longer written a second time as invisible text: 94% of the words are
+  right. The same book also needs one embedded font instead of three and comes out 22% smaller
+  (8.5 MB; JBIG2 makes 15 MB).
 
 ### Faster, leaner PDF reading (exprim)
 

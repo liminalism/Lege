@@ -1020,6 +1020,26 @@ record lege-ecosystem.observation.truetyping-letters-ride-off-their-baseline/2 :
     verified_by [ @lege-ecosystem.evidence.stale-observation-requeue-20260908/1 ]
 }
 
+record lege-ecosystem.observation.truetyping-text-accuracy-20261127/1 : observation {
+    title "Truetyping's searchable text kept 61% of a scan's words; after the alignment fixes 94%"
+    state verified
+    statement """
+        Measured on the 886-page archive.org Crusades scan (RGB JPEG pages with a hidden OCR text layer), debug-fast build, no OCR flag so the source text layer labels the glyphs. Words were scored by extracting each output's text with exprim and comparing lower-cased word lists against the source's own text layer (bag-of-words recall and precision, difflib in-order accuracy; script textscore.py in .agent/scratch/truetyping-growth-20261127).
+
+        At f88bae27: truetyping 10.9 MB in 3 fonts (147k glyph ids, 62% of them text variants), word recall 61.1%, precision 52.7%, in-order 50.9%. JBIG2 on the same build: 15.1 MB, recall 99.0% (its invisible layer is the source text itself).
+
+        With the fixes (exact-only text identities, stacked-only compounds, more slack for traced words, ligature regrouping, recognised word starts, best-margin word ownership, width-shared loose words, 4:1 scoring with loose empty readings weightless): 8.5 MB in 1 font (47k ids, 5.4k text variants), font plus ToUnicode 1.15 MB instead of 2.5 MB, recall 94.2%, precision 91.8%, in-order 92.6%, identical to within 0.03 points across two runs. Before the scoring change identical runs differed by up to 3 points because which shape mislabelled depended on page arrival order.
+
+        What is left: about 1000 words joined and 1000 split per 360 pages, inserted letters from specks and fragments read as text, and some dropped punctuation. On two scans without a text layer, with Windows OCR, recall against a JBIG2+OCR run rose 83.7% to 85.6% and 61% to 64%, but that reference OCR saw a bilevel raster instead of truetyping's grayscale one and is itself noisy, so those numbers only bound the change.
+        """
+    observed_at git:f88bae2754ca26eb16d5fd24396a548a9f08d56d
+    method command
+    watches [ "lege-process/encoding/glyphfont.rs", "lege-process/core/pdf_artifact.rs" ]
+    confidence high
+    derived_from [ @lege-ecosystem.work.glyph-font-text-output ]
+    author "dk"
+}
+
 record lege-ecosystem.observation.truetyping-text-identity-moved-letters-off-their-baseline/1 : observation {
     title "Truetyping letters off their baseline came from rises measured against a tilted fit but drawn level, and from OCR text identities handing an occurrence another position variant's id"
     state superseded

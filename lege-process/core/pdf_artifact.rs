@@ -144,6 +144,11 @@ const GLYPH_ADJUST_SNAP_PX: i32 = 1;
 /// within a few pixels; word spaces on a 2400-pixel page run 15 pixels and
 /// more even in small type.
 const WORD_SPACE_MIN_PX: i32 = 8;
+/// The gap that is a word space where a recognized word begins. Letters
+/// within a word land within a pixel or two of the pen, since a glyph's
+/// advance includes its usual letter gap; a word box that stops a letter
+/// short must not split its word ("b oat").
+const WORD_START_SPACE_MIN_PX: i32 = 3;
 
 fn glyph_runs_to_lines(
     page: &Page,
@@ -158,6 +163,7 @@ fn glyph_runs_to_lines(
     let sx = el.width as f64 / pixel_width as f64;
     let sy = el.height as f64 / pixel_height as f64;
     let mut lines = Vec::with_capacity(runs.lines.len());
+    let mut slot = 0usize;
     for line in &runs.lines {
         let Some(first) = line.glyphs.first() else {
             continue;
@@ -165,6 +171,8 @@ fn glyph_runs_to_lines(
         let mut items = Vec::with_capacity(line.glyphs.len());
         let mut pen_px: Option<i32> = None;
         for g in &line.glyphs {
+            let word_start = runs.word_starts.binary_search(&slot).is_ok();
+            slot += 1;
             let gid = u16::try_from(g.glyph + FIRST_SHAPE_GID).map_err(|_| {
                 anyhow!(
                     "glyph id {} exceeds the 16-bit CID space",
@@ -172,10 +180,16 @@ fn glyph_runs_to_lines(
                 )
             })?;
             // A word-sized gap gets the space glyph, adjusted so its advance
-            // plus the adjustment spans the gap exactly.
+            // plus the adjustment spans the gap exactly. So does a narrower
+            // gap before a glyph that begins a recognized word: a glyph's
+            // advance includes its usual letter gap, so a tight word space
+            // can leave the pen short of the minimum ("ofthe" on an
+            // archive.org scan).
             if let Some(pen) = pen_px {
                 let gap_units = (g.x - pen) * UNITS_PER_PIXEL;
-                if g.x - pen >= WORD_SPACE_MIN_PX {
+                if g.x - pen >= WORD_SPACE_MIN_PX
+                    || (word_start && g.x - pen >= WORD_START_SPACE_MIN_PX)
+                {
                     items.push(GlyphItem {
                         gid: SPACE_GID,
                         adjust: SPACE_ADVANCE as i32 - gap_units,
@@ -379,12 +393,18 @@ fn glyph_anchor_points(
 }
 
 /// Whether any traced glyph sits in this hOCR box. The anchor is a glyph's
-/// baseline-left corner, so the box is given a little slack around the ink.
+/// baseline-left corner, so the box is given a little slack above and more
+/// below: a word without descenders ends at its baseline, and a source text
+/// layer's boxes can sit higher still. On an archive.org scan they stood
+/// 10 px above ink 23 px tall, so short words such as "ate" missed by a few
+/// pixels and were written again as invisible text over their own glyphs,
+/// which extracted twice.
 fn box_is_traced(anchors: &[(f32, f32)], x: f32, y: f32, w: f32, h: f32) -> bool {
-    let pad = (h * 0.25).max(1.0);
-    anchors
-        .iter()
-        .any(|&(px, py)| px >= x - 2.0 && px <= x + w + 2.0 && py >= y - pad && py <= y + h + pad)
+    let above = (h * 0.25).max(1.0);
+    let below = (h * 0.75).max(1.0);
+    anchors.iter().any(|&(px, py)| {
+        px >= x - 2.0 && px <= x + w + 2.0 && py >= y - above && py <= y + h + below
+    })
 }
 
 /// Encode the page's glyph residual (0 = ink, page-sized) as the same kind of
@@ -544,6 +564,7 @@ mod tests {
             frame: Default::default(),
             bank: 0,
             residual: None,
+            word_starts: Vec::new(),
         };
         let page = Page {
             width: 1000.0,
@@ -607,6 +628,73 @@ mod tests {
     }
 
     #[test]
+    fn a_recognized_word_start_gets_a_space_in_a_narrow_gap() {
+        let glyph = |glyph: u32, x: i32| PlacedGlyph {
+            glyph,
+            x,
+            width: 20,
+            rise_px: 0,
+        };
+        // Pens at 30, 54 and 74. The second glyph is four pixels past the
+        // pen, short of a word space by size, but a recognized word begins
+        // there. The third begins a word too but sits a pixel from the pen:
+        // the word box stopped a letter short, and the word is not split.
+        // The third is drawn at the pen, so the fourth is six pixels out;
+        // it begins no word.
+        let runs = PageGlyphRuns {
+            lines: vec![RunLine {
+                baseline_y: 100,
+                glyphs: vec![glyph(0, 10), glyph(1, 34), glyph(0, 55), glyph(0, 80)],
+            }],
+            glyph_count: 4,
+            frame: Default::default(),
+            bank: 0,
+            residual: None,
+            word_starts: vec![0, 1, 2],
+        };
+        let el = ContentElement {
+            x: 0.0,
+            y: 0.0,
+            width: 1000.0,
+            height: 1000.0,
+            content: ContentType::GlyphText {
+                runs: Arc::new(runs.clone()),
+                pixel_width: 1000,
+                pixel_height: 1000,
+            },
+        };
+        let page = Page {
+            width: 1000.0,
+            height: 1000.0,
+            index: 0,
+            hocr_text: None,
+            binarized: None,
+            quarter_turns: 0,
+            elements: Vec::new(),
+        };
+        let lines = glyph_runs_to_lines(&page, &el, &runs, 1000, 1000).unwrap();
+        let items = &lines[0].items;
+        let gids: Vec<u16> = items.iter().map(|i| i.gid).collect();
+        assert_eq!(gids, vec![2, SPACE_GID, 3, 2, 2]);
+        // The space spans exactly the gap before the word it opens.
+        assert_eq!(items[1].adjust, SPACE_ADVANCE as i32 - 4 * UNITS_PER_PIXEL);
+        assert_eq!(items[2].adjust, 0);
+        assert_eq!(items[3].adjust, 0);
+        assert_eq!(items[4].adjust, -6 * UNITS_PER_PIXEL);
+    }
+
+    #[test]
+    fn a_word_box_above_its_baseline_still_counts_as_traced() {
+        // An archive.org text layer put "ate" (ink 23 px tall, baseline at
+        // row 266) in a box from row 233 to 256.
+        assert!(box_is_traced(&[(270.0, 266.0)], 268.0, 233.0, 44.0, 23.0));
+        // The next line's baseline, a line height further down, is not in it.
+        assert!(!box_is_traced(&[(270.0, 300.0)], 268.0, 233.0, 44.0, 23.0));
+        // Nor is a glyph beside the word.
+        assert!(!box_is_traced(&[(330.0, 266.0)], 268.0, 233.0, 44.0, 23.0));
+    }
+
+    #[test]
     fn an_upside_down_reading_is_left_alone() {
         // The 180° signal is much weaker than the sideways one, and a page
         // wrongly stood on its head is worse than one left as scanned.
@@ -633,6 +721,7 @@ mod tests {
             frame: Default::default(),
             bank: 0,
             residual,
+            word_starts: Vec::new(),
         };
         Page {
             width: 100.0,
