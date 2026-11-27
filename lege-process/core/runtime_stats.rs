@@ -598,7 +598,30 @@ fn read_process_status() -> ProcessStatus {
     result
 }
 
-#[cfg(not(target_os = "linux"))]
+/// The working set is Windows' resident set, and the OS keeps its own
+/// high-water mark, so `peak_rss_kib` is exact rather than sampled. Thread
+/// count needs a Toolhelp snapshot per sample and is left at zero.
+#[cfg(target_os = "windows")]
+fn read_process_status() -> ProcessStatus {
+    use windows::Win32::System::ProcessStatus::{GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS};
+    use windows::Win32::System::Threading::GetCurrentProcess;
+
+    let mut counters = PROCESS_MEMORY_COUNTERS::default();
+    let size = std::mem::size_of::<PROCESS_MEMORY_COUNTERS>() as u32;
+    // SAFETY: GetCurrentProcess returns a pseudo-handle that needs no
+    // closing, and `counters` is a correctly sized, writable struct.
+    let ok = unsafe { GetProcessMemoryInfo(GetCurrentProcess(), &mut counters, size) }.is_ok();
+    if !ok {
+        return ProcessStatus::default();
+    }
+    ProcessStatus {
+        threads: 0,
+        rss_kib: counters.WorkingSetSize / 1024,
+        peak_rss_kib: counters.PeakWorkingSetSize / 1024,
+    }
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
 fn read_process_status() -> ProcessStatus {
     // `/proc/self/status` is the canonical Phase 0 measurement source. Keep
     // unsupported fields explicit on other platforms rather than mixing units
@@ -621,6 +644,14 @@ mod tests {
     fn linux_process_status_has_threads() {
         let status = read_process_status();
         assert!(status.threads >= 1);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_process_status_reports_the_working_set() {
+        let status = read_process_status();
+        assert!(status.rss_kib > 0);
+        assert!(status.peak_rss_kib >= status.rss_kib);
     }
 
     #[test]

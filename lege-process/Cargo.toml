@@ -105,11 +105,14 @@ android_logger = { version = "0.15.1", optional = true }
 # crate uses is Win32 console control (core/main.rs, core/progress.rs) plus
 # GlobalMemoryStatusEx (pipeline/helper_functions.rs) — the latter is why
 # `winapi` was here, duplicating the same Win32 API through a second binding
-# crate.
+# crate — and GetProcessMemoryInfo/GetCurrentProcess for the runtime report's
+# peak working set (core/runtime_stats.rs).
 windows = { workspace = true, features = [
     "Win32_Foundation",
     "Win32_System_Console",
+    "Win32_System_ProcessStatus",
     "Win32_System_SystemInformation",
+    "Win32_System_Threading",
 ] }
 # `windows_core::BOOL` is the return type of the console control handler.
 windows-core = { workspace = true }

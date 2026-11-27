@@ -305,8 +305,10 @@ runtime asset becomes the no-GPU binarizer in any build.
   stub because there is no Tesseract on Windows.
   Consequently `lege`'s `windows` crate features are only what it actually
   calls — `Win32_Foundation`, `Win32_System_Console` (console control in
-  `core/main.rs` / `core/progress.rs`) and `Win32_System_SystemInformation`
-  (`GlobalMemoryStatusEx` in `pipeline/helper_functions.rs`). Do not re-add
+  `core/main.rs` / `core/progress.rs`), `Win32_System_SystemInformation`
+  (`GlobalMemoryStatusEx` in `pipeline/helper_functions.rs`), and
+  `Win32_System_ProcessStatus` + `Win32_System_Threading` (the peak working
+  set in `core/runtime_stats.rs`, reported by `--debug-runtime-stats`). Do not re-add
   `Media_Ocr`/`Graphics_Imaging`/Direct3D feature flags: wgpu requests its own.
 - **Linux/macOS**: Vulkan/Metal wgpu backend.
 - **Tensor cores**: on Vulkan adapters with cooperative matrices (NVIDIA RTX),
