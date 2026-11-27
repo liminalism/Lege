@@ -330,7 +330,10 @@ impl CompiledGraph {
         }
     }
 
-    pub(crate) fn build_with_shared(graph: &PreparedGraph, shared: &CompiledShared) -> Result<Self> {
+    pub(crate) fn build_with_shared(
+        graph: &PreparedGraph,
+        shared: &CompiledShared,
+    ) -> Result<Self> {
         Self::build_from_context(
             graph,
             shared.ctx.clone(),
@@ -663,7 +666,10 @@ impl CompiledGraph {
                 );
                 check_oom_scope(
                     oom_scope,
-                    &format!("wgpu out of memory allocating step params for op {}", op.name),
+                    &format!(
+                        "wgpu out of memory allocating step params for op {}",
+                        op.name
+                    ),
                 )?;
 
                 // Build bind group referencing persistent tensor buffers

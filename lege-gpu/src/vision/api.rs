@@ -475,25 +475,21 @@ impl SauvolaProcessor {
             }
             None => {
                 let graph = self.prepare_graph(width, height)?;
-                let estimated_bytes = CompiledGraph::estimate_resident_bytes(&graph)
-                    .with_context(|| {
+                let estimated_bytes =
+                    CompiledGraph::estimate_resident_bytes(&graph).with_context(|| {
                         format!("failed to plan sauvola memory for {width}x{height}")
                     })?;
                 cache.evict_for(estimated_bytes, sauvola_cache_budget_bytes());
-                let compiled = match Self::compile_prepared(
-                    width,
-                    height,
-                    &graph,
-                    cache.shared.as_ref(),
-                ) {
-                    Ok(compiled) => compiled,
-                    Err(err) if !cache.entries.is_empty() => {
-                        cache.clear_entries();
-                        Self::compile_prepared(width, height, &graph, cache.shared.as_ref())
-                            .map_err(|_| err)?
-                    }
-                    Err(err) => return Err(err),
-                };
+                let compiled =
+                    match Self::compile_prepared(width, height, &graph, cache.shared.as_ref()) {
+                        Ok(compiled) => compiled,
+                        Err(err) if !cache.entries.is_empty() => {
+                            cache.clear_entries();
+                            Self::compile_prepared(width, height, &graph, cache.shared.as_ref())
+                                .map_err(|_| err)?
+                        }
+                        Err(err) => return Err(err),
+                    };
                 if cache.shared.is_none() {
                     cache.shared = Some(compiled.shared_resources());
                 }
