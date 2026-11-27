@@ -192,3 +192,6 @@ assets = [
 
 # Point cargo-deb to the directory that contains maintainer scripts (postinst, postrm, etc.)
 # No maintainer scripts; rely on Debian triggers to update desktop/icon caches
+
+[lints.clippy]
+cognitive_complexity = "warn"

@@ -346,11 +346,11 @@ impl Flattener {
                 }
             }
         }
-        if let Some((across, down)) = settings.smooth {
-            if spread || settings.force_pages == 1 || first.spread < 0.5 {
-                for grid in grids.iter_mut() {
-                    *grid = smooth_grid(grid, across, down);
-                }
+        if let Some((across, down)) = settings.smooth
+            && (spread || settings.force_pages == 1 || first.spread < 0.5)
+        {
+            for grid in grids.iter_mut() {
+                *grid = smooth_grid(grid, across, down);
             }
         }
         for grid in &grids {
@@ -495,59 +495,16 @@ fn smooth_grid(grid: &Grid, across: usize, down: usize) -> Grid {
         for i in 0..rows {
             for j in 0..cols {
                 let (w, row, node) = (weights[i * cols + j], row_of(i, j), grid.at(i, j));
-                for a in 0..n {
-                    for b in 0..n {
-                        normal[a * n + b] += w * row[a] * row[b];
-                    }
-                    right[a][0] += w * row[a] * node[0];
-                    right[a][1] += w * row[a] * node[1];
-                }
+                add_normal_row(&mut normal, &mut right, w, &row, node);
             }
         }
-        // Gaussian elimination with partial pivoting; the basis is well conditioned.
-        for k in 0..n {
-            let pivot = (k..n)
-                .max_by(|&a, &b| normal[a * n + k].abs().total_cmp(&normal[b * n + k].abs()))
-                .unwrap();
-            if normal[pivot * n + k].abs() < 1e-12 {
-                return grid.clone();
-            }
-            if pivot != k {
-                for c in 0..n {
-                    normal.swap(k * n + c, pivot * n + c);
-                }
-                right.swap(k, pivot);
-            }
-            for r in k + 1..n {
-                let factor = normal[r * n + k] / normal[k * n + k];
-                if factor != 0.0 {
-                    for c in k..n {
-                        normal[r * n + c] -= factor * normal[k * n + c];
-                    }
-                    right[r][0] -= factor * right[k][0];
-                    right[r][1] -= factor * right[k][1];
-                }
-            }
-        }
-        let mut solution = vec![[0.0f64; 2]; n];
-        for k in (0..n).rev() {
-            for axis in 0..2 {
-                let mut value = right[k][axis];
-                for c in k + 1..n {
-                    value -= normal[k * n + c] * solution[c][axis];
-                }
-                solution[k][axis] = value / normal[k * n + k];
-            }
-        }
+        let Some(solution) = solve_normal_equations(&mut normal, &mut right) else {
+            return grid.clone();
+        };
         let mut residuals = Vec::with_capacity(rows * cols);
         for i in 0..rows {
             for j in 0..cols {
-                let row = row_of(i, j);
-                let mut node = [0.0; 2];
-                for a in 0..n {
-                    node[0] += row[a] * solution[a][0];
-                    node[1] += row[a] * solution[a][1];
-                }
+                let node = evaluate_basis(&row_of(i, j), &solution);
                 let actual = grid.at(i, j);
                 residuals.push((node[0] - actual[0]).hypot(node[1] - actual[1]));
                 fitted[i * cols + j] = node;
@@ -569,6 +526,73 @@ fn smooth_grid(grid: &Grid, across: usize, down: usize) -> Grid {
         cols,
         nodes: fitted,
     }
+}
+
+/// Add one node's weighted equation to the normal equations of the fit:
+/// `row` holds its basis values, `node` its position, `w` its weight.
+/// `normal` is `n × n` and `right` has `n` entries, `n` being `row.len()`.
+fn add_normal_row(normal: &mut [f64], right: &mut [[f64; 2]], w: f64, row: &[f64], node: P2) {
+    let n = row.len();
+    for a in 0..n {
+        for b in 0..n {
+            normal[a * n + b] += w * row[a] * row[b];
+        }
+        right[a][0] += w * row[a] * node[0];
+        right[a][1] += w * row[a] * node[1];
+    }
+}
+
+/// Solve the `n × n` normal equations for both axes at once, by Gaussian
+/// elimination with partial pivoting (both inputs are consumed);
+/// `None` when they are singular. The basis is well conditioned.
+fn solve_normal_equations(normal: &mut [f64], right: &mut [[f64; 2]]) -> Option<Vec<[f64; 2]>> {
+    let n = right.len();
+    for k in 0..n {
+        let pivot = (k..n)
+            .max_by(|&a, &b| normal[a * n + k].abs().total_cmp(&normal[b * n + k].abs()))
+            .unwrap();
+        if normal[pivot * n + k].abs() < 1e-12 {
+            return None;
+        }
+        if pivot != k {
+            for c in 0..n {
+                normal.swap(k * n + c, pivot * n + c);
+            }
+            right.swap(k, pivot);
+        }
+        for r in k + 1..n {
+            let factor = normal[r * n + k] / normal[k * n + k];
+            if factor == 0.0 {
+                continue;
+            }
+            for c in k..n {
+                normal[r * n + c] -= factor * normal[k * n + c];
+            }
+            right[r][0] -= factor * right[k][0];
+            right[r][1] -= factor * right[k][1];
+        }
+    }
+    let mut solution = vec![[0.0f64; 2]; n];
+    for k in (0..n).rev() {
+        for axis in 0..2 {
+            let mut value = right[k][axis];
+            for c in k + 1..n {
+                value -= normal[k * n + c] * solution[c][axis];
+            }
+            solution[k][axis] = value / normal[k * n + k];
+        }
+    }
+    Some(solution)
+}
+
+/// The fitted surface's position at a node whose basis values are `row`.
+fn evaluate_basis(row: &[f64], solution: &[[f64; 2]]) -> P2 {
+    let mut node = [0.0; 2];
+    for a in 0..row.len() {
+        node[0] += row[a] * solution[a][0];
+        node[1] += row[a] * solution[a][1];
+    }
+    node
 }
 
 /// Bilinear read of an edge-aligned grid at flat-page positions (x, y), where

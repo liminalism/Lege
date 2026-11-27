@@ -1705,6 +1705,40 @@ record lege-ecosystem.work.fixed-point-9-7-is-a-later-experiment/1 : work {
     }
 }
 
+record lege-ecosystem.work.flat-control-flow-review-20261127/1 : work {
+    title "Flatten control flow and cut cognitive complexity across the Lege Rust code"
+    state completed
+    scope [
+        path "Cargo.toml",
+        path "clippy.toml",
+        path "lege-android/**",
+        path "lege-document-ocr/**",
+        path "lege-gpu/**",
+        path "lege-misc/**",
+        path "lege-ocr/**",
+        path "lege-pdf/**",
+        path "lege-process/**",
+        path "lege-render-wgpu/**"
+    ]
+    intent """
+        Most of the code dates from last year and predates the flat-control-flow rule (more than three nesting levels is a defect; guard clauses, let-else, exhaustive match; helpers around coherent responsibilities). Bring every first-party Rust file in line without changing behaviour, and make Clippy's excessive_nesting and cognitive_complexity enforce it with local, reasoned exceptions only.
+        """
+    note """
+        No version bump: lege stays 1.6.1. Vendored rfd is out of scope.
+        """
+    trace [
+        "Calibrated excessive_nesting: it counts impl and fn bodies, so threshold 5 flags four control levels in methods but only five in free functions; threshold 4 over-flags three-level methods.",
+        "Survey at threshold 4: about 800 hits in 120 files, 27 functions over cognitive complexity 25; threshold 5 gave 193 nesting hits.",
+        "Split the 400 files into five crate-aligned partitions, one Opus worker each in its own worktree, so half-edited files never break another worker's cargo check.",
+        "Agent worktree isolation refused this checkout (path case Lege vs lege) and based worktrees on a stale commit; made five HEAD worktrees by hand instead.",
+        "Committed threshold 5 rather than 4: at 4 every three-level method warns, which the rule allows; four-level free functions were fixed by reading the threshold-4 survey.",
+        "Most new code is extraction around responsibilities (CLI option groups, pipeline stages, writer actors); reference kernels, flood fills and spec-shaped loops keep local reasoned allows.",
+        "Two orchestration functions keep a cognitive_complexity allow: their remaining score is await/? desugaring and no-op logging macros, not branching.",
+        "Enabled cognitive_complexity in every first-party manifest because lege, lege-gpu, lege-ocr and the GUI do not inherit workspace lints."
+    ]
+    author "dk"
+}
+
 record lege-ecosystem.work.fold-automatic-toc-into-ocr/1 : work {
     title "Fold automatic table of contents into the GUI OCR feature"
     state superseded

@@ -542,204 +542,167 @@ fn import_teachers(
         // One transaction per 2,000 pages: a stopped import keeps what it
         // committed and the rescan carries on from there.
         let tx = conn.transaction().map_err(|e| e.to_string())?;
-        {
-            let mut ins_page = tx
-                .prepare_cached(
-                    "INSERT INTO pages (page_key, seq, book_id, split, set_name, source_path, file_name, \
-                     width, height, page_index, queue_reason, priority, abandon, abandon_large, abandon_imported) \
-                     VALUES (?1, ?2, ?3, ?4, 'pool', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?12)",
-                )
-                .map_err(|e| e.to_string())?;
-            let mut ins_ann = tx
-                .prepare_cached(
-                    "INSERT INTO annotations (id, page_key, ord, class_id, x0, y0, x1, y1, provenance_json) \
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-                )
-                .map_err(|e| e.to_string())?;
-            let mut ins_imp = tx
-                .prepare_cached(
-                    "INSERT INTO imported_annotations (id, page_key, ord, class_id, x0, y0, x1, y1, provenance_json) \
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-                )
-                .map_err(|e| e.to_string())?;
-            let mut set_counts = tx
-                .prepare_cached(&format!(
-                    "UPDATE pages SET {}, fig_area = ?{} WHERE page_key = ?1",
-                    (0..NUM_CLASSES)
-                        .map(|c| format!("n{c} = ?{}", c + 2))
-                        .collect::<Vec<_>>()
-                        .join(", "),
-                    NUM_CLASSES + 2
-                ))
-                .map_err(|e| e.to_string())?;
-            let mut ins_pred = tx
-                .prepare_cached(
-                    "INSERT INTO predictions (model, page_key, class_id, score, x0, y0, x1, y1) \
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-                )
-                .map_err(|e| e.to_string())?;
-            let mut pages_in_tx = 0;
-            loop {
-                line.clear();
-                let n = reader.read_line(&mut line).map_err(|e| e.to_string())?;
-                if n == 0 {
-                    drop((ins_page, ins_ann, ins_imp, ins_pred, set_counts));
-                    tx.commit().map_err(|e| e.to_string())?;
-                    break 'outer;
-                }
-                read += n as u64;
-                lineno += 1;
-                if lineno % 4096 == 0 {
-                    progress("Importing detections", read, total);
-                }
-                let text = line.trim();
-                if text.is_empty() {
-                    continue;
-                }
-                let row: TeacherRow = match serde_json::from_str(text) {
-                    Ok(r) => r,
-                    Err(e) => {
-                        if report.warnings.len() < 20 {
-                            report
-                                .warnings
-                                .push(format!("teachers_raw.jsonl line {lineno}: {e}"));
-                        }
-                        continue;
-                    }
-                };
-                if existing.contains(&row.image_id) || !seen.insert(row.image_id.clone()) {
-                    report.pages_present += 1;
-                    continue;
-                }
-                let (book, stem, index) = split_image_id(&row.image_id);
-                let ordinal = *ordinals.entry(book.clone()).or_insert_with(|| {
-                    report.books_added += 1;
-                    next_ordinal += 1;
-                    next_ordinal - 1
-                });
-                let seq = ordinal * BOOK_STRIDE + index.unwrap_or(0).clamp(0, BOOK_STRIDE - 1);
-                let file_name = format!("images/{book}/{stem}.jpg");
-                let source = images_root.join(&book).join(format!("{stem}.jpg"));
-                let (reason, priority) = tiers
-                    .get(&row.image_id)
-                    .cloned()
-                    .map_or((None, 0.0), |(r, p)| (Some(r), p));
-                let (w, h) = (row.width as f64, row.height as f64);
-                let mut prefill: Vec<Mapped> = match prefill_model {
-                    Some(model) => {
-                        let (dets, map) = teacher(&row, model);
-                        map_dets(dets, map, opts.prefill_min_score, w, h)
-                    }
-                    None => Vec::new(),
-                };
-                if opts.prefill == Prefill::Yolo && prefill.iter().any(|m| m.class_id == ABANDON) {
-                    let pp = map_dets(&row.paddle, paddle_class, opts.resolve_min_score, w, h);
-                    report.abandon_resolved += resolve_abandon(&mut prefill, &pp, opts.resolve_iou);
-                }
-                let abandon = prefill.iter().filter(|m| m.class_id == ABANDON);
-                let n_abandon = abandon.clone().count() as i64;
-                let n_large = abandon
-                    .filter(|m| Region::Large.contains(&m.bbox, w, h))
-                    .count() as i64;
-                ins_page
-                    .execute(params![
-                        row.image_id,
-                        seq,
-                        book,
-                        splits.get(&book).map(String::as_str).unwrap_or("new"),
-                        source.to_string_lossy(),
-                        file_name,
-                        row.width,
-                        row.height,
-                        index,
-                        reason,
-                        priority,
-                        n_abandon,
-                        n_large
-                    ])
-                    .map_err(|e| format!("{}: {e}", row.image_id))?;
-                let mut counts: Vec<rusqlite::types::Value> =
-                    vec![rusqlite::types::Value::Text(row.image_id.clone())];
-                for c in 0..NUM_CLASSES {
-                    let n = prefill.iter().filter(|m| m.class_id as usize == c).count();
-                    counts.push(rusqlite::types::Value::Integer(n as i64));
-                }
-                // The largest figure box, as `database::FIG_AREA_SET` keeps it.
-                let fig_area = prefill
-                    .iter()
-                    .filter(|m| m.class_id == crate::annotation::labels::FIGURE)
-                    .map(|m| m.bbox.width() * m.bbox.height())
-                    .fold(0.0, f64::max);
-                counts.push(rusqlite::types::Value::Real(fig_area));
-                set_counts
-                    .execute(rusqlite::params_from_iter(counts))
-                    .map_err(|e| e.to_string())?;
-                if let Some(model) = prefill_model {
-                    for (ord, m) in prefill.iter().enumerate() {
-                        let id = format!("{}#{}", row.image_id, ord);
-                        let prov = match &m.resolved {
-                            Some((pp_class, pp_score)) => json!({
-                                "source": model, "score": m.score, "teacher_class": m.fine,
-                                "label_from": PADDLE_MODEL, "label_class": pp_class,
-                                "label_score": pp_score,
-                            }),
-                            None => {
-                                json!({"source": model, "score": m.score, "teacher_class": m.fine})
-                            }
-                        }
-                        .to_string();
-                        let b = &m.bbox;
-                        let args = params![
-                            id,
-                            row.image_id,
-                            ord as i64,
-                            m.class_id as i64,
-                            b.x0,
-                            b.y0,
-                            b.x1,
-                            b.y1,
-                            prov
-                        ];
-                        ins_ann.execute(args).map_err(|e| e.to_string())?;
-                        ins_imp.execute(args).map_err(|e| e.to_string())?;
-                        report.boxes += 1;
-                        if m.class_id == ABANDON {
-                            report.abandon_boxes += 1;
-                        }
-                    }
-                }
-                let layers: Vec<&str> = match (prefill_model, layer_model) {
-                    (_, Some(l)) => vec![l],
-                    (None, None) => vec![YOLO_MODEL, PADDLE_MODEL],
-                    _ => vec![],
-                };
-                for model in layers {
-                    let (dets, map) = teacher(&row, model);
-                    for m in map_dets(dets, map, opts.layer_min_score, w, h) {
-                        let b = &m.bbox;
-                        ins_pred
-                            .execute(params![
-                                model,
-                                row.image_id,
-                                m.class_id as i64,
-                                m.score,
-                                b.x0,
-                                b.y0,
-                                b.x1,
-                                b.y1
-                            ])
-                            .map_err(|e| e.to_string())?;
-                        report.predictions += 1;
-                    }
-                }
-                report.pages_added += 1;
-                pages_in_tx += 1;
-                if pages_in_tx >= 2000 {
-                    break;
-                }
+        let mut ins_page = tx
+            .prepare_cached(
+                "INSERT INTO pages (page_key, seq, book_id, split, set_name, source_path, file_name, \
+                 width, height, page_index, queue_reason, priority, abandon, abandon_large, abandon_imported) \
+                 VALUES (?1, ?2, ?3, ?4, 'pool', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?12)",
+            )
+            .map_err(|e| e.to_string())?;
+        let mut ins_ann = tx
+            .prepare_cached(
+                "INSERT INTO annotations (id, page_key, ord, class_id, x0, y0, x1, y1, provenance_json) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            )
+            .map_err(|e| e.to_string())?;
+        let mut ins_imp = tx
+            .prepare_cached(
+                "INSERT INTO imported_annotations (id, page_key, ord, class_id, x0, y0, x1, y1, provenance_json) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            )
+            .map_err(|e| e.to_string())?;
+        let mut set_counts = tx
+            .prepare_cached(&format!(
+                "UPDATE pages SET {}, fig_area = ?{} WHERE page_key = ?1",
+                (0..NUM_CLASSES)
+                    .map(|c| format!("n{c} = ?{}", c + 2))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                NUM_CLASSES + 2
+            ))
+            .map_err(|e| e.to_string())?;
+        let mut ins_pred = tx
+            .prepare_cached(
+                "INSERT INTO predictions (model, page_key, class_id, score, x0, y0, x1, y1) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            )
+            .map_err(|e| e.to_string())?;
+        let mut pages_in_tx = 0;
+        loop {
+            line.clear();
+            let n = reader.read_line(&mut line).map_err(|e| e.to_string())?;
+            if n == 0 {
+                drop((ins_page, ins_ann, ins_imp, ins_pred, set_counts));
+                tx.commit().map_err(|e| e.to_string())?;
+                break 'outer;
             }
-            drop((ins_page, ins_ann, ins_imp, ins_pred, set_counts));
+            read += n as u64;
+            lineno += 1;
+            if lineno % 4096 == 0 {
+                progress("Importing detections", read, total);
+            }
+            let text = line.trim();
+            if text.is_empty() {
+                continue;
+            }
+            let row: TeacherRow = match serde_json::from_str(text) {
+                Ok(r) => r,
+                Err(e) if report.warnings.len() < 20 => {
+                    report
+                        .warnings
+                        .push(format!("teachers_raw.jsonl line {lineno}: {e}"));
+                    continue;
+                }
+                Err(_) => continue,
+            };
+            if existing.contains(&row.image_id) || !seen.insert(row.image_id.clone()) {
+                report.pages_present += 1;
+                continue;
+            }
+            let (book, stem, index) = split_image_id(&row.image_id);
+            let ordinal = *ordinals.entry(book.clone()).or_insert_with(|| {
+                report.books_added += 1;
+                next_ordinal += 1;
+                next_ordinal - 1
+            });
+            let seq = ordinal * BOOK_STRIDE + index.unwrap_or(0).clamp(0, BOOK_STRIDE - 1);
+            let file_name = format!("images/{book}/{stem}.jpg");
+            let source = images_root.join(&book).join(format!("{stem}.jpg"));
+            let (reason, priority) = tiers
+                .get(&row.image_id)
+                .cloned()
+                .map_or((None, 0.0), |(r, p)| (Some(r), p));
+            let (w, h) = (row.width as f64, row.height as f64);
+            let mut prefill: Vec<Mapped> = match prefill_model {
+                Some(model) => {
+                    let (dets, map) = teacher(&row, model);
+                    map_dets(dets, map, opts.prefill_min_score, w, h)
+                }
+                None => Vec::new(),
+            };
+            if opts.prefill == Prefill::Yolo && prefill.iter().any(|m| m.class_id == ABANDON) {
+                let pp = map_dets(&row.paddle, paddle_class, opts.resolve_min_score, w, h);
+                report.abandon_resolved += resolve_abandon(&mut prefill, &pp, opts.resolve_iou);
+            }
+            let abandon = prefill.iter().filter(|m| m.class_id == ABANDON);
+            let n_abandon = abandon.clone().count() as i64;
+            let n_large = abandon
+                .filter(|m| Region::Large.contains(&m.bbox, w, h))
+                .count() as i64;
+            ins_page
+                .execute(params![
+                    row.image_id,
+                    seq,
+                    book,
+                    splits.get(&book).map(String::as_str).unwrap_or("new"),
+                    source.to_string_lossy(),
+                    file_name,
+                    row.width,
+                    row.height,
+                    index,
+                    reason,
+                    priority,
+                    n_abandon,
+                    n_large
+                ])
+                .map_err(|e| format!("{}: {e}", row.image_id))?;
+            let mut counts: Vec<rusqlite::types::Value> =
+                vec![rusqlite::types::Value::Text(row.image_id.clone())];
+            for c in 0..NUM_CLASSES {
+                let n = prefill.iter().filter(|m| m.class_id as usize == c).count();
+                counts.push(rusqlite::types::Value::Integer(n as i64));
+            }
+            // The largest figure box, as `database::FIG_AREA_SET` keeps it.
+            let fig_area = prefill
+                .iter()
+                .filter(|m| m.class_id == crate::annotation::labels::FIGURE)
+                .map(|m| m.bbox.width() * m.bbox.height())
+                .fold(0.0, f64::max);
+            counts.push(rusqlite::types::Value::Real(fig_area));
+            set_counts
+                .execute(rusqlite::params_from_iter(counts))
+                .map_err(|e| e.to_string())?;
+            if let Some(model) = prefill_model {
+                insert_prefill(
+                    &mut ins_ann,
+                    &mut ins_imp,
+                    &row,
+                    model,
+                    &prefill,
+                    &mut report,
+                )?;
+            }
+            let layers: Vec<&str> = match (prefill_model, layer_model) {
+                (_, Some(l)) => vec![l],
+                (None, None) => vec![YOLO_MODEL, PADDLE_MODEL],
+                _ => vec![],
+            };
+            for model in layers {
+                insert_layer(
+                    &mut ins_pred,
+                    &row,
+                    model,
+                    opts.layer_min_score,
+                    &mut report,
+                )?;
+            }
+            report.pages_added += 1;
+            pages_in_tx += 1;
+            if pages_in_tx >= 2000 {
+                break;
+            }
         }
+        drop((ins_page, ins_ann, ins_imp, ins_pred, set_counts));
         tx.commit().map_err(|e| e.to_string())?;
     }
     progress("Importing detections", total, total);
@@ -760,6 +723,81 @@ fn import_teachers(
     Ok(report)
 }
 
+/// Insert the prefill boxes of one page, from `model`, as both its annotations
+/// and its imported annotations.
+fn insert_prefill(
+    ins_ann: &mut rusqlite::Statement<'_>,
+    ins_imp: &mut rusqlite::Statement<'_>,
+    row: &TeacherRow,
+    model: &str,
+    prefill: &[Mapped],
+    report: &mut FolderReport,
+) -> Result<(), String> {
+    for (ord, m) in prefill.iter().enumerate() {
+        let id = format!("{}#{}", row.image_id, ord);
+        let prov = match &m.resolved {
+            Some((pp_class, pp_score)) => json!({
+                "source": model, "score": m.score, "teacher_class": m.fine,
+                "label_from": PADDLE_MODEL, "label_class": pp_class,
+                "label_score": pp_score,
+            }),
+            None => json!({"source": model, "score": m.score, "teacher_class": m.fine}),
+        }
+        .to_string();
+        let b = &m.bbox;
+        let args = params![
+            id,
+            row.image_id,
+            ord as i64,
+            m.class_id as i64,
+            b.x0,
+            b.y0,
+            b.x1,
+            b.y1,
+            prov
+        ];
+        ins_ann.execute(args).map_err(|e| e.to_string())?;
+        ins_imp.execute(args).map_err(|e| e.to_string())?;
+        report.boxes += 1;
+        if m.class_id == ABANDON {
+            report.abandon_boxes += 1;
+        }
+    }
+    Ok(())
+}
+
+/// Insert one teacher's detections of a page as the prediction layer `model`.
+fn insert_layer(
+    ins_pred: &mut rusqlite::Statement<'_>,
+    row: &TeacherRow,
+    model: &str,
+    min_score: f64,
+    report: &mut FolderReport,
+) -> Result<(), String> {
+    let (w, h) = (row.width as f64, row.height as f64);
+    let (dets, map) = teacher(row, model);
+    for m in map_dets(dets, map, min_score, w, h) {
+        let b = &m.bbox;
+        ins_pred
+            .execute(params![
+                model,
+                row.image_id,
+                m.class_id as i64,
+                m.score,
+                b.x0,
+                b.y0,
+                b.x1,
+                b.y1
+            ])
+            .map_err(|e| e.to_string())?;
+        report.predictions += 1;
+    }
+    Ok(())
+}
+
+/// Progress stage of `resolve_existing_abandon`.
+const RELABEL_STAGE: &str = "Labelling abandon boxes from PP-DocLayout-L";
+
 /// Projects imported before abandon boxes took PP-DocLayout-L's label: every
 /// box still `abandon` gets the label of the PP box covering the same region,
 /// read again from `teachers_raw.jsonl` (the project keeps only PP boxes at
@@ -771,8 +809,7 @@ fn resolve_existing_abandon(
     opts: &FolderOptions,
     progress: &mut ProgressFn<'_>,
 ) -> Result<usize, String> {
-    const STAGE: &str = "Labelling abandon boxes from PP-DocLayout-L";
-    progress(STAGE, 0, 0);
+    progress(RELABEL_STAGE, 0, 0);
     let pages: HashSet<String> = {
         let mut st = conn
             .prepare("SELECT DISTINCT page_key FROM annotations INDEXED BY annotations_abandon WHERE class_id = 14")
@@ -788,59 +825,7 @@ fn resolve_existing_abandon(
     let file = std::fs::File::open(jsonl).map_err(|e| format!("{}: {e}", jsonl.display()))?;
     let total = file.metadata().map(|m| m.len()).unwrap_or(0);
     let mut reader = BufReader::with_capacity(1 << 20, file);
-    let mut changes: Vec<database::ClassChange> = Vec::new();
-    {
-        let mut boxes = conn
-            .prepare(
-                "SELECT id, x0, y0, x1, y1 FROM annotations INDEXED BY annotations_abandon \
-                 WHERE page_key = ?1 AND class_id = 14",
-            )
-            .map_err(|e| e.to_string())?;
-        let mut line = String::new();
-        let (mut read, mut lineno) = (0u64, 0usize);
-        loop {
-            line.clear();
-            let n = reader.read_line(&mut line).map_err(|e| e.to_string())?;
-            if n == 0 {
-                break;
-            }
-            read += n as u64;
-            lineno += 1;
-            if lineno % 4096 == 0 {
-                progress(STAGE, read, total);
-            }
-            let Ok(row) = serde_json::from_str::<TeacherRow>(line.trim()) else {
-                continue;
-            };
-            if !pages.contains(&row.image_id) {
-                continue;
-            }
-            let (w, h) = (row.width as f64, row.height as f64);
-            let pp = map_dets(&row.paddle, paddle_class, opts.resolve_min_score, w, h);
-            if pp.is_empty() {
-                continue;
-            }
-            let rows = boxes
-                .query_map(params![row.image_id], |r| {
-                    Ok((
-                        r.get::<_, String>(0)?,
-                        Box2::new(r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?),
-                    ))
-                })
-                .map_err(|e| e.to_string())?;
-            for b in rows {
-                let (id, bbox) = b.map_err(|e| e.to_string())?;
-                if let Some(p) = best_overlap(&bbox, &pp, opts.resolve_iou) {
-                    changes.push(database::ClassChange {
-                        id,
-                        page_key: row.image_id.clone(),
-                        from: ABANDON,
-                        to: p.class_id,
-                    });
-                }
-            }
-        }
-    }
+    let changes = abandon_relabels(conn, &mut reader, total, &pages, opts, progress)?;
     progress("Saving the new labels", 0, 0);
     let n = changes.len();
     database::apply_class_changes(
@@ -849,6 +834,71 @@ fn resolve_existing_abandon(
         &changes,
     )?;
     Ok(n)
+}
+
+/// Read `teachers_raw.jsonl` through and, for each `abandon` box on `pages`,
+/// the change to the label of the PP-DocLayout-L box covering the same region.
+fn abandon_relabels(
+    conn: &Connection,
+    reader: &mut BufReader<std::fs::File>,
+    total: u64,
+    pages: &HashSet<String>,
+    opts: &FolderOptions,
+    progress: &mut ProgressFn<'_>,
+) -> Result<Vec<database::ClassChange>, String> {
+    let mut changes: Vec<database::ClassChange> = Vec::new();
+    let mut boxes = conn
+        .prepare(
+            "SELECT id, x0, y0, x1, y1 FROM annotations INDEXED BY annotations_abandon \
+             WHERE page_key = ?1 AND class_id = 14",
+        )
+        .map_err(|e| e.to_string())?;
+    let mut line = String::new();
+    let (mut read, mut lineno) = (0u64, 0usize);
+    loop {
+        line.clear();
+        let n = reader.read_line(&mut line).map_err(|e| e.to_string())?;
+        if n == 0 {
+            break;
+        }
+        read += n as u64;
+        lineno += 1;
+        if lineno % 4096 == 0 {
+            progress(RELABEL_STAGE, read, total);
+        }
+        let Ok(row) = serde_json::from_str::<TeacherRow>(line.trim()) else {
+            continue;
+        };
+        if !pages.contains(&row.image_id) {
+            continue;
+        }
+        let (w, h) = (row.width as f64, row.height as f64);
+        let pp = map_dets(&row.paddle, paddle_class, opts.resolve_min_score, w, h);
+        if pp.is_empty() {
+            continue;
+        }
+        let rows = boxes
+            .query_map(params![row.image_id], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    Box2::new(r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?),
+                ))
+            })
+            .map_err(|e| e.to_string())?;
+        for b in rows {
+            let (id, bbox) = b.map_err(|e| e.to_string())?;
+            let Some(p) = best_overlap(&bbox, &pp, opts.resolve_iou) else {
+                continue;
+            };
+            changes.push(database::ClassChange {
+                id,
+                page_key: row.image_id.clone(),
+                from: ABANDON,
+                to: p.class_id,
+            });
+        }
+    }
+    Ok(changes)
 }
 
 // --- COCO data directory --------------------------------------------------------
@@ -928,11 +978,11 @@ fn image_dirs(root: &Path) -> Vec<(PathBuf, Vec<PathBuf>)> {
             let name = entry.file_name();
             let name = name.to_string_lossy();
             match entry.file_type() {
-                Ok(t) if t.is_dir() => {
-                    if !name.starts_with('.') && name != "exports" {
-                        subdirs.push(p);
-                    }
+                Ok(t) if t.is_dir() && !name.starts_with('.') && name != "exports" => {
+                    subdirs.push(p);
                 }
+                // Hidden folders and the project's exports.
+                Ok(t) if t.is_dir() => {}
                 Ok(_) if is_image(&p) => images.push(p),
                 _ => {}
             }
@@ -965,90 +1015,102 @@ fn import_image_folders(
         ));
     }
     let total: u64 = dirs.iter().map(|(_, v)| v.len() as u64).sum();
-    let mut next_ordinal: i64 = conn
+    let next_ordinal: i64 = conn
         .query_row("SELECT COALESCE(MAX(seq), 0) FROM pages", [], |r| {
             r.get::<_, i64>(0)
         })
         .map_err(|e| e.to_string())?
         .div_euclid(BOOK_STRIDE)
         + 1;
-    let mut done = 0u64;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
-    {
-        let mut exists = tx
-            .prepare_cached("SELECT 1 FROM pages WHERE page_key = ?1")
-            .map_err(|e| e.to_string())?;
-        let mut ins = tx
-            .prepare_cached(
-                "INSERT INTO pages (page_key, seq, book_id, split, set_name, source_path, file_name, width, height, page_index) \
-                 VALUES (?1, ?2, ?3, 'new', 'folder', ?4, ?5, ?6, ?7, ?8)",
-            )
-            .map_err(|e| e.to_string())?;
-        for (dir, images) in &dirs {
-            let rel = dir.strip_prefix(root).unwrap_or(dir);
-            let book = if rel.as_os_str().is_empty() {
-                root.file_name()
-                    .map(|n| n.to_string_lossy().into_owned())
-                    .unwrap_or_else(|| "book".into())
-            } else {
-                rel.to_string_lossy().replace('\\', "/")
-            };
-            let mut book_new = false;
-            for (i, img) in images.iter().enumerate() {
-                done += 1;
-                if done % 256 == 0 {
-                    progress("Reading image sizes", done, total);
-                }
-                let stem = img
-                    .file_stem()
-                    .map(|s| s.to_string_lossy().into_owned())
-                    .unwrap_or_default();
-                let key = format!("{book}_{stem}");
-                if exists.exists(params![key]).map_err(|e| e.to_string())? {
-                    report.pages_present += 1;
-                    continue;
-                }
-                let (w, h) = match image::image_dimensions(img) {
-                    Ok(d) => d,
-                    Err(e) => {
-                        if report.warnings.len() < 20 {
-                            report.warnings.push(format!("{}: {e}", img.display()));
-                        }
-                        continue;
-                    }
-                };
-                if !book_new {
-                    book_new = true;
-                    report.books_added += 1;
-                    next_ordinal += 1;
-                }
-                let file_name = img
-                    .strip_prefix(root)
-                    .unwrap_or(img)
-                    .to_string_lossy()
-                    .replace('\\', "/");
-                let index = stem
-                    .trim_start_matches(|c: char| !c.is_ascii_digit())
-                    .parse::<i64>()
-                    .ok();
-                ins.execute(params![
-                    key,
-                    (next_ordinal - 1) * BOOK_STRIDE + i as i64,
-                    book,
-                    img.to_string_lossy(),
-                    file_name,
-                    w,
-                    h,
-                    index
-                ])
-                .map_err(|e| e.to_string())?;
-                report.pages_added += 1;
-            }
-        }
-    }
+    insert_image_pages(&tx, root, &dirs, total, next_ordinal, &mut report, progress)?;
     tx.commit().map_err(|e| e.to_string())?;
     progress("Reading image sizes", total, total);
     Ok(report)
+}
+
+/// Insert the pages of every image folder not yet in the project, one book
+/// per folder.
+fn insert_image_pages(
+    tx: &rusqlite::Transaction<'_>,
+    root: &Path,
+    dirs: &[(PathBuf, Vec<PathBuf>)],
+    total: u64,
+    mut next_ordinal: i64,
+    report: &mut FolderReport,
+    progress: &mut ProgressFn<'_>,
+) -> Result<(), String> {
+    let mut done = 0u64;
+    let mut exists = tx
+        .prepare_cached("SELECT 1 FROM pages WHERE page_key = ?1")
+        .map_err(|e| e.to_string())?;
+    let mut ins = tx
+        .prepare_cached(
+            "INSERT INTO pages (page_key, seq, book_id, split, set_name, source_path, file_name, width, height, page_index) \
+             VALUES (?1, ?2, ?3, 'new', 'folder', ?4, ?5, ?6, ?7, ?8)",
+        )
+        .map_err(|e| e.to_string())?;
+    for (dir, images) in dirs {
+        let rel = dir.strip_prefix(root).unwrap_or(dir);
+        let book = if rel.as_os_str().is_empty() {
+            root.file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "book".into())
+        } else {
+            rel.to_string_lossy().replace('\\', "/")
+        };
+        let mut book_new = false;
+        for (i, img) in images.iter().enumerate() {
+            done += 1;
+            if done % 256 == 0 {
+                progress("Reading image sizes", done, total);
+            }
+            let stem = img
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            let key = format!("{book}_{stem}");
+            if exists.exists(params![key]).map_err(|e| e.to_string())? {
+                report.pages_present += 1;
+                continue;
+            }
+            let (w, h) = match image::image_dimensions(img) {
+                Ok(d) => d,
+                Err(e) if report.warnings.len() < 20 => {
+                    report.warnings.push(format!("{}: {e}", img.display()));
+                    continue;
+                }
+                Err(_) => continue,
+            };
+            if !book_new {
+                book_new = true;
+                report.books_added += 1;
+                next_ordinal += 1;
+            }
+            let file_name = img
+                .strip_prefix(root)
+                .unwrap_or(img)
+                .to_string_lossy()
+                .replace('\\', "/");
+            let index = stem
+                .trim_start_matches(|c: char| !c.is_ascii_digit())
+                .parse::<i64>()
+                .ok();
+            ins.execute(params![
+                key,
+                (next_ordinal - 1) * BOOK_STRIDE + i as i64,
+                book,
+                img.to_string_lossy(),
+                file_name,
+                w,
+                h,
+                index
+            ])
+            .map_err(|e| e.to_string())?;
+            report.pages_added += 1;
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

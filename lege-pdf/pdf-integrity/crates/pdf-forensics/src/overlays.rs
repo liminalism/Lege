@@ -477,32 +477,44 @@ fn glyph_coverage(
         let Some(info) = underlying.chars().get(*char_index) else {
             continue;
         };
-        let Some((x0, y0, x1, y1)) = device_bbox(matrix, info.char_box, width, height) else {
+        let Some(bbox) = device_bbox(matrix, info.char_box, width, height) else {
             continue;
         };
-        for y in y0..y1 {
-            for x in x0..x1 {
-                let at = (y as usize)
-                    .saturating_mul(width as usize)
-                    .saturating_add(x as usize);
-                let seen = visited.get(at) == Some(&true);
-                if seen {
-                    continue;
-                }
-                if let Some(slot) = visited.get_mut(at) {
-                    *slot = true;
-                }
-                area = area.saturating_add(1);
-                if changed.get(at) == Some(&true) {
-                    covered = covered.saturating_add(1);
-                }
+        visit_new_pixels(&mut visited, width, bbox, |at| {
+            area = area.saturating_add(1);
+            if changed.get(at) == Some(&true) {
+                covered = covered.saturating_add(1);
             }
-        }
+        });
     }
     if area == 0 {
         0.0
     } else {
         covered as f64 / area as f64
+    }
+}
+
+/// Mark the pixels of the device box `(x0, y0, x1, y1)` that are not yet
+/// `visited`, passing each one's index to `visit`, row by row.
+fn visit_new_pixels(
+    visited: &mut [bool],
+    width: u32,
+    (x0, y0, x1, y1): (u32, u32, u32, u32),
+    mut visit: impl FnMut(usize),
+) {
+    for y in y0..y1 {
+        for x in x0..x1 {
+            let at = (y as usize)
+                .saturating_mul(width as usize)
+                .saturating_add(x as usize);
+            if visited.get(at) == Some(&true) {
+                continue;
+            }
+            if let Some(slot) = visited.get_mut(at) {
+                *slot = true;
+            }
+            visit(at);
+        }
     }
 }
 

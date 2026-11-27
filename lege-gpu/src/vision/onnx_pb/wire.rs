@@ -117,11 +117,9 @@ impl<'a> Reader<'a> {
             })?;
             self.pos += 1;
             let payload = u64::from(byte & 0x7F);
-            if index == 9 {
-                // Only bit 64 may remain; anything else overflows.
-                if byte & 0x7F > 1 {
-                    return Err(WireError::VarintOverflow { offset: start });
-                }
+            // Only bit 64 may remain; anything else overflows.
+            if index == 9 && byte & 0x7F > 1 {
+                return Err(WireError::VarintOverflow { offset: start });
             }
             value |= payload << (index * 7);
             if byte & 0x80 == 0 {

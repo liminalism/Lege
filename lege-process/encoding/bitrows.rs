@@ -248,27 +248,17 @@ fn diff_impl(
         return None;
     }
 
-    let count_thick = |plane: &[u64]| -> u32 {
-        let mut count = 0u32;
-        for y in 0..h - 1 {
-            let row = &plane[y * n..(y + 1) * n];
-            let next = &plane[(y + 1) * n..(y + 2) * n];
-            for k in 0..n {
-                let t = row[k] & next[k];
-                let pairs = t & (t >> 1);
-                let straddle = if k + 1 < n {
-                    (t >> 63) & (row[k + 1] & next[k + 1])
-                } else {
-                    0
-                };
-                count += pairs.count_ones() + straddle.count_ones();
-            }
-        }
-        count
+    let thick = count_thick(&xor, n, h);
+    let thick_a = if only_a >= 4 {
+        count_thick(&sub_a, n, h)
+    } else {
+        0
     };
-    let thick = count_thick(&xor);
-    let thick_a = if only_a >= 4 { count_thick(&sub_a) } else { 0 };
-    let thick_b = if only_b >= 4 { count_thick(&sub_b) } else { 0 };
+    let thick_b = if only_b >= 4 {
+        count_thick(&sub_b, n, h)
+    } else {
+        0
+    };
     let Some(far_limit) = far_limit else {
         return Some(Diff {
             only_a,
@@ -339,43 +329,87 @@ fn diff_impl(
     })
 }
 
+/// 2×2 blocks of set bits in a plane of `h` rows of `n` words.
+#[inline(always)]
+fn count_thick(plane: &[u64], n: usize, h: usize) -> u32 {
+    let mut count = 0u32;
+    for y in 0..h - 1 {
+        let row = &plane[y * n..(y + 1) * n];
+        let next = &plane[(y + 1) * n..(y + 2) * n];
+        for k in 0..n {
+            let t = row[k] & next[k];
+            let pairs = t & (t >> 1);
+            let straddle = if k + 1 < n {
+                (t >> 63) & (row[k + 1] & next[k + 1])
+            } else {
+                0
+            };
+            count += pairs.count_ones() + straddle.count_ones();
+        }
+    }
+    count
+}
+
 /// The largest 8-connected group of set bits in `h` rows of `n` words.
 fn largest_blob(mask: &[u64], n: usize, h: usize) -> u32 {
     let mut left = mask.to_vec();
     let mut largest = 0u32;
     let mut stack: Vec<(usize, usize)> = Vec::new();
-    let take = |left: &mut [u64], x: usize, y: usize| -> bool {
-        let i = y * n + x / 64;
-        let bit = 1u64 << (x % 64);
-        if left[i] & bit != 0 {
-            left[i] &= !bit;
-            true
-        } else {
-            false
-        }
-    };
     for y in 0..h {
         for k in 0..n {
             while left[y * n + k] != 0 {
                 let x = k * 64 + left[y * n + k].trailing_zeros() as usize;
-                take(&mut left, x, y);
+                take_bit(&mut left, n, x, y);
                 stack.push((x, y));
-                let mut size = 0u32;
-                while let Some((x, y)) = stack.pop() {
-                    size += 1;
-                    for ny in y.saturating_sub(1)..=(y + 1).min(h - 1) {
-                        for nx in x.saturating_sub(1)..=(x + 1).min(n * 64 - 1) {
-                            if take(&mut left, nx, ny) {
-                                stack.push((nx, ny));
-                            }
-                        }
-                    }
-                }
-                largest = largest.max(size);
+                largest = largest.max(drain_blob(&mut left, &mut stack, n, h));
             }
         }
     }
     largest
+}
+
+/// Take out of `left` every set bit 8-connected to the pixels on `stack`,
+/// which leaves it empty, and return the size of the group (the pixels
+/// that were on the stack included).
+#[inline]
+fn drain_blob(left: &mut [u64], stack: &mut Vec<(usize, usize)>, n: usize, h: usize) -> u32 {
+    let mut size = 0u32;
+    while let Some((x, y)) = stack.pop() {
+        size += 1;
+        push_taken_neighbours(left, stack, (x, y), n, h);
+    }
+    size
+}
+
+/// Take the set bits around `(x, y)` out of `left` and push them on `stack`.
+#[inline]
+fn push_taken_neighbours(
+    left: &mut [u64],
+    stack: &mut Vec<(usize, usize)>,
+    (x, y): (usize, usize),
+    n: usize,
+    h: usize,
+) {
+    for ny in y.saturating_sub(1)..=(y + 1).min(h - 1) {
+        for nx in x.saturating_sub(1)..=(x + 1).min(n * 64 - 1) {
+            if take_bit(left, n, nx, ny) {
+                stack.push((nx, ny));
+            }
+        }
+    }
+}
+
+/// Clear bit `(x, y)` of `left` (rows of `n` words); whether it was set.
+#[inline]
+fn take_bit(left: &mut [u64], n: usize, x: usize, y: usize) -> bool {
+    let i = y * n + x / 64;
+    let bit = 1u64 << (x % 64);
+    if left[i] & bit != 0 {
+        left[i] &= !bit;
+        true
+    } else {
+        false
+    }
 }
 
 #[cfg(test)]
@@ -433,24 +467,9 @@ mod tests {
             }
         }
         let total = only_a + only_b;
-        let count_2x2 = |plane: &[bool]| -> u32 {
-            let mut count = 0;
-            for y in 0..h.saturating_sub(1) {
-                for x in 0..w.saturating_sub(1) {
-                    if plane[y * w + x]
-                        && plane[y * w + x + 1]
-                        && plane[(y + 1) * w + x]
-                        && plane[(y + 1) * w + x + 1]
-                    {
-                        count += 1;
-                    }
-                }
-            }
-            count
-        };
-        let thick = count_2x2(&xor);
-        let thick_a = count_2x2(&sub_a);
-        let thick_b = count_2x2(&sub_b);
+        let thick = count_2x2(&xor, w, h);
+        let thick_a = count_2x2(&sub_a, w, h);
+        let thick_b = count_2x2(&sub_b, w, h);
         let near = |img: &BitImage, x: i32, y: i32| -> bool {
             (-1..=1).any(|ny| (-1..=1).any(|nx| on(img, x + nx, y + ny)))
         };
@@ -463,47 +482,21 @@ mod tests {
                 if !xor[i] {
                     continue;
                 }
-                if on(a, gx, gy) {
-                    if !near(b, gx - dx, gy - dy) {
-                        far_mask[i] = true;
-                        far_a += 1;
-                    }
-                } else if !near(a, gx, gy) {
+                // A differing pixel of one shape is far when the other
+                // shape has no ink within a pixel of it.
+                let (near_other, far_count) = if on(a, gx, gy) {
+                    (near(b, gx - dx, gy - dy), &mut far_a)
+                } else {
+                    (near(a, gx, gy), &mut far_b)
+                };
+                if !near_other {
                     far_mask[i] = true;
-                    far_b += 1;
+                    *far_count += 1;
                 }
             }
         }
         let far = far_a + far_b;
-        // Largest 8-connected blob, per pixel.
-        let mut seen = vec![false; w * h];
-        let mut far_blob = 0u32;
-        for start in 0..w * h {
-            if !far_mask[start] || seen[start] {
-                continue;
-            }
-            seen[start] = true;
-            let mut stack = vec![start];
-            let mut size = 0;
-            while let Some(i) = stack.pop() {
-                size += 1;
-                let (x, y) = ((i % w) as i32, (i / w) as i32);
-                for ny in -1..=1 {
-                    for nx in -1..=1 {
-                        let (qx, qy) = (x + nx, y + ny);
-                        if qx < 0 || qy < 0 || qx >= w as i32 || qy >= h as i32 {
-                            continue;
-                        }
-                        let j = qy as usize * w + qx as usize;
-                        if far_mask[j] && !seen[j] {
-                            seen[j] = true;
-                            stack.push(j);
-                        }
-                    }
-                }
-            }
-            far_blob = far_blob.max(size);
-        }
+        let far_blob = largest_blob_per_pixel(&far_mask, w, h);
         Diff {
             only_a,
             only_b,
@@ -516,6 +509,85 @@ mod tests {
             far,
             far_blob,
         }
+    }
+
+    /// 2x2 blocks of set pixels in a `w` x `h` plane, per pixel.
+    fn count_2x2(plane: &[bool], w: usize, h: usize) -> u32 {
+        let mut count = 0;
+        for y in 0..h.saturating_sub(1) {
+            for x in 0..w.saturating_sub(1) {
+                if plane[y * w + x]
+                    && plane[y * w + x + 1]
+                    && plane[(y + 1) * w + x]
+                    && plane[(y + 1) * w + x + 1]
+                {
+                    count += 1;
+                }
+            }
+        }
+        count
+    }
+
+    /// Largest 8-connected blob of a `w` x `h` mask, per pixel.
+    fn largest_blob_per_pixel(mask: &[bool], w: usize, h: usize) -> u32 {
+        let mut seen = vec![false; w * h];
+        let mut largest = 0u32;
+        for start in 0..w * h {
+            if !mask[start] || seen[start] {
+                continue;
+            }
+            seen[start] = true;
+            let mut stack = vec![start];
+            let mut size = 0;
+            while let Some(i) = stack.pop() {
+                size += 1;
+                push_unseen_neighbours(mask, &mut seen, &mut stack, i, (w, h));
+            }
+            largest = largest.max(size);
+        }
+        largest
+    }
+
+    /// Mark the unseen set neighbours of pixel `i` seen and push them.
+    fn push_unseen_neighbours(
+        mask: &[bool],
+        seen: &mut [bool],
+        stack: &mut Vec<usize>,
+        i: usize,
+        (w, h): (usize, usize),
+    ) {
+        let (x, y) = ((i % w) as i32, (i / w) as i32);
+        for ny in -1..=1 {
+            for nx in -1..=1 {
+                let (qx, qy) = (x + nx, y + ny);
+                if qx < 0 || qy < 0 || qx >= w as i32 || qy >= h as i32 {
+                    continue;
+                }
+                let j = qy as usize * w + qx as usize;
+                if mask[j] && !seen[j] {
+                    seen[j] = true;
+                    stack.push(j);
+                }
+            }
+        }
+    }
+
+    /// Ink pixels whose four neighbours are all ink, per pixel.
+    fn interior_per_pixel(img: &BitImage) -> u32 {
+        let mut count = 0u32;
+        for y in 1..img.height - 1 {
+            for x in 1..img.width - 1 {
+                if img.get_usize(x, y)
+                    && img.get_usize(x - 1, y)
+                    && img.get_usize(x + 1, y)
+                    && img.get_usize(x, y - 1)
+                    && img.get_usize(x, y + 1)
+                {
+                    count += 1;
+                }
+            }
+        }
+        count
     }
 
     /// A deterministic pseudo-random bitmap.
@@ -601,19 +673,7 @@ mod tests {
     fn interior_matches_the_per_pixel_count() {
         for (seed, density) in [(1, 60), (2, 80), (3, 95)] {
             let img = noise(90, 40, seed, density);
-            let mut expected = 0u32;
-            for y in 1..img.height - 1 {
-                for x in 1..img.width - 1 {
-                    if img.get_usize(x, y)
-                        && img.get_usize(x - 1, y)
-                        && img.get_usize(x + 1, y)
-                        && img.get_usize(x, y - 1)
-                        && img.get_usize(x, y + 1)
-                    {
-                        expected += 1;
-                    }
-                }
-            }
+            let expected = interior_per_pixel(&img);
             assert_eq!(BitRows::padded(&img).interior_count(), expected);
         }
     }

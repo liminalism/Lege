@@ -9,7 +9,7 @@
 //! A folder project opens on the book manager.
 
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{Receiver, channel};
+use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -78,6 +78,28 @@ enum Hit {
 }
 
 type WakeSlot = Arc<Mutex<Option<Waker>>>;
+
+/// Open (or create) the project and bring it up to date with the folder,
+/// sending progress to the window at most ~30 times a second.
+fn sync_with_progress(
+    project: &Path,
+    root: &Path,
+    opts: &FolderOptions,
+    tx: &Sender<JobMsg>,
+    slot: &WakeSlot,
+) -> Result<FolderReport, String> {
+    let mut conn = database::open(project)?;
+    let mut last = Instant::now();
+    let mut progress = |stage: &str, done: u64, total: u64| {
+        // At most ~30 updates a second reach the window.
+        if last.elapsed() >= Duration::from_millis(33) || done == total {
+            last = Instant::now();
+            let _ = tx.send(JobMsg::Progress(stage.to_owned(), done, total));
+            wake(slot);
+        }
+    };
+    import_folder::sync_folder(&mut conn, root, opts, &mut progress)
+}
 
 fn wake(slot: &WakeSlot) {
     if let Ok(w) = slot.lock() {
@@ -265,19 +287,7 @@ impl Shell {
         let spawned = std::thread::Builder::new()
             .name("annotator-import".into())
             .spawn(move || {
-                let result = (|| {
-                    let mut conn = database::open(&p)?;
-                    let mut last = Instant::now();
-                    let mut progress = |stage: &str, done: u64, total: u64| {
-                        // At most ~30 updates a second reach the window.
-                        if last.elapsed() >= Duration::from_millis(33) || done == total {
-                            last = Instant::now();
-                            let _ = tx.send(JobMsg::Progress(stage.to_owned(), done, total));
-                            wake(&slot);
-                        }
-                    };
-                    import_folder::sync_folder(&mut conn, &r, &opts, &mut progress)
-                })();
+                let result = sync_with_progress(&p, &r, &opts, &tx, &slot);
                 if result.is_err() && creating {
                     import_folder::remove_project(&p);
                 }
@@ -335,6 +345,36 @@ impl Shell {
     }
 
     /// Background results: the folder dialog, the import.
+    /// The import job ended: open its project, or show the error.
+    fn finish_import(&mut self, result: Result<FolderReport, String>, job: Option<ImportJob>) {
+        match (result, job) {
+            (Ok(report), Some(job)) => {
+                let secs = job.started.elapsed().as_secs_f64();
+                self.open_project(&job.project, true);
+                if let Some(app) = &mut self.app {
+                    let what = if job.creating {
+                        "Project created"
+                    } else {
+                        "Folder rescanned"
+                    };
+                    app.notify(&format!("{what} in {secs:.0} s · {report}"), false);
+                }
+            }
+            (Err(e), Some(job)) => {
+                self.error = Some(format!("{}: {e}", job.root.display()));
+                // A rescan that failed leaves the project as it was: reopen it.
+                if !job.creating && job.project.is_file() {
+                    let msg = self.error.clone().unwrap_or_default();
+                    self.open_project(&job.project, true);
+                    if let Some(app) = &mut self.app {
+                        app.notify(&msg, true);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
     fn poll(&mut self) {
         if let Some(rx) = &self.picker {
             if let Ok(choice) = rx.try_recv() {
@@ -361,32 +401,7 @@ impl Shell {
         }
         if let Some(result) = finished {
             let job = self.job.take();
-            match (result, job) {
-                (Ok(report), Some(job)) => {
-                    let secs = job.started.elapsed().as_secs_f64();
-                    self.open_project(&job.project, true);
-                    if let Some(app) = &mut self.app {
-                        let what = if job.creating {
-                            "Project created"
-                        } else {
-                            "Folder rescanned"
-                        };
-                        app.notify(&format!("{what} in {secs:.0} s · {report}"), false);
-                    }
-                }
-                (Err(e), Some(job)) => {
-                    self.error = Some(format!("{}: {e}", job.root.display()));
-                    // A rescan that failed leaves the project as it was: reopen it.
-                    if !job.creating && job.project.is_file() {
-                        let msg = self.error.clone().unwrap_or_default();
-                        self.open_project(&job.project, true);
-                        if let Some(app) = &mut self.app {
-                            app.notify(&msg, true);
-                        }
-                    }
-                }
-                _ => {}
-            }
+            self.finish_import(result, job);
         }
         // Requests the editor cannot carry out itself.
         let request = self.app.as_mut().and_then(|a| a.request.take());

@@ -34,31 +34,38 @@ fn prepare_pbm_data(input: &[u8], width: u32, height: u32, channels: u8) -> Resu
                 return Err(EncodingError::InputBufferTooSmall);
             }
 
-            // Allocate bit-packed buffer
-            let mut pbm_data = vec![0u8; expected_len];
-
-            // Normalize and bit-pack: >128 = white (0), <=128 = black (1)
-            for y in 0..(height as usize) {
-                let row_offset = y * bytes_per_row;
-                for x in 0..(width as usize) {
-                    let pixel_idx = y * (width as usize) + x;
-                    let is_black = input[pixel_idx] <= 128;
-
-                    if is_black {
-                        let byte_index = row_offset + x / 8;
-                        let bit_index = 7 - (x % 8);
-                        pbm_data[byte_index] |= 1 << bit_index;
-                    }
-                }
-            }
-
-            Ok(pbm_data)
+            Ok(pack_gray_rows(input, width, height, bytes_per_row))
         }
         _ => Err(EncodingError::UnsupportedChannels {
             format: "CCITT4",
             channels,
         }),
     }
+}
+
+/// Bit-pack grayscale 0/255 data, `bytes_per_row` bytes per row, values
+/// above 128 white (0) and the rest black (1). `input` holds at least
+/// `width × height` pixels.
+fn pack_gray_rows(input: &[u8], width: u32, height: u32, bytes_per_row: usize) -> Vec<u8> {
+    // Allocate bit-packed buffer
+    let mut pbm_data = vec![0u8; bytes_per_row * height as usize];
+
+    // Normalize and bit-pack: >128 = white (0), <=128 = black (1)
+    for y in 0..(height as usize) {
+        let row_offset = y * bytes_per_row;
+        for x in 0..(width as usize) {
+            let pixel_idx = y * (width as usize) + x;
+            let is_black = input[pixel_idx] <= 128;
+
+            if is_black {
+                let byte_index = row_offset + x / 8;
+                let bit_index = 7 - (x % 8);
+                pbm_data[byte_index] |= 1 << bit_index;
+            }
+        }
+    }
+
+    pbm_data
 }
 
 // Encode CCITT Group 4 from binary data

@@ -561,45 +561,7 @@ impl Dashboard {
     fn poll(&mut self) {
         while let Ok(message) = self.receiver.try_recv() {
             match message {
-                Message::Inputs(id, paths) => {
-                    if !self.input_flow.active(id) {
-                        continue;
-                    }
-                    if !self.running() {
-                        self.rows.clear();
-                    }
-                    for (path, pages, has_ocr) in paths {
-                        if self.queue.iter().any(|item| item.file_path == path) {
-                            continue;
-                        }
-                        if self.options.output_path.is_none() {
-                            self.options.output_path = Some(if path.is_dir() {
-                                path.clone()
-                            } else {
-                                path.parent()
-                                    .unwrap_or(std::path::Path::new("."))
-                                    .to_owned()
-                            });
-                            self.options.output_path_is_auto = true;
-                            self.notice(
-                                GUI_TEXT.interactive.messages.defaulted_output_dir.clone(),
-                                5,
-                            );
-                        }
-                        let mut item = DocumentItem::new(path);
-                        item.page_count = pages;
-                        item.batch = id;
-                        // A later add can be read first; it still queues
-                        // after the files added before it.
-                        let at = self
-                            .queue
-                            .iter()
-                            .position(|queued| queued.batch > id)
-                            .unwrap_or(self.queue.len());
-                        self.queue.insert(at, item);
-                        self.ocr_notice(has_ocr);
-                    }
-                }
+                Message::Inputs(id, paths) => self.admit_inputs(id, paths),
                 Message::InputMetadata(id, path, pages, has_ocr) => {
                     if !self.input_flow.active(id) {
                         continue;
@@ -635,72 +597,127 @@ impl Dashboard {
                     self.input_flow.probing.retain(|task| task.id != id);
                 }
                 Message::Started(generation, infos, handles) => {
-                    if generation != self.generation || !self.running() {
-                        continue;
-                    }
-                    if !self.cancelling() {
-                        self.batch = BatchState::Running;
-                    }
-                    self.moved_inputs.clear();
-                    self.rows = infos
-                        .into_iter()
-                        .map(|info| QueueRow {
-                            task_id: info.id,
-                            path: info.input_path,
-                            output: Some(info.output_path),
-                            state: DocumentRunState::Queued,
-                            output_ready: false,
-                        })
-                        .collect();
-                    self.handles = handles.take();
-                    if self.cancelling() {
-                        for handle in &mut self.handles {
-                            handle.kill();
-                        }
-                    }
+                    self.batch_started(generation, infos, handles)
                 }
                 Message::Worker(generation, update) => {
                     if generation == self.generation {
                         self.worker_event(update);
                     }
                 }
-                Message::Finished(generation) => {
-                    if generation != self.generation || !self.running() {
-                        continue;
-                    }
-                    let cancelled = self.cancelling();
-                    for row in &mut self.rows {
-                        if !row.state.terminal() {
-                            row.state = if cancelled {
-                                DocumentRunState::Cancelled
-                            } else {
-                                DocumentRunState::Failed
-                            };
-                        }
-                    }
-                    let outcome = if cancelled {
-                        BatchOutcome::Cancelled
-                    } else if !self.rows.is_empty()
-                        && self
-                            .rows
-                            .iter()
-                            .all(|row| row.state == DocumentRunState::Completed)
-                    {
-                        BatchOutcome::Completed
-                    } else {
-                        BatchOutcome::Failed
-                    };
-                    self.batch = BatchState::Finished(outcome);
-                    self.handles.clear();
-                    if cancelled {
-                        self.detail = tr("cancelled").into();
-                    }
-                    self.log = crate::logging::load_log_entries().unwrap_or_default();
-                }
+                Message::Finished(generation) => self.batch_finished(generation),
             }
         }
         self.check_dropped();
         self.notices.retain(|notice| notice.until > Instant::now());
+    }
+    /// Queue the probed files of input batch `id`, in batch order, skipping
+    /// files already queued. The first one also picks the output folder when
+    /// none is chosen.
+    fn admit_inputs(&mut self, id: u64, paths: Vec<(PathBuf, Option<u32>, Option<bool>)>) {
+        if !self.input_flow.active(id) {
+            return;
+        }
+        if !self.running() {
+            self.rows.clear();
+        }
+        for (path, pages, has_ocr) in paths {
+            if self.queue.iter().any(|item| item.file_path == path) {
+                continue;
+            }
+            if self.options.output_path.is_none() {
+                self.options.output_path = Some(if path.is_dir() {
+                    path.clone()
+                } else {
+                    path.parent()
+                        .unwrap_or(std::path::Path::new("."))
+                        .to_owned()
+                });
+                self.options.output_path_is_auto = true;
+                self.notice(
+                    GUI_TEXT.interactive.messages.defaulted_output_dir.clone(),
+                    5,
+                );
+            }
+            let mut item = DocumentItem::new(path);
+            item.page_count = pages;
+            item.batch = id;
+            // A later add can be read first; it still queues
+            // after the files added before it.
+            let at = self
+                .queue
+                .iter()
+                .position(|queued| queued.batch > id)
+                .unwrap_or(self.queue.len());
+            self.queue.insert(at, item);
+            self.ocr_notice(has_ocr);
+        }
+    }
+    /// The current run's workers have started: show their rows and keep
+    /// their handles, killing them at once if the run is being cancelled.
+    fn batch_started(
+        &mut self,
+        generation: u64,
+        infos: Vec<backend::TrackerInfo>,
+        handles: StartedWorkers,
+    ) {
+        if generation != self.generation || !self.running() {
+            return;
+        }
+        if !self.cancelling() {
+            self.batch = BatchState::Running;
+        }
+        self.moved_inputs.clear();
+        self.rows = infos
+            .into_iter()
+            .map(|info| QueueRow {
+                task_id: info.id,
+                path: info.input_path,
+                output: Some(info.output_path),
+                state: DocumentRunState::Queued,
+                output_ready: false,
+            })
+            .collect();
+        self.handles = handles.take();
+        if self.cancelling() {
+            for handle in &mut self.handles {
+                handle.kill();
+            }
+        }
+    }
+    /// The current run has ended: every row still open failed or was
+    /// cancelled, and the batch outcome follows from the rows.
+    fn batch_finished(&mut self, generation: u64) {
+        if generation != self.generation || !self.running() {
+            return;
+        }
+        let cancelled = self.cancelling();
+        for row in &mut self.rows {
+            if !row.state.terminal() {
+                row.state = if cancelled {
+                    DocumentRunState::Cancelled
+                } else {
+                    DocumentRunState::Failed
+                };
+            }
+        }
+        let outcome = if cancelled {
+            BatchOutcome::Cancelled
+        } else if !self.rows.is_empty()
+            && self
+                .rows
+                .iter()
+                .all(|row| row.state == DocumentRunState::Completed)
+        {
+            BatchOutcome::Completed
+        } else {
+            BatchOutcome::Failed
+        };
+        self.batch = BatchState::Finished(outcome);
+        self.handles.clear();
+        if cancelled {
+            self.detail = tr("cancelled").into();
+        }
+        self.log = crate::logging::load_log_entries().unwrap_or_default();
     }
     /// Check the files dropped since the last frame as one batch. A drop
     /// while a run is going is ignored, as the Add buttons are; one while a
@@ -863,37 +880,7 @@ impl Dashboard {
         let (id, stop) = self.begin_input(true);
         let tx = self.sender.clone();
         let wake = self.waker.clone();
-        std::thread::spawn(move || {
-            match kind {
-                FileDialogKind::Files => {
-                    if let Some(paths) = rfd::FileDialog::new()
-                        .add_filter(
-                            &GUI_TEXT.interactive.popups.supported_inputs_filter,
-                            &["pdf", "zip"],
-                        )
-                        .pick_files()
-                    {
-                        let _ = tx.send(Message::ProbeStarted(id));
-                        wake.wake();
-                        probe(tx.clone(), wake.clone(), paths, id, stop);
-                    }
-                }
-                FileDialogKind::Folder => {
-                    if let Some(path) = rfd::FileDialog::new().pick_folder() {
-                        let _ = tx.send(Message::ProbeStarted(id));
-                        wake.wake();
-                        probe(tx.clone(), wake.clone(), vec![path], id, stop);
-                    }
-                }
-                FileDialogKind::Output => {
-                    if let Some(path) = rfd::FileDialog::new().pick_folder() {
-                        let _ = tx.send(Message::Output(id, path));
-                    }
-                }
-            }
-            let _ = tx.send(Message::DialogClosed(id));
-            wake.wake();
-        });
+        std::thread::spawn(move || run_file_dialog(kind, tx, wake, id, stop));
     }
     fn probe_paths(&mut self, paths: Vec<PathBuf>) {
         if self.running() {
@@ -972,75 +959,47 @@ impl Dashboard {
         let queue = self.queue.clone();
         let tx = self.sender.clone();
         let wake = self.waker.clone();
-        std::thread::spawn(move || {
-            let result = tokio::runtime::Builder::new_current_thread()
-                .max_blocking_threads(4)
-                .build()
-                .map_err(anyhow::Error::from)
-                .and_then(|runtime| {
-                    runtime.block_on(backend::start_async_processing(queue, &options))
-                });
-            match result {
-                Ok((infos, handles, events)) => {
-                    if tx
-                        .send(Message::Started(generation, infos, StartedWorkers(handles)))
-                        .is_err()
-                    {
-                        return;
-                    }
-                    wake.wake();
-                    while let Ok(event) = events.recv() {
-                        if tx.send(Message::Worker(generation, event)).is_err() {
-                            break;
-                        }
-                        wake.wake();
-                    }
-                }
-                Err(error) => {
-                    let _ = tx.send(Message::Notice(format!("{error:#}")));
-                }
-            }
-            let _ = tx.send(Message::Finished(generation));
-            wake.wake();
-        });
+        std::thread::spawn(move || run_batch(queue, options, generation, tx, wake));
     }
     fn resolution_focus(&mut self, focused: bool, snapshot: bool) {
-        if focused && matches!(self.resolution_edit, ResolutionEdit::Displaying) {
-            self.resolution_edit = ResolutionEdit::Editing {
-                original: ResolutionPreset {
-                    height: self.options.target_height.unwrap_or(1200),
-                    width: self.options.target_width,
-                },
-            };
-            self.resolution.clear();
-            self.blink_start = Instant::now();
-        } else if !focused {
-            if let ResolutionEdit::Editing { original } =
-                std::mem::replace(&mut self.resolution_edit, ResolutionEdit::Displaying)
+        if focused {
+            if matches!(self.resolution_edit, ResolutionEdit::Displaying) {
+                self.resolution_edit = ResolutionEdit::Editing {
+                    original: ResolutionPreset {
+                        height: self.options.target_height.unwrap_or(1200),
+                        width: self.options.target_width,
+                    },
+                };
+                self.resolution.clear();
+                self.blink_start = Instant::now();
+            }
+            return;
+        }
+        let ResolutionEdit::Editing { original } =
+            std::mem::replace(&mut self.resolution_edit, ResolutionEdit::Displaying)
+        else {
+            return;
+        };
+        let parsed = parse_resolution(self.resolution.text());
+        let (height, width) = parsed.unwrap_or((original.height, original.width));
+        self.options.target_height = Some(height);
+        self.options.target_width = width;
+        if parsed.is_some() && (height, width) != (original.height, original.width) {
+            self.options.target_device = None;
+            if !snapshot
+                && let Err(error) =
+                    backend::save_resolution_preset(&ResolutionPreset { height, width })
             {
-                let parsed = parse_resolution(self.resolution.text());
-                let (height, width) = parsed.unwrap_or((original.height, original.width));
-                self.options.target_height = Some(height);
-                self.options.target_width = width;
-                if parsed.is_some() && (height, width) != (original.height, original.width) {
-                    self.options.target_device = None;
-                    if !snapshot {
-                        if let Err(error) =
-                            backend::save_resolution_preset(&ResolutionPreset { height, width })
-                        {
-                            self.notice(error.to_string(), 8);
-                        }
-                    }
-                    if self.options.crop_free_aspect && width.is_some() {
-                        self.notice(tr("resolution_width_ignored"), 5);
-                    }
-                }
-                self.resolution.set_text(&match width {
-                    Some(width) => format!("{height}x{width}"),
-                    None => height.to_string(),
-                });
+                self.notice(error.to_string(), 8);
+            }
+            if self.options.crop_free_aspect && width.is_some() {
+                self.notice(tr("resolution_width_ignored"), 5);
             }
         }
+        self.resolution.set_text(&match width {
+            Some(width) => format!("{height}x{width}"),
+            None => height.to_string(),
+        });
     }
 
     fn validate_fields(&mut self) -> Result<(), &'static str> {
@@ -1149,6 +1108,96 @@ fn theme_ring_index(choice: ThemeChoice) -> usize {
 impl Drop for Dashboard {
     fn drop(&mut self) {
         self.cancel();
+    }
+}
+
+/// The file dialog thread: show the dialog, send the files or folder chosen
+/// in it on (inputs are probed here), then report the dialog closed.
+fn run_file_dialog(
+    kind: FileDialogKind,
+    tx: SyncSender<Message>,
+    wake: Waker,
+    id: u64,
+    stop: flume::Receiver<()>,
+) {
+    match kind {
+        FileDialogKind::Files => {
+            if let Some(paths) = rfd::FileDialog::new()
+                .add_filter(
+                    &GUI_TEXT.interactive.popups.supported_inputs_filter,
+                    &["pdf", "zip"],
+                )
+                .pick_files()
+            {
+                let _ = tx.send(Message::ProbeStarted(id));
+                wake.wake();
+                probe(tx.clone(), wake.clone(), paths, id, stop);
+            }
+        }
+        FileDialogKind::Folder => {
+            if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                let _ = tx.send(Message::ProbeStarted(id));
+                wake.wake();
+                probe(tx.clone(), wake.clone(), vec![path], id, stop);
+            }
+        }
+        FileDialogKind::Output => {
+            if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                let _ = tx.send(Message::Output(id, path));
+            }
+        }
+    }
+    let _ = tx.send(Message::DialogClosed(id));
+    wake.wake();
+}
+
+/// The batch thread: start the workers for `queue`, forward their events to
+/// the window until they end or the window is gone, then report the run
+/// finished.
+fn run_batch(
+    queue: VecDeque<DocumentItem>,
+    options: ProcessingOptions,
+    generation: u64,
+    tx: SyncSender<Message>,
+    wake: Waker,
+) {
+    let result = tokio::runtime::Builder::new_current_thread()
+        .max_blocking_threads(4)
+        .build()
+        .map_err(anyhow::Error::from)
+        .and_then(|runtime| runtime.block_on(backend::start_async_processing(queue, &options)));
+    match result {
+        Ok((infos, handles, events)) => {
+            if tx
+                .send(Message::Started(generation, infos, StartedWorkers(handles)))
+                .is_err()
+            {
+                return;
+            }
+            wake.wake();
+            forward_worker_events(&events, generation, &tx, &wake);
+        }
+        Err(error) => {
+            let _ = tx.send(Message::Notice(format!("{error:#}")));
+        }
+    }
+    let _ = tx.send(Message::Finished(generation));
+    wake.wake();
+}
+
+/// Forward the run's worker events to the window until they end or the
+/// window is gone.
+fn forward_worker_events(
+    events: &flume::Receiver<WorkerProgressUpdate>,
+    generation: u64,
+    tx: &SyncSender<Message>,
+    wake: &Waker,
+) {
+    while let Ok(event) = events.recv() {
+        if tx.send(Message::Worker(generation, event)).is_err() {
+            break;
+        }
+        wake.wake();
     }
 }
 
@@ -2056,7 +2105,6 @@ impl Dashboard {
     /// The processing card, on the left band: one row of buttons per
     /// setting, and under the text encoding its JBIG2 sub-option.
     fn draw_processing(&mut self, ui: &mut Ui<'_>, area: Rect, note: &mut Option<&'static str>) {
-        let t = &GUI_TEXT.interactive;
         let a = card(ui, area);
         let card = ProcessingCard::new(a, ui.scale);
         for (index, caption) in [
@@ -2073,145 +2121,182 @@ impl Dashboard {
             }
             label(ui, label_area, caption);
             match index {
-                0 => {
-                    if let Some(index) = choices(
-                        ui,
-                        control,
-                        &[tr("preparation"), tr("preserve")],
-                        usize::from(self.options.preserve_mode),
-                    ) {
-                        self.options.set_preserve_mode(index == 1);
-                    }
-                    // Each button explains itself on mouseover, whichever
-                    // mode is selected.
-                    for (rect, text) in cells(control, 2, ui.px(4))
-                        .into_iter()
-                        .zip([tr("preparation_note"), tr("preserve_note")])
-                    {
-                        hover(ui, rect, text, note);
-                    }
-                }
-                1 => {
-                    // PDF and DjVu exclude each other; EPUB is made beside
-                    // either, so it stands a little apart from the pair.
-                    let [pdf, djvu, epub] = format_cells(ui, control);
-                    let djvu_selected = self.options.output_format == OutputFormat::Djvu;
-                    if choice(ui, pdf, "PDF", !djvu_selected) {
-                        self.options.output_format = OutputFormat::Pdf;
-                    }
-                    if choice(ui, djvu, "DjVu", djvu_selected) {
-                        self.options.output_format = OutputFormat::Djvu;
-                    }
-                    if choice(ui, epub, "EPUB", self.options.make_epub_also) {
-                        self.options
-                            .set_make_epub_also(!self.options.make_epub_also);
-                    }
-                    hover(ui, pdf, &t.tooltips.base_format, note);
-                    hover(ui, djvu, &t.tooltips.base_format, note);
-                    hover(ui, epub, &t.tooltips.make_epub_also, note);
-                }
-                2 => {
-                    // Best | Fast | Grayscale: the two binarizers and the
-                    // grayscale rendering are one choice of three.
-                    if self.options.preserve_mode {
-                        small(ui, control, tr("preserve_summary"));
-                        hover(ui, control, tr("preserve_note"), note);
-                    } else {
-                        let selected = if self.options.grayscale_mode {
-                            2
-                        } else {
-                            usize::from(self.options.fast_binarization)
-                        };
-                        if let Some(index) = choices(
-                            ui,
-                            control,
-                            &[tr("binarize_best"), tr("binarize_fast"), tr("grayscale")],
-                            selected,
-                        ) {
-                            self.options.set_text_mode(index);
-                        }
-                        let grayscale_note = if self.options.output_format == OutputFormat::Djvu {
-                            tr("grayscale_djvu")
-                        } else {
-                            tr("grayscale_pdf")
-                        };
-                        for (rect, text) in cells(control, 3, ui.px(4)).into_iter().zip([
-                            tr("binarize_best_note"),
-                            tr("binarize_fast_note"),
-                            grayscale_note,
-                        ]) {
-                            hover(ui, rect, text, note);
-                        }
-                    }
-                }
-                3 => {
-                    if let Some(index) = choices(
-                        ui,
-                        control,
-                        &[&t.controls.on, &t.controls.off],
-                        usize::from(!self.options.layout_analysis),
-                    ) {
-                        self.options.set_layout_analysis(index == 0);
-                        if index == 1 {
-                            self.notice(t.popups.layout_disabled.clone(), 5);
-                        }
-                    }
-                    hover(ui, control, &t.tooltips.layout_detection, note);
-                }
+                0 => self.draw_mode_setting(ui, control, note),
+                1 => self.draw_format_setting(ui, control, note),
+                2 => self.draw_text_setting(ui, control, note),
+                3 => self.draw_layout_setting(ui, control, note),
                 5 => self.draw_text_encoding(ui, control, card.sub_option(), note),
-                4 => {
-                    if self.options.preserve_mode {
-                        choice(ui, control, tr("original"), true);
-                    } else {
-                        let mut texts = vec![tr("original"), tr("dithered")];
-                        if self.options.can_select_jbig2_halftone_images() {
-                            texts.push(&t.labels.jbig2_halftone);
-                        }
-                        let selected = if self.options.uses_jbig2_halftone_images() {
-                            2
-                        } else {
-                            usize::from(
-                                self.options.image_processing_type == ImageProcessingType::Dithered,
-                            )
-                        };
-                        if let Some(index) = choices(ui, control, &texts, selected) {
-                            match index {
-                                0 => self
-                                    .options
-                                    .set_image_processing_type(ImageProcessingType::Original),
-                                1 => self
-                                    .options
-                                    .set_image_processing_type(ImageProcessingType::Dithered),
-                                _ => self.options.set_jbig2_halftone_images(),
-                            }
-                        }
-                    }
-                    let cells = cells(
-                        control,
-                        if self.options.preserve_mode {
-                            1
-                        } else if self.options.can_select_jbig2_halftone_images() {
-                            3
-                        } else {
-                            2
-                        },
-                        ui.px(4),
-                    );
-                    for (i, rect) in cells.into_iter().enumerate() {
-                        hover(
-                            ui,
-                            rect,
-                            match i {
-                                0 => &t.tooltips.image_output_original,
-                                1 => &t.tooltips.image_output_dithered,
-                                _ => &t.tooltips.jbig2_halftone,
-                            },
-                            note,
-                        );
-                    }
-                }
+                4 => self.draw_images_setting(ui, control, note),
                 _ => {}
             }
+        }
+    }
+
+    /// Preparation | Preserve, each explained on mouseover.
+    fn draw_mode_setting(
+        &mut self,
+        ui: &mut Ui<'_>,
+        control: Rect,
+        note: &mut Option<&'static str>,
+    ) {
+        if let Some(index) = choices(
+            ui,
+            control,
+            &[tr("preparation"), tr("preserve")],
+            usize::from(self.options.preserve_mode),
+        ) {
+            self.options.set_preserve_mode(index == 1);
+        }
+        // Each button explains itself on mouseover, whichever
+        // mode is selected.
+        for (rect, text) in cells(control, 2, ui.px(4))
+            .into_iter()
+            .zip([tr("preparation_note"), tr("preserve_note")])
+        {
+            hover(ui, rect, text, note);
+        }
+    }
+    /// PDF | DjVu, and EPUB beside either.
+    fn draw_format_setting(
+        &mut self,
+        ui: &mut Ui<'_>,
+        control: Rect,
+        note: &mut Option<&'static str>,
+    ) {
+        let t = &GUI_TEXT.interactive;
+        // PDF and DjVu exclude each other; EPUB is made beside
+        // either, so it stands a little apart from the pair.
+        let [pdf, djvu, epub] = format_cells(ui, control);
+        let djvu_selected = self.options.output_format == OutputFormat::Djvu;
+        if choice(ui, pdf, "PDF", !djvu_selected) {
+            self.options.output_format = OutputFormat::Pdf;
+        }
+        if choice(ui, djvu, "DjVu", djvu_selected) {
+            self.options.output_format = OutputFormat::Djvu;
+        }
+        if choice(ui, epub, "EPUB", self.options.make_epub_also) {
+            self.options
+                .set_make_epub_also(!self.options.make_epub_also);
+        }
+        hover(ui, pdf, &t.tooltips.base_format, note);
+        hover(ui, djvu, &t.tooltips.base_format, note);
+        hover(ui, epub, &t.tooltips.make_epub_also, note);
+    }
+    /// Best | Fast | Grayscale, or the preserve summary.
+    fn draw_text_setting(
+        &mut self,
+        ui: &mut Ui<'_>,
+        control: Rect,
+        note: &mut Option<&'static str>,
+    ) {
+        // Best | Fast | Grayscale: the two binarizers and the
+        // grayscale rendering are one choice of three.
+        if self.options.preserve_mode {
+            small(ui, control, tr("preserve_summary"));
+            hover(ui, control, tr("preserve_note"), note);
+        } else {
+            let selected = if self.options.grayscale_mode {
+                2
+            } else {
+                usize::from(self.options.fast_binarization)
+            };
+            if let Some(index) = choices(
+                ui,
+                control,
+                &[tr("binarize_best"), tr("binarize_fast"), tr("grayscale")],
+                selected,
+            ) {
+                self.options.set_text_mode(index);
+            }
+            let grayscale_note = if self.options.output_format == OutputFormat::Djvu {
+                tr("grayscale_djvu")
+            } else {
+                tr("grayscale_pdf")
+            };
+            for (rect, text) in cells(control, 3, ui.px(4)).into_iter().zip([
+                tr("binarize_best_note"),
+                tr("binarize_fast_note"),
+                grayscale_note,
+            ]) {
+                hover(ui, rect, text, note);
+            }
+        }
+    }
+    /// Layout detection on or off.
+    fn draw_layout_setting(
+        &mut self,
+        ui: &mut Ui<'_>,
+        control: Rect,
+        note: &mut Option<&'static str>,
+    ) {
+        let t = &GUI_TEXT.interactive;
+        if let Some(index) = choices(
+            ui,
+            control,
+            &[&t.controls.on, &t.controls.off],
+            usize::from(!self.options.layout_analysis),
+        ) {
+            self.options.set_layout_analysis(index == 0);
+            if index == 1 {
+                self.notice(t.popups.layout_disabled.clone(), 5);
+            }
+        }
+        hover(ui, control, &t.tooltips.layout_detection, note);
+    }
+    /// Original | Dithered | JBIG2 halftone pictures.
+    fn draw_images_setting(
+        &mut self,
+        ui: &mut Ui<'_>,
+        control: Rect,
+        note: &mut Option<&'static str>,
+    ) {
+        let t = &GUI_TEXT.interactive;
+        if self.options.preserve_mode {
+            choice(ui, control, tr("original"), true);
+        } else {
+            let mut texts = vec![tr("original"), tr("dithered")];
+            if self.options.can_select_jbig2_halftone_images() {
+                texts.push(&t.labels.jbig2_halftone);
+            }
+            let selected = if self.options.uses_jbig2_halftone_images() {
+                2
+            } else {
+                usize::from(self.options.image_processing_type == ImageProcessingType::Dithered)
+            };
+            if let Some(index) = choices(ui, control, &texts, selected) {
+                match index {
+                    0 => self
+                        .options
+                        .set_image_processing_type(ImageProcessingType::Original),
+                    1 => self
+                        .options
+                        .set_image_processing_type(ImageProcessingType::Dithered),
+                    _ => self.options.set_jbig2_halftone_images(),
+                }
+            }
+        }
+        let cells = cells(
+            control,
+            if self.options.preserve_mode {
+                1
+            } else if self.options.can_select_jbig2_halftone_images() {
+                3
+            } else {
+                2
+            },
+            ui.px(4),
+        );
+        for (i, rect) in cells.into_iter().enumerate() {
+            hover(
+                ui,
+                rect,
+                match i {
+                    0 => &t.tooltips.image_output_original,
+                    1 => &t.tooltips.image_output_dithered,
+                    _ => &t.tooltips.jbig2_halftone,
+                },
+                note,
+            );
         }
     }
 
@@ -2445,10 +2530,10 @@ impl Dashboard {
                         open = crate::logging::run_log_path(entry);
                     }
                 });
-                if let Some(path) = open {
-                    if let Err(error) = backend::open_with_system(&path.to_string_lossy()) {
-                        self.notice(error.to_string(), 8);
-                    }
+                if let Some(path) = open
+                    && let Err(error) = backend::open_with_system(&path.to_string_lossy())
+                {
+                    self.notice(error.to_string(), 8);
                 }
                 if !self.running()
                     && ui.button(

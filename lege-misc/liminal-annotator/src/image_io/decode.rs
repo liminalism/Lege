@@ -105,16 +105,22 @@ pub fn synthetic_page(w: u32, h: u32, seed: u64) -> PageImage {
         let mut x = 70 + indent;
         while x < end {
             let word = 12 + (rnd() % 60) as u32;
-            for yy in y..y + 12 {
-                for xx in x..(x + word).min(end) {
-                    px[(yy * w + xx) as usize] = 0x0020_1c18;
-                }
-            }
+            fill_bar(&mut px, w, x..(x + word).min(end), y..y + 12);
             x += word + 7;
         }
         y += line_h + if rnd() % 9 == 0 { 18 } else { 0 };
     }
     PageImage::from_level0(Level { w, h, px })
+}
+
+/// Ink one word of a synthetic page: the rectangle `xs` by `ys` of a
+/// `w`-pixel-wide raster.
+fn fill_bar(px: &mut [u32], w: u32, xs: std::ops::Range<u32>, ys: std::ops::Range<u32>) {
+    for yy in ys {
+        for xx in xs.clone() {
+            px[(yy * w + xx) as usize] = 0x0020_1c18;
+        }
+    }
 }
 
 #[cfg(test)]

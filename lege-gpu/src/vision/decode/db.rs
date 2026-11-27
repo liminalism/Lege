@@ -78,6 +78,10 @@ pub(crate) struct DbBox {
 /// Boxes are in prob-map coordinates; the caller scales them to the original
 /// image. Regions are found by 4-connected flood fill over the thresholded
 /// bitmap — a single pass with an explicit stack, no recursion.
+#[allow(
+    clippy::excessive_nesting,
+    reason = "4-connected flood fill: the neighbour visit sits inside the component's stack loop"
+)]
 pub(crate) fn boxes_from_prob(prob: &[f32], w: usize, h: usize, cfg: &DbConfig) -> Vec<DbBox> {
     let Some(pixel_count) = w.checked_mul(h) else {
         return Vec::new();

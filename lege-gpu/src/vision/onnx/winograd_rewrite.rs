@@ -46,6 +46,24 @@ pub(crate) fn rewrite_winograd_f23(
     Ok(rewritten)
 }
 
+/// Winograd F(2,3) transform of every 3x3 filter of `[cout, cin, 3, 3]`
+/// weights, laid out as `U[16, cout, cin]`.
+fn transformed_weights_f23(source_w: &Tensor, cout: usize, cin: usize) -> Vec<f32> {
+    let mut u = vec![0.0f32; 16 * cout * cin];
+    for co in 0..cout {
+        for ci in 0..cin {
+            let mut g = [0.0f32; 9];
+            let base = (co * cin + ci) * 9;
+            g.copy_from_slice(&source_w.data[base..base + 9]);
+            let ut = weight_transform_f23(&g);
+            for e in 0..16 {
+                u[e * cout * cin + co * cin + ci] = ut[e];
+            }
+        }
+    }
+    u
+}
+
 fn is_eligible_conv(op: &PlannedOp) -> bool {
     let PlannedOpKind::Conv2d(plan) = &op.kind else {
         return false;
@@ -99,18 +117,7 @@ fn rewrite_one(
         .with_context(|| format!("missing conv weight constant `{weight_name}`"))?;
     let u_name = format!("{weight_name}__wino_U");
     if !constants.contains_key(&u_name) {
-        let mut u = vec![0.0f32; 16 * cout * cin];
-        for co in 0..cout {
-            for ci in 0..cin {
-                let mut g = [0.0f32; 9];
-                let base = (co * cin + ci) * 9;
-                g.copy_from_slice(&source_w.data[base..base + 9]);
-                let ut = weight_transform_f23(&g);
-                for e in 0..16 {
-                    u[e * cout * cin + co * cin + ci] = ut[e];
-                }
-            }
-        }
+        let u = transformed_weights_f23(source_w, cout, cin);
         constants.insert(u_name.clone(), Tensor::new(vec![16, cout, cin], u)?);
         known_shapes.insert(u_name.clone(), vec![16, cout as i64, cin as i64]);
     }

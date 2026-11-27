@@ -14,9 +14,9 @@
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;
 
+use exprim::doctor::{FontRecord, ImageRecord};
 use exprim::document::{DocumentSnapshot, PageIndex, ParseContext};
 use exprim::object::{Dictionary, ObjectId, PdfObject};
-use exprim::doctor::{FontRecord, ImageRecord};
 use exprim::structure::ObjectLocation;
 
 use crate::document::ObjectRole;

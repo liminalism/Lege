@@ -343,134 +343,14 @@ pub async fn start_async_processing(
             if scheduler_cancelled.load(Ordering::SeqCst) {
                 break;
             }
-
-            let (worker_events_tx, worker_events_rx) = flume::unbounded::<WorkerProgressUpdate>();
-
-            let mut handle = match spawn_lege_worker(
-                info.id,
-                info.input_path.clone(),
-                info.output_path.clone(),
+            let flow = run_scheduled_worker(
+                &info,
                 &scheduler_options,
-                worker_events_tx,
-                None,
-            ) {
-                Ok(handle) => handle,
-                Err(e) => {
-                    let error = format!(
-                        "Failed to spawn worker for {}: {}",
-                        info.input_path.display(),
-                        e
-                    );
-                    eprintln!("{error}");
-                    let _ = events_tx.send(WorkerProgressUpdate::Error {
-                        task_id: info.id,
-                        error,
-                        metrics: None,
-                    });
-                    continue;
-                }
-            };
-
-            if let Ok(mut pids) = scheduler_active_workers.lock() {
-                pids.clear();
-                pids.push(handle.stop_handle());
-            }
-            // Cancellation can race the narrow interval between the scheduler's
-            // loop check and publishing the new worker control. Re-check after publication
-            // so the just-spawned worker cannot escape the supervisor.
-            if scheduler_cancelled.load(Ordering::SeqCst) {
-                handle.kill();
-                while let Ok(update) = worker_events_rx.recv() {
-                    if matches!(
-                        update,
-                        WorkerProgressUpdate::Completed { .. } | WorkerProgressUpdate::Error { .. }
-                    ) {
-                        break;
-                    }
-                }
-                if let Ok(mut pids) = scheduler_active_workers.lock() {
-                    pids.retain(|pid| pid.pid() != handle.pid());
-                }
-                let _ = events_tx.send(WorkerProgressUpdate::Error {
-                    task_id: info.id,
-                    error: "Processing cancelled".to_string(),
-                    metrics: None,
-                });
-                break;
-            }
-
-            // A healthy GUI worker emits its JSON "initializing" event as soon
-            // as argument parsing completes. Do not leave the GUI spinning
-            // forever if Gatekeeper, Rosetta, or process startup stalls before
-            // that first event (the wait-thread in spawn_lege_worker only fires
-            // when the child actually exits, not when it hangs).
-            match worker_events_rx.recv_timeout(std::time::Duration::from_secs(15)) {
-                Ok(update) => {
-                    let terminal = matches!(
-                        update,
-                        WorkerProgressUpdate::Completed { .. } | WorkerProgressUpdate::Error { .. }
-                    );
-                    let _ = events_tx.send(update);
-                    if terminal {
-                        if let Ok(mut pids) = scheduler_active_workers.lock() {
-                            pids.retain(|pid| pid.pid() != handle.pid());
-                        }
-                        continue;
-                    }
-                }
-                Err(flume::RecvTimeoutError::Timeout) => {
-                    handle.kill();
-                    while let Ok(update) = worker_events_rx.recv() {
-                        if matches!(
-                            update,
-                            WorkerProgressUpdate::Completed { .. }
-                                | WorkerProgressUpdate::Error { .. }
-                        ) {
-                            break;
-                        }
-                    }
-                    let _ = events_tx.send(WorkerProgressUpdate::Error {
-                        task_id: info.id,
-                        error: "The bundled Lege worker started but emitted no startup event \
-                                within 15 seconds. The system may have blocked the helper \
-                                (e.g. macOS Gatekeeper)."
-                            .to_string(),
-                        metrics: None,
-                    });
-                    if let Ok(mut pids) = scheduler_active_workers.lock() {
-                        pids.retain(|pid| pid.pid() != handle.pid());
-                    }
-                    continue;
-                }
-                Err(flume::RecvTimeoutError::Disconnected) => {
-                    let _ = events_tx.send(WorkerProgressUpdate::Error {
-                        task_id: info.id,
-                        error: "The bundled Lege worker disconnected during startup.".to_string(),
-                        metrics: None,
-                    });
-                    if let Ok(mut pids) = scheduler_active_workers.lock() {
-                        pids.retain(|pid| pid.pid() != handle.pid());
-                    }
-                    continue;
-                }
-            }
-
-            while let Ok(update) = worker_events_rx.recv() {
-                let terminal = matches!(
-                    update,
-                    WorkerProgressUpdate::Completed { .. } | WorkerProgressUpdate::Error { .. }
-                );
-                let _ = events_tx.send(update);
-                if terminal {
-                    break;
-                }
-            }
-
-            if let Ok(mut pids) = scheduler_active_workers.lock() {
-                pids.retain(|pid| pid.pid() != handle.pid());
-            }
-
-            if scheduler_cancelled.load(Ordering::SeqCst) {
+                &scheduler_cancelled,
+                &scheduler_active_workers,
+                &events_tx,
+            );
+            if flow.is_break() {
                 break;
             }
         }
@@ -479,6 +359,142 @@ pub async fn start_async_processing(
     let worker_handles = vec![WorkerHandle::supervisor(active_workers, cancelled)];
 
     Ok((tracker_infos, worker_handles, events_rx))
+}
+
+/// Whether a worker event ends the worker's run.
+fn is_terminal_update(update: &WorkerProgressUpdate) -> bool {
+    matches!(
+        update,
+        WorkerProgressUpdate::Completed { .. } | WorkerProgressUpdate::Error { .. }
+    )
+}
+
+/// Discard a killed worker's events up to its terminal one.
+fn wait_for_terminal_event(worker_events_rx: &flume::Receiver<WorkerProgressUpdate>) {
+    while let Ok(update) = worker_events_rx.recv() {
+        if is_terminal_update(&update) {
+            break;
+        }
+    }
+}
+
+/// Drop a finished worker from the supervisor's active list.
+fn forget_worker(active_workers: &Mutex<Vec<WorkerStop>>, handle: &WorkerHandle) {
+    if let Ok(mut pids) = active_workers.lock() {
+        pids.retain(|pid| pid.pid() != handle.pid());
+    }
+}
+
+/// Run one queued file's worker to its end, forwarding its events to the GUI.
+/// `Break` stops the queue: the batch was cancelled.
+fn run_scheduled_worker(
+    info: &TrackerInfo,
+    options: &ProcessingOptions,
+    cancelled: &AtomicBool,
+    active_workers: &Mutex<Vec<WorkerStop>>,
+    events_tx: &flume::Sender<WorkerProgressUpdate>,
+) -> std::ops::ControlFlow<()> {
+    use std::ops::ControlFlow;
+
+    let (worker_events_tx, worker_events_rx) = flume::unbounded::<WorkerProgressUpdate>();
+
+    let mut handle = match spawn_lege_worker(
+        info.id,
+        info.input_path.clone(),
+        info.output_path.clone(),
+        options,
+        worker_events_tx,
+        None,
+    ) {
+        Ok(handle) => handle,
+        Err(e) => {
+            let error = format!(
+                "Failed to spawn worker for {}: {}",
+                info.input_path.display(),
+                e
+            );
+            eprintln!("{error}");
+            let _ = events_tx.send(WorkerProgressUpdate::Error {
+                task_id: info.id,
+                error,
+                metrics: None,
+            });
+            return ControlFlow::Continue(());
+        }
+    };
+
+    if let Ok(mut pids) = active_workers.lock() {
+        pids.clear();
+        pids.push(handle.stop_handle());
+    }
+    // Cancellation can race the narrow interval between the scheduler's
+    // loop check and publishing the new worker control. Re-check after publication
+    // so the just-spawned worker cannot escape the supervisor.
+    if cancelled.load(Ordering::SeqCst) {
+        handle.kill();
+        wait_for_terminal_event(&worker_events_rx);
+        forget_worker(active_workers, &handle);
+        let _ = events_tx.send(WorkerProgressUpdate::Error {
+            task_id: info.id,
+            error: "Processing cancelled".to_string(),
+            metrics: None,
+        });
+        return ControlFlow::Break(());
+    }
+
+    // A healthy GUI worker emits its JSON "initializing" event as soon
+    // as argument parsing completes. Do not leave the GUI spinning
+    // forever if Gatekeeper, Rosetta, or process startup stalls before
+    // that first event (the wait-thread in spawn_lege_worker only fires
+    // when the child actually exits, not when it hangs).
+    match worker_events_rx.recv_timeout(std::time::Duration::from_secs(15)) {
+        Ok(update) => {
+            let terminal = is_terminal_update(&update);
+            let _ = events_tx.send(update);
+            if terminal {
+                forget_worker(active_workers, &handle);
+                return ControlFlow::Continue(());
+            }
+        }
+        Err(flume::RecvTimeoutError::Timeout) => {
+            handle.kill();
+            wait_for_terminal_event(&worker_events_rx);
+            let _ = events_tx.send(WorkerProgressUpdate::Error {
+                task_id: info.id,
+                error: "The bundled Lege worker started but emitted no startup event \
+                        within 15 seconds. The system may have blocked the helper \
+                        (e.g. macOS Gatekeeper)."
+                    .to_string(),
+                metrics: None,
+            });
+            forget_worker(active_workers, &handle);
+            return ControlFlow::Continue(());
+        }
+        Err(flume::RecvTimeoutError::Disconnected) => {
+            let _ = events_tx.send(WorkerProgressUpdate::Error {
+                task_id: info.id,
+                error: "The bundled Lege worker disconnected during startup.".to_string(),
+                metrics: None,
+            });
+            forget_worker(active_workers, &handle);
+            return ControlFlow::Continue(());
+        }
+    }
+
+    while let Ok(update) = worker_events_rx.recv() {
+        let terminal = is_terminal_update(&update);
+        let _ = events_tx.send(update);
+        if terminal {
+            break;
+        }
+    }
+
+    forget_worker(active_workers, &handle);
+
+    if cancelled.load(Ordering::SeqCst) {
+        return ControlFlow::Break(());
+    }
+    ControlFlow::Continue(())
 }
 
 /// Open a file or URL with the system default handler.

@@ -119,6 +119,44 @@ mod tests {
         assert_gpu_matches_cpu_f16(&g, in_shape);
     }
 
+    fn fused_mm((m, k, n): (usize, usize, usize), act: Activation, bias: bool, residual: bool) {
+        let mut consts = vec![("w", vec![k, n], values_f16(k * n, 7))];
+        if bias {
+            consts.push(("bias", vec![n], values_f16(n, 11)));
+        }
+        if residual {
+            consts.push(("res", vec![1, m, n], values_f16(m * n, 13)));
+        }
+        let kind = PlannedOpKind::FusedMatMul {
+            alpha: 0.5,
+            trans_b: false,
+            has_bias: bias,
+            has_residual: residual,
+            act,
+            out_shape: vec![1, m, n],
+        };
+        let g = one_op_graph(kind, &[m, k], consts, &[1, m, n]);
+        assert_gpu_matches_cpu_f16(&g, &[m, k]);
+    }
+
+    fn gemm((m, k, n): (usize, usize, usize), (ta, tb): (bool, bool), bias: Option<Vec<usize>>) {
+        let a = if ta { vec![k, m] } else { vec![m, k] };
+        let b = if tb { vec![n, k] } else { vec![k, n] };
+        let mut consts = vec![("w", b.clone(), values_f16(b.iter().product(), 7))];
+        if let Some(cs) = bias {
+            let len = cs.iter().product();
+            consts.push(("c", cs, values_f16(len, 11)));
+        }
+        let kind = PlannedOpKind::Gemm {
+            alpha: 0.75,
+            beta: 1.5,
+            trans_a: ta,
+            trans_b: tb,
+        };
+        let g = one_op_graph(kind, &a, consts, &[m, n]);
+        assert_gpu_matches_cpu_f16(&g, &a);
+    }
+
     #[test]
     fn fused_matmul_epilogue_matches_reference() {
         for &(m, k, n) in &[(70, 48, 132), (37, 64, 66)] {
@@ -126,23 +164,7 @@ mod tests {
                 for &(bias, residual) in
                     &[(false, false), (true, false), (true, true), (false, true)]
                 {
-                    let mut consts = vec![("w", vec![k, n], values_f16(k * n, 7))];
-                    if bias {
-                        consts.push(("bias", vec![n], values_f16(n, 11)));
-                    }
-                    if residual {
-                        consts.push(("res", vec![1, m, n], values_f16(m * n, 13)));
-                    }
-                    let kind = PlannedOpKind::FusedMatMul {
-                        alpha: 0.5,
-                        trans_b: false,
-                        has_bias: bias,
-                        has_residual: residual,
-                        act,
-                        out_shape: vec![1, m, n],
-                    };
-                    let g = one_op_graph(kind, &[m, k], consts, &[1, m, n]);
-                    assert_gpu_matches_cpu_f16(&g, &[m, k]);
+                    fused_mm((m, k, n), act, bias, residual);
                 }
             }
         }
@@ -181,21 +203,7 @@ mod tests {
                     Some(vec![1]),
                     Some(vec![m, 1]),
                 ] {
-                    let a = if ta { vec![k, m] } else { vec![m, k] };
-                    let b = if tb { vec![n, k] } else { vec![k, n] };
-                    let mut consts = vec![("w", b.clone(), values_f16(b.iter().product(), 7))];
-                    if let Some(cs) = bias {
-                        let len = cs.iter().product();
-                        consts.push(("c", cs, values_f16(len, 11)));
-                    }
-                    let kind = PlannedOpKind::Gemm {
-                        alpha: 0.75,
-                        beta: 1.5,
-                        trans_a: ta,
-                        trans_b: tb,
-                    };
-                    let g = one_op_graph(kind, &a, consts, &[m, n]);
-                    assert_gpu_matches_cpu_f16(&g, &a);
+                    gemm((m, k, n), (ta, tb), bias);
                 }
             }
         }

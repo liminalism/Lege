@@ -5,9 +5,24 @@ use std::time::Instant;
 use liminal_annotator::annotation::geometry::Point;
 use liminal_annotator::canvas::draw::{PageRaster, render_page};
 use liminal_annotator::canvas::viewport::{CanvasRect, ViewTransform};
-use liminal_annotator::image_io::decode::{decode_page, synthetic_page};
+use liminal_annotator::image_io::decode::{PageImage, decode_page, synthetic_page};
 
 const ITERS: usize = 200;
+
+/// Render `ITERS` times into one raster and return the times in ms, sorted.
+fn time_renders(img: &PageImage, view: ViewTransform, w: u32, h: u32, threads: usize) -> Vec<f64> {
+    let mut r = PageRaster::default();
+    let mut times = Vec::new();
+    for i in 0..ITERS {
+        let mut v = view;
+        v.origin.x += (i % 2) as f64; // defeat nothing: every call renders
+        let t = Instant::now();
+        render_page(&mut r, img, &v, 0, 40, w, h, threads);
+        times.push(t.elapsed().as_secs_f64() * 1000.0);
+    }
+    times.sort_by(|a, b| a.total_cmp(b));
+    times
+}
 
 fn main() {
     let img = match std::env::args().nth(1) {
@@ -39,16 +54,7 @@ fn main() {
         ));
         for (label, view) in cases {
             for threads in [1usize, 4, 8] {
-                let mut r = PageRaster::default();
-                let mut times = Vec::new();
-                for i in 0..ITERS {
-                    let mut v = view;
-                    v.origin.x += (i % 2) as f64; // defeat nothing: every call renders
-                    let t = Instant::now();
-                    render_page(&mut r, &img, &v, 0, 40, w, h, threads);
-                    times.push(t.elapsed().as_secs_f64() * 1000.0);
-                }
-                times.sort_by(|a, b| a.total_cmp(b));
+                let times = time_renders(&img, view, w, h, threads);
                 println!(
                     "{w}x{h} scale {:>5.2} threads {threads}: p50 {:>6.2} ms  p95 {:>6.2} ms {label}",
                     view.scale,
@@ -68,16 +74,7 @@ fn main() {
     };
     for h in [32u32, 64, 128, 256, 512] {
         for threads in [1usize, 2, 4, 8] {
-            let mut r = PageRaster::default();
-            let mut times = Vec::new();
-            for i in 0..ITERS {
-                let mut v = view;
-                v.origin.x += (i % 2) as f64;
-                let t = Instant::now();
-                render_page(&mut r, &img, &v, 0, 40, w, h, threads);
-                times.push(t.elapsed().as_secs_f64() * 1000.0);
-            }
-            times.sort_by(|a, b| a.total_cmp(b));
+            let times = time_renders(&img, view, w, h, threads);
             println!(
                 "strip {w}x{h} ({:>4} kpx) threads {threads}: p50 {:>6.3} ms  p95 {:>6.3} ms",
                 (w * h) / 1000,

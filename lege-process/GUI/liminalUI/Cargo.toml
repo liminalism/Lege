@@ -60,3 +60,6 @@ embed-resource = "3.0"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+[lints.clippy]
+cognitive_complexity = "warn"

@@ -11,7 +11,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::mpsc::{Receiver, channel};
+use std::sync::mpsc::{Receiver, Sender, channel};
 
 use super::database::{self, Tone};
 
@@ -101,6 +101,31 @@ pub fn book_tone(pages: &[PathBuf]) -> Option<Tone> {
     })
 }
 
+/// One measuring thread: takes books off `queue` until it is empty or the
+/// job stops, sending each tone to the writer (`wtx`) and to the results.
+fn measure_books(
+    queue: &std::sync::Mutex<Vec<(String, Vec<PathBuf>)>>,
+    tx: &Sender<(String, Tone)>,
+    wtx: &Sender<(String, Tone)>,
+    done: &AtomicUsize,
+    stop: &AtomicBool,
+    wake: &(dyn Fn() + Send + Sync),
+) {
+    loop {
+        if stop.load(Ordering::Relaxed) {
+            break;
+        }
+        let job = queue.lock().ok().and_then(|mut q| q.pop());
+        let Some((book, pages)) = job else { break };
+        if let Some(t) = book_tone(&pages) {
+            let _ = wtx.send((book.clone(), t));
+            let _ = tx.send((book, t));
+        }
+        done.fetch_add(1, Ordering::Relaxed);
+        wake();
+    }
+}
+
 /// A background measurement of every book that has no tone yet. Results are
 /// written to the project as they come and also sent on `results`.
 pub struct ToneJob {
@@ -154,21 +179,7 @@ impl ToneJob {
             );
             std::thread::Builder::new()
                 .name(format!("annotator-tone-{i}"))
-                .spawn(move || {
-                    loop {
-                        if stop.load(Ordering::Relaxed) {
-                            break;
-                        }
-                        let job = queue.lock().ok().and_then(|mut q| q.pop());
-                        let Some((book, pages)) = job else { break };
-                        if let Some(t) = book_tone(&pages) {
-                            let _ = wtx.send((book.clone(), t));
-                            let _ = tx.send((book, t));
-                        }
-                        done.fetch_add(1, Ordering::Relaxed);
-                        wake();
-                    }
-                })
+                .spawn(move || measure_books(&queue, &tx, &wtx, &done, &stop, &*wake))
                 .map_err(|e| e.to_string())?;
         }
         Ok(Some(ToneJob {

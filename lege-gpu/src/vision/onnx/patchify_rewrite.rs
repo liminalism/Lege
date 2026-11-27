@@ -52,6 +52,28 @@ fn eligible_block(op: &PlannedOp, constants: &HashMap<String, Tensor>) -> Option
     ok.then_some(kh as usize)
 }
 
+/// The 1×1 weight `W'[o, (bh·b+bw)·C + c] = W[o, c, bh, bw]` of a b×b
+/// patchify weight `[cout, cin, b, b]`.
+#[allow(
+    clippy::excessive_nesting,
+    reason = "axis re-layout of a 4-D weight: one loop per tensor axis keeps the index math checkable"
+)]
+fn patchify_weights(w: &Tensor, b: usize) -> Vec<f32> {
+    let (cout, cin) = (w.shape[0], w.shape[1]);
+    let k = cin * b * b;
+    let mut w2 = vec![0.0f32; cout * k];
+    for o in 0..cout {
+        for c in 0..cin {
+            for bh in 0..b {
+                for bw in 0..b {
+                    w2[o * k + (bh * b + bw) * cin + c] = w.data[((o * cin + c) * b + bh) * b + bw];
+                }
+            }
+        }
+    }
+    w2
+}
+
 fn rewrite_one(
     op: PlannedOp,
     b: usize,
@@ -68,16 +90,7 @@ fn rewrite_one(
     }
     let (cout, cin) = (w.shape[0], w.shape[1]);
     let k = cin * b * b;
-    let mut w2 = vec![0.0f32; cout * k];
-    for o in 0..cout {
-        for c in 0..cin {
-            for bh in 0..b {
-                for bw in 0..b {
-                    w2[o * k + (bh * b + bw) * cin + c] = w.data[((o * cin + c) * b + bh) * b + bw];
-                }
-            }
-        }
-    }
+    let w2 = patchify_weights(&w, b);
     let s2d_name = format!("{}__patchify_s2d", op.outputs[0]);
     let w_name = format!("{}__patchify_w", op.inputs[1]);
     let s2d_shape = vec![1, k as i64, (x[2] / b) as i64, (x[3] / b) as i64];

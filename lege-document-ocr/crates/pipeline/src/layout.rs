@@ -22,6 +22,7 @@
 //! paragraphs: layout refines recall, it never reduces it. Reading order is
 //! column-aware via [`lege_ocr::reading_order::order_bboxes`].
 
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -530,40 +531,11 @@ pub fn group_ocr_lines(
                 let preprocessing = preprocessing_for(&box_.label);
                 let mut text_lines = Vec::with_capacity(ordered.len());
                 for &index in &ordered {
-                    let [left, top, right, bottom] = lines[index].bbox_highres;
-                    let line = &lines[index];
-                    let words = line
-                        .words
-                        .iter()
-                        .map(|word| lege_docir::TextWord {
-                            text: TextEvidence::raw(word.text.clone()),
-                            polygon: rect_polygon(
-                                (left + word.bbox_crop_local[0]) as f32,
-                                (top + word.bbox_crop_local[1]) as f32,
-                                (left + word.bbox_crop_local[2]) as f32,
-                                (top + word.bbox_crop_local[3]) as f32,
-                            ),
-                            confidence: RecognitionConfidence {
-                                mean_token: word.confidence,
-                                ..Default::default()
-                            },
-                            geometry_source: if provider == "paddle" {
-                                GeometrySource::CtcEstimated
-                            } else {
-                                GeometrySource::OcrBackend
-                            },
-                        })
-                        .collect();
-                    text_lines.push(TextLine {
-                        text: TextEvidence::raw(line.text.clone()),
-                        polygon: rect_polygon(left as f32, top as f32, right as f32, bottom as f32),
-                        confidence: RecognitionConfidence {
-                            mean_token: line.confidence,
-                            ..Default::default()
-                        },
-                        words,
-                        provenance: layout_provenance_with(provider, language, preprocessing),
-                    });
+                    text_lines.push(ocr_text_line(
+                        &lines[index],
+                        provider,
+                        layout_provenance_with(provider, language, preprocessing),
+                    ));
                 }
                 let provenance = layout_provenance_with(provider, language, preprocessing);
                 regions.push(Region {
@@ -618,6 +590,28 @@ fn single_ocr_region(
     provider: &str,
     provenance: Provenance,
 ) -> Region {
+    Region {
+        id,
+        kind: RegionKind::Paragraph,
+        polygon,
+        confidence: RegionConfidence {
+            recognition: line.confidence,
+            ..Default::default()
+        },
+        content: RegionContent::Text(TextBlock {
+            lines: vec![ocr_text_line(line, provider, provenance.clone())],
+        }),
+        provenance,
+    }
+}
+
+/// One recognized OCR line with its words placed on the page: word boxes
+/// arrive crop-local and are offset by the line's page box.
+fn ocr_text_line(
+    line: &lege_ocr::types::OcrLineResult,
+    provider: &str,
+    provenance: Provenance,
+) -> TextLine {
     let [left, top, right, bottom] = line.bbox_highres;
     let words = line
         .words
@@ -641,26 +635,14 @@ fn single_ocr_region(
             },
         })
         .collect();
-    Region {
-        id,
-        kind: RegionKind::Paragraph,
-        polygon,
-        confidence: RegionConfidence {
-            recognition: line.confidence,
+    TextLine {
+        text: TextEvidence::raw(line.text.clone()),
+        polygon: rect_polygon(left as f32, top as f32, right as f32, bottom as f32),
+        confidence: RecognitionConfidence {
+            mean_token: line.confidence,
             ..Default::default()
         },
-        content: RegionContent::Text(TextBlock {
-            lines: vec![TextLine {
-                text: TextEvidence::raw(line.text.clone()),
-                polygon: rect_polygon(left as f32, top as f32, right as f32, bottom as f32),
-                confidence: RecognitionConfidence {
-                    mean_token: line.confidence,
-                    ..Default::default()
-                },
-                words,
-                provenance: provenance.clone(),
-            }],
-        }),
+        words,
         provenance,
     }
 }
@@ -892,38 +874,13 @@ fn layout_placeholder_caption(region: &Region) -> Option<&str> {
 ///
 /// Returns a manifest-level warning, or `None` when nothing was resolved.
 pub fn resolve_furniture(document: &mut lege_docir::Document) -> Option<String> {
-    use std::collections::{HashMap, HashSet};
-    let mut text_pages: HashMap<String, HashSet<u32>> = HashMap::new();
-    let mut figure_pages: HashMap<(String, [i32; 4]), HashSet<u32>> = HashMap::new();
-    let mut number_pages: HashMap<[i32; 4], HashSet<u32>> = HashMap::new();
+    let mut occurrences = FurnitureOccurrences::default();
     for page in &document.pages {
         for region in &page.regions {
-            if is_number_candidate(region) {
-                number_pages
-                    .entry(quantized_bbox(region))
-                    .or_default()
-                    .insert(page.index);
-                continue;
-            }
-            match region.kind {
-                RegionKind::Header | RegionKind::Footer if is_layout_classified(region) => {
-                    if let Some(text) = region.content.plain_text(lege_docir::TextView::Raw) {
-                        let normalized = text.split_whitespace().collect::<Vec<_>>().join(" ");
-                        if !normalized.is_empty() {
-                            text_pages.entry(normalized).or_default().insert(page.index);
-                        }
-                    }
-                }
-                _ => {
-                    if let Some(caption) = layout_placeholder_caption(region) {
-                        let key = (caption.to_string(), quantized_bbox(region));
-                        figure_pages.entry(key).or_default().insert(page.index);
-                    }
-                }
-            }
+            occurrences.record(region, page.index);
         }
     }
-    if text_pages.is_empty() && figure_pages.is_empty() && number_pages.is_empty() {
+    if occurrences.is_empty() {
         return None;
     }
     let mut removed_furniture = 0_usize;
@@ -933,48 +890,16 @@ pub fn resolve_furniture(document: &mut lege_docir::Document) -> Option<String> 
     for page in &mut document.pages {
         let mut kept = Vec::with_capacity(page.regions.len());
         for mut region in std::mem::take(&mut page.regions) {
-            if is_number_candidate(&region) {
-                let repeats = number_pages
-                    .get(&quantized_bbox(&region))
-                    .is_some_and(|pages| pages.len() >= FURNITURE_REPEAT_PAGES);
-                if repeats {
-                    removed_numbers += 1;
-                } else {
+            match occurrences.disposition(&region) {
+                FurnitureDisposition::RemoveNumber => removed_numbers += 1,
+                FurnitureDisposition::RemoveFurniture => removed_furniture += 1,
+                FurnitureDisposition::RemoveFigure => removed_figures += 1,
+                FurnitureDisposition::DemoteToParagraph => {
+                    region.kind = RegionKind::Paragraph;
+                    kept_candidates += 1;
                     kept.push(region);
                 }
-                continue;
-            }
-            match region.kind {
-                RegionKind::Header | RegionKind::Footer if is_layout_classified(&region) => {
-                    let normalized = region
-                        .content
-                        .plain_text(lege_docir::TextView::Raw)
-                        .map(|text| text.split_whitespace().collect::<Vec<_>>().join(" "))
-                        .unwrap_or_default();
-                    let repeats = text_pages
-                        .get(&normalized)
-                        .is_some_and(|pages| pages.len() >= FURNITURE_REPEAT_PAGES);
-                    if repeats {
-                        removed_furniture += 1;
-                    } else {
-                        region.kind = RegionKind::Paragraph;
-                        kept_candidates += 1;
-                        kept.push(region);
-                    }
-                }
-                _ => {
-                    let repeated_figure =
-                        layout_placeholder_caption(&region).is_some_and(|caption| {
-                            figure_pages
-                                .get(&(caption.to_string(), quantized_bbox(&region)))
-                                .is_some_and(|pages| pages.len() >= FIGURE_REPEAT_PAGES)
-                        });
-                    if repeated_figure {
-                        removed_figures += 1;
-                    } else {
-                        kept.push(region);
-                    }
-                }
+                FurnitureDisposition::Keep => kept.push(region),
             }
         }
         page.regions = kept;
@@ -987,6 +912,106 @@ pub fn resolve_furniture(document: &mut lege_docir::Document) -> Option<String> 
                 "layout resolved running furniture: removed {removed_furniture} repeated header/footer region(s), {removed_numbers} repeated page-number region(s) and {removed_figures} repeated placeholder figure(s); kept {kept_candidates} unique candidate(s) as body text"
             )
         })
+}
+
+/// Pages on which each furniture candidate occurs, keyed the way
+/// [`resolve_furniture`] compares candidates across pages.
+#[derive(Default)]
+struct FurnitureOccurrences {
+    text_pages: HashMap<String, HashSet<u32>>,
+    figure_pages: HashMap<(String, [i32; 4]), HashSet<u32>>,
+    number_pages: HashMap<[i32; 4], HashSet<u32>>,
+}
+
+/// What [`resolve_furniture`] does with one region.
+enum FurnitureDisposition {
+    RemoveNumber,
+    RemoveFurniture,
+    RemoveFigure,
+    DemoteToParagraph,
+    Keep,
+}
+
+impl FurnitureOccurrences {
+    fn record(&mut self, region: &Region, page_index: u32) {
+        if is_number_candidate(region) {
+            self.number_pages
+                .entry(quantized_bbox(region))
+                .or_default()
+                .insert(page_index);
+            return;
+        }
+        match region.kind {
+            RegionKind::Header | RegionKind::Footer if is_layout_classified(region) => {
+                let normalized = normalized_raw_text(region);
+                if !normalized.is_empty() {
+                    self.text_pages
+                        .entry(normalized)
+                        .or_default()
+                        .insert(page_index);
+                }
+            }
+            _ => {
+                if let Some(caption) = layout_placeholder_caption(region) {
+                    let key = (caption.to_string(), quantized_bbox(region));
+                    self.figure_pages.entry(key).or_default().insert(page_index);
+                }
+            }
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.text_pages.is_empty() && self.figure_pages.is_empty() && self.number_pages.is_empty()
+    }
+
+    fn disposition(&self, region: &Region) -> FurnitureDisposition {
+        if is_number_candidate(region) {
+            let repeats = self
+                .number_pages
+                .get(&quantized_bbox(region))
+                .is_some_and(|pages| pages.len() >= FURNITURE_REPEAT_PAGES);
+            return if repeats {
+                FurnitureDisposition::RemoveNumber
+            } else {
+                FurnitureDisposition::Keep
+            };
+        }
+        match region.kind {
+            RegionKind::Header | RegionKind::Footer if is_layout_classified(region) => {
+                let repeats = self
+                    .text_pages
+                    .get(&normalized_raw_text(region))
+                    .is_some_and(|pages| pages.len() >= FURNITURE_REPEAT_PAGES);
+                if repeats {
+                    FurnitureDisposition::RemoveFurniture
+                } else {
+                    FurnitureDisposition::DemoteToParagraph
+                }
+            }
+            _ => {
+                let repeated_figure = layout_placeholder_caption(region).is_some_and(|caption| {
+                    self.figure_pages
+                        .get(&(caption.to_string(), quantized_bbox(region)))
+                        .is_some_and(|pages| pages.len() >= FIGURE_REPEAT_PAGES)
+                });
+                if repeated_figure {
+                    FurnitureDisposition::RemoveFigure
+                } else {
+                    FurnitureDisposition::Keep
+                }
+            }
+        }
+    }
+}
+
+/// Raw text of a region with whitespace runs collapsed; empty when the region
+/// has no text.
+fn normalized_raw_text(region: &Region) -> String {
+    region
+        .content
+        .plain_text(lege_docir::TextView::Raw)
+        .map(|text| text.split_whitespace().collect::<Vec<_>>().join(" "))
+        .unwrap_or_default()
 }
 
 /// Coarse bbox key so margin furniture at the same spot compares equal

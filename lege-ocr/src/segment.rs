@@ -163,7 +163,7 @@ pub fn horizontal_projection(
     proj
 }
 
-fn smooth_box(proj: &[u32], radius: usize) -> Vec<f32> {
+pub(crate) fn smooth_box(proj: &[u32], radius: usize) -> Vec<f32> {
     let n = proj.len();
     if n == 0 {
         return Vec::new();
@@ -356,10 +356,11 @@ mod tests {
     fn make_binary(width: usize, height: usize, ink_rows: &[usize]) -> Vec<u8> {
         let mut buf = vec![255u8; width * height];
         for &row in ink_rows {
-            if row < height {
-                for col in 5..(width.saturating_sub(5)) {
-                    buf[row * width + col] = 0;
-                }
+            if row >= height {
+                continue;
+            }
+            for col in 5..(width.saturating_sub(5)) {
+                buf[row * width + col] = 0;
             }
         }
         buf

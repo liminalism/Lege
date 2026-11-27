@@ -4,12 +4,12 @@
 //! translucent, and non-covering paint stays silent.
 #![allow(clippy::unwrap_used, reason = "a failed unwrap is a failed test")]
 
+use exprim::test_support::builder;
 use pdf_forensics::{
     AnalysisMode, AuditReport, Disposition, EvidenceOptions, EvidenceStrength, OcclusionKind,
     OcclusionOptions, OcclusionOutcome, PAGE_CONTENT_COVERS_TEXT, RASTER_PATCH_ON_VECTOR_PAGE,
     audit_bytes, detect_flattened_occlusion, diff_renders, render_bytes_evidence,
 };
-use exprim::test_support::builder;
 
 /// Audit `bytes` and run the occlusion analysis over the same parse.
 fn detect(bytes: &[u8]) -> (AuditReport, OcclusionOutcome) {

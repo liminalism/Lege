@@ -720,33 +720,35 @@ mod tests {
 
         // A queued closure owns its input buffers before a blocking worker
         // becomes available. Use a one-thread pool to exercise that interval.
-        std::thread::spawn(|| {
-            let runtime = tokio::runtime::Builder::new_current_thread()
-                .max_blocking_threads(1)
-                .build()
-                .unwrap();
-            runtime.block_on(async {
-                let (release, wait) = std::sync::mpsc::channel::<()>();
-                let (started, ready) = tokio::sync::oneshot::channel();
-                let first = spawn_blocking(move || {
-                    let _ = started.send(());
-                    let _ = wait.recv();
-                });
-                ready.await.unwrap();
-                let queued = spawn_blocking(|| {});
-                assert_eq!(
-                    outstanding_blocking_jobs(),
-                    2,
-                    "queued buffers must count toward cancellation drain"
-                );
-                queued.abort();
-                drop(release);
-                first.await.unwrap();
-                assert!(queued.await.unwrap_err().is_cancelled());
-                assert_eq!(wait_for_blocking_drain(Duration::from_secs(2)).await, 0);
+        std::thread::spawn(queued_blocking_job_counts_toward_drain)
+            .join()
+            .unwrap();
+    }
+
+    fn queued_blocking_job_counts_toward_drain() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .max_blocking_threads(1)
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let (release, wait) = std::sync::mpsc::channel::<()>();
+            let (started, ready) = tokio::sync::oneshot::channel();
+            let first = spawn_blocking(move || {
+                let _ = started.send(());
+                let _ = wait.recv();
             });
-        })
-        .join()
-        .unwrap();
+            ready.await.unwrap();
+            let queued = spawn_blocking(|| {});
+            assert_eq!(
+                outstanding_blocking_jobs(),
+                2,
+                "queued buffers must count toward cancellation drain"
+            );
+            queued.abort();
+            drop(release);
+            first.await.unwrap();
+            assert!(queued.await.unwrap_err().is_cancelled());
+            assert_eq!(wait_for_blocking_drain(Duration::from_secs(2)).await, 0);
+        });
     }
 }

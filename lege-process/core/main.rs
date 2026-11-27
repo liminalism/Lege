@@ -700,38 +700,14 @@ fn extract_cli_options(args: Vec<String>) -> Result<(Vec<String>, CliOptions)> {
             }
             "--layout-visualize" => {
                 let default_height: u32 = 1200;
-                if let Some(next) = args.get(i + 1) {
-                    if let Ok(height) = next.parse::<u32>() {
-                        if height < 100 || height > 10000 {
-                            bail!("--layout-visualize height must be between 100 and 10000 pixels");
-                        }
-                        opts.layout_visualize = Some(height);
-                        i += 2;
-                    } else {
-                        opts.layout_visualize = Some(default_height);
-                        i += 1;
-                    }
-                } else {
-                    opts.layout_visualize = Some(default_height);
-                    i += 1;
-                }
+                let height = optional_debug_height(&args, i, "--layout-visualize")?;
+                opts.layout_visualize = Some(height.unwrap_or(default_height));
+                i += if height.is_some() { 2 } else { 1 };
             }
             "--image-debug" => {
-                if let Some(next) = args.get(i + 1) {
-                    if let Ok(height) = next.parse::<u32>() {
-                        if height < 100 || height > 10000 {
-                            bail!("--image-debug height must be between 100 and 10000 pixels");
-                        }
-                        opts.image_debug = Some(Some(height));
-                        i += 2;
-                    } else {
-                        opts.image_debug = Some(None);
-                        i += 1;
-                    }
-                } else {
-                    opts.image_debug = Some(None);
-                    i += 1;
-                }
+                let height = optional_debug_height(&args, i, "--image-debug")?;
+                opts.image_debug = Some(height);
+                i += if height.is_some() { 2 } else { 1 };
             }
             "--crop-areas" => {
                 let val = args
@@ -1011,6 +987,19 @@ fn extract_cli_options(args: Vec<String>) -> Result<(Vec<String>, CliOptions)> {
     }
 
     Ok((remaining, opts))
+}
+
+/// The optional height after the debug flag `flag` at `args[i]`: `Some` when
+/// the next argument is a number, which must then lie in 100..=10000 pixels;
+/// `None` when it is absent or not a number (and so not consumed).
+fn optional_debug_height(args: &[String], i: usize, flag: &str) -> Result<Option<u32>> {
+    let Some(height) = args.get(i + 1).and_then(|next| next.parse::<u32>().ok()) else {
+        return Ok(None);
+    };
+    if height < 100 || height > 10000 {
+        bail!("{} height must be between 100 and 10000 pixels", flag);
+    }
+    Ok(Some(height))
 }
 
 /// `--preserve` writes the page as colour MRC layers, so it cannot be combined
@@ -1764,100 +1753,111 @@ fn run_main() -> Result<()> {
 
     // ----- Normal processing mode -----
 
-    if args.len() >= 2 {
-        let mut positional: Vec<String> = args[1..].iter().map(|s| sanitize_path_arg(s)).collect();
-        let mut page_range: Option<String> = None;
-        let mut target_arg: Option<String> = None;
-        let epub_command = pop_trailing_epub_command(&mut positional);
-        if epub_command {
-            if let Some(fmt) = cli_opts.text_format.as_deref()
-                && fmt != "epub"
-            {
-                bail!(
-                    "Trailing `epub` command cannot be combined with --text-format {}",
-                    fmt
-                );
-            }
-            cli_opts.text_format = Some("epub".to_string());
-        }
-
-        // Trailing target (height/profile) takes precedence over page range so numeric targets aren't misread.
-        if positional.len() >= 2 {
-            let last_idx = positional.len() - 1;
-            let prev_idx = positional.len() - 2;
-            let prev = &positional[prev_idx];
-            let last = &positional[last_idx];
-            if !looks_like_input_arg(prev)
-                && !looks_like_input_arg(last)
-                && two_numbers_are_target_dimensions(prev, last)
-            {
-                let width = positional.pop().unwrap();
-                let height = positional.pop().unwrap();
-                target_arg = Some(format!("{height} {width}"));
-            }
-        }
-
-        if let Some(last) = positional.last() {
-            if !looks_like_input_arg(last) {
-                // A lone small number (e.g. "215") is a page, not a target height.
-                // Normalize it to a single-page range ("215" -> "215-215") so it passes
-                // the start-end page-range validation and processes just that page.
-                if lone_number_is_page_like(last) {
-                    let candidate = positional.pop().unwrap();
-                    let range = canonicalize_page_range_token(&candidate);
-                    validate_page_range(&range)?;
-                    page_range = Some(range);
-                } else if parse_target_argument(last).is_ok() {
-                    if let Some(warning) = lone_integer_target_warning(last) {
-                        eprintln!("{warning}");
-                    }
-                    target_arg = positional.pop();
-                } else if looks_like_page_range(last) {
-                    let candidate = positional.pop().unwrap();
-                    let interpreted =
-                        interpret_page_range_arg(canonicalize_page_range_token(&candidate));
-                    if let Some(ref range) = interpreted {
-                        validate_page_range(range)?;
-                    }
-                    page_range = interpreted;
-                } else {
-                    bail!("Unrecognized argument: {}", last);
-                }
-            }
-        }
-
-        // After removing target, check for a remaining page range hint.
-        if let Some(last) = positional.last() {
-            if !looks_like_input_arg(last) {
-                if looks_like_page_range(last) {
-                    let candidate = positional.pop().unwrap();
-                    let interpreted =
-                        interpret_page_range_arg(canonicalize_page_range_token(&candidate));
-                    if let Some(ref range) = interpreted {
-                        validate_page_range(range)?;
-                    }
-                    page_range = interpreted;
-                } else {
-                    bail!("Unrecognized argument: {}", last);
-                }
-            }
-        }
-
-        if positional.is_empty() {
-            bail!("No input PDF files were provided.");
-        }
-
-        handle_simple_processing(
-            positional,
-            page_range,
-            target_arg,
-            cli_opts,
-            AppConfig::default(),
-        )?;
+    if args.len() < 2 {
         return Ok(());
     }
 
+    let mut positional: Vec<String> = args[1..].iter().map(|s| sanitize_path_arg(s)).collect();
+    let epub_command = pop_trailing_epub_command(&mut positional);
+    if epub_command {
+        if let Some(fmt) = cli_opts.text_format.as_deref()
+            && fmt != "epub"
+        {
+            bail!(
+                "Trailing `epub` command cannot be combined with --text-format {}",
+                fmt
+            );
+        }
+        cli_opts.text_format = Some("epub".to_string());
+    }
+
+    let (page_range, target_arg) = pop_trailing_target_and_page_range(&mut positional)?;
+
+    if positional.is_empty() {
+        bail!("No input PDF files were provided.");
+    }
+
+    handle_simple_processing(
+        positional,
+        page_range,
+        target_arg,
+        cli_opts,
+        AppConfig::default(),
+    )?;
     Ok(())
+}
+
+/// Take the trailing target (height/profile, or width and height) and page
+/// range off the positional arguments, leaving only the inputs. Returns
+/// `(page_range, target_arg)`.
+fn pop_trailing_target_and_page_range(
+    positional: &mut Vec<String>,
+) -> Result<(Option<String>, Option<String>)> {
+    let mut page_range: Option<String> = None;
+    let mut target_arg: Option<String> = None;
+
+    // Trailing target (height/profile) takes precedence over page range so numeric targets aren't misread.
+    if positional.len() >= 2 {
+        let last_idx = positional.len() - 1;
+        let prev_idx = positional.len() - 2;
+        let prev = &positional[prev_idx];
+        let last = &positional[last_idx];
+        if !looks_like_input_arg(prev)
+            && !looks_like_input_arg(last)
+            && two_numbers_are_target_dimensions(prev, last)
+        {
+            let width = positional.pop().unwrap();
+            let height = positional.pop().unwrap();
+            target_arg = Some(format!("{height} {width}"));
+        }
+    }
+
+    if let Some(last) = positional.last()
+        && !looks_like_input_arg(last)
+    {
+        // A lone small number (e.g. "215") is a page, not a target height.
+        // Normalize it to a single-page range ("215" -> "215-215") so it passes
+        // the start-end page-range validation and processes just that page.
+        if lone_number_is_page_like(last) {
+            let candidate = positional.pop().unwrap();
+            let range = canonicalize_page_range_token(&candidate);
+            validate_page_range(&range)?;
+            page_range = Some(range);
+        } else if parse_target_argument(last).is_ok() {
+            if let Some(warning) = lone_integer_target_warning(last) {
+                eprintln!("{warning}");
+            }
+            target_arg = positional.pop();
+        } else if looks_like_page_range(last) {
+            let candidate = positional.pop().unwrap();
+            page_range = validated_page_range_token(&candidate)?;
+        } else {
+            bail!("Unrecognized argument: {}", last);
+        }
+    }
+
+    // After removing target, check for a remaining page range hint.
+    if let Some(last) = positional.last()
+        && !looks_like_input_arg(last)
+    {
+        if !looks_like_page_range(last) {
+            bail!("Unrecognized argument: {}", last);
+        }
+        let candidate = positional.pop().unwrap();
+        page_range = validated_page_range_token(&candidate)?;
+    }
+
+    Ok((page_range, target_arg))
+}
+
+/// Normalize a page-range token and validate it; "all" / "full" / "*" give
+/// `None` (every page).
+fn validated_page_range_token(candidate: &str) -> Result<Option<String>> {
+    let interpreted = interpret_page_range_arg(canonicalize_page_range_token(candidate));
+    if let Some(ref range) = interpreted {
+        validate_page_range(range)?;
+    }
+    Ok(interpreted)
 }
 
 fn print_usage() {
@@ -2185,214 +2185,15 @@ fn handle_simple_processing(
         .map_err(|e| anyhow!("Failed to construct CLI defaults: {}", e))?;
 
     // ----- Apply all CLI options to pipeline config -----
-
-    // Language. Only the Linux arm reads the value, so only it binds it.
-    #[cfg(target_os = "linux")]
-    if let Some(ref language) = cli_opts.language {
-        pipeline_config.set_ocr_language(language)?;
-    }
-    #[cfg(not(target_os = "linux"))]
-    if cli_opts.language.is_some() {
-        bail!("--language is supported on Linux builds only");
-    }
-
-    // Text format (ccitt4 | jbig2 | djvu | epub)
-    if let Some(ref fmt) = cli_opts.text_format {
-        pipeline_config.set_text_format(fmt)?;
-    }
-
-    // Preservation mode pins the mask format to JBIG2 unless the user chose
-    // one (truetyping stays allowed); the config default would be truetyping.
-    if cli_opts.preserve && cli_opts.text_format.is_none() {
-        pipeline_config.set_text_format("jbig2")?;
-    }
-
-    // Cover / image format
-    if let Some(ref fmt) = cli_opts.cover_format {
-        let cover = match fmt.as_str() {
-            "jpeg" => CoverFormat::Jpeg,
-            "jp2" => CoverFormat::Jp2,
-            "ccitt4" => CoverFormat::Ccitt4,
-            "jbig2" => CoverFormat::Jbig2,
-            "none" => CoverFormat::None,
-            _ => bail!("Invalid cover format: {}", fmt),
-        };
-        pipeline_config.set_image_format(cover);
-    }
-
-    // Binarization (--binarization)
-    if let Some(bin_config) = cli_binarization_config(&cli_opts) {
-        pipeline_config.set_binarization(bin_config);
-    }
-
-    // Grayscale-clean / MRC mode: text becomes a JBIG2 mask over a JP2 gray
-    // background. Overrides bilevel binarization. Image regions keep the
-    // cover-format default (Jpeg variant → JP2 for regions, or JPEG under
-    // --jpeg-compat) — jpeg-compat affects image regions only, never the
-    // grayscale text background.
-    if cli_opts.grayscale {
-        pipeline_config.set_page_mode(lege::pipeline::PageMode::Grayscale);
-        pipeline_config.set_keep_original_images(true);
-    }
-    // Preservation mode: colour MRC (colour JPX background under a JBIG2 ink
-    // mask). Ink is rendered black for now. The mask comes from the binarizer,
-    // as in --mrc-adaptive-mask.
-    if cli_opts.preserve {
-        pipeline_config.set_page_mode(lege::pipeline::PageMode::Preserved);
-        pipeline_config.set_keep_original_images(true);
-    }
-    if let Some(q) = cli_opts.mrc_bg_quality {
-        pipeline_config.set_mrc_bg_quality(q);
-    }
-    if let Some(s) = cli_opts.mrc_bg_subsample {
-        pipeline_config.set_mrc_bg_subsample(s);
-    }
-    if let Some(t) = cli_opts.mrc_ink_threshold {
-        pipeline_config.set_mrc_ink_threshold(t);
-    }
-    if cli_opts.mrc_adaptive_mask {
-        pipeline_config.set_mrc_adaptive_mask(true);
-    }
-    pipeline_config.set_flatten(cli_flatten_settings(&cli_opts));
-
-    // DjVu quality
-    if let Some(q) = cli_opts.djvu_quality {
-        pipeline_config.set_djvu_iw44_quality(q)?;
-    }
-
-    // Boolean toggles — image-region dithering only (requires layout detection; see pipeline).
-    // `--halftone` wins over `--dither` (jbig2halftone.rs page encode vs symbol/generic JBIG2).
-    // CCITT4 + `--dither` uses clustered-dot 4×4 only (never Stucki); JBIG2/DjVu use Stucki.
-    if cli_opts.halftone {
-        pipeline_config.set_image_region_dither_mode(ImageRegionDitherMode::Halftone);
-    } else if cli_opts.gray_jp2 {
-        pipeline_config.set_image_region_dither_mode(ImageRegionDitherMode::GrayJp2);
-        pipeline_config.set_keep_original_images(false);
-    } else if cli_opts.dither {
-        let tf = pipeline_config.text_format();
-        if tf == "ccitt4" {
-            pipeline_config
-                .set_image_region_dither_mode(ImageRegionDitherMode::Ccitt4ClusteredDot4x4);
-        } else {
-            pipeline_config.set_image_region_dither_mode(ImageRegionDitherMode::Stucki);
-        }
-    }
-
-    // Halftone image regions are JBIG2 streams, but the page's text may be
-    // encoded either as JBIG2 or as a TrueType font.
-    let tf = pipeline_config.text_format();
-    if cli_opts.halftone && !matches!(tf, "jbig2" | "truetyping") {
-        bail!(
-            "--halftone requires --text-format jbig2 or truetyping (got {}). Halftone image regions are encoded as JBIG2.",
-            tf
-        );
-    }
-
-    if cli_opts.no_layout {
-        pipeline_config.set_enable_layout_detection(false);
-    }
-    apply_ocr_options(&mut pipeline_config, &cli_opts);
-    pipeline_config.set_enable_auto_toc(cli_opts.auto_toc);
-    if let Some(scale) = cli_opts.slow_ocr_scale {
-        pipeline_config.set_slow_ocr_scale(scale);
-    }
-    if cli_opts.no_cover {
-        pipeline_config.set_no_cover_page(true);
-    }
-    if cli_opts.invert {
-        pipeline_config.set_invert_input(true);
-        // Invert disables layout detection (model doesn't support inverted docs)
-        if pipeline_config.enable_layout_detection() {
-            pipeline_config.set_enable_layout_detection(false);
-        }
-    }
-    if cli_opts.halftone && !pipeline_config.enable_layout_detection() {
-        bail!("--halftone requires layout detection (do not combine with --no-layout/--invert)");
-    }
-
-    if pipeline_config.text_format() == "jbig2" {
-        // The bit-exact generic region is the default. Symbol substitution
-        // compresses scanned text far better, but it is a lossy transform --
-        // near identical glyphs collapse to one shared bitmap, and a wrong
-        // match silently rewrites a word -- so it is opt-in, through
-        // `--sym-unify` (the GUI's checkbox) or `--symbol-mode`.
-        let selected_mode = cli_opts.jbig2_mode.clone().unwrap_or(Jbig2Mode::Generic);
-        pipeline_config.set_jbig2_mode(selected_mode);
-    }
-    apply_reflow_option(&mut pipeline_config, cli_opts.reflow)?;
-    if cli_opts.jpeg_compat {
-        pipeline_config.set_jpeg_compat(true);
-    }
-    if cli_opts.high_quality {
-        pipeline_config.set_high_quality_output(true);
-    }
-    // Default: keep raster crops as originals (PipelineConfig::new). Opt into re-encoding/dither paths.
-    if cli_opts.halftone || cli_opts.dither {
-        pipeline_config.set_keep_original_images(false);
-    }
-    if cli_opts.original_images || cli_opts.image_only {
-        pipeline_config.set_keep_original_images(true);
-    }
-
-    // Margin processing (precedence: force-crop > crop > center)
-    if cli_opts.force_crop {
-        pipeline_config.set_margin_settings(lege::margin::MarginSettings::CropAndResize);
-        pipeline_config.set_crop_footnotes(true);
-    } else if cli_opts.crop_margins {
-        pipeline_config.set_margin_settings(lege::margin::MarginSettings::CropAndResize);
-    } else if cli_opts.center_margins {
-        pipeline_config.set_margin_settings(lege::margin::MarginSettings::StandardizeAndCenter);
-    }
-    if cli_opts.crop_free_aspect || cli_opts.crop_margins || cli_opts.force_crop {
-        pipeline_config.set_crop_free_aspect(true);
-    }
+    apply_cli_text_and_page_mode(&mut pipeline_config, &cli_opts)?;
+    apply_cli_image_region_mode(&mut pipeline_config, &cli_opts)?;
+    apply_cli_layout_and_ocr_options(&mut pipeline_config, &cli_opts)?;
+    apply_cli_output_options(&mut pipeline_config, &cli_opts)?;
+    apply_cli_margin_options(&mut pipeline_config, &cli_opts);
 
     // ----- Target sizing -----
-
-    // Explicit flags win over the trailing positional: a bare number below 500
-    // is interpreted as a page, so the GUI worker always passes the target via
-    // --target-height/--target-width to avoid that ambiguity entirely.
-    let target_selection = if let Some(height) = cli_opts.target_height {
-        Some(TargetSelection {
-            width: cli_opts.target_width,
-            height,
-        })
-    } else {
-        target_spec
-            .as_deref()
-            .map(parse_target_argument)
-            .transpose()?
-            .flatten()
-    };
-
-    let mut target_description = format!(
-        "{}px height (proportional width)",
-        pipeline_config.target_height()
-    );
-
-    if let Some(selection) = target_selection {
-        if let Some(width) = selection.width {
-            pipeline_config
-                .set_target_dimensions(width, selection.height)
-                .map_err(|e| anyhow!("Failed to set target dimensions: {}", e))?;
-            pipeline_config
-                .set_high_res_render_height(selection.height)
-                .map_err(|e| anyhow!("Failed to set render height: {}", e))?;
-            target_description = format!("{}x{} px", width, selection.height);
-        } else {
-            pipeline_config
-                .set_target_height(selection.height)
-                .map_err(|e| anyhow!("Failed to set target height: {}", e))?;
-            pipeline_config
-                .set_high_res_render_height(selection.height)
-                .map_err(|e| anyhow!("Failed to set render height: {}", e))?;
-            target_description = format!("{}px height (proportional width)", selection.height);
-        }
-    } else {
-        pipeline_config
-            .set_high_res_render_height(pipeline_config.target_height())
-            .map_err(|e| anyhow!("Failed to set render height: {}", e))?;
-    }
+    let target_description =
+        apply_cli_target(&mut pipeline_config, &cli_opts, target_spec.as_deref())?;
 
     // Set page range if provided
     if let Some(ref range) = page_range {
@@ -2413,35 +2214,12 @@ fn handle_simple_processing(
 
     // Show batch summary (suppressed in --gui-worker mode; all human output goes to stderr)
     if !cli_opts.gui_worker {
-        info_println!("\n{}", CLI_TEXT.main.simple_mode_header);
-        info_println!(
-            "{}",
-            fmt1(&CLI_TEXT.main.simple_mode_files_queued, input_jobs.len())
+        print_simple_batch_summary(
+            &input_jobs,
+            page_range.as_deref(),
+            &target_description,
+            &output_dir,
         );
-        for path in &input_jobs {
-            info_println!(
-                "{}",
-                fmt1(
-                    &CLI_TEXT.main.simple_mode_file_item,
-                    path.display_path().display()
-                )
-            );
-        }
-        if let Some(ref range) = page_range {
-            info_println!("{}", fmt1(&CLI_TEXT.main.simple_mode_page_range, range));
-        }
-        info_println!(
-            "{}",
-            fmt1(&CLI_TEXT.main.simple_mode_settings, &target_description)
-        );
-        info_println!(
-            "{}",
-            fmt1(
-                &CLI_TEXT.main.simple_mode_output_directory,
-                output_dir.display()
-            )
-        );
-        info_println!("{}\n", CLI_TEXT.main.simple_mode_footer);
     }
 
     let total_files = input_jobs.len();
@@ -2454,33 +2232,7 @@ fn handle_simple_processing(
         let output_path = generate_output_path(&file_path, &output_dir, &per_file_config)?;
 
         if !gui_worker {
-            if total_files > 1 {
-                info_println!(
-                    "{}",
-                    fmt3(
-                        &CLI_TEXT.main.simple_mode_batch_item,
-                        index + 1,
-                        total_files,
-                        file_path.display()
-                    )
-                );
-                info_println!(
-                    "{}",
-                    fmt1(
-                        &CLI_TEXT.main.simple_mode_batch_output,
-                        output_path.display()
-                    )
-                );
-            } else {
-                info_println!(
-                    "{}",
-                    fmt1(&CLI_TEXT.main.simple_mode_input, file_path.display())
-                );
-                info_println!(
-                    "{}",
-                    fmt1(&CLI_TEXT.main.simple_mode_output, output_path.display())
-                );
-            }
+            print_simple_file_header(index, total_files, &file_path, &output_path);
         }
 
         let result = if gui_worker {
@@ -2531,6 +2283,332 @@ fn handle_simple_processing(
         cli_opts.pause_on_exit,
     );
     fast_exit(exit_code);
+}
+
+/// Apply the OCR language, text and cover formats, binarization and page mode
+/// (grayscale or preserved MRC) options.
+fn apply_cli_text_and_page_mode(
+    pipeline_config: &mut PipelineConfig,
+    cli_opts: &CliOptions,
+) -> Result<()> {
+    // Language. Only the Linux arm reads the value, so only it binds it.
+    #[cfg(target_os = "linux")]
+    if let Some(ref language) = cli_opts.language {
+        pipeline_config.set_ocr_language(language)?;
+    }
+    #[cfg(not(target_os = "linux"))]
+    if cli_opts.language.is_some() {
+        bail!("--language is supported on Linux builds only");
+    }
+
+    // Text format (ccitt4 | jbig2 | djvu | epub)
+    if let Some(ref fmt) = cli_opts.text_format {
+        pipeline_config.set_text_format(fmt)?;
+    }
+
+    // Preservation mode pins the mask format to JBIG2 unless the user chose
+    // one (truetyping stays allowed); the config default would be truetyping.
+    if cli_opts.preserve && cli_opts.text_format.is_none() {
+        pipeline_config.set_text_format("jbig2")?;
+    }
+
+    // Cover / image format
+    if let Some(ref fmt) = cli_opts.cover_format {
+        let cover = match fmt.as_str() {
+            "jpeg" => CoverFormat::Jpeg,
+            "jp2" => CoverFormat::Jp2,
+            "ccitt4" => CoverFormat::Ccitt4,
+            "jbig2" => CoverFormat::Jbig2,
+            "none" => CoverFormat::None,
+            _ => bail!("Invalid cover format: {}", fmt),
+        };
+        pipeline_config.set_image_format(cover);
+    }
+
+    // Binarization (--binarization)
+    if let Some(bin_config) = cli_binarization_config(cli_opts) {
+        pipeline_config.set_binarization(bin_config);
+    }
+
+    // Grayscale-clean / MRC mode: text becomes a JBIG2 mask over a JP2 gray
+    // background. Overrides bilevel binarization. Image regions keep the
+    // cover-format default (Jpeg variant → JP2 for regions, or JPEG under
+    // --jpeg-compat) — jpeg-compat affects image regions only, never the
+    // grayscale text background.
+    if cli_opts.grayscale {
+        pipeline_config.set_page_mode(lege::pipeline::PageMode::Grayscale);
+        pipeline_config.set_keep_original_images(true);
+    }
+    // Preservation mode: colour MRC (colour JPX background under a JBIG2 ink
+    // mask). Ink is rendered black for now. The mask comes from the binarizer,
+    // as in --mrc-adaptive-mask.
+    if cli_opts.preserve {
+        pipeline_config.set_page_mode(lege::pipeline::PageMode::Preserved);
+        pipeline_config.set_keep_original_images(true);
+    }
+    if let Some(q) = cli_opts.mrc_bg_quality {
+        pipeline_config.set_mrc_bg_quality(q);
+    }
+    if let Some(s) = cli_opts.mrc_bg_subsample {
+        pipeline_config.set_mrc_bg_subsample(s);
+    }
+    if let Some(t) = cli_opts.mrc_ink_threshold {
+        pipeline_config.set_mrc_ink_threshold(t);
+    }
+    if cli_opts.mrc_adaptive_mask {
+        pipeline_config.set_mrc_adaptive_mask(true);
+    }
+    pipeline_config.set_flatten(cli_flatten_settings(cli_opts));
+
+    // DjVu quality
+    if let Some(q) = cli_opts.djvu_quality {
+        pipeline_config.set_djvu_iw44_quality(q)?;
+    }
+    Ok(())
+}
+
+/// Apply how image regions are rendered (halftone, gray JP2 or dithered).
+fn apply_cli_image_region_mode(
+    pipeline_config: &mut PipelineConfig,
+    cli_opts: &CliOptions,
+) -> Result<()> {
+    // Boolean toggles — image-region dithering only (requires layout detection; see pipeline).
+    // `--halftone` wins over `--dither` (jbig2halftone.rs page encode vs symbol/generic JBIG2).
+    // CCITT4 + `--dither` uses clustered-dot 4×4 only (never Stucki); JBIG2/DjVu use Stucki.
+    if cli_opts.halftone {
+        pipeline_config.set_image_region_dither_mode(ImageRegionDitherMode::Halftone);
+    } else if cli_opts.gray_jp2 {
+        pipeline_config.set_image_region_dither_mode(ImageRegionDitherMode::GrayJp2);
+        pipeline_config.set_keep_original_images(false);
+    } else if cli_opts.dither {
+        let tf = pipeline_config.text_format();
+        if tf == "ccitt4" {
+            pipeline_config
+                .set_image_region_dither_mode(ImageRegionDitherMode::Ccitt4ClusteredDot4x4);
+        } else {
+            pipeline_config.set_image_region_dither_mode(ImageRegionDitherMode::Stucki);
+        }
+    }
+
+    // Halftone image regions are JBIG2 streams, but the page's text may be
+    // encoded either as JBIG2 or as a TrueType font.
+    let tf = pipeline_config.text_format();
+    if cli_opts.halftone && !matches!(tf, "jbig2" | "truetyping") {
+        bail!(
+            "--halftone requires --text-format jbig2 or truetyping (got {}). Halftone image regions are encoded as JBIG2.",
+            tf
+        );
+    }
+    Ok(())
+}
+
+/// Apply the layout detection, OCR, table of contents, cover page and input
+/// inversion options.
+fn apply_cli_layout_and_ocr_options(
+    pipeline_config: &mut PipelineConfig,
+    cli_opts: &CliOptions,
+) -> Result<()> {
+    if cli_opts.no_layout {
+        pipeline_config.set_enable_layout_detection(false);
+    }
+    apply_ocr_options(pipeline_config, cli_opts);
+    pipeline_config.set_enable_auto_toc(cli_opts.auto_toc);
+    if let Some(scale) = cli_opts.slow_ocr_scale {
+        pipeline_config.set_slow_ocr_scale(scale);
+    }
+    if cli_opts.no_cover {
+        pipeline_config.set_no_cover_page(true);
+    }
+    if cli_opts.invert {
+        pipeline_config.set_invert_input(true);
+        // Invert disables layout detection (model doesn't support inverted docs)
+        if pipeline_config.enable_layout_detection() {
+            pipeline_config.set_enable_layout_detection(false);
+        }
+    }
+    if cli_opts.halftone && !pipeline_config.enable_layout_detection() {
+        bail!("--halftone requires layout detection (do not combine with --no-layout/--invert)");
+    }
+    Ok(())
+}
+
+/// Apply the JBIG2 mode, reflow, output compatibility and quality options,
+/// and whether raster crops keep their original images.
+fn apply_cli_output_options(
+    pipeline_config: &mut PipelineConfig,
+    cli_opts: &CliOptions,
+) -> Result<()> {
+    if pipeline_config.text_format() == "jbig2" {
+        // The bit-exact generic region is the default. Symbol substitution
+        // compresses scanned text far better, but it is a lossy transform --
+        // near identical glyphs collapse to one shared bitmap, and a wrong
+        // match silently rewrites a word -- so it is opt-in, through
+        // `--sym-unify` (the GUI's checkbox) or `--symbol-mode`.
+        let selected_mode = cli_opts.jbig2_mode.clone().unwrap_or(Jbig2Mode::Generic);
+        pipeline_config.set_jbig2_mode(selected_mode);
+    }
+    apply_reflow_option(pipeline_config, cli_opts.reflow)?;
+    if cli_opts.jpeg_compat {
+        pipeline_config.set_jpeg_compat(true);
+    }
+    if cli_opts.high_quality {
+        pipeline_config.set_high_quality_output(true);
+    }
+    // Default: keep raster crops as originals (PipelineConfig::new). Opt into re-encoding/dither paths.
+    if cli_opts.halftone || cli_opts.dither {
+        pipeline_config.set_keep_original_images(false);
+    }
+    if cli_opts.original_images || cli_opts.image_only {
+        pipeline_config.set_keep_original_images(true);
+    }
+    Ok(())
+}
+
+/// Apply margin processing (precedence: force-crop > crop > center).
+fn apply_cli_margin_options(pipeline_config: &mut PipelineConfig, cli_opts: &CliOptions) {
+    if cli_opts.force_crop {
+        pipeline_config.set_margin_settings(lege::margin::MarginSettings::CropAndResize);
+        pipeline_config.set_crop_footnotes(true);
+    } else if cli_opts.crop_margins {
+        pipeline_config.set_margin_settings(lege::margin::MarginSettings::CropAndResize);
+    } else if cli_opts.center_margins {
+        pipeline_config.set_margin_settings(lege::margin::MarginSettings::StandardizeAndCenter);
+    }
+    if cli_opts.crop_free_aspect || cli_opts.crop_margins || cli_opts.force_crop {
+        pipeline_config.set_crop_free_aspect(true);
+    }
+}
+
+/// Apply the target size and the matching render height, and describe the
+/// target for the batch summary.
+fn apply_cli_target(
+    pipeline_config: &mut PipelineConfig,
+    cli_opts: &CliOptions,
+    target_spec: Option<&str>,
+) -> Result<String> {
+    // Explicit flags win over the trailing positional: a bare number below 500
+    // is interpreted as a page, so the GUI worker always passes the target via
+    // --target-height/--target-width to avoid that ambiguity entirely.
+    let target_selection = if let Some(height) = cli_opts.target_height {
+        Some(TargetSelection {
+            width: cli_opts.target_width,
+            height,
+        })
+    } else {
+        target_spec
+            .map(parse_target_argument)
+            .transpose()?
+            .flatten()
+    };
+
+    let Some(selection) = target_selection else {
+        let target_description = format!(
+            "{}px height (proportional width)",
+            pipeline_config.target_height()
+        );
+        pipeline_config
+            .set_high_res_render_height(pipeline_config.target_height())
+            .map_err(|e| anyhow!("Failed to set render height: {}", e))?;
+        return Ok(target_description);
+    };
+
+    match selection.width {
+        Some(width) => {
+            pipeline_config
+                .set_target_dimensions(width, selection.height)
+                .map_err(|e| anyhow!("Failed to set target dimensions: {}", e))?;
+            pipeline_config
+                .set_high_res_render_height(selection.height)
+                .map_err(|e| anyhow!("Failed to set render height: {}", e))?;
+            Ok(format!("{}x{} px", width, selection.height))
+        }
+        None => {
+            pipeline_config
+                .set_target_height(selection.height)
+                .map_err(|e| anyhow!("Failed to set target height: {}", e))?;
+            pipeline_config
+                .set_high_res_render_height(selection.height)
+                .map_err(|e| anyhow!("Failed to set render height: {}", e))?;
+            Ok(format!(
+                "{}px height (proportional width)",
+                selection.height
+            ))
+        }
+    }
+}
+
+/// Print the queued files and the settings of a simple CLI batch.
+fn print_simple_batch_summary(
+    input_jobs: &[SimpleInput],
+    page_range: Option<&str>,
+    target_description: &str,
+    output_dir: &Path,
+) {
+    info_println!("\n{}", CLI_TEXT.main.simple_mode_header);
+    info_println!(
+        "{}",
+        fmt1(&CLI_TEXT.main.simple_mode_files_queued, input_jobs.len())
+    );
+    for path in input_jobs {
+        info_println!(
+            "{}",
+            fmt1(
+                &CLI_TEXT.main.simple_mode_file_item,
+                path.display_path().display()
+            )
+        );
+    }
+    if let Some(range) = page_range {
+        info_println!("{}", fmt1(&CLI_TEXT.main.simple_mode_page_range, range));
+    }
+    info_println!(
+        "{}",
+        fmt1(&CLI_TEXT.main.simple_mode_settings, target_description)
+    );
+    info_println!(
+        "{}",
+        fmt1(
+            &CLI_TEXT.main.simple_mode_output_directory,
+            output_dir.display()
+        )
+    );
+    info_println!("{}\n", CLI_TEXT.main.simple_mode_footer);
+}
+
+/// Print which input file of the batch is starting and where its output goes.
+fn print_simple_file_header(
+    index: usize,
+    total_files: usize,
+    file_path: &Path,
+    output_path: &Path,
+) {
+    if total_files > 1 {
+        info_println!(
+            "{}",
+            fmt3(
+                &CLI_TEXT.main.simple_mode_batch_item,
+                index + 1,
+                total_files,
+                file_path.display()
+            )
+        );
+        info_println!(
+            "{}",
+            fmt1(
+                &CLI_TEXT.main.simple_mode_batch_output,
+                output_path.display()
+            )
+        );
+    } else {
+        info_println!(
+            "{}",
+            fmt1(&CLI_TEXT.main.simple_mode_input, file_path.display())
+        );
+        info_println!(
+            "{}",
+            fmt1(&CLI_TEXT.main.simple_mode_output, output_path.display())
+        );
+    }
 }
 
 fn print_env_variables_help() {
@@ -2638,41 +2716,7 @@ fn run_cli() -> Result<Option<(PathBuf, PipelineConfig)>> {
         .and_then(|s| s.to_str())
         == Some("pdf")
     {
-        let has_ocr = tokio::runtime::Builder::new_current_thread()
-            .max_blocking_threads(lege::runtime_stats::MAX_BLOCKING_THREADS)
-            .enable_all()
-            .build()?
-            .block_on(check_pdf_ocr_layer(&PathBuf::from(file_path)));
-
-        match has_ocr {
-            Ok(true) => {
-                println!(
-                    "\n{}{}{}",
-                    cli_color(COLORS.info),
-                    CLI_TEXT.interactive.messages.ocr_detected,
-                    cli_reset()
-                );
-                println!("{}", CLI_TEXT.interactive.messages.ocr_detected_msg);
-                println!("{}\n", CLI_TEXT.interactive.messages.ocr_detected_tip);
-            }
-            Ok(false) => {
-                println!(
-                    "\n{}{}{}",
-                    cli_color(COLORS.highlight),
-                    CLI_TEXT.interactive.messages.no_ocr_detected,
-                    cli_reset()
-                );
-                println!("{}\n", CLI_TEXT.interactive.messages.no_ocr_detected_msg);
-            }
-            Err(e) => {
-                eprintln!(
-                    "{}{}{}",
-                    cli_color(COLORS.highlight),
-                    fmt1(&CLI_TEXT.main.ocr_check_warning, e),
-                    cli_reset()
-                );
-            }
-        }
+        report_pdf_ocr_layer(file_path)?;
     }
 
     // Processing options selection
@@ -2833,21 +2877,8 @@ fn run_cli() -> Result<Option<(PathBuf, PipelineConfig)>> {
     // Apply precedence rules before constructing the final config
 
     // 1) Margin processing precedence: force-crop ('f') > crop ('w') > center ('m')
-    let (effective_center_margins, effective_crop_margins, effective_force_crop) = if force_crop {
-        // Force crop overrides everything
-        if crop_margins || center_margins {
-            println!("{}", CLI_TEXT.main.precedence_force_crop_note);
-        }
-        (false, true, true)
-    } else if crop_margins {
-        // Crop overrides center
-        if center_margins {
-            println!("{}", CLI_TEXT.main.precedence_crop_over_center_note);
-        }
-        (false, true, false)
-    } else {
-        (center_margins, false, false)
-    };
+    let (effective_center_margins, effective_crop_margins, effective_force_crop) =
+        effective_margin_choices(center_margins, crop_margins, force_crop);
 
     // 2) Layout detection is enabled by default, disabled by 'a' flag
     // When disabled, margin processing uses pixel-based analysis
@@ -3093,6 +3124,71 @@ fn run_cli() -> Result<Option<(PathBuf, PipelineConfig)>> {
     }
 
     Ok(Some((PathBuf::from(file_path), config)))
+}
+
+/// Tell the user whether the PDF at `file_path` already has an OCR text layer.
+fn report_pdf_ocr_layer(file_path: &str) -> Result<()> {
+    let has_ocr = tokio::runtime::Builder::new_current_thread()
+        .max_blocking_threads(lege::runtime_stats::MAX_BLOCKING_THREADS)
+        .enable_all()
+        .build()?
+        .block_on(check_pdf_ocr_layer(&PathBuf::from(file_path)));
+
+    match has_ocr {
+        Ok(true) => {
+            println!(
+                "\n{}{}{}",
+                cli_color(COLORS.info),
+                CLI_TEXT.interactive.messages.ocr_detected,
+                cli_reset()
+            );
+            println!("{}", CLI_TEXT.interactive.messages.ocr_detected_msg);
+            println!("{}\n", CLI_TEXT.interactive.messages.ocr_detected_tip);
+        }
+        Ok(false) => {
+            println!(
+                "\n{}{}{}",
+                cli_color(COLORS.highlight),
+                CLI_TEXT.interactive.messages.no_ocr_detected,
+                cli_reset()
+            );
+            println!("{}\n", CLI_TEXT.interactive.messages.no_ocr_detected_msg);
+        }
+        Err(e) => {
+            eprintln!(
+                "{}{}{}",
+                cli_color(COLORS.highlight),
+                fmt1(&CLI_TEXT.main.ocr_check_warning, e),
+                cli_reset()
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Resolve the interactive margin choices by their precedence, force-crop
+/// ('f') > crop ('w') > center ('m'), and note any choice that is overridden.
+/// Returns the effective `(center_margins, crop_margins, force_crop)`.
+fn effective_margin_choices(
+    center_margins: bool,
+    crop_margins: bool,
+    force_crop: bool,
+) -> (bool, bool, bool) {
+    if force_crop {
+        // Force crop overrides everything
+        if crop_margins || center_margins {
+            println!("{}", CLI_TEXT.main.precedence_force_crop_note);
+        }
+        return (false, true, true);
+    }
+    if crop_margins {
+        // Crop overrides center
+        if center_margins {
+            println!("{}", CLI_TEXT.main.precedence_crop_over_center_note);
+        }
+        return (false, true, false);
+    }
+    (center_margins, false, false)
 }
 
 enum SimpleInput {
@@ -4131,40 +4227,26 @@ fn parse_file_paths(input: &str) -> Vec<String> {
 
     while let Some(ch) = chars.next() {
         match ch {
-            '"' | '\'' => {
-                if let Some(active) = quote_char {
-                    if active == ch {
-                        quote_char = None;
-                    } else {
-                        current_file.push(ch);
-                    }
-                } else {
-                    quote_char = Some(ch);
+            '"' | '\'' => match quote_char {
+                None => quote_char = Some(ch),
+                Some(active) if active == ch => quote_char = None,
+                Some(_) => current_file.push(ch),
+            },
+            '\\' => match chars.peek().copied() {
+                Some(' ' | '\t') => {
+                    current_file.push(' ');
+                    chars.next();
                 }
-            }
-            '\\' => {
-                if let Some(next) = chars.peek().copied() {
-                    match next {
-                        ' ' | '\t' => {
-                            current_file.push(' ');
-                            chars.next();
-                        }
-                        '"' | '\'' => {
-                            current_file.push(next);
-                            chars.next();
-                        }
-                        '\\' => {
-                            current_file.push('\\');
-                            chars.next();
-                        }
-                        _ => {
-                            current_file.push('\\');
-                        }
-                    }
-                } else {
+                Some(next @ ('"' | '\'')) => {
+                    current_file.push(next);
+                    chars.next();
+                }
+                Some('\\') => {
                     current_file.push('\\');
+                    chars.next();
                 }
-            }
+                Some(_) | None => current_file.push('\\'),
+            },
             ' ' | '\t' => {
                 if quote_char.is_some() {
                     current_file.push(ch);
@@ -4257,13 +4339,7 @@ fn prompt_target_device(config: &mut PipelineConfig) -> Result<String> {
             || input.eq_ignore_ascii_case("proportional")
         {
             let height = config.target_height();
-            if let Err(e) = config.set_high_res_render_height(height) {
-                println!(
-                    "{}{}{}",
-                    cli_color(COLORS.highlight),
-                    fmt1(&CLI_TEXT.main.target_device_render_height_error, e),
-                    cli_reset()
-                );
+            if !apply_render_height(config, height) {
                 continue;
             }
             return Ok(format!("{}px height (proportional width)", height));
@@ -4273,46 +4349,8 @@ fn prompt_target_device(config: &mut PipelineConfig) -> Result<String> {
             .strip_prefix("save ")
             .or_else(|| input.strip_prefix("save-preset "));
         if let Some(spec) = save_prefix {
-            match parse_target_argument(spec) {
-                Ok(Some(selection)) => {
-                    lege::resolution_preset::save(lege::resolution_preset::ResolutionPreset {
-                        height: selection.height,
-                        width: selection.width,
-                    })?;
-                    println!(
-                        "Saved resolution preset: {}",
-                        describe_target_selection(selection)
-                    );
-                    if let Some(width) = selection.width {
-                        if let Err(e) = config.set_target_dimensions(width, selection.height) {
-                            println!(
-                                "{}{}{}",
-                                cli_color(COLORS.highlight),
-                                fmt1(&CLI_TEXT.main.target_device_apply_dimensions_error, e),
-                                cli_reset()
-                            );
-                            continue;
-                        }
-                    } else if let Err(e) = config.set_target_height(selection.height) {
-                        println!(
-                            "{}{}{}",
-                            cli_color(COLORS.highlight),
-                            fmt1(&CLI_TEXT.main.target_device_set_target_height_error, e),
-                            cli_reset()
-                        );
-                        continue;
-                    }
-                    if let Err(e) = config.set_high_res_render_height(selection.height) {
-                        println!(
-                            "{}{}{}",
-                            cli_color(COLORS.highlight),
-                            fmt1(&CLI_TEXT.main.target_device_render_height_error, e),
-                            cli_reset()
-                        );
-                        continue;
-                    }
-                    return Ok(describe_target_selection(selection));
-                }
+            let selection = match parse_target_argument(spec) {
+                Ok(Some(selection)) => selection,
                 Ok(None) => {
                     println!(
                         "{}Cannot save the default target as a preset.{}",
@@ -4322,111 +4360,96 @@ fn prompt_target_device(config: &mut PipelineConfig) -> Result<String> {
                     continue;
                 }
                 Err(e) => {
-                    println!(
-                        "{}{}{}",
-                        cli_color(COLORS.highlight),
-                        fmt2(&CLI_TEXT.main.target_device_invalid_spec_error, spec, e),
-                        cli_reset()
-                    );
+                    print_target_error(fmt2(
+                        &CLI_TEXT.main.target_device_invalid_spec_error,
+                        spec,
+                        e,
+                    ));
                     continue;
                 }
+            };
+            lege::resolution_preset::save(lege::resolution_preset::ResolutionPreset {
+                height: selection.height,
+                width: selection.width,
+            })?;
+            println!(
+                "Saved resolution preset: {}",
+                describe_target_selection(selection)
+            );
+            if !apply_target_selection(config, selection) {
+                continue;
             }
+            return Ok(describe_target_selection(selection));
         }
 
-        let normalized_spec = if input == "1"
+        let spec = if input == "1"
             || input.eq_ignore_ascii_case("preset")
             || input.eq_ignore_ascii_case("load-preset")
         {
-            Some("preset".to_string())
+            "preset"
         } else {
-            Some(input.to_string())
+            input
         };
 
-        if let Some(spec) = normalized_spec {
-            match parse_target_argument(&spec) {
-                Ok(Some(selection)) => {
-                    if let Some(width) = selection.width {
-                        if let Err(e) = config.set_target_dimensions(width, selection.height) {
-                            println!(
-                                "{}{}{}",
-                                cli_color(COLORS.highlight),
-                                fmt1(&CLI_TEXT.main.target_device_apply_dimensions_error, e),
-                                cli_reset()
-                            );
-                            continue;
-                        }
-                        if let Err(e) = config.set_high_res_render_height(selection.height) {
-                            println!(
-                                "{}{}{}",
-                                cli_color(COLORS.highlight),
-                                fmt1(&CLI_TEXT.main.target_device_render_height_error, e),
-                                cli_reset()
-                            );
-                            continue;
-                        }
-                        return Ok(format!("{}x{} px", width, selection.height));
-                    } else {
-                        if let Err(e) = config.set_target_height(selection.height) {
-                            println!(
-                                "{}{}{}",
-                                cli_color(COLORS.highlight),
-                                fmt1(&CLI_TEXT.main.target_device_set_target_height_error, e),
-                                cli_reset()
-                            );
-                            continue;
-                        }
-                        if let Err(e) = config.set_high_res_render_height(selection.height) {
-                            println!(
-                                "{}{}{}",
-                                cli_color(COLORS.highlight),
-                                fmt1(&CLI_TEXT.main.target_device_render_height_error, e),
-                                cli_reset()
-                            );
-                            continue;
-                        }
-                        return Ok(format!(
-                            "{}px height (proportional width)",
-                            selection.height
-                        ));
-                    }
-                }
-                Ok(None) => {
-                    let height = config.target_height();
-                    if let Err(e) = config.set_high_res_render_height(height) {
-                        println!(
-                            "{}{}{}",
-                            cli_color(COLORS.highlight),
-                            fmt1(&CLI_TEXT.main.target_device_render_height_error, e),
-                            cli_reset()
-                        );
-                        continue;
-                    }
-                    return Ok(format!("{}px height (proportional width)", height));
-                }
-                Err(e) => {
-                    println!(
-                        "{}{}{}",
-                        cli_color(COLORS.highlight),
-                        fmt2(&CLI_TEXT.main.target_device_invalid_spec_error, spec, e),
-                        cli_reset()
-                    );
+        let selection = match parse_target_argument(spec) {
+            Ok(Some(selection)) => selection,
+            Ok(None) => {
+                let height = config.target_height();
+                if !apply_render_height(config, height) {
                     continue;
                 }
+                return Ok(format!("{}px height (proportional width)", height));
             }
-        } else {
-            let height = config.target_height();
-            if let Err(e) = config.set_high_res_render_height(height) {
-                println!(
-                    "{}{}{}",
-                    cli_color(COLORS.highlight),
-                    fmt1(&CLI_TEXT.main.target_device_render_height_error, e),
-                    cli_reset()
-                );
+            Err(e) => {
+                print_target_error(fmt2(
+                    &CLI_TEXT.main.target_device_invalid_spec_error,
+                    spec,
+                    e,
+                ));
                 continue;
             }
-            return Ok(format!("{}px height (proportional width)", height));
+        };
+        if !apply_target_selection(config, selection) {
+            continue;
         }
+        return Ok(match selection.width {
+            Some(width) => format!("{}x{} px", width, selection.height),
+            None => format!("{}px height (proportional width)", selection.height),
+        });
     }
+}
+
+/// Print why the target prompt could not use an answer, before it asks again.
+fn print_target_error(message: String) {
+    println!("{}{}{}", cli_color(COLORS.highlight), message, cli_reset());
+}
+
+/// Apply a chosen target size and its render height to `config`. On a
+/// rejected value, print why and return `false` so the prompt asks again.
+fn apply_target_selection(config: &mut PipelineConfig, selection: TargetSelection) -> bool {
+    let applied = match selection.width {
+        Some(width) => config
+            .set_target_dimensions(width, selection.height)
+            .map_err(|e| fmt1(&CLI_TEXT.main.target_device_apply_dimensions_error, e)),
+        None => config
+            .set_target_height(selection.height)
+            .map_err(|e| fmt1(&CLI_TEXT.main.target_device_set_target_height_error, e)),
+    };
+    if let Err(message) = applied {
+        print_target_error(message);
+        return false;
+    }
+    apply_render_height(config, selection.height)
+}
+
+/// Set the render height to `height`. On a rejected value, print why and
+/// return `false` so the prompt asks again.
+fn apply_render_height(config: &mut PipelineConfig, height: u32) -> bool {
+    if let Err(e) = config.set_high_res_render_height(height) {
+        print_target_error(fmt1(&CLI_TEXT.main.target_device_render_height_error, e));
+        return false;
+    }
+    true
 }
 
 fn handle_png_folder(folder_path: PathBuf) -> Result<Option<(PathBuf, PipelineConfig)>> {

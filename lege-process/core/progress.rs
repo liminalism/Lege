@@ -1549,17 +1549,7 @@ pub fn install_termination_handler() {
             libc::signal(libc::SIGINT, handler);
             libc::signal(libc::SIGTERM, handler);
         }
-        std::thread::Builder::new()
-            .name("lege-signal".to_string())
-            .spawn(|| {
-                loop {
-                    if TERMINATION_SIGNAL_PENDING.swap(false, AtomicOrdering::AcqRel) {
-                        let _ = request_global_shutdown("Processing cancelled by shutdown signal");
-                    }
-                    std::thread::sleep(std::time::Duration::from_millis(20));
-                }
-            })
-            .expect("failed to spawn termination bridge");
+        spawn_termination_bridge();
     });
 
     #[cfg(windows)]
@@ -1572,18 +1562,25 @@ pub fn install_termination_handler() {
                 true,
             );
         }
-        std::thread::Builder::new()
-            .name("lege-signal".to_string())
-            .spawn(|| {
-                loop {
-                    if TERMINATION_SIGNAL_PENDING.swap(false, AtomicOrdering::AcqRel) {
-                        let _ = request_global_shutdown("Processing cancelled by shutdown signal");
-                    }
-                    std::thread::sleep(std::time::Duration::from_millis(20));
-                }
-            })
-            .expect("failed to spawn termination bridge");
+        spawn_termination_bridge();
     });
+}
+
+/// Start the thread that turns a pending termination signal into a global
+/// shutdown request: the platform callback itself may only flip atomics.
+#[cfg(any(unix, windows))]
+fn spawn_termination_bridge() {
+    std::thread::Builder::new()
+        .name("lege-signal".to_string())
+        .spawn(|| {
+            loop {
+                if TERMINATION_SIGNAL_PENDING.swap(false, AtomicOrdering::AcqRel) {
+                    let _ = request_global_shutdown("Processing cancelled by shutdown signal");
+                }
+                std::thread::sleep(std::time::Duration::from_millis(20));
+            }
+        })
+        .expect("failed to spawn termination bridge");
 }
 
 /// Compatibility name retained for callers outside the workspace.
@@ -1732,6 +1729,15 @@ fn human_duration(d: Duration) -> String {
 mod tests {
     use super::*;
 
+    /// Wait for the other publishers at `barrier`, then publish every page of
+    /// a 50-page no-layout job.
+    fn publish_every_page_after(barrier: &std::sync::Barrier, tracker: &ProgressTracker) {
+        barrier.wait();
+        for current in 1..=50 {
+            tracker.publish_no_layout_progress(current, 50);
+        }
+    }
+
     #[test]
     fn lifecycle_progress_has_exactly_one_terminal_event_and_no_later_status() {
         for fail in [false, true] {
@@ -1744,12 +1750,7 @@ mod tests {
                 for _ in 0..4 {
                     let tracker = tracker.clone();
                     let barrier = barrier.clone();
-                    scope.spawn(move || {
-                        barrier.wait();
-                        for current in 1..=50 {
-                            tracker.publish_no_layout_progress(current, 50);
-                        }
-                    });
+                    scope.spawn(move || publish_every_page_after(&barrier, &tracker));
                 }
                 barrier.wait();
                 if fail {
@@ -1962,20 +1963,16 @@ fn unified_dependency_preflight(config: &crate::PipelineConfig) -> Result<()> {
             work_dir: temp_dir,
             ..Default::default()
         };
-        match crate::djvu::DjvuOrchestrator::new(djvu_cfg) {
-            Ok(orchestrator) => {
-                if let Err(e) = orchestrator.preflight_check(config.enable_ocr()) {
-                    return Err(anyhow::anyhow!(
-                        "DjVu output was selected, but native encoder setup failed.\n{e}"
-                    ));
-                }
-            }
-            Err(e) => {
-                return Err(anyhow::anyhow!(
-                    "DjVu output was selected, but the DjVu encoder could not be initialized: {e}"
-                ));
-            }
-        }
+        let orchestrator = crate::djvu::DjvuOrchestrator::new(djvu_cfg).map_err(|e| {
+            anyhow::anyhow!(
+                "DjVu output was selected, but the DjVu encoder could not be initialized: {e}"
+            )
+        })?;
+        orchestrator
+            .preflight_check(config.enable_ocr())
+            .map_err(|e| {
+                anyhow::anyhow!("DjVu output was selected, but native encoder setup failed.\n{e}")
+            })?;
     }
 
     if !missing.is_empty() {

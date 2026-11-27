@@ -59,21 +59,26 @@ pub fn two_pass_nms(
 
     let mut final_results: Vec<Detection> = Vec::new();
     for det in results {
-        let mut keep = true;
-        for kept in &final_results {
-            if det.class_id != kept.class_id {
-                let iou = calculate_iou(&det, kept);
-                if iou > agnostic_iou && det.confidence < kept.confidence * 0.9 {
-                    keep = false;
-                    break;
-                }
-            }
-        }
-        if keep {
+        if !suppressed_across_classes(&det, &final_results, agnostic_iou) {
             final_results.push(det);
         }
     }
     final_results
+}
+
+/// Whether a kept detection of another class overlaps `det` beyond
+/// `agnostic_iou` and is clearly more confident.
+fn suppressed_across_classes(det: &Detection, kept: &[Detection], agnostic_iou: f32) -> bool {
+    for kept in kept {
+        if det.class_id == kept.class_id {
+            continue;
+        }
+        let iou = calculate_iou(det, kept);
+        if iou > agnostic_iou && det.confidence < kept.confidence * 0.9 {
+            return true;
+        }
+    }
+    false
 }
 
 fn class_aware_nms(mut detections: Vec<Detection>, iou_threshold: f32) -> Vec<Detection> {

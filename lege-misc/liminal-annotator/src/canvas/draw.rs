@@ -703,23 +703,27 @@ mod tests {
         let mut out = Vec::with_capacity((w * h) as usize);
         for ty in &p.yt {
             for tx in &p.xt {
-                out.push(if !ty.valid || !tx.valid {
-                    CANVAS_BG
-                } else if p.nearest {
-                    lvl.px[ty.i0 as usize * lw + tx.i0 as usize]
-                } else {
-                    let at = |row: u32, col: u32| lvl.px[row as usize * lw + col as usize];
-                    let top = lerp_px(at(ty.i0, tx.i0), at(ty.i0, tx.i1), tx.w);
-                    if ty.w == 0 {
-                        top
-                    } else {
-                        let bot = lerp_px(at(ty.i1, tx.i0), at(ty.i1, tx.i1), tx.w);
-                        lerp_px(top, bot, ty.w)
-                    }
-                });
+                out.push(reference_pixel(lvl, lw, p.nearest, ty, tx));
             }
         }
         out
+    }
+
+    /// One pixel of `reference_render`, from its row and column taps.
+    fn reference_pixel(lvl: &Level, lw: usize, nearest: bool, ty: &Tap, tx: &Tap) -> u32 {
+        if !ty.valid || !tx.valid {
+            return CANVAS_BG;
+        }
+        if nearest {
+            return lvl.px[ty.i0 as usize * lw + tx.i0 as usize];
+        }
+        let at = |row: u32, col: u32| lvl.px[row as usize * lw + col as usize];
+        let top = lerp_px(at(ty.i0, tx.i0), at(ty.i0, tx.i1), tx.w);
+        if ty.w == 0 {
+            return top;
+        }
+        let bot = lerp_px(at(ty.i1, tx.i0), at(ty.i1, tx.i1), tx.w);
+        lerp_px(top, bot, ty.w)
     }
 
     #[test]
@@ -764,6 +768,16 @@ mod tests {
         }
     }
 
+    /// Pixel (`px`, `py`) of the 250x180 test page, or the canvas background
+    /// off the page.
+    fn page_pixel_or_background(lvl0: &Level, px: i32, py: i32) -> u32 {
+        if (0..250).contains(&px) && (0..180).contains(&py) {
+            lvl0.px[py as usize * 250 + px as usize]
+        } else {
+            CANVAS_BG
+        }
+    }
+
     /// At exactly 100% on whole pixels each raster pixel is a lookup of one
     /// page pixel, or the background off the page. Independent of the taps.
     #[test]
@@ -787,11 +801,7 @@ mod tests {
             for row in 0..h as i32 {
                 for col in 0..w as i32 {
                     let (px, py) = (x + col - ox as i32, y + row - oy as i32);
-                    let want = if (0..250).contains(&px) && (0..180).contains(&py) {
-                        lvl0.px[py as usize * 250 + px as usize]
-                    } else {
-                        CANVAS_BG
-                    };
+                    let want = page_pixel_or_background(lvl0, px, py);
                     assert_eq!(
                         r.px[row as usize * w as usize + col as usize],
                         want,

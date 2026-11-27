@@ -11,3 +11,6 @@ serde_json = { workspace = true }
 anyhow = { workspace = true }
 chrono = { workspace = true }
 dirs = "6.0.0"
+
+[lints.clippy]
+cognitive_complexity = "warn"

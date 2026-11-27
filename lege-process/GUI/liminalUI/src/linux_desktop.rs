@@ -43,12 +43,11 @@ fn packaged_runtime_handles_desktop() -> bool {
         return true;
     }
     // Belt-and-braces: even without env vars, never pin Exec to a FUSE mount.
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(s) = exe.to_str() {
-            if s.contains("/.mount_") {
-                return true;
-            }
-        }
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(s) = exe.to_str()
+        && s.contains("/.mount_")
+    {
+        return true;
     }
     false
 }
@@ -130,10 +129,10 @@ fn shell_quote_path(path: &Path) -> String {
 }
 
 fn write_if_changed(path: &Path, contents: &[u8]) -> io::Result<bool> {
-    if let Ok(existing) = fs::read(path) {
-        if existing == contents {
-            return Ok(false);
-        }
+    if let Ok(existing) = fs::read(path)
+        && existing == contents
+    {
+        return Ok(false);
     }
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;

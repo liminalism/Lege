@@ -19,7 +19,7 @@ use exprim::render_api::{
     AnnotationMode, Background, OutputFormat, OutputResidency, PageTransform, RenderColorPolicy,
     RenderLimits, RenderQuality, RenderRequest,
 };
-use exprim::render_cpu::CpuBackend;
+use exprim::render_cpu::{CpuBackend, PreparedRgbImagePage};
 use exprim::source::{MmapSource, PdfSource};
 use lege_render_wgpu::classify_gpu_eligibility;
 
@@ -33,6 +33,64 @@ struct Candidate {
     score: u64,
     file: String,
     page: u32,
+}
+
+/// What decoding a statically eligible page through the CPU preparation seam
+/// showed.
+enum Prepared {
+    Eligible {
+        analytic_clip: bool,
+        page_soft_mask: bool,
+    },
+    Declined(&'static str),
+    Failed(String),
+}
+
+/// Decode-confirm a statically eligible page.
+fn prepare_page(backend: &CpuBackend, request: &RenderRequest) -> Prepared {
+    let page_bytes = request.output_size.width as u64 * request.output_size.height as u64 * 4;
+    if page_bytes > CONSERVATIVE_STORAGE_BINDING_BYTES {
+        return Prepared::Declined("page-storage-over-128m");
+    }
+    match backend.prepare_rgb_image_page(request) {
+        Ok(Some(prepared)) if footprints_within_box_limit(&prepared) => Prepared::Eligible {
+            analytic_clip: prepared.images.iter().any(|image| image.clip.is_some()),
+            page_soft_mask: prepared
+                .images
+                .iter()
+                .any(|image| image.soft_mask.is_some()),
+        },
+        Ok(Some(_)) => Prepared::Declined("footprint-limit"),
+        Ok(None) => Prepared::Declined("prepared-vocabulary-decline"),
+        Err(error) => Prepared::Failed(error.to_string()),
+    }
+}
+
+/// Whether every image of the page, and its opacity plane, samples within
+/// the GPU's box-filter footprint.
+fn footprints_within_box_limit(prepared: &PreparedRgbImagePage) -> bool {
+    prepared.images.iter().all(|image| {
+        image.footprint[0].is_finite()
+            && image.footprint[1].is_finite()
+            && image.footprint[0] <= MAX_BOX_FOOTPRINT
+            && image.footprint[1] <= MAX_BOX_FOOTPRINT
+            && image.opacity.as_ref().is_none_or(|opacity| {
+                opacity.footprint[0].is_finite()
+                    && opacity.footprint[1].is_finite()
+                    && opacity.footprint[0] <= MAX_BOX_FOOTPRINT
+                    && opacity.footprint[1] <= MAX_BOX_FOOTPRINT
+            })
+    })
+}
+
+/// The CSV note of a decode-confirmed page.
+fn prepared_note(analytic_clip: bool, page_soft_mask: bool) -> String {
+    match (analytic_clip, page_soft_mask) {
+        (true, true) => "analytic-clip;page-soft-mask".to_owned(),
+        (true, false) => "analytic-clip".to_owned(),
+        (false, true) => "page-soft-mask".to_owned(),
+        (false, false) => String::new(),
+    }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -164,53 +222,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut note = String::new();
         let mut is_prepared_eligible = false;
 
-        if is_static_eligible {
-            let page_bytes =
-                request.output_size.width as u64 * request.output_size.height as u64 * 4;
-            if page_bytes > CONSERVATIVE_STORAGE_BINDING_BYTES {
-                reasons.push("page-storage-over-128m");
-            } else {
-                match backend.prepare_rgb_image_page(&request) {
-                    Ok(Some(prepared))
-                        if prepared.images.iter().all(|image| {
-                            image.footprint[0].is_finite()
-                                && image.footprint[1].is_finite()
-                                && image.footprint[0] <= MAX_BOX_FOOTPRINT
-                                && image.footprint[1] <= MAX_BOX_FOOTPRINT
-                                && image.opacity.as_ref().is_none_or(|opacity| {
-                                    opacity.footprint[0].is_finite()
-                                        && opacity.footprint[1].is_finite()
-                                        && opacity.footprint[0] <= MAX_BOX_FOOTPRINT
-                                        && opacity.footprint[1] <= MAX_BOX_FOOTPRINT
-                                })
-                        }) =>
-                    {
-                        if prepared.images.iter().any(|image| image.clip.is_some()) {
-                            analytic_clip_pages += 1;
-                            note = "analytic-clip".to_owned();
-                        }
-                        if prepared
-                            .images
-                            .iter()
-                            .any(|image| image.soft_mask.is_some())
-                        {
-                            page_soft_mask_pages += 1;
-                            if !note.is_empty() {
-                                note.push(';');
-                            }
-                            note.push_str("page-soft-mask");
-                        }
-                        is_prepared_eligible = true;
-                        prepared_eligible += 1;
-                    }
-                    Ok(Some(_)) => reasons.push("footprint-limit"),
-                    Ok(None) => reasons.push("prepared-vocabulary-decline"),
-                    Err(error) => {
-                        reasons.push("preparation-error");
-                        note = error.to_string();
-                    }
-                }
+        let prepared = is_static_eligible.then(|| prepare_page(&backend, &request));
+        match prepared {
+            Some(Prepared::Eligible {
+                analytic_clip,
+                page_soft_mask,
+            }) => {
+                analytic_clip_pages += u64::from(analytic_clip);
+                page_soft_mask_pages += u64::from(page_soft_mask);
+                note = prepared_note(analytic_clip, page_soft_mask);
+                is_prepared_eligible = true;
+                prepared_eligible += 1;
             }
+            Some(Prepared::Declined(reason)) => reasons.push(reason),
+            Some(Prepared::Failed(error)) => {
+                reasons.push("preparation-error");
+                note = error;
+            }
+            None => {}
         }
         if reasons.is_empty() {
             increment(&mut counts, "eligible");

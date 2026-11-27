@@ -17,8 +17,10 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use exprim::doctor::{
+    FontRecord, ImageRecord, XrefEntryFacts, XrefEntryLocation, XrefSectionFacts,
+};
 use exprim::document::DocumentSnapshot;
-use exprim::doctor::{FontRecord, ImageRecord, XrefEntryFacts, XrefEntryLocation, XrefSectionFacts};
 
 use crate::document::{
     ObjectChangeFacts, ObjectChangeKind, ObjectLocationFacts, ObjectRole, RevisionHistoryFacts,

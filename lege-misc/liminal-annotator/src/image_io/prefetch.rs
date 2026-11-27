@@ -106,25 +106,31 @@ impl Loader {
     }
 }
 
+/// Wait for the next job and mark it in flight. `None` once the loader stops
+/// (or its queue lock is poisoned).
+fn next_job(shared: &Shared) -> Option<Job> {
+    let Ok(mut q) = shared.queue.lock() else {
+        return None;
+    };
+    loop {
+        if q.stop {
+            return None;
+        }
+        if let Some(j) = q.jobs.pop_front() {
+            q.in_flight.insert(j.page_key.clone());
+            return Some(j);
+        }
+        q = match shared.ready.wait(q) {
+            Ok(q) => q,
+            Err(_) => return None,
+        };
+    }
+}
+
 fn worker(shared: &Shared, tx: &Sender<Loaded>, wake: &(dyn Fn() + Send + Sync)) {
     loop {
-        let job = {
-            let Ok(mut q) = shared.queue.lock() else {
-                return;
-            };
-            loop {
-                if q.stop {
-                    return;
-                }
-                if let Some(j) = q.jobs.pop_front() {
-                    q.in_flight.insert(j.page_key.clone());
-                    break j;
-                }
-                q = match shared.ready.wait(q) {
-                    Ok(q) => q,
-                    Err(_) => return,
-                };
-            }
+        let Some(job) = next_job(shared) else {
+            return;
         };
         let t0 = Instant::now();
         let result = std::panic::catch_unwind(|| decode_page(&job.path))

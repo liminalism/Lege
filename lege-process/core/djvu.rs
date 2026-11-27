@@ -351,21 +351,13 @@ impl DjvuOrchestrator {
         bytes.extend_from_slice(format!("P4\n{} {}\n", width, height).as_bytes());
 
         for y in 0..height as usize {
-            for byte_x in 0..row_bytes {
-                let mut packed = 0u8;
-                for bit in 0..8 {
-                    let x = byte_x * 8 + bit;
-                    if x >= width as usize {
-                        continue;
-                    }
-                    let val = binarized[y * width as usize + x];
-                    let is_black = if val <= 1 { val == 0 } else { val < 128 };
-                    if is_black {
-                        packed |= 0x80 >> bit;
-                    }
-                }
-                bytes.push(packed);
-            }
+            push_pbm_row(
+                &mut bytes,
+                binarized,
+                y * width as usize,
+                width as usize,
+                row_bytes,
+            );
         }
 
         fs::write(&out_path, bytes)
@@ -634,6 +626,32 @@ impl DjvuOrchestrator {
     }
 }
 
+/// Pack the mask row of `width` pixels starting at `row_start` into PBM bytes,
+/// most significant bit first, ink as 1.
+fn push_pbm_row(
+    bytes: &mut Vec<u8>,
+    binarized: &[u8],
+    row_start: usize,
+    width: usize,
+    row_bytes: usize,
+) {
+    for byte_x in 0..row_bytes {
+        let mut packed = 0u8;
+        for bit in 0..8 {
+            let x = byte_x * 8 + bit;
+            if x >= width {
+                continue;
+            }
+            let val = binarized[row_start + x];
+            let is_black = if val <= 1 { val == 0 } else { val < 128 };
+            if is_black {
+                packed |= 0x80 >> bit;
+            }
+        }
+        bytes.push(packed);
+    }
+}
+
 /// Paste original colour image-region crops onto an RGB canvas buffer.
 fn paste_regions(
     canvas: &mut [u8],
@@ -833,10 +851,17 @@ pub fn spawn_djvu_writer_actor(
     let writer_doc = Arc::clone(&doc);
 
     let task = tokio::spawn(async move {
-        let mut page_buffer: BTreeMap<usize, EncodedPage> = BTreeMap::new();
-        let mut next_expected = 0usize;
-        let mut pages_written = 0usize;
-        let mut navigation = DjVmNav::default();
+        let mut writer = DjvuWriterState {
+            doc: writer_doc,
+            total_pages,
+            progress_tracker,
+            output_path,
+            cancel,
+            page_buffer: BTreeMap::new(),
+            next_expected: 0,
+            pages_written: 0,
+            navigation: DjVmNav::default(),
+        };
 
         crate::info_log!("[DjvuWriterActor] Started, waiting for encoded pages...");
 
@@ -845,57 +870,12 @@ pub fn spawn_djvu_writer_actor(
                 DjvuWriterMessage::AppendEncoded {
                     encoded,
                     page_index,
-                } => {
-                    page_buffer.insert(page_index, encoded);
-                    for encoded in drain_ready_pages(&mut page_buffer, &mut next_expected) {
-                        writer_doc.add_encoded_page(encoded).with_context(|| {
-                            format!(
-                                "Failed to append DjVu page {}",
-                                next_expected.saturating_sub(1)
-                            )
-                        })?;
-                        pages_written += 1;
-                        progress_tracker.update(crate::progress::ProcessingStatus::PdfAppend {
-                            current: pages_written,
-                            total: total_pages,
-                        });
-                    }
-                }
+                } => writer.append_in_order(encoded, page_index)?,
                 DjvuWriterMessage::SetOutline(items) => {
-                    navigation = outline_to_navigation(items, total_pages)?;
+                    writer.navigation = outline_to_navigation(items, total_pages)?;
                 }
                 DjvuWriterMessage::Finalize => {
-                    if pages_written != total_pages {
-                        return Err(anyhow!(
-                            "Document incomplete: {} of {} pages encoded",
-                            pages_written,
-                            total_pages
-                        ));
-                    }
-                    let writer_doc = Arc::clone(&writer_doc);
-                    let navigation = navigation.clone();
-                    let output_path = output_path.clone();
-                    let cancel = cancel.clone();
-                    crate::runtime_stats::spawn_blocking_stage(
-                        crate::runtime_stats::Stage::Writer,
-                        move || {
-                            finalize_document_atomic(
-                                &writer_doc,
-                                &navigation,
-                                &output_path,
-                                &cancel,
-                            )
-                        },
-                    )
-                    .await
-                    .map_err(|e| anyhow!("DjVu finalizer task panicked: {}", e))??;
-
-                    progress_tracker.update(crate::progress::ProcessingStatus::PdfAppend {
-                        current: total_pages,
-                        total: total_pages,
-                    });
-
-                    crate::success_log!("[DjvuWriterActor] Document finalized successfully");
+                    writer.finalize().await?;
                     break;
                 }
             }
@@ -905,6 +885,73 @@ pub fn spawn_djvu_writer_actor(
     });
 
     (handle, doc, task)
+}
+
+/// The DjVu writer actor's state: the document, the pages that arrived ahead
+/// of their predecessors, and the navigation accepted so far.
+struct DjvuWriterState {
+    doc: Arc<DjvuDocument>,
+    total_pages: usize,
+    progress_tracker: crate::progress::ProgressTracker,
+    output_path: PathBuf,
+    cancel: exprim::CancellationToken,
+    page_buffer: BTreeMap<usize, EncodedPage>,
+    next_expected: usize,
+    pages_written: usize,
+    navigation: DjVmNav,
+}
+
+impl DjvuWriterState {
+    /// Buffer `encoded` and insert every page that is now next in order.
+    fn append_in_order(&mut self, encoded: EncodedPage, page_index: usize) -> Result<()> {
+        self.page_buffer.insert(page_index, encoded);
+        for encoded in drain_ready_pages(&mut self.page_buffer, &mut self.next_expected) {
+            self.doc.add_encoded_page(encoded).with_context(|| {
+                format!(
+                    "Failed to append DjVu page {}",
+                    self.next_expected.saturating_sub(1)
+                )
+            })?;
+            self.pages_written += 1;
+            self.progress_tracker
+                .update(crate::progress::ProcessingStatus::PdfAppend {
+                    current: self.pages_written,
+                    total: self.total_pages,
+                });
+        }
+        Ok(())
+    }
+
+    /// Check that every page arrived, then assemble and atomically publish
+    /// the document.
+    async fn finalize(self) -> Result<()> {
+        if self.pages_written != self.total_pages {
+            return Err(anyhow!(
+                "Document incomplete: {} of {} pages encoded",
+                self.pages_written,
+                self.total_pages
+            ));
+        }
+        let writer_doc = Arc::clone(&self.doc);
+        let navigation = self.navigation.clone();
+        let output_path = self.output_path.clone();
+        let cancel = self.cancel.clone();
+        crate::runtime_stats::spawn_blocking_stage(
+            crate::runtime_stats::Stage::Writer,
+            move || finalize_document_atomic(&writer_doc, &navigation, &output_path, &cancel),
+        )
+        .await
+        .map_err(|e| anyhow!("DjVu finalizer task panicked: {}", e))??;
+
+        self.progress_tracker
+            .update(crate::progress::ProcessingStatus::PdfAppend {
+                current: self.total_pages,
+                total: self.total_pages,
+            });
+
+        crate::success_log!("[DjvuWriterActor] Document finalized successfully");
+        Ok(())
+    }
 }
 
 fn finalize_document_atomic(

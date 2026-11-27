@@ -217,33 +217,110 @@ impl Editor {
     ) -> Outcome {
         let screen = Point::new(ev.position.0, ev.position.1);
         self.pointer = screen;
-        let mut out = Outcome::default();
         match ev.phase {
-            PointerPhase::Down => {
-                if self.state != ToolState::Idle {
-                    return out; // a second button during a gesture is ignored
+            PointerPhase::Down => self.pointer_down(ev, doc, view, image_ok),
+            PointerPhase::Move => self.pointer_move(ev, doc, view, canvas, image_ok),
+            PointerPhase::Up => self.pointer_up(ev, doc, view),
+            PointerPhase::Cancel => {
+                let mut out = Outcome::default();
+                if self.cancel() {
+                    out.redraw = true;
                 }
-                let button = ev.button.unwrap_or(MouseButton::Left);
-                let pan = button == MouseButton::Middle
-                    || (button == MouseButton::Left && self.space_held);
-                if pan {
-                    self.state = ToolState::Panning {
-                        button,
-                        screen_start: screen,
-                        // On the pan grid, so every later origin is the grid
-                        // origin plus a whole number of pixels, exactly.
-                        original_origin: Point::new(
-                            pan_grid(view.origin.x),
-                            pan_grid(view.origin.y),
-                        ),
-                    };
-                    return out;
+                out
+            }
+        }
+    }
+
+    /// A press: starts a pan, an edit of the box under the pointer, or a new box.
+    fn pointer_down(
+        &mut self,
+        ev: &PointerEvent,
+        doc: &mut PageDoc,
+        view: &mut ViewTransform,
+        image_ok: bool,
+    ) -> Outcome {
+        let screen = Point::new(ev.position.0, ev.position.1);
+        let mut out = Outcome::default();
+        if self.state != ToolState::Idle {
+            return out; // a second button during a gesture is ignored
+        }
+        let button = ev.button.unwrap_or(MouseButton::Left);
+        let pan = button == MouseButton::Middle || (button == MouseButton::Left && self.space_held);
+        if pan {
+            self.state = ToolState::Panning {
+                button,
+                screen_start: screen,
+                // On the pan grid, so every later origin is the grid
+                // origin plus a whole number of pixels, exactly.
+                original_origin: Point::new(pan_grid(view.origin.x), pan_grid(view.origin.y)),
+            };
+            return out;
+        }
+        if button != MouseButton::Left || !image_ok {
+            return out;
+        }
+        let image_pt = view.screen_to_image(screen);
+        let hit = if self.show_outlines && !ev.modifiers.shift {
+            pick(
+                &doc.annotations,
+                self.selected.as_deref(),
+                view,
+                screen,
+                self.params.slop,
+            )
+        } else {
+            None
+        };
+        match hit {
+            Some(hit) => {
+                let a = &doc.annotations[hit.index];
+                if self.selected.as_deref() != Some(a.id.as_str()) {
+                    out.redraw = true;
                 }
-                if button != MouseButton::Left || !image_ok {
-                    return out;
+                self.selected = Some(a.id.clone());
+                self.state = ToolState::Editing {
+                    annotation_id: a.id.clone(),
+                    handle: hit.handle,
+                    original: a.bbox,
+                    pointer_start: image_pt,
+                    screen_start: screen,
+                    preview: a.bbox,
+                    dragging: false,
+                };
+            }
+            None => {
+                if self.selected.take().is_some() {
+                    out.redraw = true;
                 }
-                let image_pt = view.screen_to_image(screen);
-                let hit = if self.show_outlines && !ev.modifiers.shift {
+                let p = Point::new(
+                    image_pt.x.clamp(0.0, doc.width),
+                    image_pt.y.clamp(0.0, doc.height),
+                );
+                self.state = ToolState::Drawing {
+                    class_id: self.active_class,
+                    origin: p,
+                    current: p,
+                };
+            }
+        }
+        out
+    }
+
+    /// A move: hover feedback when idle, else the gesture in progress follows.
+    fn pointer_move(
+        &mut self,
+        ev: &PointerEvent,
+        doc: &mut PageDoc,
+        view: &mut ViewTransform,
+        canvas: CanvasRect,
+        image_ok: bool,
+    ) -> Outcome {
+        let screen = Point::new(ev.position.0, ev.position.1);
+        let mut out = Outcome::default();
+        let limits = self.limits(doc, view);
+        match &mut self.state {
+            ToolState::Idle => {
+                let hover = if self.show_outlines && image_ok && canvas.contains(screen) {
                     pick(
                         &doc.annotations,
                         self.selected.as_deref(),
@@ -251,185 +328,138 @@ impl Editor {
                         screen,
                         self.params.slop,
                     )
+                    .map(|h| (doc.annotations[h.index].id.clone(), h.handle))
                 } else {
                     None
                 };
-                match hit {
-                    Some(hit) => {
-                        let a = &doc.annotations[hit.index];
-                        if self.selected.as_deref() != Some(a.id.as_str()) {
-                            out.redraw = true;
-                        }
-                        self.selected = Some(a.id.clone());
-                        self.state = ToolState::Editing {
-                            annotation_id: a.id.clone(),
-                            handle: hit.handle,
-                            original: a.bbox,
-                            pointer_start: image_pt,
-                            screen_start: screen,
-                            preview: a.bbox,
-                            dragging: false,
-                        };
-                    }
-                    None => {
-                        if self.selected.take().is_some() {
-                            out.redraw = true;
-                        }
-                        let p = Point::new(
-                            image_pt.x.clamp(0.0, doc.width),
-                            image_pt.y.clamp(0.0, doc.height),
-                        );
-                        self.state = ToolState::Drawing {
-                            class_id: self.active_class,
-                            origin: p,
-                            current: p,
-                        };
-                    }
-                }
-            }
-            PointerPhase::Move => {
-                let limits = self.limits(doc, view);
-                match &mut self.state {
-                    ToolState::Idle => {
-                        let hover = if self.show_outlines && image_ok && canvas.contains(screen) {
-                            pick(
-                                &doc.annotations,
-                                self.selected.as_deref(),
-                                view,
-                                screen,
-                                self.params.slop,
-                            )
-                            .map(|h| (doc.annotations[h.index].id.clone(), h.handle))
-                        } else {
-                            None
-                        };
-                        if hover != self.hover {
-                            self.hover = hover;
-                            out.redraw = true;
-                        }
-                    }
-                    ToolState::Drawing { current, .. } => {
-                        *current = view.screen_to_image(screen);
-                        out.redraw = true;
-                    }
-                    ToolState::Editing {
-                        handle,
-                        original,
-                        pointer_start,
-                        screen_start,
-                        preview,
-                        dragging,
-                        ..
-                    } => {
-                        if !*dragging {
-                            let d = ((screen.x - screen_start.x).powi(2)
-                                + (screen.y - screen_start.y).powi(2))
-                            .sqrt();
-                            if d >= self.params.drag_threshold {
-                                *dragging = true;
-                            }
-                        }
-                        if *dragging {
-                            let now = view.screen_to_image(screen);
-                            let delta =
-                                Point::new(now.x - pointer_start.x, now.y - pointer_start.y);
-                            let next = if ev.modifiers.alt && handle.is_corner() {
-                                // Alt: move only the edge whose axis the drag favours.
-                                let axis_x = delta.x.abs() >= delta.y.abs();
-                                apply_edge_drag(*original, *handle, delta, axis_x, limits)
-                            } else {
-                                apply_drag(*original, *handle, delta, limits)
-                            };
-                            if next != *preview {
-                                *preview = next;
-                                out.redraw = true;
-                            }
-                        }
-                    }
-                    ToolState::Panning {
-                        screen_start,
-                        original_origin,
-                        ..
-                    } => {
-                        view.origin = Point::new(
-                            original_origin.x + screen.x - screen_start.x,
-                            original_origin.y + screen.y - screen_start.y,
-                        );
-                        view.constrain(canvas, doc.width, doc.height, 64.0);
-                        self.zoom_mode = ZoomMode::Free;
-                        out.view_changed = true;
-                        out.redraw = true;
-                    }
-                }
-            }
-            PointerPhase::Up => {
-                let state = std::mem::replace(&mut self.state, ToolState::Idle);
-                match state {
-                    ToolState::Drawing {
-                        class_id, origin, ..
-                    } => {
-                        self.last_click = None;
-                        // The release position is authoritative, even if no
-                        // move arrived between press and release.
-                        let current = view.screen_to_image(screen);
-                        let b = Box2::from_corners(origin, current).clamp_to(doc.width, doc.height);
-                        let min = self.params.min_draw / view.scale;
-                        if b.width() >= min && b.height() >= min {
-                            let ann = Annotation {
-                                id: new_annotation_id(),
-                                class_id,
-                                bbox: b,
-                                is_ignore: false,
-                                provenance_json: None,
-                            };
-                            self.selected = Some(ann.id.clone());
-                            let index = doc.annotations.len();
-                            out.edited = doc.apply(Edit::Add { index, ann });
-                        }
-                        out.redraw = true;
-                    }
-                    ToolState::Editing {
-                        annotation_id,
-                        handle,
-                        original,
-                        pointer_start,
-                        screen_start,
-                        dragging,
-                        ..
-                    } => {
-                        let travel = ((screen.x - screen_start.x).powi(2)
-                            + (screen.y - screen_start.y).powi(2))
-                        .sqrt();
-                        if dragging || travel >= self.params.drag_threshold {
-                            self.last_click = None;
-                            let now = view.screen_to_image(screen);
-                            let delta =
-                                Point::new(now.x - pointer_start.x, now.y - pointer_start.y);
-                            let limits = self.limits(doc, view);
-                            let finalb = if ev.modifiers.alt && handle.is_corner() {
-                                let axis_x = delta.x.abs() >= delta.y.abs();
-                                apply_edge_drag(original, handle, delta, axis_x, limits)
-                            } else {
-                                apply_drag(original, handle, delta, limits)
-                            };
-                            if let Some(before) = doc.get(&annotation_id).cloned() {
-                                let mut after = before.clone();
-                                after.bbox = finalb;
-                                out.edited = doc.apply(Edit::Modify { before, after });
-                            }
-                        } else {
-                            out.edited = self.clicked(&annotation_id, screen, doc);
-                        }
-                        out.redraw = true;
-                    }
-                    ToolState::Panning { .. } | ToolState::Idle => {}
-                }
-            }
-            PointerPhase::Cancel => {
-                if self.cancel() {
+                if hover != self.hover {
+                    self.hover = hover;
                     out.redraw = true;
                 }
             }
+            ToolState::Drawing { current, .. } => {
+                *current = view.screen_to_image(screen);
+                out.redraw = true;
+            }
+            ToolState::Editing {
+                handle,
+                original,
+                pointer_start,
+                screen_start,
+                preview,
+                dragging,
+                ..
+            } => {
+                if !*dragging {
+                    let d = ((screen.x - screen_start.x).powi(2)
+                        + (screen.y - screen_start.y).powi(2))
+                    .sqrt();
+                    if d >= self.params.drag_threshold {
+                        *dragging = true;
+                    }
+                }
+                if *dragging {
+                    let now = view.screen_to_image(screen);
+                    let delta = Point::new(now.x - pointer_start.x, now.y - pointer_start.y);
+                    let next = if ev.modifiers.alt && handle.is_corner() {
+                        // Alt: move only the edge whose axis the drag favours.
+                        let axis_x = delta.x.abs() >= delta.y.abs();
+                        apply_edge_drag(*original, *handle, delta, axis_x, limits)
+                    } else {
+                        apply_drag(*original, *handle, delta, limits)
+                    };
+                    if next != *preview {
+                        *preview = next;
+                        out.redraw = true;
+                    }
+                }
+            }
+            ToolState::Panning {
+                screen_start,
+                original_origin,
+                ..
+            } => {
+                view.origin = Point::new(
+                    original_origin.x + screen.x - screen_start.x,
+                    original_origin.y + screen.y - screen_start.y,
+                );
+                view.constrain(canvas, doc.width, doc.height, 64.0);
+                self.zoom_mode = ZoomMode::Free;
+                out.view_changed = true;
+                out.redraw = true;
+            }
+        }
+        out
+    }
+
+    /// A release: ends the gesture, committing the new or edited box.
+    fn pointer_up(
+        &mut self,
+        ev: &PointerEvent,
+        doc: &mut PageDoc,
+        view: &mut ViewTransform,
+    ) -> Outcome {
+        let screen = Point::new(ev.position.0, ev.position.1);
+        let mut out = Outcome::default();
+        let state = std::mem::replace(&mut self.state, ToolState::Idle);
+        match state {
+            ToolState::Drawing {
+                class_id, origin, ..
+            } => {
+                self.last_click = None;
+                // The release position is authoritative, even if no
+                // move arrived between press and release.
+                let current = view.screen_to_image(screen);
+                let b = Box2::from_corners(origin, current).clamp_to(doc.width, doc.height);
+                let min = self.params.min_draw / view.scale;
+                if b.width() >= min && b.height() >= min {
+                    let ann = Annotation {
+                        id: new_annotation_id(),
+                        class_id,
+                        bbox: b,
+                        is_ignore: false,
+                        provenance_json: None,
+                    };
+                    self.selected = Some(ann.id.clone());
+                    let index = doc.annotations.len();
+                    out.edited = doc.apply(Edit::Add { index, ann });
+                }
+                out.redraw = true;
+            }
+            ToolState::Editing {
+                annotation_id,
+                handle,
+                original,
+                pointer_start,
+                screen_start,
+                dragging,
+                ..
+            } => {
+                let travel = ((screen.x - screen_start.x).powi(2)
+                    + (screen.y - screen_start.y).powi(2))
+                .sqrt();
+                if dragging || travel >= self.params.drag_threshold {
+                    self.last_click = None;
+                    let now = view.screen_to_image(screen);
+                    let delta = Point::new(now.x - pointer_start.x, now.y - pointer_start.y);
+                    let limits = self.limits(doc, view);
+                    let finalb = if ev.modifiers.alt && handle.is_corner() {
+                        let axis_x = delta.x.abs() >= delta.y.abs();
+                        apply_edge_drag(original, handle, delta, axis_x, limits)
+                    } else {
+                        apply_drag(original, handle, delta, limits)
+                    };
+                    if let Some(before) = doc.get(&annotation_id).cloned() {
+                        let mut after = before.clone();
+                        after.bbox = finalb;
+                        out.edited = doc.apply(Edit::Modify { before, after });
+                    }
+                } else {
+                    out.edited = self.clicked(&annotation_id, screen, doc);
+                }
+                out.redraw = true;
+            }
+            ToolState::Panning { .. } | ToolState::Idle => {}
         }
         out
     }

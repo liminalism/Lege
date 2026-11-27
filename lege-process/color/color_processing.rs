@@ -742,42 +742,59 @@ pub fn dither_stucki_error_diffusion(grayscale_data: &[u8], width: u32, height: 
             // Next row (y + 1)
             if y + 1 < height {
                 let next_row_base = (y + 1) * width;
-                if x >= 2 {
-                    working_image[next_row_base + x - 2] += error * 2.0 / 42.0;
-                }
-                if x >= 1 {
-                    working_image[next_row_base + x - 1] += error * 4.0 / 42.0;
-                }
-                working_image[next_row_base + x] += error * 8.0 / 42.0;
-                if x + 1 < width {
-                    working_image[next_row_base + x + 1] += error * 4.0 / 42.0;
-                }
-                if x + 2 < width {
-                    working_image[next_row_base + x + 2] += error * 2.0 / 42.0;
-                }
+                diffuse_into_row(
+                    &mut working_image,
+                    next_row_base,
+                    x,
+                    width,
+                    error,
+                    [2.0, 4.0, 8.0, 4.0, 2.0],
+                );
             }
 
             // Row y + 2
             if y + 2 < height {
                 let next2_row_base = (y + 2) * width;
-                if x >= 2 {
-                    working_image[next2_row_base + x - 2] += error * 1.0 / 42.0;
-                }
-                if x >= 1 {
-                    working_image[next2_row_base + x - 1] += error * 2.0 / 42.0;
-                }
-                working_image[next2_row_base + x] += error * 4.0 / 42.0;
-                if x + 1 < width {
-                    working_image[next2_row_base + x + 1] += error * 2.0 / 42.0;
-                }
-                if x + 2 < width {
-                    working_image[next2_row_base + x + 2] += error * 1.0 / 42.0;
-                }
+                diffuse_into_row(
+                    &mut working_image,
+                    next2_row_base,
+                    x,
+                    width,
+                    error,
+                    [1.0, 2.0, 4.0, 2.0, 1.0],
+                );
             }
         }
     }
 
     output
+}
+
+/// Add `error * weight / 42` to the five pixels of the row starting at
+/// `row_base`, centered on column `x` (columns x-2..=x+2 that lie inside the
+/// row): one row of the Stucki matrix.
+#[inline(always)]
+fn diffuse_into_row(
+    working_image: &mut [f32],
+    row_base: usize,
+    x: usize,
+    width: usize,
+    error: f32,
+    weights: [f32; 5],
+) {
+    if x >= 2 {
+        working_image[row_base + x - 2] += error * weights[0] / 42.0;
+    }
+    if x >= 1 {
+        working_image[row_base + x - 1] += error * weights[1] / 42.0;
+    }
+    working_image[row_base + x] += error * weights[2] / 42.0;
+    if x + 1 < width {
+        working_image[row_base + x + 1] += error * weights[3] / 42.0;
+    }
+    if x + 2 < width {
+        working_image[row_base + x + 2] += error * weights[4] / 42.0;
+    }
 }
 
 /// Create an inversion mask for a given bounding box on a page

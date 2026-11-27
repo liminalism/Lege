@@ -166,32 +166,11 @@ fn qa_report(document: &Document) -> serde_json::Value {
                     "reason": "low-recognition-confidence"
                 }));
             }
-            match &region.content {
-                RegionContent::Text(block) => count_block_corrections(
-                    block,
-                    &mut suggested_corrections,
-                    &mut applied_corrections,
-                ),
-                RegionContent::Table(table) => {
-                    for block in table.cells.iter().flat_map(|cell| &cell.blocks) {
-                        count_block_corrections(
-                            block,
-                            &mut suggested_corrections,
-                            &mut applied_corrections,
-                        );
-                    }
-                }
-                RegionContent::Formula(formula) => {
-                    if let Some(block) = &formula.raw_ocr {
-                        count_block_corrections(
-                            block,
-                            &mut suggested_corrections,
-                            &mut applied_corrections,
-                        );
-                    }
-                }
-                _ => {}
-            }
+            count_region_corrections(
+                &region.content,
+                &mut suggested_corrections,
+                &mut applied_corrections,
+            );
         }
     }
     serde_json::json!({
@@ -207,6 +186,23 @@ fn qa_report(document: &Document) -> serde_json::Value {
         },
         "warnings": document.processing.warnings,
     })
+}
+
+fn count_region_corrections(content: &RegionContent, suggested: &mut u64, applied: &mut u64) {
+    match content {
+        RegionContent::Text(block) => count_block_corrections(block, suggested, applied),
+        RegionContent::Table(table) => {
+            for block in table.cells.iter().flat_map(|cell| &cell.blocks) {
+                count_block_corrections(block, suggested, applied);
+            }
+        }
+        RegionContent::Formula(formula) => {
+            if let Some(block) = &formula.raw_ocr {
+                count_block_corrections(block, suggested, applied);
+            }
+        }
+        _ => {}
+    }
 }
 
 fn count_block_corrections(block: &lege_docir::TextBlock, suggested: &mut u64, applied: &mut u64) {
@@ -268,15 +264,17 @@ impl DocumentExporter for HtmlExporter {
                 page.index + 1
             ));
             for region_id in &page.reading_order {
-                if let Some(region) = page.regions.iter().find(|region| &region.id == region_id) {
-                    if matches!(
-                        region.kind,
-                        lege_docir::RegionKind::Header | lege_docir::RegionKind::Footer
-                    ) {
-                        continue;
-                    }
-                    render_region(&mut html, &region.content, request.text_view);
+                let Some(region) = page.regions.iter().find(|region| &region.id == region_id)
+                else {
+                    continue;
+                };
+                if matches!(
+                    region.kind,
+                    lege_docir::RegionKind::Header | lege_docir::RegionKind::Footer
+                ) {
+                    continue;
                 }
+                render_region(&mut html, &region.content, request.text_view);
             }
             html.push_str("</section>\n");
         }
@@ -403,34 +401,7 @@ fn page_text_layer(page: &lege_docir::Page, view: TextView) -> Option<PreparedTe
         let RegionContent::Text(block) = &region.content else {
             continue;
         };
-        for line in &block.lines {
-            if line.words.is_empty() {
-                if let Some((left, top, _, bottom)) = polygon_bounds(&line.polygon) {
-                    runs.push(TextRun {
-                        text: line.text.select(view),
-                        x: f64::from(left) * scale_x,
-                        y: page.page_size_points.height - f64::from(bottom) * scale_y,
-                        size: (f64::from(bottom - top) * scale_y).max(1.0),
-                    });
-                }
-            } else {
-                for (index, word) in line.words.iter().enumerate() {
-                    let Some((left, top, _, bottom)) = polygon_bounds(&word.polygon) else {
-                        continue;
-                    };
-                    let mut text = word.text.select(view);
-                    if index + 1 < line.words.len() {
-                        text.push(' ');
-                    }
-                    runs.push(TextRun {
-                        text,
-                        x: f64::from(left) * scale_x,
-                        y: page.page_size_points.height - f64::from(bottom) * scale_y,
-                        size: (f64::from(bottom - top) * scale_y).max(1.0),
-                    });
-                }
-            }
-        }
+        push_block_text_runs(&mut runs, block, view, page, scale_x, scale_y);
     }
     (!runs.is_empty()).then_some(PreparedTextLayer {
         runs: runs.into_boxed_slice(),
@@ -438,6 +409,46 @@ fn page_text_layer(page: &lege_docir::Page, view: TextView) -> Option<PreparedTe
         // glyphless font will lift this fallback's Windows-1252 limitation.
         font: TextFont::HelveticaFallback,
     })
+}
+
+/// Appends one run per word of `block`, or one per line for lines without
+/// word geometry.
+fn push_block_text_runs(
+    runs: &mut Vec<TextRun>,
+    block: &lege_docir::TextBlock,
+    view: TextView,
+    page: &lege_docir::Page,
+    scale_x: f64,
+    scale_y: f64,
+) {
+    for line in &block.lines {
+        if line.words.is_empty() {
+            if let Some((left, top, _, bottom)) = polygon_bounds(&line.polygon) {
+                runs.push(TextRun {
+                    text: line.text.select(view),
+                    x: f64::from(left) * scale_x,
+                    y: page.page_size_points.height - f64::from(bottom) * scale_y,
+                    size: (f64::from(bottom - top) * scale_y).max(1.0),
+                });
+            }
+            continue;
+        }
+        for (index, word) in line.words.iter().enumerate() {
+            let Some((left, top, _, bottom)) = polygon_bounds(&word.polygon) else {
+                continue;
+            };
+            let mut text = word.text.select(view);
+            if index + 1 < line.words.len() {
+                text.push(' ');
+            }
+            runs.push(TextRun {
+                text,
+                x: f64::from(left) * scale_x,
+                y: page.page_size_points.height - f64::from(bottom) * scale_y,
+                size: (f64::from(bottom - top) * scale_y).max(1.0),
+            });
+        }
+    }
 }
 
 fn polygon_bounds(polygon: &[lege_docir::Point]) -> Option<(f32, f32, f32, f32)> {
@@ -569,19 +580,7 @@ fn render_alto(request: &ExportRequest<'_>) -> String {
             };
             output.push_str(&format!("<TextBlock ID=\"{}\" HPOS=\"{x0:.0}\" VPOS=\"{y0:.0}\" WIDTH=\"{:.0}\" HEIGHT=\"{:.0}\">", xml_attr(&region.id), x1-x0, y1-y0));
             if let RegionContent::Text(block) = &region.content {
-                for line in &block.lines {
-                    let Some((lx0, ly0, lx1, ly1)) = polygon_bounds(&line.polygon) else {
-                        continue;
-                    };
-                    output.push_str(&format!("<TextLine HPOS=\"{lx0:.0}\" VPOS=\"{ly0:.0}\" WIDTH=\"{:.0}\" HEIGHT=\"{:.0}\">", lx1-lx0, ly1-ly0));
-                    for word in &line.words {
-                        let Some((wx0, wy0, wx1, wy1)) = polygon_bounds(&word.polygon) else {
-                            continue;
-                        };
-                        output.push_str(&format!("<String CONTENT=\"{}\" HPOS=\"{wx0:.0}\" VPOS=\"{wy0:.0}\" WIDTH=\"{:.0}\" HEIGHT=\"{:.0}\"/>", xml_attr(&word.text.select(request.text_view)), wx1-wx0, wy1-wy0));
-                    }
-                    output.push_str("</TextLine>");
-                }
+                render_alto_text_lines(&mut output, block, request.text_view);
             }
             output.push_str("</TextBlock>");
         }
@@ -589,6 +588,26 @@ fn render_alto(request: &ExportRequest<'_>) -> String {
     }
     output.push_str("</Layout></alto>\n");
     output
+}
+
+fn render_alto_text_lines(output: &mut String, block: &lege_docir::TextBlock, view: TextView) {
+    for line in &block.lines {
+        let Some((lx0, ly0, lx1, ly1)) = polygon_bounds(&line.polygon) else {
+            continue;
+        };
+        output.push_str(&format!(
+            "<TextLine HPOS=\"{lx0:.0}\" VPOS=\"{ly0:.0}\" WIDTH=\"{:.0}\" HEIGHT=\"{:.0}\">",
+            lx1 - lx0,
+            ly1 - ly0
+        ));
+        for word in &line.words {
+            let Some((wx0, wy0, wx1, wy1)) = polygon_bounds(&word.polygon) else {
+                continue;
+            };
+            output.push_str(&format!("<String CONTENT=\"{}\" HPOS=\"{wx0:.0}\" VPOS=\"{wy0:.0}\" WIDTH=\"{:.0}\" HEIGHT=\"{:.0}\"/>", xml_attr(&word.text.select(view)), wx1-wx0, wy1-wy0));
+        }
+        output.push_str("</TextLine>");
+    }
 }
 
 fn render_page_xml(request: &ExportRequest<'_>) -> String {
@@ -629,13 +648,14 @@ fn render_hocr(request: &ExportRequest<'_>) -> String {
             page.source_size.height
         ));
         for region in &page.regions {
-            if let RegionContent::Text(block) = &region.content {
-                for (line_index, line) in block.lines.iter().enumerate() {
-                    let Some((x0, y0, x1, y1)) = polygon_bounds(&line.polygon) else {
-                        continue;
-                    };
-                    output.push_str(&format!("<span class=\"ocr_line\" id=\"{}_{}\" title=\"bbox {x0:.0} {y0:.0} {x1:.0} {y1:.0}\">{}</span>\n", xml_attr(&region.id), line_index, xml_text(&line.text.select(request.text_view))));
-                }
+            let RegionContent::Text(block) = &region.content else {
+                continue;
+            };
+            for (line_index, line) in block.lines.iter().enumerate() {
+                let Some((x0, y0, x1, y1)) = polygon_bounds(&line.polygon) else {
+                    continue;
+                };
+                output.push_str(&format!("<span class=\"ocr_line\" id=\"{}_{}\" title=\"bbox {x0:.0} {y0:.0} {x1:.0} {y1:.0}\">{}</span>\n", xml_attr(&region.id), line_index, xml_text(&line.text.select(request.text_view))));
             }
         }
         output.push_str("</div>\n");
@@ -648,25 +668,26 @@ fn render_csv(request: &ExportRequest<'_>) -> String {
     let mut rows = vec!["page,table,row,column,row_span,column_span,text".to_string()];
     for page in &request.document.pages {
         for region in &page.regions {
-            if let RegionContent::Table(table) = &region.content {
-                for cell in &table.cells {
-                    let text = cell
-                        .blocks
-                        .iter()
-                        .map(|b| b.plain_text(request.text_view))
-                        .collect::<Vec<_>>()
-                        .join(" ");
-                    rows.push(format!(
-                        "{},{},{},{},{},{},{}",
-                        page.index + 1,
-                        csv_field(&region.id),
-                        cell.row,
-                        cell.column,
-                        cell.row_span,
-                        cell.column_span,
-                        csv_field(&text)
-                    ));
-                }
+            let RegionContent::Table(table) = &region.content else {
+                continue;
+            };
+            for cell in &table.cells {
+                let text = cell
+                    .blocks
+                    .iter()
+                    .map(|b| b.plain_text(request.text_view))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                rows.push(format!(
+                    "{},{},{},{},{},{},{}",
+                    page.index + 1,
+                    csv_field(&region.id),
+                    cell.row,
+                    cell.column,
+                    cell.row_span,
+                    cell.column_span,
+                    csv_field(&text)
+                ));
             }
         }
     }
@@ -703,38 +724,7 @@ impl DocumentExporter for DocxExporter {
                 ) {
                     continue;
                 }
-                match &region.content {
-                    RegionContent::Text(block) => {
-                        let style = match region.kind {
-                            lege_docir::RegionKind::Title => Some("Title"),
-                            lege_docir::RegionKind::Heading => Some("Heading1"),
-                            lege_docir::RegionKind::Caption => Some("Caption"),
-                            _ => None,
-                        };
-                        for line in &block.lines {
-                            docx_paragraph(&mut body, &line.text.select(request.text_view), style);
-                        }
-                    }
-                    RegionContent::Table(table) => docx_table(&mut body, table, request.text_view),
-                    RegionContent::Formula(formula) => {
-                        let value = formula
-                            .latex
-                            .as_deref()
-                            .or(formula.mathml.as_deref())
-                            .unwrap_or_default();
-                        docx_paragraph(&mut body, value, None);
-                    }
-                    RegionContent::Figure(figure) => {
-                        if let Some(caption) = &figure.caption {
-                            docx_paragraph(
-                                &mut body,
-                                &caption.plain_text(request.text_view),
-                                Some("Caption"),
-                            );
-                        }
-                    }
-                    RegionContent::Separator | RegionContent::Unknown => {}
-                }
+                docx_region(&mut body, region, request.text_view);
             }
             if page_index + 1 < request.document.pages.len() {
                 body.push_str("<w:p><w:r><w:br w:type=\"page\"/></w:r></w:p>");
@@ -765,6 +755,37 @@ impl DocumentExporter for DocxExporter {
     }
 }
 
+fn docx_region(body: &mut String, region: &lege_docir::Region, view: TextView) {
+    match &region.content {
+        RegionContent::Text(block) => {
+            let style = match region.kind {
+                lege_docir::RegionKind::Title => Some("Title"),
+                lege_docir::RegionKind::Heading => Some("Heading1"),
+                lege_docir::RegionKind::Caption => Some("Caption"),
+                _ => None,
+            };
+            for line in &block.lines {
+                docx_paragraph(body, &line.text.select(view), style);
+            }
+        }
+        RegionContent::Table(table) => docx_table(body, table, view),
+        RegionContent::Formula(formula) => {
+            let value = formula
+                .latex
+                .as_deref()
+                .or(formula.mathml.as_deref())
+                .unwrap_or_default();
+            docx_paragraph(body, value, None);
+        }
+        RegionContent::Figure(figure) => {
+            if let Some(caption) = &figure.caption {
+                docx_paragraph(body, &caption.plain_text(view), Some("Caption"));
+            }
+        }
+        RegionContent::Separator | RegionContent::Unknown => {}
+    }
+}
+
 fn docx_paragraph(output: &mut String, text: &str, style: Option<&str>) {
     output.push_str("<w:p>");
     if let Some(style) = style {
@@ -782,32 +803,35 @@ fn docx_table(output: &mut String, table: &lege_docir::Table, view: TextView) {
         output.push_str("<w:tr>");
         for column in 0..table.columns {
             output.push_str("<w:tc>");
-            if let Some(cell) = table
+            match table
                 .cells
                 .iter()
                 .find(|cell| cell.row == row && cell.column == column)
             {
-                if cell.column_span > 1 {
-                    output.push_str(&format!(
-                        "<w:tcPr><w:gridSpan w:val=\"{}\"/></w:tcPr>",
-                        cell.column_span
-                    ));
-                }
-                let text = cell
-                    .blocks
-                    .iter()
-                    .map(|block| block.plain_text(view))
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                docx_paragraph(output, &text, None);
-            } else {
-                output.push_str("<w:p/>");
+                Some(cell) => docx_cell_content(output, cell, view),
+                None => output.push_str("<w:p/>"),
             }
             output.push_str("</w:tc>");
         }
         output.push_str("</w:tr>");
     }
     output.push_str("</w:tbl>");
+}
+
+fn docx_cell_content(output: &mut String, cell: &lege_docir::TableCell, view: TextView) {
+    if cell.column_span > 1 {
+        output.push_str(&format!(
+            "<w:tcPr><w:gridSpan w:val=\"{}\"/></w:tcPr>",
+            cell.column_span
+        ));
+    }
+    let text = cell
+        .blocks
+        .iter()
+        .map(|block| block.plain_text(view))
+        .collect::<Vec<_>>()
+        .join(" ");
+    docx_paragraph(output, &text, None);
 }
 
 struct XlsxExporter;
@@ -822,26 +846,11 @@ impl DocumentExporter for XlsxExporter {
         let mut rows = Vec::new();
         for page in &request.document.pages {
             for region in &page.regions {
-                if let RegionContent::Table(table) = &region.content {
-                    for row in 0..table.rows {
-                        let values = (0..table.columns)
-                            .map(|column| {
-                                table
-                                    .cells
-                                    .iter()
-                                    .find(|cell| cell.row == row && cell.column == column)
-                                    .map(|cell| {
-                                        cell.blocks
-                                            .iter()
-                                            .map(|b| b.plain_text(request.text_view))
-                                            .collect::<Vec<_>>()
-                                            .join(" ")
-                                    })
-                                    .unwrap_or_default()
-                            })
-                            .collect::<Vec<_>>();
-                        rows.push(values);
-                    }
+                let RegionContent::Table(table) = &region.content else {
+                    continue;
+                };
+                for row in 0..table.rows {
+                    rows.push(xlsx_row_values(table, row, request.text_view));
                 }
             }
         }
@@ -889,6 +898,26 @@ impl DocumentExporter for XlsxExporter {
             path,
         })
     }
+}
+
+/// The text of every column of `row`, empty where no cell starts.
+fn xlsx_row_values(table: &lege_docir::Table, row: u32, view: TextView) -> Vec<String> {
+    (0..table.columns)
+        .map(|column| {
+            table
+                .cells
+                .iter()
+                .find(|cell| cell.row == row && cell.column == column)
+                .map(|cell| {
+                    cell.blocks
+                        .iter()
+                        .map(|b| b.plain_text(view))
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                })
+                .unwrap_or_default()
+        })
+        .collect::<Vec<_>>()
 }
 
 fn spreadsheet_column(mut index: usize) -> String {
@@ -944,38 +973,7 @@ fn render_region(output: &mut String, content: &RegionContent, view: TextView) {
             );
             output.push_str("</p>\n");
         }
-        RegionContent::Table(table) => {
-            output.push_str("<table>\n");
-            for row in 0..table.rows {
-                output.push_str("<tr>");
-                for column in 0..table.columns {
-                    if let Some(cell) = table
-                        .cells
-                        .iter()
-                        .find(|cell| cell.row == row && cell.column == column)
-                    {
-                        let tag = if cell.is_header { "th" } else { "td" };
-                        output.push_str(&format!(
-                            "<{tag} rowspan=\"{}\" colspan=\"{}\">{}</{tag}>",
-                            cell.row_span.max(1),
-                            cell.column_span.max(1),
-                            html_escape::encode_text(
-                                &cell
-                                    .blocks
-                                    .iter()
-                                    .map(|block| block.plain_text(view))
-                                    .collect::<Vec<_>>()
-                                    .join(" ")
-                            )
-                        ));
-                    } else {
-                        output.push_str("<td></td>");
-                    }
-                }
-                output.push_str("</tr>\n");
-            }
-            output.push_str("</table>\n");
-        }
+        RegionContent::Table(table) => render_html_table(output, table, view),
         RegionContent::Formula(formula) => {
             if let Some(mathml) = &formula.mathml {
                 output.push_str(mathml);
@@ -998,6 +996,39 @@ fn render_region(output: &mut String, content: &RegionContent, view: TextView) {
         RegionContent::Separator => output.push_str("<hr>\n"),
         RegionContent::Unknown => {}
     }
+}
+
+fn render_html_table(output: &mut String, table: &lege_docir::Table, view: TextView) {
+    output.push_str("<table>\n");
+    for row in 0..table.rows {
+        output.push_str("<tr>");
+        for column in 0..table.columns {
+            let Some(cell) = table
+                .cells
+                .iter()
+                .find(|cell| cell.row == row && cell.column == column)
+            else {
+                output.push_str("<td></td>");
+                continue;
+            };
+            let tag = if cell.is_header { "th" } else { "td" };
+            output.push_str(&format!(
+                "<{tag} rowspan=\"{}\" colspan=\"{}\">{}</{tag}>",
+                cell.row_span.max(1),
+                cell.column_span.max(1),
+                html_escape::encode_text(
+                    &cell
+                        .blocks
+                        .iter()
+                        .map(|block| block.plain_text(view))
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                )
+            ));
+        }
+        output.push_str("</tr>\n");
+    }
+    output.push_str("</table>\n");
 }
 
 fn atomic_write(path: &Path, bytes: &[u8], overwrite: bool) -> Result<(), ExportError> {

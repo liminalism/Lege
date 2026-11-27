@@ -388,20 +388,14 @@ fn run_batch(args: BatchArgs) -> Result<(), String> {
             let cancelled = std::sync::Arc::clone(&cancelled);
             let result_sender = result_sender.clone();
             scope.spawn(move || {
-                loop {
-                    if cancelled.load(std::sync::atomic::Ordering::Acquire) {
-                        break;
-                    }
-                    let task = tasks.lock().ok().and_then(|mut queue| queue.pop_front());
-                    let Some(task) = task else { break };
-                    let source = task.source.clone();
-                    let job_id = task.job.id;
-                    let result = process_batch_task(&processor, &store, &settings, task);
-                    if result.is_err() && settings.on_error == OnErrorArg::Stop {
-                        cancelled.store(true, std::sync::atomic::Ordering::Release);
-                    }
-                    let _ = result_sender.send((source, job_id, result));
-                }
+                run_batch_worker(
+                    &processor,
+                    &store,
+                    &settings,
+                    &tasks,
+                    &cancelled,
+                    &result_sender,
+                );
             });
         }
     });
@@ -438,6 +432,32 @@ fn run_batch(args: BatchArgs) -> Result<(), String> {
         ));
     }
     Ok(())
+}
+
+/// One batch worker: takes tasks off the shared queue until it is empty or
+/// the batch is cancelled, and reports every result.
+fn run_batch_worker(
+    processor: &DocumentProcessor,
+    store: &JobStore,
+    settings: &BatchSettings,
+    tasks: &std::sync::Mutex<std::collections::VecDeque<BatchTask>>,
+    cancelled: &std::sync::atomic::AtomicBool,
+    result_sender: &std::sync::mpsc::Sender<(PathBuf, i64, Result<(), String>)>,
+) {
+    loop {
+        if cancelled.load(std::sync::atomic::Ordering::Acquire) {
+            break;
+        }
+        let task = tasks.lock().ok().and_then(|mut queue| queue.pop_front());
+        let Some(task) = task else { break };
+        let source = task.source.clone();
+        let job_id = task.job.id;
+        let result = process_batch_task(processor, store, settings, task);
+        if result.is_err() && settings.on_error == OnErrorArg::Stop {
+            cancelled.store(true, std::sync::atomic::Ordering::Release);
+        }
+        let _ = result_sender.send((source, job_id, result));
+    }
 }
 
 fn run_doctor(args: DoctorArgs) -> Result<(), String> {

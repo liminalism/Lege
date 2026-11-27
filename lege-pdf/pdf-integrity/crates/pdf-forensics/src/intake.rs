@@ -7,8 +7,8 @@
 
 use std::sync::Arc;
 
-use exprim::document::{DocumentLimits, DocumentSnapshot};
 use exprim::doctor::{CompileStatus, DocumentReport, OpenOutcome};
+use exprim::document::{DocumentLimits, DocumentSnapshot};
 use exprim::source::{OwnedBytesSource, PdfSource};
 
 use crate::document::{
@@ -65,8 +65,11 @@ pub fn audit_bytes_with_evidence(
     };
 
     let source: Arc<dyn PdfSource> = Arc::new(OwnedBytesSource::new(bytes.to_vec()));
-    let report =
-        exprim::doctor::examine_with_password(Arc::clone(&source), DocumentLimits::default(), password);
+    let report = exprim::doctor::examine_with_password(
+        Arc::clone(&source),
+        DocumentLimits::default(),
+        password,
+    );
 
     let facts = translate(bytes, &report, &source, password, identity);
     let mode = analysis_mode(&facts);

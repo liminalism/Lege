@@ -1316,31 +1316,31 @@ pub fn runtime_search_directories() -> Vec<PathBuf> {
         }
     };
 
-    if let Ok(exe_path) = std::env::current_exe() {
-        if let Some(dir) = exe_path.parent() {
-            push_unique(dir.to_path_buf());
-            push_unique(dir.join("models"));
-            push_unique(dir.join("tessdata"));
-            push_unique(dir.join("installer/linux64"));
-            push_unique(dir.join("installer"));
+    if let Ok(exe_path) = std::env::current_exe()
+        && let Some(dir) = exe_path.parent()
+    {
+        push_unique(dir.to_path_buf());
+        push_unique(dir.join("models"));
+        push_unique(dir.join("tessdata"));
+        push_unique(dir.join("installer/linux64"));
+        push_unique(dir.join("installer"));
 
-            if let Some(parent) = dir.parent() {
-                #[cfg(target_os = "macos")]
-                if parent.file_name().is_some_and(|name| name == "Contents") {
-                    push_unique(parent.join("Frameworks"));
-                    push_unique(parent.join("Resources"));
-                    push_unique(parent.join("Resources/models"));
-                    push_unique(parent.join("Resources/tessdata"));
-                }
-
-                push_unique(parent.to_path_buf());
-                push_unique(parent.join("share/lege"));
-                push_unique(parent.join("share/lege/models"));
-                push_unique(parent.join("share/lege/tessdata"));
-                push_unique(parent.join("lib/lege"));
-                push_unique(parent.join("installer/linux64"));
-                push_unique(parent.join("installer"));
+        if let Some(parent) = dir.parent() {
+            #[cfg(target_os = "macos")]
+            if parent.file_name().is_some_and(|name| name == "Contents") {
+                push_unique(parent.join("Frameworks"));
+                push_unique(parent.join("Resources"));
+                push_unique(parent.join("Resources/models"));
+                push_unique(parent.join("Resources/tessdata"));
             }
+
+            push_unique(parent.to_path_buf());
+            push_unique(parent.join("share/lege"));
+            push_unique(parent.join("share/lege/models"));
+            push_unique(parent.join("share/lege/tessdata"));
+            push_unique(parent.join("lib/lege"));
+            push_unique(parent.join("installer/linux64"));
+            push_unique(parent.join("installer"));
         }
     }
 

@@ -143,6 +143,60 @@ pub fn percentile(q: &VecDeque<f64>, p: f64) -> f64 {
 
 type WakeSlot = Arc<Mutex<Option<Waker>>>;
 
+/// Where a box came from, for the status line: ` · source score` and the
+/// label's own source for a prefilled box, ` · drawn` for one drawn here.
+fn provenance_note(provenance_json: Option<&str>) -> String {
+    let Some(v) = provenance_json.and_then(|j| serde_json::from_str::<serde_json::Value>(j).ok())
+    else {
+        return " · drawn".into();
+    };
+    let src = v.get("source").and_then(|x| x.as_str()).unwrap_or("");
+    let score = v
+        .get("score")
+        .and_then(|x| x.as_f64())
+        .map(|x| format!(" {x:.2}"))
+        .unwrap_or_default();
+    let label = match (
+        v.get("label_class").and_then(|x| x.as_str()),
+        v.get("teacher_class").and_then(|x| x.as_str()),
+    ) {
+        (Some(pp), Some(yolo)) => {
+            let s = v
+                .get("label_score")
+                .and_then(|x| x.as_f64())
+                .map(|x| format!(" {x:.2}"))
+                .unwrap_or_default();
+            format!(" ({yolo}; label from PP-DocLayout-L {pp}{s})")
+        }
+        _ => String::new(),
+    };
+    format!(" · {src}{score}{label}")
+}
+
+/// The white grab mark on the hovered corner `h` of box `r`.
+fn draw_corner_grab(p: &mut Painter<'_>, r: Rect, h: &Handle, color: u32, s: f64) {
+    let k = (9.0 * s).round() as i32;
+    let (x, y) = match h {
+        Handle::TopLeft => (r.x, r.y),
+        Handle::TopRight => (r.right(), r.y),
+        Handle::BottomLeft => (r.x, r.bottom()),
+        _ => (r.right(), r.bottom()),
+    };
+    let m = Rect::new(x - k / 2, y - k / 2, k, k);
+    p.fill_rect(m, 0xffffff);
+    outline(p, m, color, 1);
+}
+
+/// Wake the window through `slot`, once a waker is attached.
+fn wake_window(slot: &WakeSlot) {
+    let Ok(w) = slot.lock() else {
+        return;
+    };
+    if let Some(w) = w.as_ref() {
+        w.wake();
+    }
+}
+
 /// Prefilled boxes scored below this are drawn dashed until edited.
 pub const LOW_CONFIDENCE: f64 = 0.5;
 
@@ -327,13 +381,7 @@ impl AnnotatorApp {
         warnings.extend(w2);
         let wake_slot: WakeSlot = Arc::new(Mutex::new(None));
         let ws = wake_slot.clone();
-        let wake: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
-            if let Ok(w) = ws.lock() {
-                if let Some(w) = w.as_ref() {
-                    w.wake();
-                }
-            }
-        });
+        let wake: Arc<dyn Fn() + Send + Sync> = Arc::new(move || wake_window(&ws));
         let w2 = wake.clone();
         let writer = Writer::spawn(&config.project, move || w2())?;
         let loader = Loader::spawn(settings.raw.decode_threads, wake);
@@ -474,13 +522,7 @@ impl AnnotatorApp {
         view.split_names = database::split_names(&self.conn).unwrap_or_default();
         if self.tone_job.is_none() {
             let ws = self.wake_slot.clone();
-            let wake: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
-                if let Ok(w) = ws.lock() {
-                    if let Some(w) = w.as_ref() {
-                        w.wake();
-                    }
-                }
-            });
+            let wake: Arc<dyn Fn() + Send + Sync> = Arc::new(move || wake_window(&ws));
             let threads = std::thread::available_parallelism()
                 .map(|n| n.get() / 2)
                 .unwrap_or(2)
@@ -617,44 +659,48 @@ impl AnnotatorApp {
                 }
                 self.dirty = true;
             }
-            BooksAction::AssignSplits => {
-                let plan = database::SplitPlan::default();
-                match database::assign_splits(&mut self.conn, &plan, false) {
-                    Ok(moved) => {
-                        let count = |s: &str| moved.iter().filter(|(_, x)| x == s).count();
-                        let msg = format!(
-                            "{} books given a split: {} train, {} dev, {} final_test",
-                            moved.len(),
-                            count(&plan.train),
-                            count(&plan.dev.0),
-                            count(&plan.test.0)
-                        );
-                        let stats = database::book_stats(&self.conn).unwrap_or_default();
-                        if let Some(m) = self.meta.as_mut() {
-                            if let Some((_, s)) = moved.iter().find(|(b, _)| *b == m.book_id) {
-                                m.split = s.clone();
-                            }
-                        }
-                        if let Some(v) = &mut self.books {
-                            v.update_stats(stats);
-                            v.split_names = database::split_names(&self.conn).unwrap_or_default();
-                            v.say(msg);
-                        }
-                    }
-                    Err(e) => {
-                        if let Some(v) = &mut self.books {
-                            v.say(e);
-                        }
-                    }
-                }
-                self.dirty = true;
-            }
+            BooksAction::AssignSplits => self.assign_book_splits(),
             BooksAction::Close => {
                 self.books = None;
                 self.dirty = true;
                 self.update_title();
             }
         }
+    }
+
+    /// Give every book without a split one, by the default plan, and say how
+    /// many went where.
+    fn assign_book_splits(&mut self) {
+        let plan = database::SplitPlan::default();
+        match database::assign_splits(&mut self.conn, &plan, false) {
+            Ok(moved) => {
+                let count = |s: &str| moved.iter().filter(|(_, x)| x == s).count();
+                let msg = format!(
+                    "{} books given a split: {} train, {} dev, {} final_test",
+                    moved.len(),
+                    count(&plan.train),
+                    count(&plan.dev.0),
+                    count(&plan.test.0)
+                );
+                let stats = database::book_stats(&self.conn).unwrap_or_default();
+                if let Some(m) = self.meta.as_mut() {
+                    if let Some((_, s)) = moved.iter().find(|(b, _)| *b == m.book_id) {
+                        m.split = s.clone();
+                    }
+                }
+                if let Some(v) = &mut self.books {
+                    v.update_stats(stats);
+                    v.split_names = database::split_names(&self.conn).unwrap_or_default();
+                    v.say(msg);
+                }
+            }
+            Err(e) => {
+                if let Some(v) = &mut self.books {
+                    v.say(e);
+                }
+            }
+        }
+        self.dirty = true;
     }
 
     /// `A`: select the next `abandon` box on the page.
@@ -1285,55 +1331,8 @@ impl AnnotatorApp {
         if self.editor.is_busy() {
             return;
         }
-        if accept {
-            let loaded = matches!(self.image, ImageState::Ready(_));
-            let mut refused = false;
-            if let Some(doc) = &mut self.doc {
-                let abandon = doc
-                    .annotations
-                    .iter()
-                    .filter(|a| a.class_id == ABANDON)
-                    .count();
-                let todo = matches!(doc.status, ReviewStatus::Unseen | ReviewStatus::Opened);
-                if !loaded {
-                    let msg = format!("{}: image did not load — not marked reviewed", doc.page_key);
-                    self.flash(&msg, true);
-                } else if todo && abandon > 0 {
-                    // Export skips a page with abandon boxes, so marking it
-                    // reviewed would lose it quietly.
-                    if self.abandon_warned.as_deref() == Some(doc.page_key.as_str()) {
-                        let msg = format!(
-                            "{}: left to do ({abandon} abandon boxes) — not marked reviewed",
-                            doc.page_key
-                        );
-                        self.flash(&msg, true);
-                    } else {
-                        self.abandon_warned = Some(doc.page_key.clone());
-                        refused = true;
-                    }
-                } else if todo {
-                    doc.set_status_untracked(ReviewStatus::Reviewed);
-                    self.reviewed_in_queue += 1;
-                    self.pace.accepted(Instant::now());
-                }
-            }
-            if refused {
-                let n = self.doc.as_ref().map_or(0, |d| {
-                    d.annotations
-                        .iter()
-                        .filter(|a| a.class_id == ABANDON)
-                        .count()
-                });
-                self.flash(
-                    &format!(
-                        "{n} abandon box{} left: export skips this page. A selects the next, a class key labels it · \
-                         Right again: move on without marking it reviewed",
-                        if n == 1 { "" } else { "es" }
-                    ),
-                    true,
-                );
-                return;
-            }
+        if accept && self.refuse_accept() {
+            return;
         }
         self.commit(if accept { "accept" } else { "navigate" });
         if pos >= self.keys.len() {
@@ -1348,6 +1347,62 @@ impl AnnotatorApp {
         if pos != self.pos || self.doc.is_none() {
             self.open_page(pos);
         }
+    }
+
+    /// Accepting the open page marks it reviewed. The first accept of a page
+    /// that still has abandon boxes is refused (true), with a warning: export
+    /// skips such a page, so marking it reviewed would lose it quietly. A
+    /// second accept moves on and leaves the page to do.
+    fn refuse_accept(&mut self) -> bool {
+        let loaded = matches!(self.image, ImageState::Ready(_));
+        let mut refused = false;
+        if let Some(doc) = &mut self.doc {
+            let abandon = doc
+                .annotations
+                .iter()
+                .filter(|a| a.class_id == ABANDON)
+                .count();
+            let todo = matches!(doc.status, ReviewStatus::Unseen | ReviewStatus::Opened);
+            if !loaded {
+                let msg = format!("{}: image did not load — not marked reviewed", doc.page_key);
+                self.flash(&msg, true);
+            } else if todo && abandon > 0 {
+                // Export skips a page with abandon boxes, so marking it
+                // reviewed would lose it quietly.
+                if self.abandon_warned.as_deref() == Some(doc.page_key.as_str()) {
+                    let msg = format!(
+                        "{}: left to do ({abandon} abandon boxes) — not marked reviewed",
+                        doc.page_key
+                    );
+                    self.flash(&msg, true);
+                } else {
+                    self.abandon_warned = Some(doc.page_key.clone());
+                    refused = true;
+                }
+            } else if todo {
+                doc.set_status_untracked(ReviewStatus::Reviewed);
+                self.reviewed_in_queue += 1;
+                self.pace.accepted(Instant::now());
+            }
+        }
+        if !refused {
+            return false;
+        }
+        let n = self.doc.as_ref().map_or(0, |d| {
+            d.annotations
+                .iter()
+                .filter(|a| a.class_id == ABANDON)
+                .count()
+        });
+        self.flash(
+            &format!(
+                "{n} abandon box{} left: export skips this page. A selects the next, a class key labels it · \
+                 Right again: move on without marking it reviewed",
+                if n == 1 { "" } else { "es" }
+            ),
+            true,
+        );
+        true
     }
 
     // --- background results -------------------------------------------------
@@ -1711,26 +1766,7 @@ impl AnnotatorApp {
                 }
             }
             Action::Fit => self.set_fit(),
-            Action::Actual => {
-                let p = self.editor.pointer;
-                let anchor = if self.canvas.contains(p) {
-                    p
-                } else {
-                    Point::new(
-                        self.canvas.x + self.canvas.w / 2.0,
-                        self.canvas.y + self.canvas.h / 2.0,
-                    )
-                };
-                self.view.actual_at(anchor);
-                // Whole-pixel origin: 100% is then an exact copy of the page.
-                self.view.origin =
-                    Point::new(self.view.origin.x.round(), self.view.origin.y.round());
-                if let Some(doc) = &self.doc {
-                    self.view
-                        .constrain(self.canvas, doc.width, doc.height, 64.0);
-                }
-                self.editor.zoom_mode = ZoomMode::Actual;
-            }
+            Action::Actual => self.zoom_actual(),
             Action::ZoomIn => {
                 self.zoom_by(self.settings.raw.wheel_zoom_step, Some(self.editor.pointer))
             }
@@ -1738,32 +1774,7 @@ impl AnnotatorApp {
                 1.0 / self.settings.raw.wheel_zoom_step,
                 Some(self.editor.pointer),
             ),
-            Action::Undo | Action::Redo => {
-                if self.editor.is_busy() {
-                    self.editor.cancel();
-                }
-                if let Some(doc) = self.doc.as_mut() {
-                    let done = if action == Action::Undo {
-                        doc.undo()
-                    } else {
-                        doc.redo()
-                    };
-                    match done {
-                        Some(_) => {
-                            self.editor.reconcile(doc);
-                            self.commit("undo");
-                        }
-                        None => self.flash(
-                            if action == Action::Undo {
-                                "Nothing to undo"
-                            } else {
-                                "Nothing to redo"
-                            },
-                            false,
-                        ),
-                    }
-                }
-            }
+            Action::Undo | Action::Redo => self.undo_redo(action == Action::Undo),
             Action::Delete => {
                 if let Some(doc) = self.doc.as_mut() {
                     let out = self.editor.delete_selected(doc);
@@ -1782,17 +1793,7 @@ impl AnnotatorApp {
                 } else {
                     ReviewStatus::NeedsAttention
                 };
-                let Some((key, before)) = self.doc.as_ref().map(|d| (d.page_key.clone(), d.status))
-                else {
-                    return;
-                };
-                let after = self.status_after_flag_key(&key, before, target);
-                if let Some(doc) = self.doc.as_mut() {
-                    doc.apply(Edit::Status { before, after });
-                    self.flash(flag_message(after), false);
-                    self.commit("status");
-                    self.refresh_counts();
-                }
+                self.toggle_page_flag(target);
             }
             Action::Grid => self.show_grid(),
             Action::ToggleOutlines => {
@@ -1851,6 +1852,68 @@ impl AnnotatorApp {
                     false,
                 );
             }
+        }
+    }
+
+    /// `Actual`: 100% about the pointer, or about the canvas centre when the
+    /// pointer is off the canvas.
+    fn zoom_actual(&mut self) {
+        let p = self.editor.pointer;
+        let anchor = if self.canvas.contains(p) {
+            p
+        } else {
+            Point::new(
+                self.canvas.x + self.canvas.w / 2.0,
+                self.canvas.y + self.canvas.h / 2.0,
+            )
+        };
+        self.view.actual_at(anchor);
+        // Whole-pixel origin: 100% is then an exact copy of the page.
+        self.view.origin = Point::new(self.view.origin.x.round(), self.view.origin.y.round());
+        if let Some(doc) = &self.doc {
+            self.view
+                .constrain(self.canvas, doc.width, doc.height, 64.0);
+        }
+        self.editor.zoom_mode = ZoomMode::Actual;
+    }
+
+    /// `Undo` (`undo`) or `Redo` on the open page, ending any gesture first.
+    fn undo_redo(&mut self, undo: bool) {
+        if self.editor.is_busy() {
+            self.editor.cancel();
+        }
+        let Some(doc) = self.doc.as_mut() else {
+            return;
+        };
+        let done = if undo { doc.undo() } else { doc.redo() };
+        match done {
+            Some(_) => {
+                self.editor.reconcile(doc);
+                self.commit("undo");
+            }
+            None => self.flash(
+                if undo {
+                    "Nothing to undo"
+                } else {
+                    "Nothing to redo"
+                },
+                false,
+            ),
+        }
+    }
+
+    /// `ToggleExclude` / `ToggleAttention`: set the open page's status to
+    /// `target`, or take it back off.
+    fn toggle_page_flag(&mut self, target: ReviewStatus) {
+        let Some((key, before)) = self.doc.as_ref().map(|d| (d.page_key.clone(), d.status)) else {
+            return;
+        };
+        let after = self.status_after_flag_key(&key, before, target);
+        if let Some(doc) = self.doc.as_mut() {
+            doc.apply(Edit::Status { before, after });
+            self.flash(flag_message(after), false);
+            self.commit("status");
+            self.refresh_counts();
         }
     }
 
@@ -2651,160 +2714,187 @@ impl AnnotatorApp {
     fn route_pointer(&mut self) {
         let events: Vec<PointerEvent> = self.pointer.drain().collect();
         for ev in events {
-            let p = Point::new(ev.position.0, ev.position.1);
-            if ev.phase != PointerPhase::Move {
+            self.route_event(&ev);
+        }
+    }
+
+    /// One pointer event, to whatever has it: the book manager, an open
+    /// dialog, the grid, or the page view and its bars.
+    fn route_event(&mut self, ev: &PointerEvent) {
+        let p = Point::new(ev.position.0, ev.position.1);
+        if ev.phase != PointerPhase::Move {
+            self.dirty = true;
+        }
+        if self.books.is_some() {
+            self.books_pointer(ev.phase, p);
+            return;
+        }
+        if ev.phase == PointerPhase::Down && self.capture.owner().is_none() && self.dialog_press(p)
+        {
+            return;
+        }
+        if self.grid.is_some() {
+            self.grid_pointer(ev);
+            return;
+        }
+        match ev.phase {
+            PointerPhase::Down => self.page_pointer_down(ev, p),
+            PointerPhase::Move => match self.capture.owner() {
+                Some(SURFACE_CANVAS) => self.dispatch_canvas(ev),
+                Some(_) => {}
+                None => {
+                    self.editor.pointer = p;
+                    if self.canvas.contains(p) {
+                        self.dispatch_canvas(ev);
+                    } else if self.editor.hover.take().is_some() {
+                        self.dirty = true;
+                    }
+                }
+            },
+            PointerPhase::Up | PointerPhase::Cancel => self.page_pointer_up(ev, p),
+        }
+    }
+
+    /// A pointer event while the book manager is shown.
+    fn books_pointer(&mut self, phase: PointerPhase, p: Point) {
+        let (x, y) = (p.x as i32, p.y as i32);
+        match phase {
+            PointerPhase::Down => {
+                let action = self
+                    .books
+                    .as_mut()
+                    .map_or(BooksAction::None, |b| b.click(x, y));
+                self.dirty = true;
+                self.handle_books(action);
+            }
+            PointerPhase::Move => {
+                if self.books.as_mut().is_some_and(|b| b.pointer_move(x, y)) {
+                    self.dirty = true;
+                }
+            }
+            PointerPhase::Up | PointerPhase::Cancel => {
+                if self.books.as_mut().is_some_and(|b| b.pointer_up(x, y)) {
+                    self.dirty = true;
+                }
+            }
+        }
+    }
+
+    /// A press while no surface holds the pointer: the open queue, similar
+    /// or convert dialog takes it (true), or a press outside the dialog
+    /// closes it, except a press on a toolbar.
+    fn dialog_press(&mut self, p: Point) -> bool {
+        if let Some(d) = &mut self.queues {
+            let a = if d.contains(p.x as i32, p.y as i32) {
+                d.click(p.x as i32, p.y as i32)
+            } else {
+                QueueAction::Close
+            };
+            self.handle_queues(a);
+            self.dirty = true;
+            return true;
+        }
+        if let Some(d) = &mut self.similar {
+            if d.contains(p.x as i32, p.y as i32) {
+                let a = d.click(p.x as i32, p.y as i32);
+                self.handle_similar(a);
+                self.dirty = true;
+                return true;
+            }
+            let in_toolbar =
+                self.hud && (p.y < self.canvas.y || p.y >= self.canvas.y + self.canvas.h);
+            if !in_toolbar {
+                self.similar = None;
                 self.dirty = true;
             }
-            if self.books.is_some() {
-                let (x, y) = (p.x as i32, p.y as i32);
-                match ev.phase {
-                    PointerPhase::Down => {
-                        let action = self
-                            .books
-                            .as_mut()
-                            .map_or(BooksAction::None, |b| b.click(x, y));
-                        self.dirty = true;
-                        self.handle_books(action);
-                    }
-                    PointerPhase::Move => {
-                        if self.books.as_mut().is_some_and(|b| b.pointer_move(x, y)) {
-                            self.dirty = true;
-                        }
-                    }
-                    PointerPhase::Up | PointerPhase::Cancel => {
-                        if self.books.as_mut().is_some_and(|b| b.pointer_up(x, y)) {
-                            self.dirty = true;
-                        }
-                    }
+        }
+        if let Some(d) = &mut self.convert {
+            if d.contains(p.x as i32, p.y as i32) {
+                match d.click(p.x as i32, p.y as i32) {
+                    Some(ConvertAction::Undo(id)) => self.undo_bulk(id),
+                    Some(ConvertAction::Close) => self.convert = None,
+                    _ => {}
                 }
-                continue;
+                self.dirty = true;
+                return true;
             }
-            if ev.phase == PointerPhase::Down && self.capture.owner().is_none() {
-                if let Some(d) = &mut self.queues {
-                    let a = if d.contains(p.x as i32, p.y as i32) {
-                        d.click(p.x as i32, p.y as i32)
-                    } else {
-                        QueueAction::Close
-                    };
-                    self.handle_queues(a);
-                    self.dirty = true;
-                    continue;
-                }
-                if let Some(d) = &mut self.similar {
-                    if d.contains(p.x as i32, p.y as i32) {
-                        let a = d.click(p.x as i32, p.y as i32);
-                        self.handle_similar(a);
-                        self.dirty = true;
-                        continue;
-                    }
-                    let in_toolbar =
-                        self.hud && (p.y < self.canvas.y || p.y >= self.canvas.y + self.canvas.h);
-                    if !in_toolbar {
-                        self.similar = None;
-                        self.dirty = true;
-                    }
-                }
-                if let Some(d) = &mut self.convert {
-                    if d.contains(p.x as i32, p.y as i32) {
-                        match d.click(p.x as i32, p.y as i32) {
-                            Some(ConvertAction::Undo(id)) => self.undo_bulk(id),
-                            Some(ConvertAction::Close) => self.convert = None,
-                            _ => {}
-                        }
-                        self.dirty = true;
-                        continue;
-                    }
-                    // A click on the page, not a class chip, closes the dialog.
-                    let in_toolbar =
-                        self.hud && (p.y < self.canvas.y || p.y >= self.canvas.y + self.canvas.h);
-                    if !in_toolbar {
-                        self.convert = None;
-                        self.dirty = true;
-                    }
+            // A click on the page, not a class chip, closes the dialog.
+            let in_toolbar =
+                self.hud && (p.y < self.canvas.y || p.y >= self.canvas.y + self.canvas.h);
+            if !in_toolbar {
+                self.convert = None;
+                self.dirty = true;
+            }
+        }
+        false
+    }
+
+    /// A press on the page view: closes help, picks from the class popup,
+    /// or starts a toolbar press or a canvas gesture.
+    fn page_pointer_down(&mut self, ev: &PointerEvent, p: Point) {
+        if self.help {
+            self.help = false;
+            return;
+        }
+        if let Some(popup) = self.popup_rect.filter(|_| self.palette) {
+            if popup.contains(p.x as i32, p.y as i32) {
+                self.capture.capture(SURFACE_POPUP);
+                return;
+            }
+            self.palette = false;
+        }
+        let in_toolbar = self.hud && p.y < self.canvas.y;
+        if in_toolbar || (self.hud && p.y >= self.canvas.y + self.canvas.h) {
+            if self.capture.capture(SURFACE_TOOLBAR) {
+                self.pressed_toolbar = self.toolbar_hit(p);
+            }
+        } else if self.capture.capture(SURFACE_CANVAS) {
+            self.dispatch_canvas(ev);
+        }
+    }
+
+    /// A release (or cancel) on the page view, to the surface that holds the
+    /// pointer.
+    fn page_pointer_up(&mut self, ev: &PointerEvent, p: Point) {
+        match self.capture.owner() {
+            Some(SURFACE_CANVAS) => {
+                self.dispatch_canvas(ev);
+                // Release capture only when the gesture's button is up.
+                if !self.editor.is_busy() {
+                    self.capture.release(SURFACE_CANVAS);
                 }
             }
-            if self.grid.is_some() {
-                self.grid_pointer(&ev);
-                continue;
-            }
-            match ev.phase {
-                PointerPhase::Down => {
-                    if self.help {
-                        self.help = false;
-                        continue;
-                    }
-                    if let Some(popup) = self.popup_rect.filter(|_| self.palette) {
-                        if popup.contains(p.x as i32, p.y as i32) {
-                            self.capture.capture(SURFACE_POPUP);
-                            continue;
-                        }
-                        self.palette = false;
-                    }
-                    let in_toolbar = self.hud && p.y < self.canvas.y;
-                    if in_toolbar || (self.hud && p.y >= self.canvas.y + self.canvas.h) {
-                        if self.capture.capture(SURFACE_TOOLBAR) {
-                            self.pressed_toolbar = self.toolbar_hit(p);
-                        }
-                    } else if self.capture.capture(SURFACE_CANVAS) {
-                        self.dispatch_canvas(&ev);
+            Some(SURFACE_TOOLBAR) => {
+                let hit = self.toolbar_hit(p);
+                if ev.phase == PointerPhase::Up && hit.is_some() && hit == self.pressed_toolbar {
+                    match hit {
+                        Some(ToolbarItem::Books) => self.act(Action::Books),
+                        Some(ToolbarItem::Class(c)) => self.act(Action::Class(c)),
+                        Some(ToolbarItem::More) => self.palette = !self.palette,
+                        Some(ToolbarItem::Compare) => self.cycle_compare(),
+                        Some(ToolbarItem::Revert) => self.act(Action::RevertPage),
+                        Some(ToolbarItem::Similar) => self.act(Action::MatchSimilar),
+                        None => {}
                     }
                 }
-                PointerPhase::Move => match self.capture.owner() {
-                    Some(SURFACE_CANVAS) => self.dispatch_canvas(&ev),
-                    Some(_) => {}
-                    None => {
-                        self.editor.pointer = p;
-                        if self.canvas.contains(p) {
-                            self.dispatch_canvas(&ev);
-                        } else if self.editor.hover.take().is_some() {
-                            self.dirty = true;
-                        }
+                self.pressed_toolbar = None;
+                self.capture.release(SURFACE_TOOLBAR);
+            }
+            Some(SURFACE_POPUP) => {
+                if ev.phase == PointerPhase::Up {
+                    let hit = self
+                        .popup_hits
+                        .iter()
+                        .find(|(r, _)| r.contains(p.x as i32, p.y as i32))
+                        .map(|(_, c)| *c);
+                    if let Some(c) = hit {
+                        self.act(Action::Class(c));
                     }
-                },
-                PointerPhase::Up | PointerPhase::Cancel => match self.capture.owner() {
-                    Some(SURFACE_CANVAS) => {
-                        self.dispatch_canvas(&ev);
-                        // Release capture only when the gesture's button is up.
-                        if !self.editor.is_busy() {
-                            self.capture.release(SURFACE_CANVAS);
-                        }
-                    }
-                    Some(SURFACE_TOOLBAR) => {
-                        let hit = self.toolbar_hit(p);
-                        if ev.phase == PointerPhase::Up
-                            && hit.is_some()
-                            && hit == self.pressed_toolbar
-                        {
-                            match hit {
-                                Some(ToolbarItem::Books) => self.act(Action::Books),
-                                Some(ToolbarItem::Class(c)) => self.act(Action::Class(c)),
-                                Some(ToolbarItem::More) => self.palette = !self.palette,
-                                Some(ToolbarItem::Compare) => self.cycle_compare(),
-                                Some(ToolbarItem::Revert) => self.act(Action::RevertPage),
-                                Some(ToolbarItem::Similar) => self.act(Action::MatchSimilar),
-                                None => {}
-                            }
-                        }
-                        self.pressed_toolbar = None;
-                        self.capture.release(SURFACE_TOOLBAR);
-                    }
-                    Some(SURFACE_POPUP) => {
-                        if ev.phase == PointerPhase::Up {
-                            let hit = self
-                                .popup_hits
-                                .iter()
-                                .find(|(r, _)| r.contains(p.x as i32, p.y as i32))
-                                .map(|(_, c)| *c);
-                            if let Some(c) = hit {
-                                self.act(Action::Class(c));
-                            }
-                        }
-                        self.capture.release(SURFACE_POPUP);
-                    }
-                    _ => {
-                        self.capture.clear();
-                    }
-                },
+                }
+                self.capture.release(SURFACE_POPUP);
+            }
+            _ => {
+                self.capture.clear();
             }
         }
     }
@@ -3229,74 +3319,9 @@ impl AnnotatorApp {
 
         // Comparison layers underneath.
         match self.compare {
-            Compare::Imported => {
-                let imported = self.imported.clone();
-                for a in &imported {
-                    let r = pixel_rect(view.box_to_screen(a.bbox));
-                    if canvas_rect.intersect(r.inset(-2)).is_empty() {
-                        continue;
-                    }
-                    let c = if a.is_ignore {
-                        IGNORE_COLOR
-                    } else {
-                        colors[a.class_id as usize]
-                    };
-                    dashed_outline(p, r.inset(-1), c, 3, 3);
-                }
-            }
-            Compare::Prediction(_) => {
-                let preds = self.predictions.clone();
-                let thr = self.prediction_threshold;
-                let figures_only = self.figures_only();
-                for pr in preds
-                    .iter()
-                    .filter(|x| x.score >= thr && (!figures_only || x.class_id == 6))
-                {
-                    let r = pixel_rect(view.box_to_screen(pr.bbox));
-                    if canvas_rect.intersect(r.inset(-2)).is_empty() {
-                        continue;
-                    }
-                    let c = colors[pr.class_id as usize];
-                    dashed_outline(p, r, c, 6, 3);
-                    if self.settings.raw.show_tags {
-                        let label = format!("{} {:.2}", class(pr.class_id).short, pr.score);
-                        let br = Rect::new(r.x, r.bottom(), r.w, 0);
-                        let st = self.style(10.0);
-                        let tw = self.text.measure(&label, st);
-                        let lh = self.text.line_height(st);
-                        let tag = Rect::new(br.right() - tw - 4, br.y, tw + 4, lh);
-                        p.blend_rect(tag, 0x000000, 160);
-                        self.text.draw(p, &label, tag.x + 2, tag.y, st, c);
-                    }
-                }
-            }
-            Compare::Diff => {
-                if let Some(d) = self.page_diff.clone() {
-                    let deleted = d.deleted.clone();
-                    for a in &deleted {
-                        let r = pixel_rect(view.box_to_screen(a.bbox));
-                        dashed_outline(p, r, DIFF_DELETED, 5, 3);
-                        self.draw_tag(
-                            p,
-                            r,
-                            &format!("deleted {}", class(a.class_id).short),
-                            DIFF_DELETED,
-                            &[],
-                        );
-                    }
-                    let originals: Vec<Box2> = annotations
-                        .iter()
-                        .zip(&d.changes)
-                        .filter(|(_, c)| matches!(c, Change::Modified { geometry: true, .. }))
-                        .filter_map(|(a, _)| {
-                            self.imported.iter().find(|o| o.id == a.id).map(|o| o.bbox)
-                        })
-                        .collect();
-                    for b in originals {
-                        dashed_outline(p, pixel_rect(view.box_to_screen(b)), DIFF_MODIFIED, 4, 3);
-                    }
-                }
-            }
+            Compare::Imported => self.draw_imported_layer(p, canvas_rect),
+            Compare::Prediction(_) => self.draw_prediction_layer(p, canvas_rect),
+            Compare::Diff => self.draw_diff_layer(p, &annotations),
             Compare::Off => {}
         }
 
@@ -3386,16 +3411,7 @@ impl AnnotatorApp {
             }
             if let Some((id, h)) = &hover {
                 if id == &a.id && h.is_corner() && self.editor.state == ToolState::Idle {
-                    let k = (9.0 * s).round() as i32;
-                    let (x, y) = match h {
-                        Handle::TopLeft => (r.x, r.y),
-                        Handle::TopRight => (r.right(), r.y),
-                        Handle::BottomLeft => (r.x, r.bottom()),
-                        _ => (r.right(), r.bottom()),
-                    };
-                    let m = Rect::new(x - k / 2, y - k / 2, k, k);
-                    p.fill_rect(m, 0xffffff);
-                    outline(p, m, color, 1);
+                    draw_corner_grab(p, r, h, color, s);
                 }
             }
             if compare == Compare::Diff {
@@ -3441,6 +3457,86 @@ impl AnnotatorApp {
             let r = pixel_rect(view.box_to_screen(b));
             p.blend_rect(r, colors[c as usize], 24);
             outline(p, r, colors[c as usize], 1);
+        }
+    }
+
+    /// Compare layer: the imported boxes, dashed.
+    fn draw_imported_layer(&mut self, p: &mut Painter<'_>, canvas_rect: Rect) {
+        let view = self.view;
+        let colors = self.settings.colors;
+        let imported = self.imported.clone();
+        for a in &imported {
+            let r = pixel_rect(view.box_to_screen(a.bbox));
+            if canvas_rect.intersect(r.inset(-2)).is_empty() {
+                continue;
+            }
+            let c = if a.is_ignore {
+                IGNORE_COLOR
+            } else {
+                colors[a.class_id as usize]
+            };
+            dashed_outline(p, r.inset(-1), c, 3, 3);
+        }
+    }
+
+    /// Compare layer: the model's boxes over the threshold, dashed, with
+    /// class and score tags when tags are on.
+    fn draw_prediction_layer(&mut self, p: &mut Painter<'_>, canvas_rect: Rect) {
+        let view = self.view;
+        let colors = self.settings.colors;
+        let preds = self.predictions.clone();
+        let thr = self.prediction_threshold;
+        let figures_only = self.figures_only();
+        for pr in preds
+            .iter()
+            .filter(|x| x.score >= thr && (!figures_only || x.class_id == 6))
+        {
+            let r = pixel_rect(view.box_to_screen(pr.bbox));
+            if canvas_rect.intersect(r.inset(-2)).is_empty() {
+                continue;
+            }
+            let c = colors[pr.class_id as usize];
+            dashed_outline(p, r, c, 6, 3);
+            if self.settings.raw.show_tags {
+                let label = format!("{} {:.2}", class(pr.class_id).short, pr.score);
+                let br = Rect::new(r.x, r.bottom(), r.w, 0);
+                let st = self.style(10.0);
+                let tw = self.text.measure(&label, st);
+                let lh = self.text.line_height(st);
+                let tag = Rect::new(br.right() - tw - 4, br.y, tw + 4, lh);
+                p.blend_rect(tag, 0x000000, 160);
+                self.text.draw(p, &label, tag.x + 2, tag.y, st, c);
+            }
+        }
+    }
+
+    /// Compare layer: the boxes deleted since import, tagged, and where
+    /// moved boxes were.
+    fn draw_diff_layer(&mut self, p: &mut Painter<'_>, annotations: &[Annotation]) {
+        let view = self.view;
+        let Some(d) = self.page_diff.clone() else {
+            return;
+        };
+        let deleted = d.deleted.clone();
+        for a in &deleted {
+            let r = pixel_rect(view.box_to_screen(a.bbox));
+            dashed_outline(p, r, DIFF_DELETED, 5, 3);
+            self.draw_tag(
+                p,
+                r,
+                &format!("deleted {}", class(a.class_id).short),
+                DIFF_DELETED,
+                &[],
+            );
+        }
+        let originals: Vec<Box2> = annotations
+            .iter()
+            .zip(&d.changes)
+            .filter(|(_, c)| matches!(c, Change::Modified { geometry: true, .. }))
+            .filter_map(|(a, _)| self.imported.iter().find(|o| o.id == a.id).map(|o| o.bbox))
+            .collect();
+        for b in originals {
+            dashed_outline(p, pixel_rect(view.box_to_screen(b)), DIFF_MODIFIED, 4, 3);
         }
     }
 
@@ -3676,87 +3772,9 @@ impl AnnotatorApp {
         };
         let info = info.or_else(|| {
             let doc = self.doc.as_ref()?;
-            if let Some(sel) = &self.editor.selected {
-                let a = doc.get(sel)?;
-                let b = self.editor.preview_for(sel).unwrap_or(a.bbox);
-                let prov = a
-                    .provenance_json
-                    .as_deref()
-                    .and_then(|j| serde_json::from_str::<serde_json::Value>(j).ok())
-                    .map(|v| {
-                        let src = v.get("source").and_then(|x| x.as_str()).unwrap_or("");
-                        let score = v
-                            .get("score")
-                            .and_then(|x| x.as_f64())
-                            .map(|x| format!(" {x:.2}"))
-                            .unwrap_or_default();
-                        let label = match (
-                            v.get("label_class").and_then(|x| x.as_str()),
-                            v.get("teacher_class").and_then(|x| x.as_str()),
-                        ) {
-                            (Some(pp), Some(yolo)) => {
-                                let s = v
-                                    .get("label_score")
-                                    .and_then(|x| x.as_f64())
-                                    .map(|x| format!(" {x:.2}"))
-                                    .unwrap_or_default();
-                                format!(" ({yolo}; label from PP-DocLayout-L {pp}{s})")
-                            }
-                            _ => String::new(),
-                        };
-                        format!(" · {src}{score}{label}")
-                    })
-                    .unwrap_or_else(|| " · drawn".into());
-                Some((
-                    format!(
-                        "{}{} · x {:.0} y {:.0} · {:.0}×{:.0}{}",
-                        class(a.class_id).name,
-                        if a.is_ignore { " (ignore)" } else { "" },
-                        b.x0,
-                        b.y0,
-                        b.width(),
-                        b.height(),
-                        prov
-                    ),
-                    HUD_TEXT,
-                ))
-            } else {
-                let reason = self
-                    .meta
-                    .as_ref()
-                    .and_then(|m| m.queue_reason.clone())
-                    .map(|r| format!(" · {r}"))
-                    .unwrap_or_default();
-                let counts = self
-                    .page_diff
-                    .as_ref()
-                    .map(|d| {
-                        let (_, m, a, del) = d.count();
-                        if m + a + del == 0 {
-                            String::new()
-                        } else {
-                            format!(" · edits: {m} changed, {a} new, {del} deleted")
-                        }
-                    })
-                    .unwrap_or_default();
-                let abandon = doc
-                    .annotations
-                    .iter()
-                    .filter(|a| a.class_id == ABANDON)
-                    .count();
-                if abandon > 0 {
-                    return Some((
-                        format!(
-                            "{} boxes, {abandon} abandon (A: select next, Shift+A: convert){reason}{counts}",
-                            doc.annotations.len()
-                        ),
-                        DIFF_MODIFIED,
-                    ));
-                }
-                Some((
-                    format!("{} boxes{reason}{counts}", doc.annotations.len()),
-                    HUD_DIM,
-                ))
+            match &self.editor.selected {
+                Some(sel) => self.selection_info(doc, sel),
+                None => Some(self.page_info(doc)),
             }
         });
         let right = format!("Compare: {} (C) · F1 help", self.compare_label());
@@ -3806,6 +3824,67 @@ impl AnnotatorApp {
             Rect::new(w - s.px(12) - cw, top, cw, bh),
             ToolbarItem::Compare,
         ));
+    }
+
+    /// Status line with a box selected: its class, geometry and origin.
+    fn selection_info(&self, doc: &PageDoc, sel: &str) -> Option<(String, u32)> {
+        let a = doc.get(sel)?;
+        let b = self.editor.preview_for(sel).unwrap_or(a.bbox);
+        let prov = provenance_note(a.provenance_json.as_deref());
+        Some((
+            format!(
+                "{}{} · x {:.0} y {:.0} · {:.0}×{:.0}{}",
+                class(a.class_id).name,
+                if a.is_ignore { " (ignore)" } else { "" },
+                b.x0,
+                b.y0,
+                b.width(),
+                b.height(),
+                prov
+            ),
+            HUD_TEXT,
+        ))
+    }
+
+    /// Status line with nothing selected: the page's boxes, its queue reason
+    /// and its edits since import.
+    fn page_info(&self, doc: &PageDoc) -> (String, u32) {
+        let reason = self
+            .meta
+            .as_ref()
+            .and_then(|m| m.queue_reason.clone())
+            .map(|r| format!(" · {r}"))
+            .unwrap_or_default();
+        let counts = self
+            .page_diff
+            .as_ref()
+            .map(|d| {
+                let (_, m, a, del) = d.count();
+                if m + a + del == 0 {
+                    String::new()
+                } else {
+                    format!(" · edits: {m} changed, {a} new, {del} deleted")
+                }
+            })
+            .unwrap_or_default();
+        let abandon = doc
+            .annotations
+            .iter()
+            .filter(|a| a.class_id == ABANDON)
+            .count();
+        if abandon > 0 {
+            return (
+                format!(
+                    "{} boxes, {abandon} abandon (A: select next, Shift+A: convert){reason}{counts}",
+                    doc.annotations.len()
+                ),
+                DIFF_MODIFIED,
+            );
+        }
+        (
+            format!("{} boxes{reason}{counts}", doc.annotations.len()),
+            HUD_DIM,
+        )
     }
 
     fn draw_palette(&mut self, p: &mut Painter<'_>) {

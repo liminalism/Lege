@@ -17,10 +17,10 @@
 use std::sync::Arc;
 
 use exprim::document::{DocumentLimits, DocumentSnapshot, PageIndex, ParseContext};
-use pdf_forensics::{AuditReport, ReplayError, RevisionHistoryFacts, audit_bytes, open_revision};
 use exprim::object::PdfObject;
 use exprim::source::{OwnedBytesSource, PdfSource, PrefixSource};
 use exprim::test_support::builder;
+use pdf_forensics::{AuditReport, ReplayError, RevisionHistoryFacts, audit_bytes, open_revision};
 
 /// Audit `bytes` and require the report to satisfy the schema's own rules.
 fn audit(bytes: &[u8]) -> AuditReport {

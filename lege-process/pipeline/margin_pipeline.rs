@@ -183,6 +183,20 @@ fn prepare_analysis_page(page_index: usize, original_image: RgbImage) -> Analysi
     }
 }
 
+/// Content bounds from the pixels: the whole page's ink without detections,
+/// else only the ink no detection covers.
+fn margin_pixel_bounds(
+    analysis_image: &RgbImage,
+    detections: &[crate::engine::Detection],
+    config: &PipelineConfig,
+) -> Option<ContentBounds> {
+    if detections.is_empty() {
+        compute_pixel_bounds_for_margin(analysis_image, config)
+    } else {
+        compute_missed_pixel_bounds_for_margin(analysis_image, detections, config)
+    }
+}
+
 fn build_margin_analysis_future(
     inference_handle: Option<Arc<crate::pipeline::inference::InferenceHandle>>,
     prepared: AnalysisPreparedPage,
@@ -229,17 +243,7 @@ fn build_margin_analysis_future(
                 let analysis_image = analysis_image.clone();
                 let detections = detections.clone();
                 let config = config.clone();
-                move || {
-                    if detections.is_empty() {
-                        compute_pixel_bounds_for_margin(&analysis_image, &config)
-                    } else {
-                        compute_missed_pixel_bounds_for_margin(
-                            &analysis_image,
-                            &detections,
-                            &config,
-                        )
-                    }
-                }
+                move || margin_pixel_bounds(&analysis_image, &detections, &config)
             })
             .await
             .map_err(|error| anyhow!("Margin-analysis pixel guard task panicked: {}", error))?;
@@ -255,6 +259,61 @@ fn build_margin_analysis_future(
             pixel_bounds,
         })
     })
+}
+
+/// Analyze one page for the margin pass: admit it against the page-memory
+/// budget, load and shrink it, then detect its layout and pixel bounds. A
+/// page that fails to load is reported, not an error.
+async fn run_margin_analysis_job(
+    source: Arc<dyn PageSource>,
+    config: Arc<PipelineConfig>,
+    inference_handle: Option<Arc<crate::pipeline::inference::InferenceHandle>>,
+    cancellation: exprim::CancellationToken,
+    memory_budget: Arc<tokio::sync::Semaphore>,
+    memory_budget_mb: usize,
+    page_index: usize,
+) -> Result<AnalysisJobResult> {
+    // Same byte governor as the page jobs: the analysis raster is
+    // small, but image sources still decode at native size first.
+    let charge = estimate_margin_job_charge(&source, page_index, memory_budget_mb);
+    if charge.oversized {
+        crate::pipeline::source::note_oversized_page(page_index, &charge, memory_budget_mb);
+    }
+    let _permit = memory_budget
+        .acquire_many_owned(charge.acquire_mb)
+        .await
+        .map_err(|_| anyhow!("page memory admission semaphore closed"))?;
+    let _tracked = crate::runtime_stats::track_memory_bytes(
+        crate::runtime_stats::MemoryGauge::PageWorkingSet,
+        charge.acquire_mb as usize,
+    );
+    let source_page = match source
+        .load_analysis_page(page_index, MARGIN_ANALYSIS_WIDTH, cancellation.clone())
+        .await
+    {
+        Ok(page) => page,
+        Err(error) => {
+            return Ok(AnalysisJobResult::LoadFailed {
+                page_index,
+                _error: error,
+            });
+        }
+    };
+    let prepared = crate::runtime_stats::spawn_blocking_stage(
+        crate::runtime_stats::Stage::Processing,
+        move || prepare_analysis_page(page_index, source_page.image),
+    )
+    .await
+    .map_err(|error| anyhow!("Margin-analysis prep task panicked: {}", error))?;
+    if cancellation.is_cancelled() {
+        return Err(anyhow!("Margin analysis cancelled after page preparation"));
+    }
+    let result = crate::runtime_stats::track_future(
+        crate::runtime_stats::Stage::Inference,
+        build_margin_analysis_future(inference_handle, prepared, config, cancellation),
+    )
+    .await?;
+    Ok(AnalysisJobResult::Completed(result))
 }
 
 pub(crate) async fn perform_document_margin_analysis(
@@ -328,53 +387,15 @@ pub(crate) async fn perform_document_margin_analysis(
             let inference_handle = inference_handle.clone();
             let cancellation = cancellation.clone();
             let memory_budget = memory_budget.clone();
-            pending.push(Box::pin(async move {
-                // Same byte governor as the page jobs: the analysis raster is
-                // small, but image sources still decode at native size first.
-                let charge = estimate_margin_job_charge(&source, page_index, memory_budget_mb);
-                if charge.oversized {
-                    crate::pipeline::source::note_oversized_page(
-                        page_index,
-                        &charge,
-                        memory_budget_mb,
-                    );
-                }
-                let _permit = memory_budget
-                    .acquire_many_owned(charge.acquire_mb)
-                    .await
-                    .map_err(|_| anyhow!("page memory admission semaphore closed"))?;
-                let _tracked = crate::runtime_stats::track_memory_bytes(
-                    crate::runtime_stats::MemoryGauge::PageWorkingSet,
-                    charge.acquire_mb as usize,
-                );
-                let source_page = match source
-                    .load_analysis_page(page_index, MARGIN_ANALYSIS_WIDTH, cancellation.clone())
-                    .await
-                {
-                    Ok(page) => page,
-                    Err(error) => {
-                        return Ok(AnalysisJobResult::LoadFailed {
-                            page_index,
-                            _error: error,
-                        });
-                    }
-                };
-                let prepared = crate::runtime_stats::spawn_blocking_stage(
-                    crate::runtime_stats::Stage::Processing,
-                    move || prepare_analysis_page(page_index, source_page.image),
-                )
-                .await
-                .map_err(|error| anyhow!("Margin-analysis prep task panicked: {}", error))?;
-                if cancellation.is_cancelled() {
-                    return Err(anyhow!("Margin analysis cancelled after page preparation"));
-                }
-                let result = crate::runtime_stats::track_future(
-                    crate::runtime_stats::Stage::Inference,
-                    build_margin_analysis_future(inference_handle, prepared, config, cancellation),
-                )
-                .await?;
-                Ok(AnalysisJobResult::Completed(result))
-            }));
+            pending.push(Box::pin(run_margin_analysis_job(
+                source,
+                config,
+                inference_handle,
+                cancellation,
+                memory_budget,
+                memory_budget_mb,
+                page_index,
+            )));
         }
 
         let Some(result) = pending.next().await else {
@@ -517,6 +538,45 @@ fn constrain_edge_spanning_crop_axes(
     }
 }
 
+/// The bounds of a page in a crop job: the document crop window fitted around
+/// the page's content, or, when the content is larger than the window, the
+/// content itself and `true` (the page falls back to standardize-and-center).
+fn crop_window_for_page(
+    safety_bounds: Option<ContentBounds>,
+    scaled_crop: ContentBounds,
+    page_width: u32,
+    page_height: u32,
+    config: &PipelineConfig,
+) -> (ContentBounds, bool) {
+    let safety = constrain_edge_spanning_crop_axes(
+        safety_bounds.unwrap_or(scaled_crop),
+        scaled_crop,
+        page_width,
+        page_height,
+    );
+    let pad_y = ((scaled_crop.height() as f32) * 0.015).round().max(4.0) as u32;
+    let required_height = safety.height().saturating_add(pad_y.saturating_mul(2));
+    let exceptional =
+        safety.width() > scaled_crop.width() || safety.height() > scaled_crop.height();
+    if exceptional {
+        return (safety, true);
+    }
+    let window_height = if config.crop_free_aspect() {
+        let min_height = ((scaled_crop.height() as f32) * 0.35).round().max(1.0) as u32;
+        required_height.clamp(min_height, scaled_crop.height().max(1))
+    } else {
+        scaled_crop.height().max(1)
+    };
+    let window = crate::margin::fit_crop_window_to_content(
+        &safety,
+        scaled_crop.width().max(1),
+        window_height,
+        page_width,
+        page_height,
+    );
+    (window, false)
+}
+
 pub(crate) fn adjust_page_with_margin_analysis(
     page: &RenderedPageData,
     mut detections: Vec<crate::engine::Detection>,
@@ -577,42 +637,16 @@ pub(crate) fn adjust_page_with_margin_analysis(
             effective_setting = crate::margin::MarginSettings::StandardizeAndCenter;
             full_page
         } else {
-            let safety = constrain_edge_spanning_crop_axes(
-                safety_bounds.unwrap_or(scaled_crop),
-                scaled_crop,
-                page_width,
-                page_height,
-            );
-            let pad_y = ((scaled_crop.height() as f32) * 0.015).round().max(4.0) as u32;
-            let required_height = safety.height().saturating_add(pad_y.saturating_mul(2));
-            let exceptional =
-                safety.width() > scaled_crop.width() || safety.height() > scaled_crop.height();
+            let (window, exceptional) =
+                crop_window_for_page(safety_bounds, scaled_crop, page_width, page_height, config);
             if exceptional {
                 effective_setting = crate::margin::MarginSettings::StandardizeAndCenter;
-                #[cfg(test)]
-                {
-                    centered_exception = true;
-                }
-                safety
-            } else if config.crop_free_aspect() {
-                let min_height = ((scaled_crop.height() as f32) * 0.35).round().max(1.0) as u32;
-                let window_height = required_height.clamp(min_height, scaled_crop.height().max(1));
-                crate::margin::fit_crop_window_to_content(
-                    &safety,
-                    scaled_crop.width().max(1),
-                    window_height,
-                    page_width,
-                    page_height,
-                )
-            } else {
-                crate::margin::fit_crop_window_to_content(
-                    &safety,
-                    scaled_crop.width().max(1),
-                    scaled_crop.height().max(1),
-                    page_width,
-                    page_height,
-                )
             }
+            #[cfg(test)]
+            {
+                centered_exception = exceptional;
+            }
+            window
         }
     } else if non_crop_content {
         full_page

@@ -140,26 +140,32 @@ fn draw(image: &RgbImage, detections: &[LayoutDetection]) -> RgbImage {
         let y1 = det.bbox[1].round().clamp(0.0, (h - 1) as f32) as u32;
         let x2 = det.bbox[2].round().clamp(0.0, (w - 1) as f32) as u32;
         let y2 = det.bbox[3].round().clamp(0.0, (h - 1) as f32) as u32;
-        for t in 0..3 {
-            for x in x1..=x2 {
-                if y1 + t < h {
-                    out.put_pixel(x, y1 + t, color);
-                }
-                if y2 >= t {
-                    out.put_pixel(x, y2 - t, color);
-                }
+        draw_box_outline(&mut out, [x1, y1, x2, y2], color);
+    }
+    out
+}
+
+/// Paints a 3-pixel border just inside the box `[x1, y1, x2, y2]`.
+fn draw_box_outline(out: &mut RgbImage, [x1, y1, x2, y2]: [u32; 4], color: Rgb<u8>) {
+    let (w, h) = out.dimensions();
+    for t in 0..3 {
+        for x in x1..=x2 {
+            if y1 + t < h {
+                out.put_pixel(x, y1 + t, color);
             }
-            for y in y1..=y2 {
-                if x1 + t < w {
-                    out.put_pixel(x1 + t, y, color);
-                }
-                if x2 >= t {
-                    out.put_pixel(x2 - t, y, color);
-                }
+            if y2 >= t {
+                out.put_pixel(x, y2 - t, color);
+            }
+        }
+        for y in y1..=y2 {
+            if x1 + t < w {
+                out.put_pixel(x1 + t, y, color);
+            }
+            if x2 >= t {
+                out.put_pixel(x2 - t, y, color);
             }
         }
     }
-    out
 }
 
 fn main() -> Result<()> {

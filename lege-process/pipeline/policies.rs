@@ -475,45 +475,58 @@ impl RegionPolicy for MarginStandardizeAndCenter {
             compute_pixel_bounds_for_margin(&page.high_res_image, cfg)
         };
 
-        if let Some(bounds) = bounds {
-            let dims = margin::StandardPageDimensions {
-                width: STANDARD_WIDTH.load(Ordering::Relaxed),
-                height: STANDARD_HEIGHT.load(Ordering::Relaxed),
-            };
-            if dims.width > 0 && dims.height > 0 {
-                let setting = match cfg.margin_settings() {
-                    margin::MarginSettings::StandardizeAndCenter
-                    | margin::MarginSettings::CropAndResize => {
-                        margin::MarginSettings::StandardizeAndCenter
-                    }
-                    margin::MarginSettings::None => margin::MarginSettings::None,
-                };
-                match margin::process_page_margins(
-                    &page.high_res_image,
-                    &bounds,
-                    setting,
-                    &dims,
-                    cfg.target_width(),
-                    cfg.target_height(),
-                ) {
-                    Ok(img) => {
-                        let new_dets = margin::transform_detections(
-                            &dets,
-                            &bounds,
-                            setting,
-                            &dims,
-                            cfg.target_width(),
-                            cfg.target_height(),
-                            Some((page_w, page_h)),
-                        );
-                        return (img, new_dets);
-                    }
-                    Err(_) => {}
-                }
-            }
+        if let Some(bounds) = bounds
+            && let Some(standardized) = standardize_page(page, &dets, &bounds, cfg)
+        {
+            return standardized;
         }
         ((*page.high_res_image).clone(), dets)
     }
+}
+
+/// The page standardized and centered onto the document's standard page, with
+/// its detections moved along; `None` before there is a standard page or when
+/// the margin processing fails.
+fn standardize_page(
+    page: &RenderedPageData,
+    dets: &[Detection],
+    bounds: &margin::ContentBounds,
+    cfg: &PipelineConfig,
+) -> Option<(RgbImage, Vec<Detection>)> {
+    let page_w = page.high_res_image.width();
+    let page_h = page.high_res_image.height();
+    let dims = margin::StandardPageDimensions {
+        width: STANDARD_WIDTH.load(Ordering::Relaxed),
+        height: STANDARD_HEIGHT.load(Ordering::Relaxed),
+    };
+    if dims.width == 0 || dims.height == 0 {
+        return None;
+    }
+    let setting = match cfg.margin_settings() {
+        margin::MarginSettings::StandardizeAndCenter | margin::MarginSettings::CropAndResize => {
+            margin::MarginSettings::StandardizeAndCenter
+        }
+        margin::MarginSettings::None => margin::MarginSettings::None,
+    };
+    let img = margin::process_page_margins(
+        &page.high_res_image,
+        bounds,
+        setting,
+        &dims,
+        cfg.target_width(),
+        cfg.target_height(),
+    )
+    .ok()?;
+    let new_dets = margin::transform_detections(
+        dets,
+        bounds,
+        setting,
+        &dims,
+        cfg.target_width(),
+        cfg.target_height(),
+        Some((page_w, page_h)),
+    );
+    Some((img, new_dets))
 }
 
 /// Layout detection provider using the existing InferenceHandle.

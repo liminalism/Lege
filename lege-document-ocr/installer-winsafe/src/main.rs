@@ -468,38 +468,7 @@ mod app {
 
                     // ── Progress bar ────────────────────────────────────────────
                     if dis.hwndItem == *progress_for_draw.hwnd() {
-                        let full = dis.rcItem;
-                        let border = w::HBRUSH::CreateSolidBrush(w::COLORREF::from_rgb(
-                            BORDER.0, BORDER.1, BORDER.2,
-                        ))?;
-                        let trough = w::HBRUSH::CreateSolidBrush(w::COLORREF::from_rgb(
-                            PANEL_BG.0, PANEL_BG.1, PANEL_BG.2,
-                        ))?;
-                        // 1px border, then the cream trough inset by 1px.
-                        dis.hDC.FillRect(full, &border)?;
-                        let inner = w::RECT {
-                            left: full.left + 1,
-                            top: full.top + 1,
-                            right: full.right - 1,
-                            bottom: full.bottom - 1,
-                        };
-                        dis.hDC.FillRect(inner, &trough)?;
-                        // Cinnabar fill proportional to percent.
-                        let pct = progress_pct.get().min(100);
-                        let span = inner.right - inner.left;
-                        let fill_w = span * pct as i32 / 100;
-                        if fill_w > 0 {
-                            let fill = w::HBRUSH::CreateSolidBrush(w::COLORREF::from_rgb(
-                                CINNABAR.0, CINNABAR.1, CINNABAR.2,
-                            ))?;
-                            let bar = w::RECT {
-                                left: inner.left,
-                                top: inner.top,
-                                right: inner.left + fill_w,
-                                bottom: inner.bottom,
-                            };
-                            dis.hDC.FillRect(bar, &fill)?;
-                        }
+                        paint_progress_bar(dis, progress_pct.get())?;
                         return Ok(1);
                     }
 
@@ -668,22 +637,22 @@ mod app {
                 }
                 InstallerEvent::Done(Ok(())) => {
                     // Collect everything from state in one borrow, then drop before UI calls.
-                    let (step_text, log_line) = {
+                    let already_installed = {
                         let mut s = self.state.borrow_mut();
                         s.phase = Phase::Complete;
-                        if s.already_installed {
-                            (
-                                "Lege Document OCR is already installed — nothing to do."
-                                    .to_string(),
-                                "Already installed; skipped.",
-                            )
-                        } else {
-                            (
-                                "Lege Document OCR installed successfully.".to_string(),
-                                "Installation complete.",
-                            )
-                        }
+                        s.already_installed
                     }; // borrow_mut dropped here — safe to call UI methods below
+                    let (step_text, log_line) = if already_installed {
+                        (
+                            "Lege Document OCR is already installed — nothing to do.".to_string(),
+                            "Already installed; skipped.",
+                        )
+                    } else {
+                        (
+                            "Lege Document OCR installed successfully.".to_string(),
+                            "Installation complete.",
+                        )
+                    };
                     self.progress_floor.set(100);
                     self.repaint_progress()?;
                     self.set_enabled_controls(true)?;
@@ -939,6 +908,42 @@ mod app {
             .map_err(|e| anyhow!("failed to extract payload archive: {e}"));
         let _ = fs::remove_file(&archive_path);
         result
+    }
+
+    /// Owner-draws the progress bar: a 1px border, the cream trough inset by
+    /// 1px, and a cinnabar fill proportional to `percent` (clamped to 100).
+    fn paint_progress_bar(dis: &w::DRAWITEMSTRUCT, percent: u32) -> w::SysResult<()> {
+        let full = dis.rcItem;
+        let border =
+            w::HBRUSH::CreateSolidBrush(w::COLORREF::from_rgb(BORDER.0, BORDER.1, BORDER.2))?;
+        let trough =
+            w::HBRUSH::CreateSolidBrush(w::COLORREF::from_rgb(PANEL_BG.0, PANEL_BG.1, PANEL_BG.2))?;
+        // 1px border, then the cream trough inset by 1px.
+        dis.hDC.FillRect(full, &border)?;
+        let inner = w::RECT {
+            left: full.left + 1,
+            top: full.top + 1,
+            right: full.right - 1,
+            bottom: full.bottom - 1,
+        };
+        dis.hDC.FillRect(inner, &trough)?;
+        // Cinnabar fill proportional to percent.
+        let pct = percent.min(100);
+        let span = inner.right - inner.left;
+        let fill_w = span * pct as i32 / 100;
+        if fill_w > 0 {
+            let fill = w::HBRUSH::CreateSolidBrush(w::COLORREF::from_rgb(
+                CINNABAR.0, CINNABAR.1, CINNABAR.2,
+            ))?;
+            let bar = w::RECT {
+                left: inner.left,
+                top: inner.top,
+                right: inner.left + fill_w,
+                bottom: inner.bottom,
+            };
+            dis.hDC.FillRect(bar, &fill)?;
+        }
+        Ok(())
     }
 
     fn required_payload_paths() -> &'static [&'static str] {

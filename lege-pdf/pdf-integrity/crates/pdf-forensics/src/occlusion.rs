@@ -863,34 +863,47 @@ fn cover_coverage(
         let Some(info) = text.chars().get(*char_index) else {
             continue;
         };
-        let Some((x0, y0, x1, y1)) = device_bbox(matrix, info.char_box, width, height) else {
+        let Some(bbox) = device_bbox(matrix, info.char_box, width, height) else {
             continue;
         };
-        for y in y0..y1 {
-            for x in x0..x1 {
-                let at = (y as usize)
-                    .saturating_mul(width as usize)
-                    .saturating_add(x as usize);
-                if visited.get(at) == Some(&true) {
-                    continue;
-                }
-                if let Some(slot) = visited.get_mut(at) {
-                    *slot = true;
-                }
-                if glyphs.get(at) != Some(&true) {
-                    continue;
-                }
-                area = area.saturating_add(1);
-                if is_cover_winner(map, at) {
-                    won = won.saturating_add(1);
-                }
+        visit_new_pixels(&mut visited, width, bbox, |at| {
+            if glyphs.get(at) != Some(&true) {
+                return;
             }
-        }
+            area = area.saturating_add(1);
+            if is_cover_winner(map, at) {
+                won = won.saturating_add(1);
+            }
+        });
     }
     if area == 0 {
         0.0
     } else {
         won as f64 / area as f64
+    }
+}
+
+/// Mark the pixels of the device box `(x0, y0, x1, y1)` that are not yet
+/// `visited`, passing each one's index to `visit`, row by row.
+fn visit_new_pixels(
+    visited: &mut [bool],
+    width: u32,
+    (x0, y0, x1, y1): (u32, u32, u32, u32),
+    mut visit: impl FnMut(usize),
+) {
+    for y in y0..y1 {
+        for x in x0..x1 {
+            let at = (y as usize)
+                .saturating_mul(width as usize)
+                .saturating_add(x as usize);
+            if visited.get(at) == Some(&true) {
+                continue;
+            }
+            if let Some(slot) = visited.get_mut(at) {
+                *slot = true;
+            }
+            visit(at);
+        }
     }
 }
 

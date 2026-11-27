@@ -493,48 +493,62 @@ fn scale_hocr_coords(hocr: &str, sw: usize, sh: usize, ow: usize, oh: usize) -> 
     let mut out = String::with_capacity(hocr.len());
     let mut chars = hocr.chars();
     while let Some(ch) = chars.next() {
-        if ch == 'b' {
-            let lookahead: String = std::iter::once(ch)
-                .chain(chars.as_str().chars().take(4))
-                .collect();
-            if lookahead == "bbox " {
-                out.push_str("bbox ");
-                for _ in 0..4 {
-                    chars.next();
-                }
-                let remaining = chars.as_str();
-                if let Some(end) = remaining.find('"') {
-                    let coords: Vec<&str> = remaining[..end].trim().split_whitespace().collect();
-                    if coords.len() >= 4 {
-                        if let (Ok(x1), Ok(y1), Ok(x2), Ok(y2)) = (
-                            coords[0].parse::<f32>(),
-                            coords[1].parse::<f32>(),
-                            coords[2].parse::<f32>(),
-                            coords[3].parse::<f32>(),
-                        ) {
-                            out.push_str(&format!(
-                                "{} {} {} {}",
-                                (x1 * sx) as i32,
-                                (y1 * sy) as i32,
-                                (x2 * sx) as i32,
-                                (y2 * sy) as i32
-                            ));
-                        } else {
-                            out.push_str(&remaining[..end]);
-                        }
-                    } else {
-                        out.push_str(&remaining[..end]);
-                    }
-                    for _ in 0..end {
-                        chars.next();
-                    }
-                    continue;
-                }
-            }
+        if ch != 'b' {
+            out.push(ch);
+            continue;
         }
-        out.push(ch);
+        let lookahead: String = std::iter::once(ch)
+            .chain(chars.as_str().chars().take(4))
+            .collect();
+        if lookahead != "bbox " {
+            out.push(ch);
+            continue;
+        }
+        out.push_str("bbox ");
+        for _ in 0..4 {
+            chars.next();
+        }
+        let remaining = chars.as_str();
+        let Some(end) = remaining.find('"') else {
+            out.push(ch);
+            continue;
+        };
+        push_scaled_bbox_coords(&mut out, &remaining[..end], sx, sy);
+        for _ in 0..end {
+            chars.next();
+        }
     }
     out
+}
+
+/// Append the four `bbox` coordinates in `coords_text` scaled by `sx`/`sy`,
+/// or the text unchanged when it does not hold four numbers.
+#[cfg(all(
+    any(target_os = "linux", target_os = "macos"),
+    feature = "tesseract-ocr"
+))]
+fn push_scaled_bbox_coords(out: &mut String, coords_text: &str, sx: f32, sy: f32) {
+    let coords: Vec<&str> = coords_text.trim().split_whitespace().collect();
+    if coords.len() < 4 {
+        out.push_str(coords_text);
+        return;
+    }
+    let (Ok(x1), Ok(y1), Ok(x2), Ok(y2)) = (
+        coords[0].parse::<f32>(),
+        coords[1].parse::<f32>(),
+        coords[2].parse::<f32>(),
+        coords[3].parse::<f32>(),
+    ) else {
+        out.push_str(coords_text);
+        return;
+    };
+    out.push_str(&format!(
+        "{} {} {} {}",
+        (x1 * sx) as i32,
+        (y1 * sy) as i32,
+        (x2 * sx) as i32,
+        (y2 * sy) as i32
+    ));
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -577,34 +591,32 @@ impl OcrEngine for WinOcrEngine {
             });
         }
 
-        match run_winocr_lines_inner(data, w, h, lang) {
-            Some(lines) => {
-                let mut text = String::new();
-                let mut words = Vec::new();
-                for line in lines {
-                    if !text.is_empty() {
-                        text.push(' ');
-                    }
-                    text.push_str(line.text.trim());
-                    for mut word in line.words {
-                        word.bbox_crop_local = [
-                            word.bbox_crop_local[0] + line.bbox_highres[0],
-                            word.bbox_crop_local[1] + line.bbox_highres[1],
-                            word.bbox_crop_local[2] + line.bbox_highres[0],
-                            word.bbox_crop_local[3] + line.bbox_highres[1],
-                        ];
-                        words.push(word);
-                    }
-                }
-                Ok(OcrLineResult {
-                    text,
-                    confidence: None,
-                    words,
-                    bbox_highres: bbox,
-                })
+        let Some(lines) = run_winocr_lines_inner(data, w, h, lang) else {
+            return Err(anyhow::anyhow!("Windows OCR failed to recognize a line"));
+        };
+        let mut text = String::new();
+        let mut words = Vec::new();
+        for line in lines {
+            if !text.is_empty() {
+                text.push(' ');
             }
-            None => Err(anyhow::anyhow!("Windows OCR failed to recognize a line")),
+            text.push_str(line.text.trim());
+            for mut word in line.words {
+                word.bbox_crop_local = [
+                    word.bbox_crop_local[0] + line.bbox_highres[0],
+                    word.bbox_crop_local[1] + line.bbox_highres[1],
+                    word.bbox_crop_local[2] + line.bbox_highres[0],
+                    word.bbox_crop_local[3] + line.bbox_highres[1],
+                ];
+                words.push(word);
+            }
         }
+        Ok(OcrLineResult {
+            text,
+            confidence: None,
+            words,
+            bbox_highres: bbox,
+        })
     }
 
     fn ocr_region(&self, image: &GrayImage, lang: &str) -> Result<Vec<OcrLineResult>> {
@@ -684,9 +696,8 @@ fn run_winocr_lines_inner(
     let mut results = Vec::new();
 
     for line in lines.into_iter() {
-        let wds = match line.Words() {
-            Ok(w) => w,
-            Err(_) => continue,
+        let Ok(wds) = line.Words() else {
+            continue;
         };
         let mut line_words = Vec::new();
         let mut line_text = String::new();
@@ -842,9 +853,8 @@ fn run_winocr_impl(
     );
 
     for line in lines.into_iter() {
-        let words = match line.Words() {
-            Ok(w) => w,
-            Err(_) => continue,
+        let Ok(words) = line.Words() else {
+            continue;
         };
         if words.Size().unwrap_or(0) == 0 {
             continue;
@@ -1040,30 +1050,31 @@ pub fn parse_hocr_lines(
         let bbox_opt = extract_bbox_from_title(rest);
         // Collect all words until </span> for this line
         let (mut words, line_text) = collect_words_in_line(rest, scale_x, scale_y);
-        if !line_text.trim().is_empty() {
-            let Some(bbox) = bbox_opt
-                .and_then(|bbox| scale_hocr_bbox(bbox, scale_x, scale_y, Some((image_w, image_h))))
-            else {
-                continue;
-            };
-            let line_w = bbox[2].saturating_sub(bbox[0]);
-            let line_h = bbox[3].saturating_sub(bbox[1]);
-            for word in &mut words {
-                word.bbox_crop_local = [
-                    word.bbox_crop_local[0].saturating_sub(bbox[0]).min(line_w),
-                    word.bbox_crop_local[1].saturating_sub(bbox[1]).min(line_h),
-                    word.bbox_crop_local[2].saturating_sub(bbox[0]).min(line_w),
-                    word.bbox_crop_local[3].saturating_sub(bbox[1]).min(line_h),
-                ];
-            }
-            let confidence = mean_word_confidence(&words);
-            lines.push(OcrLineResult {
-                text: line_text.trim().to_string(),
-                confidence,
-                words,
-                bbox_highres: bbox,
-            });
+        if line_text.trim().is_empty() {
+            continue;
         }
+        let Some(bbox) = bbox_opt
+            .and_then(|bbox| scale_hocr_bbox(bbox, scale_x, scale_y, Some((image_w, image_h))))
+        else {
+            continue;
+        };
+        let line_w = bbox[2].saturating_sub(bbox[0]);
+        let line_h = bbox[3].saturating_sub(bbox[1]);
+        for word in &mut words {
+            word.bbox_crop_local = [
+                word.bbox_crop_local[0].saturating_sub(bbox[0]).min(line_w),
+                word.bbox_crop_local[1].saturating_sub(bbox[1]).min(line_h),
+                word.bbox_crop_local[2].saturating_sub(bbox[0]).min(line_w),
+                word.bbox_crop_local[3].saturating_sub(bbox[1]).min(line_h),
+            ];
+        }
+        let confidence = mean_word_confidence(&words);
+        lines.push(OcrLineResult {
+            text: line_text.trim().to_string(),
+            confidence,
+            words,
+            bbox_highres: bbox,
+        });
     }
     lines
 }

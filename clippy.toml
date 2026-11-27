@@ -1,0 +1,7 @@
+# Flat control flow (CLAUDE.md "Control flow"): more than three levels of
+# control-flow nesting is a defect. excessive_nesting counts the fn body and an
+# enclosing impl as levels, so 5 flags a fourth level inside a method and a
+# fifth inside a free function. Justified exceptions get a local
+# #[allow(clippy::excessive_nesting, reason = "...")], never a crate-wide one.
+excessive-nesting-threshold = 5
+cognitive-complexity-threshold = 25

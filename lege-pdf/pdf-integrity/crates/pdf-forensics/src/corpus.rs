@@ -106,7 +106,10 @@ pub struct CorpusSweepReport {
 /// Validate a manifest before reading any PDFs.
 pub fn validate_manifest(manifest: &CorpusManifest) -> Result<(), String> {
     if manifest.schema_version != CORPUS_SCHEMA_VERSION {
-        return Err(format!("unsupported corpus schema {}", manifest.schema_version));
+        return Err(format!(
+            "unsupported corpus schema {}",
+            manifest.schema_version
+        ));
     }
     let families: BTreeSet<_> = manifest.producer_families.iter().collect();
     if families.len() != manifest.producer_families.len()
@@ -118,18 +121,33 @@ pub fn validate_manifest(manifest: &CorpusManifest) -> Result<(), String> {
     let mut paths = BTreeSet::new();
     for doc in &manifest.documents {
         if doc.path.as_os_str().is_empty()
-            || doc.path.components().any(|c| !matches!(c, Component::Normal(_)))
+            || doc
+                .path
+                .components()
+                .any(|c| !matches!(c, Component::Normal(_)))
             || !paths.insert(&doc.path)
         {
-            return Err(format!("invalid or duplicate relative path: {}", doc.path.display()));
+            return Err(format!(
+                "invalid or duplicate relative path: {}",
+                doc.path.display()
+            ));
         }
         if !families.contains(&doc.producer_family) || doc.provenance.trim().is_empty() {
-            return Err(format!("missing producer label or provenance for {}", doc.path.display()));
+            return Err(format!(
+                "missing producer label or provenance for {}",
+                doc.path.display()
+            ));
         }
         if doc.sha256.len() != 64
-            || !doc.sha256.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+            || !doc
+                .sha256
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
         {
-            return Err(format!("expected lowercase SHA-256 for {}", doc.path.display()));
+            return Err(format!(
+                "expected lowercase SHA-256 for {}",
+                doc.path.display()
+            ));
         }
     }
     Ok(())
@@ -144,15 +162,19 @@ pub fn sweep_corpus(root: &Path) -> Result<CorpusSweepReport, String> {
     let manifest: CorpusManifest = serde_json::from_slice(
         &std::fs::read(&manifest_path)
             .map_err(|e| format!("cannot read {}: {e}", manifest_path.display()))?,
-    ).map_err(|e| format!("invalid {}: {e}", manifest_path.display()))?;
+    )
+    .map_err(|e| format!("invalid {}: {e}", manifest_path.display()))?;
     validate_manifest(&manifest)?;
     let root = root.canonicalize().map_err(|e| e.to_string())?;
     let mut seen_hashes = BTreeSet::new();
     let mut samples = Vec::new();
     for doc in &manifest.documents {
         let mut sample = SampleMeasurement {
-            document: doc.clone(), actual_sha256: None, exclusion: None,
-            finding_codes: Vec::new(), review_codes: Vec::new(),
+            document: doc.clone(),
+            actual_sha256: None,
+            exclusion: None,
+            finding_codes: Vec::new(),
+            review_codes: Vec::new(),
         };
         let result = measure_sample(&root, doc, &mut seen_hashes, &mut sample);
         if let Err(reason) = result {
@@ -169,7 +191,10 @@ fn measure_sample(
     seen_hashes: &mut BTreeSet<String>,
     sample: &mut SampleMeasurement,
 ) -> Result<(), String> {
-    let path = root.join(&doc.path).canonicalize().map_err(|e| e.to_string())?;
+    let path = root
+        .join(&doc.path)
+        .canonicalize()
+        .map_err(|e| e.to_string())?;
     if !path.starts_with(root) {
         return Err("sample resolves outside corpus directory".to_owned());
     }
@@ -184,9 +209,12 @@ fn measure_sample(
     }
     let (report, evidence) = audit_bytes_with_evidence(&bytes, None);
     let codes: BTreeSet<_> = report.findings.iter().map(|f| f.code.to_string()).collect();
-    let review: BTreeSet<_> = report.findings.iter()
+    let review: BTreeSet<_> = report
+        .findings
+        .iter()
         .filter(|f| !matches!(f.strength, EvidenceStrength::WeakHeuristic))
-        .map(|f| f.code.to_string()).collect();
+        .map(|f| f.code.to_string())
+        .collect();
     sample.finding_codes = codes.into_iter().collect();
     sample.review_codes = review.into_iter().collect();
     if report.analysis_mode != AnalysisMode::Full {
@@ -195,9 +223,12 @@ fn measure_sample(
     if report.document.parse.rests_on_recovered_structure() {
         return Err("recovered structure; not a clean baseline sample".to_owned());
     }
-    if report.document.pages.value().is_none_or(|pages| pages.is_empty()
-        || pages.iter().any(|p| !matches!(p.compile, CompileOutcome::Ok { .. })))
-    {
+    if report.document.pages.value().is_none_or(|pages| {
+        pages.is_empty()
+            || pages
+                .iter()
+                .any(|p| !matches!(p.compile, CompileOutcome::Ok { .. }))
+    }) {
         return Err("page compilation incomplete or degraded".to_owned());
     }
     if !evidence.revision_text.skipped.is_empty()
@@ -210,10 +241,14 @@ fn measure_sample(
 }
 
 fn summarize(families: &[String], samples: Vec<SampleMeasurement>) -> CorpusSweepReport {
-    let mut producers: BTreeMap<_, ProducerMeasurement> = families.iter()
-        .map(|family| (family.clone(), ProducerMeasurement::default())).collect();
+    let mut producers: BTreeMap<_, ProducerMeasurement> = families
+        .iter()
+        .map(|family| (family.clone(), ProducerMeasurement::default()))
+        .collect();
     for sample in &samples {
-        let stats = producers.entry(sample.document.producer_family.clone()).or_default();
+        let stats = producers
+            .entry(sample.document.producer_family.clone())
+            .or_default();
         stats.labeled_documents += 1;
         if sample.exclusion.is_some() {
             stats.excluded_documents += 1;
@@ -225,7 +260,10 @@ fn summarize(families: &[String], samples: Vec<SampleMeasurement>) -> CorpusSwee
             *stats.documents_by_code.entry(code.clone()).or_default() += 1;
         }
         for code in sample.review_codes.iter().collect::<BTreeSet<_>>() {
-            *stats.review_documents_by_code.entry(code.clone()).or_default() += 1;
+            *stats
+                .review_documents_by_code
+                .entry(code.clone())
+                .or_default() += 1;
         }
     }
     for stats in producers.values_mut() {
@@ -234,8 +272,10 @@ fn summarize(families: &[String], samples: Vec<SampleMeasurement>) -> CorpusSwee
         stats.within_review_budget = (stats.evaluated_documents >= MIN_DOCUMENTS)
             .then_some(stats.review_documents <= stats.evaluated_documents / MIN_DOCUMENTS);
     }
-    let corpus_ready = producers.len() >= MIN_PRODUCERS && producers.values().all(|s|
-        s.evaluated_documents >= MIN_DOCUMENTS && s.excluded_documents == 0);
+    let corpus_ready = producers.len() >= MIN_PRODUCERS
+        && producers
+            .values()
+            .all(|s| s.evaluated_documents >= MIN_DOCUMENTS && s.excluded_documents == 0);
     let mut limitations = vec![
         "No M5 heuristics are registered in this build; baseline M1–M4 rates do not validate absent heuristics.".to_owned(),
         "Provenance labels are curator assertions. This sweep does not establish legitimacy or measure seeded-edit recall.".to_owned(),
@@ -244,8 +284,13 @@ fn summarize(families: &[String], samples: Vec<SampleMeasurement>) -> CorpusSwee
         limitations.push("Need at least eight declared producer families with 200 unique, fully evaluated PDFs each, without excluded samples.".to_owned());
     }
     CorpusSweepReport {
-        schema_version: CORPUS_SCHEMA_VERSION, producers, samples, corpus_ready,
-        evaluated_heuristics: Vec::new(), m5_false_positive_acceptance_satisfied: false, limitations,
+        schema_version: CORPUS_SCHEMA_VERSION,
+        producers,
+        samples,
+        corpus_ready,
+        evaluated_heuristics: Vec::new(),
+        m5_false_positive_acceptance_satisfied: false,
+        limitations,
     }
 }
 
@@ -261,18 +306,37 @@ mod tests {
             for i in 0..200 {
                 let review = i < if family == "office" { 1 } else { 2 };
                 samples.push(SampleMeasurement {
-                    document: CorpusDocument { path: format!("{family}/{i}.pdf").into(),
-                        producer_family: family.clone(), provenance: "test aggregation".into(), sha256: String::new() },
-                    actual_sha256: None, exclusion: None,
-                    finding_codes: if review { vec!["TEST".into(); 3] } else { Vec::new() },
-                    review_codes: if review { vec!["TEST".into(); 3] } else { Vec::new() },
+                    document: CorpusDocument {
+                        path: format!("{family}/{i}.pdf").into(),
+                        producer_family: family.clone(),
+                        provenance: "test aggregation".into(),
+                        sha256: String::new(),
+                    },
+                    actual_sha256: None,
+                    exclusion: None,
+                    finding_codes: if review {
+                        vec!["TEST".into(); 3]
+                    } else {
+                        Vec::new()
+                    },
+                    review_codes: if review {
+                        vec!["TEST".into(); 3]
+                    } else {
+                        Vec::new()
+                    },
                 });
             }
         }
         let report = summarize(&families, samples);
-        assert_eq!(report.producers["office"].review_documents_by_code["TEST"], 1);
+        assert_eq!(
+            report.producers["office"].review_documents_by_code["TEST"],
+            1
+        );
         assert_eq!(report.producers["office"].within_review_budget, Some(true));
-        assert_eq!(report.producers["scanner"].within_review_budget, Some(false));
+        assert_eq!(
+            report.producers["scanner"].within_review_budget,
+            Some(false)
+        );
         assert!(!report.corpus_ready);
         assert!(!report.m5_false_positive_acceptance_satisfied);
     }

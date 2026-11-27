@@ -518,6 +518,27 @@ pub fn import_coco(
 /// whose annotations carry `score`. `image_id`s are resolved through the
 /// project's imported COCO ids for `id_set` (or any set when unique).
 /// `scale_from` un-stretches predictions made at an `S×S` model input.
+/// The page (key, width, height) a prediction is for, found by its `page_key`
+/// or else by its COCO `image_id`. An image id that names pages in more than
+/// one set is an error.
+fn prediction_page(
+    p: &Value,
+    keys: &HashMap<String, (f64, f64)>,
+    ids: &HashMap<i64, (String, f64, f64)>,
+    ambiguous: &std::collections::HashSet<i64>,
+) -> Result<Option<(String, f64, f64)>, String> {
+    if let Some(k) = p.get("page_key").and_then(Value::as_str) {
+        return Ok(keys.get(k).map(|&(w, h)| (k.to_owned(), w, h)));
+    }
+    let id = p.get("image_id").and_then(Value::as_i64);
+    if let Some(i) = id.filter(|i| ambiguous.contains(i)) {
+        return Err(format!(
+            "COCO image id {i} occurs in more than one set; pass --set to say which set the ids belong to"
+        ));
+    }
+    Ok(id.and_then(|i| ids.get(&i).cloned()))
+}
+
 pub fn import_predictions(
     conn: &mut Connection,
     path: &Path,
@@ -559,10 +580,11 @@ pub fn import_predictions(
         for r in rows {
             let (k, id, set, w, h) = r.map_err(|e| e.to_string())?;
             keys.insert(k.clone(), (w, h));
-            if let Some(id) = id {
-                if id_set.is_none_or(|s| s == set) && ids.insert(id, (k, w, h)).is_some() {
-                    dup.insert(id);
-                }
+            let Some(id) = id else {
+                continue;
+            };
+            if id_set.is_none_or(|s| s == set) && ids.insert(id, (k, w, h)).is_some() {
+                dup.insert(id);
             }
         }
         for d in &dup {
@@ -584,17 +606,7 @@ pub fn import_predictions(
             if score < min_score {
                 continue;
             }
-            let target = if let Some(k) = p.get("page_key").and_then(Value::as_str) {
-                keys.get(k).map(|&(w, h)| (k.to_owned(), w, h))
-            } else {
-                let id = p.get("image_id").and_then(Value::as_i64);
-                if let Some(i) = id.filter(|i| ambiguous.contains(i)) {
-                    return Err(format!(
-                        "COCO image id {i} occurs in more than one set; pass --set to say which set the ids belong to"
-                    ));
-                }
-                id.and_then(|i| ids.get(&i).cloned())
-            };
+            let target = prediction_page(&p, &keys, &ids, &ambiguous)?;
             let cat = p.get("category_id").and_then(Value::as_i64).unwrap_or(0);
             let bbox: Vec<f64> = p
                 .get("bbox")

@@ -23,18 +23,8 @@ pub fn pick(
     slop: f64,
 ) -> Option<Hit> {
     // 1. Selected box handles.
-    if let Some(sel) = selected {
-        if let Some(i) = annotations.iter().position(|a| a.id == sel) {
-            let b = view.box_to_screen(annotations[i].bbox);
-            if let Some((_, h)) = hit_box_scored(b, screen, slop) {
-                if h.is_corner() {
-                    return Some(Hit {
-                        index: i,
-                        handle: h,
-                    });
-                }
-            }
-        }
+    if let Some(hit) = selected_corner(annotations, selected, view, screen, slop) {
+        return Some(hit);
     }
     // 2. Closest edge anywhere; 3. smallest interior.
     let mut best_edge: Option<(f64, f64, usize, Handle)> = None; // (dist, area, idx, handle)
@@ -79,5 +69,26 @@ pub fn pick(
     best_inner.map(|(_, i)| Hit {
         index: i,
         handle: Handle::Move,
+    })
+}
+
+/// The corner handle of the selected box under the pointer, if any.
+fn selected_corner(
+    annotations: &[Annotation],
+    selected: Option<&str>,
+    view: &ViewTransform,
+    screen: Point,
+    slop: f64,
+) -> Option<Hit> {
+    let sel = selected?;
+    let i = annotations.iter().position(|a| a.id == sel)?;
+    let b = view.box_to_screen(annotations[i].bbox);
+    let (_, h) = hit_box_scored(b, screen, slop)?;
+    if !h.is_corner() {
+        return None;
+    }
+    Some(Hit {
+        index: i,
+        handle: h,
     })
 }

@@ -112,14 +112,26 @@ fn binarize_on_gpu_with(
         for (left, tile_w, cols) in tile_spans(width, tile, halo) {
             let view = image::imageops::crop_imm(img, left, top, tile_w, tile_h).to_image();
             let part = student.binarize_rgb_padded(&view, STUDENT_PAD_MULTIPLE)?;
-            for y in rows.clone() {
-                for x in cols.clone() {
-                    mask.put_pixel(x, y, *part.get_pixel(x - left, y - top));
-                }
-            }
+            paste_tile_core(&mut mask, &part, (left, top), rows.clone(), cols);
         }
     }
     Ok(mask)
+}
+
+/// Copy the kept core of a tile's mask (`rows` x `cols`, in page coordinates)
+/// into the page mask; `origin` is the tile's top-left corner on the page.
+fn paste_tile_core(
+    mask: &mut GrayImage,
+    part: &GrayImage,
+    (left, top): (u32, u32),
+    rows: std::ops::Range<u32>,
+    cols: std::ops::Range<u32>,
+) {
+    for y in rows {
+        for x in cols.clone() {
+            mask.put_pixel(x, y, *part.get_pixel(x - left, y - top));
+        }
+    }
 }
 
 /// The adaptive algorithm's mask of a region: on the wgpu kernels when allowed
@@ -307,15 +319,14 @@ impl HeavySauvolaProcessor {
         };
         let mut last_error = None;
         for (idx, &(max_pixels, tile, halo)) in active_rungs.iter().enumerate() {
-            match binarize_on_gpu_with(student, img, max_pixels, tile, halo) {
+            let error = match binarize_on_gpu_with(student, img, max_pixels, tile, halo) {
                 Ok(mask) => return Ok(mask),
-                Err(error) => {
-                    if let Some(&(_, next_tile, _)) = active_rungs.get(idx + 1) {
-                        self.max_gpu_tile.fetch_min(next_tile, Ordering::Relaxed);
-                    }
-                    last_error = Some(error);
-                }
+                Err(error) => error,
+            };
+            if let Some(&(_, next_tile, _)) = active_rungs.get(idx + 1) {
+                self.max_gpu_tile.fetch_min(next_tile, Ordering::Relaxed);
             }
+            last_error = Some(error);
         }
         Err(last_error.unwrap_or_else(|| anyhow!("GPU binarization produced no result")))
     }
@@ -932,20 +943,22 @@ pub(crate) fn apply_threshold(gray: &[u8], thr: u8, bin: &mut [u8], width: usize
             let start = y * width;
             let row = &mut bin[start..start + width];
             let gray_row = &gray[start..start + width];
-            for i in 0..width {
-                row[i] = if gray_row[i] > thr { 255 } else { 0 };
-            }
+            threshold_row(gray_row, thr, row, width);
         }
         return;
     }
 
     bin.par_chunks_mut(width)
         .zip(gray.par_chunks(width))
-        .for_each(|(row, gray_row)| {
-            for i in 0..width {
-                row[i] = if gray_row[i] > thr { 255 } else { 0 };
-            }
-        });
+        .for_each(|(row, gray_row)| threshold_row(gray_row, thr, row, width));
+}
+
+/// The first `width` pixels of `row`: white where `gray_row` is above `thr`.
+#[inline]
+fn threshold_row(gray_row: &[u8], thr: u8, row: &mut [u8], width: usize) {
+    for i in 0..width {
+        row[i] = if gray_row[i] > thr { 255 } else { 0 };
+    }
 }
 
 /// Invert binary image (parallel using par_chunks_mut)

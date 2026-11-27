@@ -122,18 +122,16 @@ pub fn post_signature_changes(
         let later = revision.index > signed;
         for change in &revision.changes {
             let number = change_number(change.object.as_str());
-            if later {
-                let first_free = change.change == ObjectChangeKind::Freed
-                    && number.is_some_and(|n| !live.get(&n).copied().unwrap_or(false));
-                if change.change != ObjectChangeKind::RepeatedIdentically && !first_free {
-                    post.push(PostSignatureChange {
-                        revision: revision.index,
-                        object: change.object.clone(),
-                        change: change.change,
-                        role: change.role,
-                        pages: change.pages.clone(),
-                    });
-                }
+            let first_free = change.change == ObjectChangeKind::Freed
+                && number.is_some_and(|n| !live.get(&n).copied().unwrap_or(false));
+            if later && change.change != ObjectChangeKind::RepeatedIdentically && !first_free {
+                post.push(PostSignatureChange {
+                    revision: revision.index,
+                    object: change.object.clone(),
+                    change: change.change,
+                    role: change.role,
+                    pages: change.pages.clone(),
+                });
             }
             if let Some(number) = number {
                 live.insert(
@@ -194,19 +192,12 @@ pub fn check_post_signature_policies(
         let mut unestablished: Vec<String> = Vec::new();
         if let Some(policy) = &signature.docmdp {
             match policy.permission {
-                Some(permission) => {
-                    for change in &changes {
-                        match evaluate_docmdp(change, permission, form) {
-                            ChangeVerdict::Permitted => {}
-                            ChangeVerdict::Forbidden(reason) => {
-                                push_forbidden(&mut forbidden, change, reason);
-                            }
-                            ChangeVerdict::Unestablished(reason) => {
-                                push_unique(&mut unestablished, reason);
-                            }
-                        }
-                    }
-                }
+                Some(permission) => sort_verdicts(
+                    &changes,
+                    |change| evaluate_docmdp(change, permission, form),
+                    &mut forbidden,
+                    &mut unestablished,
+                ),
                 None => unestablished.push(
                     "DocMDP permission is unestablished (/P is missing or outside 1-3)".to_owned(),
                 ),
@@ -214,19 +205,12 @@ pub fn check_post_signature_policies(
         }
         if let Some(policy) = &signature.fieldmdp {
             match lock_set(policy) {
-                Some(lock) => {
-                    for change in &changes {
-                        match evaluate_fieldmdp(change, &lock, form) {
-                            ChangeVerdict::Permitted => {}
-                            ChangeVerdict::Forbidden(reason) => {
-                                push_forbidden(&mut forbidden, change, reason);
-                            }
-                            ChangeVerdict::Unestablished(reason) => {
-                                push_unique(&mut unestablished, reason);
-                            }
-                        }
-                    }
-                }
+                Some(lock) => sort_verdicts(
+                    &changes,
+                    |change| evaluate_fieldmdp(change, &lock, form),
+                    &mut forbidden,
+                    &mut unestablished,
+                ),
                 None => unestablished.push(fieldmdp_unestablished_reason(policy)),
             }
         }
@@ -450,6 +434,23 @@ fn evaluate_fieldmdp(
             } else {
                 Permitted
             }
+        }
+    }
+}
+
+/// Judge every change under one policy (`verdict`), recording the forbidden
+/// ones and the reasons permission could not be decided.
+fn sort_verdicts(
+    changes: &[PostSignatureChange],
+    verdict: impl Fn(&PostSignatureChange) -> ChangeVerdict,
+    forbidden: &mut Vec<(PostSignatureChange, String)>,
+    unestablished: &mut Vec<String>,
+) {
+    for change in changes {
+        match verdict(change) {
+            ChangeVerdict::Permitted => {}
+            ChangeVerdict::Forbidden(reason) => push_forbidden(forbidden, change, reason),
+            ChangeVerdict::Unestablished(reason) => push_unique(unestablished, reason),
         }
     }
 }

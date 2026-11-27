@@ -558,6 +558,67 @@ pub(crate) fn note_oversized_page(page_index: usize, charge: &PageMemoryCharge, 
     }
 }
 
+/// Load one page for the source stage, with its inference image when layout
+/// detection runs on it.
+async fn load_rendered_page(
+    source: Arc<dyn PageSource>,
+    config: Arc<PipelineConfig>,
+    cancellation: exprim::CancellationToken,
+    page_index: usize,
+) -> Result<RenderedPageData> {
+    crate::info_log!("[SourceStage] Loading page {}", page_index);
+    if cancellation.is_cancelled() {
+        return Err(anyhow!("Source stage cancelled before page {page_index}"));
+    }
+    let source_page = source
+        .load_page_cancellable(page_index, cancellation.clone())
+        .await
+        .map_err(|e| {
+            #[cfg(feature = "debug-logging")]
+            crate::error_println!("[SourceStage] Page {} load failed: {:#}", page_index, e);
+            e
+        })?;
+    if cancellation.is_cancelled() {
+        return Err(anyhow!(
+            "Source stage cancelled after page {page_index} render"
+        ));
+    }
+    let SourcePage {
+        image,
+        original_width_pts,
+        original_height_pts,
+    } = source_page;
+
+    crate::pipeline::set_standard_dimensions_once(image.width(), image.height());
+
+    let high_res_arc = Arc::new(image);
+    let page_layout_enabled = config.layout_detection_enabled_for_page(page_index);
+    // In no-layout mode the inference image is never used; share the
+    // high-res Arc instead of deep-cloning a full RGB page per file.
+    let inference_image = if page_layout_enabled {
+        let spec = config.inference_resize_spec();
+        let img = build_inference_image(high_res_arc.as_ref(), &spec)
+            .unwrap_or_else(|_| (*high_res_arc).clone());
+        Arc::new(img)
+    } else {
+        high_res_arc.clone()
+    };
+    if cancellation.is_cancelled() {
+        return Err(anyhow!(
+            "Source stage cancelled after page {page_index} preparation"
+        ));
+    }
+
+    Ok(RenderedPageData {
+        index: page_index,
+        high_res_image: high_res_arc,
+        inference_image,
+        layout_detection_enabled: page_layout_enabled,
+        original_width_pts,
+        original_height_pts,
+    })
+}
+
 #[allow(clippy::too_many_arguments)]
 pub async fn source_stage(
     source: Arc<dyn PageSource>,
@@ -600,63 +661,7 @@ pub async fn source_stage(
 
             in_flight.push(tokio::spawn(crate::runtime_stats::track_future(
                 crate::runtime_stats::Stage::Render,
-                async move {
-                    crate::info_log!("[SourceStage] Loading page {}", page_index);
-                    if cancellation.is_cancelled() {
-                        return Err(anyhow!("Source stage cancelled before page {page_index}"));
-                    }
-                    let source_page = source
-                        .load_page_cancellable(page_index, cancellation.clone())
-                        .await
-                        .map_err(|e| {
-                            #[cfg(feature = "debug-logging")]
-                            crate::error_println!(
-                                "[SourceStage] Page {} load failed: {:#}",
-                                page_index,
-                                e
-                            );
-                            e
-                        })?;
-                    if cancellation.is_cancelled() {
-                        return Err(anyhow!(
-                            "Source stage cancelled after page {page_index} render"
-                        ));
-                    }
-                    let SourcePage {
-                        image,
-                        original_width_pts,
-                        original_height_pts,
-                    } = source_page;
-
-                    crate::pipeline::set_standard_dimensions_once(image.width(), image.height());
-
-                    let high_res_arc = Arc::new(image);
-                    let page_layout_enabled = config.layout_detection_enabled_for_page(page_index);
-                    // In no-layout mode the inference image is never used; share the
-                    // high-res Arc instead of deep-cloning a full RGB page per file.
-                    let inference_image = if page_layout_enabled {
-                        let spec = config.inference_resize_spec();
-                        let img = build_inference_image(high_res_arc.as_ref(), &spec)
-                            .unwrap_or_else(|_| (*high_res_arc).clone());
-                        Arc::new(img)
-                    } else {
-                        high_res_arc.clone()
-                    };
-                    if cancellation.is_cancelled() {
-                        return Err(anyhow!(
-                            "Source stage cancelled after page {page_index} preparation"
-                        ));
-                    }
-
-                    Ok::<_, anyhow::Error>(RenderedPageData {
-                        index: page_index,
-                        high_res_image: high_res_arc,
-                        inference_image,
-                        layout_detection_enabled: page_layout_enabled,
-                        original_width_pts,
-                        original_height_pts,
-                    })
-                },
+                load_rendered_page(source, config, cancellation, page_index),
             )));
         }
 

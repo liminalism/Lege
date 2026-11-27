@@ -376,26 +376,24 @@ impl NeuQuant {
             }
         }
 
-        if first_guess > 0 {
-            for current_pos in (0..first_guess).rev() {
-                let map_color = self.colormap[current_pos];
-                let mut dist = sqr_dist(map_color.g, g as i32);
-                if dist > best_dist {
-                    break;
-                }
-                dist += sqr_dist(map_color.r, r as i32);
-                if dist >= best_dist && map_color.g != g as i32 {
-                    continue;
-                }
-                dist += sqr_dist(map_color.b, b as i32);
-                if dist >= best_dist && map_color.g != g as i32 {
-                    continue;
-                }
-                dist += sqr_dist(map_color.a, a as i32);
-                if dist < best_dist {
-                    best_dist = dist;
-                    best_pos = current_pos;
-                }
+        for current_pos in (0..first_guess).rev() {
+            let map_color = self.colormap[current_pos];
+            let mut dist = sqr_dist(map_color.g, g as i32);
+            if dist > best_dist {
+                break;
+            }
+            dist += sqr_dist(map_color.r, r as i32);
+            if dist >= best_dist && map_color.g != g as i32 {
+                continue;
+            }
+            dist += sqr_dist(map_color.b, b as i32);
+            if dist >= best_dist && map_color.g != g as i32 {
+                continue;
+            }
+            dist += sqr_dist(map_color.a, a as i32);
+            if dist < best_dist {
+                best_dist = dist;
+                best_pos = current_pos;
             }
         }
 

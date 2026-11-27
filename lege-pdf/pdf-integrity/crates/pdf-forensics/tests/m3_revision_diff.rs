@@ -3,13 +3,13 @@
 //! and revision index, plus before/after/diff PNG evidence.
 #![allow(clippy::unwrap_used, reason = "a failed unwrap is a failed test")]
 
+use exprim::test_support::builder;
 use pdf_forensics::{
     AnalysisMode, AuditReport, BoundaryConfidence, Disposition, EvidenceStrength,
     LogicalRevisionFacts, OpenState, ParseAssessment, RevisionHistoryFacts,
     RevisionTextDiffOptions, TEXT_CHANGED_BETWEEN_REVISIONS, XrefEntryCounts, XrefSectionKind,
     audit_bytes, diff_revision_text, encode_png, highlight_changed_regions,
 };
-use exprim::test_support::builder;
 
 /// Audit `bytes` and require the report to satisfy the schema's own rules.
 fn audit(bytes: &[u8]) -> AuditReport {

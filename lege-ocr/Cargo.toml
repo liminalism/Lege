@@ -66,3 +66,6 @@ trocr = []
 
 [dev-dependencies]
 tempfile = { workspace = true }
+
+[lints.clippy]
+cognitive_complexity = "warn"

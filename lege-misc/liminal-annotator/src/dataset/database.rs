@@ -1517,22 +1517,23 @@ pub fn tone_samples(conn: &Connection, per_book: usize) -> DbResult<Vec<(String,
     let mut out: Vec<(String, Vec<PathBuf>)> = Vec::new();
     let mut cur: Option<(String, Vec<String>)> = None;
     let flush = |c: Option<(String, Vec<String>)>, out: &mut Vec<(String, Vec<PathBuf>)>| {
-        if let Some((book, paths)) = c {
-            let n = paths.len();
-            let k = per_book.min(n).max(1);
-            let picks: Vec<PathBuf> = (0..k)
-                .map(|i| {
-                    // Evenly over 15%..85% of the book.
-                    let f = if k == 1 {
-                        0.5
-                    } else {
-                        0.15 + 0.7 * i as f64 / (k - 1) as f64
-                    };
-                    PathBuf::from(&paths[((n - 1) as f64 * f).round() as usize])
-                })
-                .collect();
-            out.push((book, picks));
-        }
+        let Some((book, paths)) = c else {
+            return;
+        };
+        let n = paths.len();
+        let k = per_book.min(n).max(1);
+        let picks: Vec<PathBuf> = (0..k)
+            .map(|i| {
+                // Evenly over 15%..85% of the book.
+                let f = if k == 1 {
+                    0.5
+                } else {
+                    0.15 + 0.7 * i as f64 / (k - 1) as f64
+                };
+                PathBuf::from(&paths[((n - 1) as f64 * f).round() as usize])
+            })
+            .collect();
+        out.push((book, picks));
     };
     for row in rows {
         let (book, path) = row.map_err(e)?;
@@ -1895,54 +1896,7 @@ impl Writer {
         let (ack_tx, acks) = channel::<WriteAck>();
         let handle = std::thread::Builder::new()
             .name("annotator-writer".into())
-            .spawn(move || {
-                while let Ok(first) = rx.recv() {
-                    // Gather everything already queued, newest snapshot per page wins,
-                    // order of first appearance kept.
-                    let mut batch: Vec<WriteRequest> = vec![first];
-                    while let Ok(more) = rx.try_recv() {
-                        batch.push(more);
-                    }
-                    let mut saves: Vec<PageSave> = Vec::new();
-                    let mut flushes: Vec<Sender<()>> = Vec::new();
-                    for req in batch {
-                        match req {
-                            WriteRequest::Save(s) => {
-                                if let Some(existing) =
-                                    saves.iter_mut().find(|x| x.page_key == s.page_key)
-                                {
-                                    if s.revision >= existing.revision {
-                                        *existing = s;
-                                    }
-                                } else {
-                                    saves.push(s);
-                                }
-                            }
-                            WriteRequest::Flush(reply) => flushes.push(reply),
-                        }
-                    }
-                    for s in saves {
-                        let ack = match save_page(&mut conn, &s) {
-                            Ok(()) => WriteAck::Saved {
-                                page_key: s.page_key,
-                                revision: s.revision,
-                            },
-                            Err(error) => WriteAck::Failed {
-                                page_key: s.page_key,
-                                revision: s.revision,
-                                error,
-                            },
-                        };
-                        let _ = ack_tx.send(ack);
-                        wake();
-                    }
-                    for f in flushes {
-                        let _ = f.send(());
-                    }
-                }
-                // Channel closed: checkpoint so the WAL does not grow unbounded.
-                let _ = conn.pragma_update(None, "wal_checkpoint", "TRUNCATE");
-            })
+            .spawn(move || run_writer(&mut conn, &rx, &ack_tx, &wake))
             .map_err(|err| err.to_string())?;
         Ok(Writer {
             tx: Some(tx),
@@ -1979,5 +1933,62 @@ impl Writer {
 impl Drop for Writer {
     fn drop(&mut self) {
         self.shutdown();
+    }
+}
+
+/// The writer thread's loop: commits each batch of queued requests until the
+/// channel closes.
+fn run_writer(
+    conn: &mut Connection,
+    rx: &Receiver<WriteRequest>,
+    ack_tx: &Sender<WriteAck>,
+    wake: &impl Fn(),
+) {
+    while let Ok(first) = rx.recv() {
+        // Gather everything already queued, newest snapshot per page wins,
+        // order of first appearance kept.
+        let mut batch: Vec<WriteRequest> = vec![first];
+        while let Ok(more) = rx.try_recv() {
+            batch.push(more);
+        }
+        let mut saves: Vec<PageSave> = Vec::new();
+        let mut flushes: Vec<Sender<()>> = Vec::new();
+        for req in batch {
+            match req {
+                WriteRequest::Save(s) => keep_newest_save(&mut saves, s),
+                WriteRequest::Flush(reply) => flushes.push(reply),
+            }
+        }
+        for s in saves {
+            let ack = match save_page(conn, &s) {
+                Ok(()) => WriteAck::Saved {
+                    page_key: s.page_key,
+                    revision: s.revision,
+                },
+                Err(error) => WriteAck::Failed {
+                    page_key: s.page_key,
+                    revision: s.revision,
+                    error,
+                },
+            };
+            let _ = ack_tx.send(ack);
+            wake();
+        }
+        for f in flushes {
+            let _ = f.send(());
+        }
+    }
+    // Channel closed: checkpoint so the WAL does not grow unbounded.
+    let _ = conn.pragma_update(None, "wal_checkpoint", "TRUNCATE");
+}
+
+/// Add `s` to the batch, replacing an older snapshot of the same page in place.
+fn keep_newest_save(saves: &mut Vec<PageSave>, s: PageSave) {
+    let Some(existing) = saves.iter_mut().find(|x| x.page_key == s.page_key) else {
+        saves.push(s);
+        return;
+    };
+    if s.revision >= existing.revision {
+        *existing = s;
     }
 }

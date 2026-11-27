@@ -121,6 +121,70 @@ pub(crate) fn compute_missed_pixel_bounds_for_margin(
     }
 
     // Join neighboring glyphs into lines/blocks before component analysis.
+    let dilated = dilate_ink(&residual, width, height);
+
+    let page_area = width.saturating_mul(height);
+    let min_bbox_area = ((page_area as f32) * 0.005).ceil() as usize;
+    let min_ink_area = ((page_area as f32) * 0.001).ceil() as usize;
+    let thin_edge_w = ((width as f32) * 0.02).ceil() as usize;
+    let thin_edge_h = ((height as f32) * 0.02).ceil() as usize;
+    let mut visited = vec![false; dilated.len()];
+    let mut stack = Vec::new();
+    let mut combined: Option<ContentBounds> = None;
+
+    for seed in 0..dilated.len() {
+        if dilated[seed] == 0 || visited[seed] {
+            continue;
+        }
+        let InkComponent {
+            min_x,
+            min_y,
+            max_x,
+            max_y,
+            ink_area,
+        } = flood_ink_component(
+            seed,
+            &dilated,
+            &residual,
+            width,
+            height,
+            &mut visited,
+            &mut stack,
+        );
+
+        let component_w = max_x.saturating_sub(min_x).saturating_add(1);
+        let component_h = max_y.saturating_sub(min_y).saturating_add(1);
+        let bbox_area = component_w.saturating_mul(component_h);
+        let touches_edge = min_x == 0 || min_y == 0 || max_x + 1 == width || max_y + 1 == height;
+        let thin_edge_strip =
+            touches_edge && (component_w <= thin_edge_w || component_h <= thin_edge_h);
+        if bbox_area < min_bbox_area || ink_area < min_ink_area || thin_edge_strip {
+            continue;
+        }
+
+        let bounds = ContentBounds {
+            min_x: min_x.saturating_sub(DETECTION_PAD) as u32,
+            min_y: min_y.saturating_sub(DETECTION_PAD) as u32,
+            max_x: (max_x + 1 + DETECTION_PAD).min(width) as u32,
+            max_y: (max_y + 1 + DETECTION_PAD).min(height) as u32,
+        };
+        combined = Some(match combined {
+            Some(existing) => ContentBounds {
+                min_x: existing.min_x.min(bounds.min_x),
+                min_y: existing.min_y.min(bounds.min_y),
+                max_x: existing.max_x.max(bounds.max_x),
+                max_y: existing.max_y.max(bounds.max_y),
+            },
+            None => bounds,
+        });
+    }
+
+    combined
+}
+
+/// Dilate an ink mask by `DILATE_RADIUS` pixels, horizontally then
+/// vertically, so neighboring glyphs join into lines and blocks.
+fn dilate_ink(residual: &[u8], width: usize, height: usize) -> Vec<u8> {
     const DILATE_RADIUS: usize = 3;
     let mut horizontal = vec![0u8; residual.len()];
     for y in 0..height {
@@ -166,81 +230,68 @@ pub(crate) fn compute_missed_pixel_bounds_for_margin(
             }
         }
     }
+    dilated
+}
 
-    let page_area = width.saturating_mul(height);
-    let min_bbox_area = ((page_area as f32) * 0.005).ceil() as usize;
-    let min_ink_area = ((page_area as f32) * 0.001).ceil() as usize;
-    let thin_edge_w = ((width as f32) * 0.02).ceil() as usize;
-    let thin_edge_h = ((height as f32) * 0.02).ceil() as usize;
-    let mut visited = vec![false; dilated.len()];
-    let mut stack = Vec::new();
-    let mut combined: Option<ContentBounds> = None;
+/// Bounding box and ink pixel count of one 8-connected component.
+struct InkComponent {
+    min_x: usize,
+    min_y: usize,
+    max_x: usize,
+    max_y: usize,
+    ink_area: usize,
+}
 
-    for seed in 0..dilated.len() {
-        if dilated[seed] == 0 || visited[seed] {
-            continue;
-        }
-        visited[seed] = true;
-        stack.clear();
-        stack.push(seed);
-        let mut min_x = width;
-        let mut min_y = height;
-        let mut max_x = 0usize;
-        let mut max_y = 0usize;
-        let mut ink_area = 0usize;
+/// Flood-fill the 8-connected component of `dilated` that contains `seed`,
+/// marking it in `visited`. `stack` is scratch space reused across calls.
+#[allow(
+    clippy::excessive_nesting,
+    reason = "8-neighbour flood fill: the two neighbour loops scan the 3x3 window around the popped pixel"
+)]
+fn flood_ink_component(
+    seed: usize,
+    dilated: &[u8],
+    residual: &[u8],
+    width: usize,
+    height: usize,
+    visited: &mut [bool],
+    stack: &mut Vec<usize>,
+) -> InkComponent {
+    visited[seed] = true;
+    stack.clear();
+    stack.push(seed);
+    let mut component = InkComponent {
+        min_x: width,
+        min_y: height,
+        max_x: 0,
+        max_y: 0,
+        ink_area: 0,
+    };
 
-        while let Some(index) = stack.pop() {
-            let x = index % width;
-            let y = index / width;
-            min_x = min_x.min(x);
-            min_y = min_y.min(y);
-            max_x = max_x.max(x);
-            max_y = max_y.max(y);
-            ink_area += usize::from(residual[index] != 0);
+    while let Some(index) = stack.pop() {
+        let x = index % width;
+        let y = index / width;
+        component.min_x = component.min_x.min(x);
+        component.min_y = component.min_y.min(y);
+        component.max_x = component.max_x.max(x);
+        component.max_y = component.max_y.max(y);
+        component.ink_area += usize::from(residual[index] != 0);
 
-            let y0 = y.saturating_sub(1);
-            let y1 = (y + 1).min(height - 1);
-            let x0 = x.saturating_sub(1);
-            let x1 = (x + 1).min(width - 1);
-            for ny in y0..=y1 {
-                for nx in x0..=x1 {
-                    let next = ny * width + nx;
-                    if !visited[next] && dilated[next] != 0 {
-                        visited[next] = true;
-                        stack.push(next);
-                    }
+        let y0 = y.saturating_sub(1);
+        let y1 = (y + 1).min(height - 1);
+        let x0 = x.saturating_sub(1);
+        let x1 = (x + 1).min(width - 1);
+        for ny in y0..=y1 {
+            for nx in x0..=x1 {
+                let next = ny * width + nx;
+                if !visited[next] && dilated[next] != 0 {
+                    visited[next] = true;
+                    stack.push(next);
                 }
             }
         }
-
-        let component_w = max_x.saturating_sub(min_x).saturating_add(1);
-        let component_h = max_y.saturating_sub(min_y).saturating_add(1);
-        let bbox_area = component_w.saturating_mul(component_h);
-        let touches_edge = min_x == 0 || min_y == 0 || max_x + 1 == width || max_y + 1 == height;
-        let thin_edge_strip =
-            touches_edge && (component_w <= thin_edge_w || component_h <= thin_edge_h);
-        if bbox_area < min_bbox_area || ink_area < min_ink_area || thin_edge_strip {
-            continue;
-        }
-
-        let bounds = ContentBounds {
-            min_x: min_x.saturating_sub(DETECTION_PAD) as u32,
-            min_y: min_y.saturating_sub(DETECTION_PAD) as u32,
-            max_x: (max_x + 1 + DETECTION_PAD).min(width) as u32,
-            max_y: (max_y + 1 + DETECTION_PAD).min(height) as u32,
-        };
-        combined = Some(match combined {
-            Some(existing) => ContentBounds {
-                min_x: existing.min_x.min(bounds.min_x),
-                min_y: existing.min_y.min(bounds.min_y),
-                max_x: existing.max_x.max(bounds.max_x),
-                max_y: existing.max_y.max(bounds.max_y),
-            },
-            None => bounds,
-        });
     }
-
-    combined
+    component
 }
 
 pub fn is_visually_blank_page(image: &RgbImage) -> bool {

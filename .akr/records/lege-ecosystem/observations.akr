@@ -317,6 +317,25 @@ record lege-ecosystem.observation.bpg-variance-separates-line-art/3 : observatio
     author "GitHub Uploader"
 }
 
+record lege-ecosystem.observation.defects-seen-in-flat-control-flow-review/1 : observation {
+    title "Small pre-existing defects seen during the flat-control-flow review, kept as they were"
+    state verified
+    statement """
+        The review kept behaviour frozen, so these were left as found: (1) lege-process/core/djvu.rs writer: the 'Failed to append DjVu page {}' context uses next_expected - 1 after draining a batch, so an earlier failing page is misnamed. (2) lege-ocr/src/engine.rs scale_hocr_coords (Tesseract only): a 'bbox ' with no closing quote writes 'bbox ' and then the 'b' again, skipping four characters. (3) lege-process/core/cli_progress.rs: the comment says it updates every 10 pages, but any increase counts as significant, so there is no throttling. (4) lege-gpu/src/vision/runtime/compiled.rs resolve_alias stops after 32 hops while memory_plan::resolve_alias loops to a self-alias; longer chains would resolve differently (none exist today). (5) jpxbench prints NaN throughput with --only.
+        """
+    observed_at git:8b206e139c1d48faed90eb25753199207538acec
+    method manual
+    watches [
+        "lege-process/core/djvu.rs",
+        "lege-ocr/src/engine.rs",
+        "lege-process/core/cli_progress.rs",
+        "lege-gpu/src/vision/runtime/compiled.rs"
+    ]
+    confidence medium
+    derived_from [ @lege-ecosystem.work.flat-control-flow-review-20261127 ]
+    author "dk"
+}
+
 record lege-ecosystem.observation.dewarp-models-move-flat-pages-20261112/1 : observation {
     title "Paddle UVDoc, flattener and DocScanner all move already-flat pages; DocScanner matches them on curved spreads but is non-commercial and does not load in lege-gpu"
     state verified

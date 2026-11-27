@@ -49,6 +49,7 @@ missing_docs = "warn"
 
 # A forensic tool must not abort mid-report on a malformed input.
 [workspace.lints.clippy]
+cognitive_complexity = "warn"
 unwrap_used = "deny"
 expect_used = "deny"
 panic = "deny"

@@ -243,25 +243,7 @@ pub fn gui_options_to_cli_args(
         args.push(output_path.with_extension("epub").as_os_str().into());
     }
 
-    // Cover / image format
-    let preserve_cover = options.original_cover
-        && !options.no_front_cover
-        && !matches!(options.cover_image_type, CoverImageType::None);
-    let cover_format = match (&options.cover_image_type, preserve_cover) {
-        (_, false) | (CoverImageType::None, _) => "none",
-        (CoverImageType::Jpeg, true) => "jpeg",
-        (CoverImageType::Jpeg2000, true) => "jp2",
-    };
-    if matches!(
-        options.output_format,
-        OutputFormat::Pdf | OutputFormat::Djvu
-    ) {
-        args.push("--cover-format".into());
-        args.push(cover_format.into());
-        if !preserve_cover {
-            args.push("--no-cover".into());
-        }
-    }
+    push_cover_args(&mut args, options);
 
     // Layout detection
     if !options.layout_analysis {
@@ -269,84 +251,22 @@ pub fn gui_options_to_cli_args(
     }
     if options.layout_analysis
         && let Some(ref pages) = options.layout_exclusion_pages
+        && !pages.trim().is_empty()
     {
-        if !pages.trim().is_empty() {
-            args.push("--exclude-layout".into());
-            args.push(pages.trim().into());
-        }
+        args.push("--exclude-layout".into());
+        args.push(pages.trim().into());
     }
 
-    // OCR
-    if options.use_ocr {
-        args.push("--ocr-mode".into());
-        args.push(
-            match options.ocr_mode {
-                OcrMode::Fast => "fast",
-                OcrMode::Thorough => "best",
-            }
-            .into(),
-        );
-        // In the desktop GUI, document analysis is one OCR feature: both
-        // recognition modes generate the search overlay, synthesized outline,
-        // and inferred metadata.
-        args.push("--auto-toc".into());
-    } else {
-        args.push("--no-ocr".into());
-    }
+    push_ocr_args(&mut args, options);
 
     // Reflow
     if options.reflow {
         args.push("--reflow".into());
     }
 
-    // Image processing
-    // JBIG2 halftone is an image-region codec choice, independent of whether
-    // the page's text plane is truetyping or JBIG2.
-    let use_jbig2_halftone = matches!(options.output_format, OutputFormat::Pdf)
-        && options.layout_analysis
-        && options.uses_jbig2_halftone_images();
-    if use_jbig2_halftone {
-        args.push("--halftone".into());
-    } else if matches!(options.image_processing_type, ImageProcessingType::Dithered)
-        && options.layout_analysis
-    {
-        args.push("--dither".into());
-    }
-
-    // Quality
-    if options.jpeg_compat {
-        args.push("--jpeg-compat".into());
-    }
-    // Mirrors the toggle's own visibility condition: symbol substitution only
-    // exists while JBIG2 is the text encoder, so the flag is only sent then.
-    // Without it the worker writes the bit-exact generic region.
-    if options.symbol_mode
-        && matches!(options.output_format, OutputFormat::Pdf)
-        && !options.jpeg_compat
-        && !options.grayscale_mode
-        && matches!(options.compression_type, CompressionType::Jbig2)
-    {
-        args.push("--sym-unify".into());
-    }
-    if options.high_quality_output {
-        args.push("--high-quality".into());
-    }
-    if options.invert_input {
-        args.push("--invert".into());
-    }
-
-    // Margin processing
-    if options.center_margins {
-        args.push("--center-margins".into());
-    } else if options.crop_margins {
-        args.push("--crop-margins".into());
-    }
-    if options.crop_margins || options.crop_free_aspect {
-        args.push("--crop-free-aspect".into());
-    }
-    if options.crop_footnotes {
-        args.push("--force-crop".into());
-    }
+    push_image_args(&mut args, options);
+    push_quality_args(&mut args, options);
+    push_margin_args(&mut args, options);
 
     match options.page_treatment() {
         PageTreatment::Preserved => args.push("--preserve".into()),
@@ -381,13 +301,111 @@ pub fn gui_options_to_cli_args(
     }
 
     // Page range stays positional (its format is unambiguous).
-    if let Some(ref range) = options.page_range {
-        if !range.trim().is_empty() {
-            args.push(OsString::from(range.as_str()));
-        }
+    if let Some(ref range) = options.page_range
+        && !range.trim().is_empty()
+    {
+        args.push(OsString::from(range.as_str()));
     }
 
     args
+}
+
+/// Cover / image format
+fn push_cover_args(args: &mut Vec<OsString>, options: &ProcessingOptions) {
+    let preserve_cover = options.original_cover
+        && !options.no_front_cover
+        && !matches!(options.cover_image_type, CoverImageType::None);
+    let cover_format = match (&options.cover_image_type, preserve_cover) {
+        (_, false) | (CoverImageType::None, _) => "none",
+        (CoverImageType::Jpeg, true) => "jpeg",
+        (CoverImageType::Jpeg2000, true) => "jp2",
+    };
+    if !matches!(
+        options.output_format,
+        OutputFormat::Pdf | OutputFormat::Djvu
+    ) {
+        return;
+    }
+    args.push("--cover-format".into());
+    args.push(cover_format.into());
+    if !preserve_cover {
+        args.push("--no-cover".into());
+    }
+}
+
+/// OCR
+fn push_ocr_args(args: &mut Vec<OsString>, options: &ProcessingOptions) {
+    if !options.use_ocr {
+        args.push("--no-ocr".into());
+        return;
+    }
+    args.push("--ocr-mode".into());
+    args.push(
+        match options.ocr_mode {
+            OcrMode::Fast => "fast",
+            OcrMode::Thorough => "best",
+        }
+        .into(),
+    );
+    // In the desktop GUI, document analysis is one OCR feature: both
+    // recognition modes generate the search overlay, synthesized outline,
+    // and inferred metadata.
+    args.push("--auto-toc".into());
+}
+
+/// Image processing
+fn push_image_args(args: &mut Vec<OsString>, options: &ProcessingOptions) {
+    // JBIG2 halftone is an image-region codec choice, independent of whether
+    // the page's text plane is truetyping or JBIG2.
+    let use_jbig2_halftone = matches!(options.output_format, OutputFormat::Pdf)
+        && options.layout_analysis
+        && options.uses_jbig2_halftone_images();
+    if use_jbig2_halftone {
+        args.push("--halftone".into());
+    } else if matches!(options.image_processing_type, ImageProcessingType::Dithered)
+        && options.layout_analysis
+    {
+        args.push("--dither".into());
+    }
+}
+
+/// Quality
+fn push_quality_args(args: &mut Vec<OsString>, options: &ProcessingOptions) {
+    if options.jpeg_compat {
+        args.push("--jpeg-compat".into());
+    }
+    // Mirrors the toggle's own visibility condition: symbol substitution only
+    // exists while JBIG2 is the text encoder, so the flag is only sent then.
+    // Without it the worker writes the bit-exact generic region.
+    if options.symbol_mode
+        && matches!(options.output_format, OutputFormat::Pdf)
+        && !options.jpeg_compat
+        && !options.grayscale_mode
+        && matches!(options.compression_type, CompressionType::Jbig2)
+    {
+        args.push("--sym-unify".into());
+    }
+    if options.high_quality_output {
+        args.push("--high-quality".into());
+    }
+    if options.invert_input {
+        args.push("--invert".into());
+    }
+}
+
+/// Margin processing
+fn push_margin_args(args: &mut Vec<OsString>, options: &ProcessingOptions) {
+    if options.center_margins {
+        args.push("--center-margins".into());
+    } else if options.crop_margins {
+        args.push("--crop-margins".into());
+    }
+    if options.crop_margins || options.crop_free_aspect {
+        args.push("--crop-free-aspect".into());
+    }
+    if options.crop_footnotes {
+        args.push("--force-crop".into());
+    }
 }
 
 // ── Worker handle and subprocess spawning ────────────────────────────────────
@@ -555,12 +573,12 @@ pub fn append_worker_log(line: &str) {
 
 fn resolve_cli_path() -> Result<PathBuf> {
     // Look for lege.exe next to lege-gui.exe first (installed / release layout).
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            let candidate = dir.join(if cfg!(windows) { "lege.exe" } else { "lege" });
-            if candidate.exists() {
-                return Ok(candidate);
-            }
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(dir) = exe.parent()
+    {
+        let candidate = dir.join(if cfg!(windows) { "lege.exe" } else { "lege" });
+        if candidate.exists() {
+            return Ok(candidate);
         }
     }
     // Dev fallback: assume `lege` is on PATH (cargo run layout).
@@ -690,6 +708,35 @@ enum WorkerProtocolState {
     Terminal(WorkerProgressUpdate),
 }
 
+/// Read the worker's JSON event stream to its end: progress events are
+/// forwarded as they arrive, the first terminal event is kept and returned,
+/// and lines that are not events are skipped.
+fn read_worker_protocol(
+    stdout: std::process::ChildStdout,
+    task_id: u64,
+    progress: &flume::Sender<WorkerProgressUpdate>,
+) -> std::io::Result<WorkerProtocolState> {
+    let mut state = WorkerProtocolState::Streaming;
+    for line in BufReader::new(stdout).lines() {
+        let line = line?;
+        let Ok(update) = serde_json::from_str::<WorkerProgressUpdate>(&line) else {
+            continue;
+        };
+        if !matches!(state, WorkerProtocolState::Streaming) {
+            continue;
+        }
+        match update {
+            WorkerProgressUpdate::Completed { .. } | WorkerProgressUpdate::Error { .. } => {
+                state = WorkerProtocolState::Terminal(update.with_task_id(task_id))
+            }
+            update => {
+                let _ = progress.send(update.with_task_id(task_id));
+            }
+        }
+    }
+    Ok(state)
+}
+
 fn monitor_worker(
     mut child: std::process::Child,
     task_id: u64,
@@ -708,26 +755,8 @@ fn monitor_worker(
         .take()
         .ok_or_else(|| anyhow::anyhow!("worker stderr not piped"))?;
     let progress = events.clone();
-    let stdout_thread = std::thread::spawn(move || -> std::io::Result<WorkerProtocolState> {
-        let mut state = WorkerProtocolState::Streaming;
-        for line in BufReader::new(stdout).lines() {
-            let line = line?;
-            if let Ok(update) = serde_json::from_str::<WorkerProgressUpdate>(&line) {
-                if matches!(state, WorkerProtocolState::Streaming) {
-                    match update {
-                        WorkerProgressUpdate::Completed { .. }
-                        | WorkerProgressUpdate::Error { .. } => {
-                            state = WorkerProtocolState::Terminal(update.with_task_id(task_id))
-                        }
-                        update => {
-                            let _ = progress.send(update.with_task_id(task_id));
-                        }
-                    }
-                }
-            }
-        }
-        Ok(state)
-    });
+    let stdout_thread =
+        std::thread::spawn(move || read_worker_protocol(stdout, task_id, &progress));
     let stderr_run_log = run_log.clone();
     let stderr_thread = std::thread::spawn(move || {
         let mut tail = VecDeque::with_capacity(50);

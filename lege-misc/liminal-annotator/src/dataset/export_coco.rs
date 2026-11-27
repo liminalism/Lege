@@ -28,7 +28,7 @@ use super::resizing::stretch_image;
 use crate::annotation::commands::{Annotation, ReviewStatus};
 use crate::annotation::geometry::{Box2, coco_polygon, coco_xywh, stretch_box};
 use crate::annotation::labels::{CLASSES, class, is_taxonomy};
-use crate::review::comparison::{Change, diff};
+use crate::review::comparison::{Change, PageDiff, diff};
 
 #[derive(Clone, Debug)]
 pub struct ExportOptions {
@@ -404,6 +404,142 @@ pub fn export(conn: &Connection, opts: &ExportOptions) -> Result<ExportReport, S
     }
 }
 
+/// Books whose pages lie in more than one split, as `book: split, split`.
+fn split_leaks(conn: &Connection, keys: &[String]) -> Result<Vec<String>, String> {
+    let mut splits: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    let mut st = conn
+        .prepare_cached("SELECT book_id, split FROM pages WHERE page_key = ?1")
+        .map_err(|e| e.to_string())?;
+    for k in keys {
+        let (b, s): (String, String) = st
+            .query_row(params![k], |r| Ok((r.get(0)?, r.get(1)?)))
+            .map_err(|e| e.to_string())?;
+        splits.entry(b).or_default().insert(s);
+    }
+    let mut leaks = Vec::new();
+    for (book, s) in splits {
+        if s.len() > 1 {
+            leaks.push(format!(
+                "{book}: {}",
+                s.into_iter().collect::<Vec<_>>().join(", ")
+            ));
+        }
+    }
+    Ok(leaks)
+}
+
+/// Count one page's corrections into `delta` (class -> [added, deleted,
+/// modified_geometry, reclassified_from, reclassified_to, ignore_toggled])
+/// and its reclassifications into `reclass` (from, to).
+fn tally_corrections(
+    page: &ExportPage,
+    d: &PageDiff,
+    delta: &mut BTreeMap<&'static str, [usize; 6]>,
+    reclass: &mut BTreeMap<(String, String), usize>,
+) {
+    for (a, c) in page.annotations.iter().zip(&d.changes) {
+        match *c {
+            Change::Added => delta.entry(class(a.class_id).name).or_default()[0] += 1,
+            Change::Modified {
+                geometry,
+                class: cls,
+                ignore,
+            } => {
+                if geometry {
+                    delta.entry(class(a.class_id).name).or_default()[2] += 1;
+                }
+                if ignore {
+                    delta.entry(class(a.class_id).name).or_default()[5] += 1;
+                }
+                if !cls {
+                    continue;
+                }
+                let Some(orig) = page.imported.iter().find(|o| o.id == a.id) else {
+                    continue;
+                };
+                delta.entry(class(orig.class_id).name).or_default()[3] += 1;
+                delta.entry(class(a.class_id).name).or_default()[4] += 1;
+                *reclass
+                    .entry((
+                        class(orig.class_id).name.into(),
+                        class(a.class_id).name.into(),
+                    ))
+                    .or_default() += 1;
+            }
+            Change::Unchanged => {}
+        }
+    }
+    for a in &d.deleted {
+        delta.entry(class(a.class_id).name).or_default()[1] += 1;
+    }
+}
+
+/// One resize thread: takes source images off `jobs` until none are left and
+/// writes each at every training size.
+fn resize_worker(
+    jobs: &std::sync::Mutex<std::slice::Iter<'_, (PathBuf, String)>>,
+    errors: &std::sync::Mutex<Vec<String>>,
+    written: &std::sync::atomic::AtomicUsize,
+    work: &Path,
+    opts: &ExportOptions,
+) {
+    loop {
+        let next = jobs.lock().map(|mut it| it.next().cloned()).unwrap_or(None);
+        let Some((src, rel)) = next else { break };
+        for &s in &opts.sizes {
+            let dst = work.join(format!("s{s}")).join(&rel);
+            let Err(e) = stretch_image(&src, &dst, s, s, opts.jpeg_quality) else {
+                written.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                continue;
+            };
+            if let Ok(mut v) = errors.lock() {
+                v.push(e);
+            }
+        }
+    }
+}
+
+/// Write the page's boxes to the original and every resized annotation file,
+/// counting them in `report` and in the page's split (`split_count.1`).
+fn write_page_boxes(
+    page: &ExportPage,
+    d: &PageDiff,
+    image_id: i64,
+    original: &mut CocoWriter,
+    sized: &mut [(u32, CocoWriter)],
+    report: &mut ExportReport,
+    split_count: &mut (usize, usize),
+) -> Result<(), String> {
+    for (a, c) in page.annotations.iter().zip(&d.changes) {
+        let mut clamped = 0;
+        let Some(m) = annotation_json(a, *c, image_id, page.width, page.height, None, &mut clamped)
+        else {
+            report.dropped_boxes += 1;
+            continue;
+        };
+        original.annotation(m)?;
+        report.boxes += 1;
+        split_count.1 += 1;
+        report.clamped_boxes += clamped;
+        for (s, w) in sized.iter_mut() {
+            let mut ignored = 0;
+            let Some(m) = annotation_json(
+                a,
+                *c,
+                image_id,
+                page.width,
+                page.height,
+                Some(*s),
+                &mut ignored,
+            ) else {
+                continue;
+            };
+            w.annotation(m)?;
+        }
+    }
+    Ok(())
+}
+
 fn export_into(
     conn: &Connection,
     opts: &ExportOptions,
@@ -413,31 +549,12 @@ fn export_into(
     let keys = load_pages(conn, &opts.filter)?;
 
     // Split check first: a book in two splits contaminates evaluation.
-    {
-        let mut splits: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-        let mut st = conn
-            .prepare_cached("SELECT book_id, split FROM pages WHERE page_key = ?1")
-            .map_err(|e| e.to_string())?;
-        for k in &keys {
-            let (b, s): (String, String) = st
-                .query_row(params![k], |r| Ok((r.get(0)?, r.get(1)?)))
-                .map_err(|e| e.to_string())?;
-            splits.entry(b).or_default().insert(s);
-        }
-        for (book, s) in splits {
-            if s.len() > 1 {
-                report.split_leaks.push(format!(
-                    "{book}: {}",
-                    s.into_iter().collect::<Vec<_>>().join(", ")
-                ));
-            }
-        }
-        if opts.strict_splits && !report.split_leaks.is_empty() {
-            return Err(format!(
-                "books occur in more than one split (pass --allow-split-leak to export anyway): {}",
-                report.split_leaks.join("; ")
-            ));
-        }
+    report.split_leaks = split_leaks(conn, &keys)?;
+    if opts.strict_splits && !report.split_leaks.is_empty() {
+        return Err(format!(
+            "books occur in more than one split (pass --allow-split-leak to export anyway): {}",
+            report.split_leaks.join("; ")
+        ));
     }
 
     let (info, licenses) = export_info(conn, opts)?;
@@ -486,39 +603,7 @@ fn export_into(
         report.pages += 1;
 
         // Corrections bookkeeping.
-        for (a, c) in page.annotations.iter().zip(&d.changes) {
-            match *c {
-                Change::Added => delta.entry(class(a.class_id).name).or_default()[0] += 1,
-                Change::Modified {
-                    geometry,
-                    class: cls,
-                    ignore,
-                } => {
-                    if geometry {
-                        delta.entry(class(a.class_id).name).or_default()[2] += 1;
-                    }
-                    if ignore {
-                        delta.entry(class(a.class_id).name).or_default()[5] += 1;
-                    }
-                    if cls {
-                        if let Some(orig) = page.imported.iter().find(|o| o.id == a.id) {
-                            delta.entry(class(orig.class_id).name).or_default()[3] += 1;
-                            delta.entry(class(a.class_id).name).or_default()[4] += 1;
-                            *reclass
-                                .entry((
-                                    class(orig.class_id).name.into(),
-                                    class(a.class_id).name.into(),
-                                ))
-                                .or_default() += 1;
-                        }
-                    }
-                }
-                Change::Unchanged => {}
-            }
-        }
-        for a in &d.deleted {
-            delta.entry(class(a.class_id).name).or_default()[1] += 1;
-        }
+        tally_corrections(&page, &d, &mut delta, &mut reclass);
         if !d.is_untouched() || page.status != ReviewStatus::Unseen {
             let (u, m, a, del) = d.count();
             review_pages.push(json!({
@@ -563,32 +648,15 @@ fn export_into(
         let entry = split_counts.entry(page.split.clone()).or_default();
         entry.0 += 1;
 
-        for (a, c) in page.annotations.iter().zip(&d.changes) {
-            let mut clamped = 0;
-            match annotation_json(a, *c, image_id, page.width, page.height, None, &mut clamped) {
-                Some(m) => {
-                    original.annotation(m)?;
-                    report.boxes += 1;
-                    entry.1 += 1;
-                    report.clamped_boxes += clamped;
-                    for (s, w) in sized.iter_mut() {
-                        let mut ignored = 0;
-                        if let Some(m) = annotation_json(
-                            a,
-                            *c,
-                            image_id,
-                            page.width,
-                            page.height,
-                            Some(*s),
-                            &mut ignored,
-                        ) {
-                            w.annotation(m)?;
-                        }
-                    }
-                }
-                None => report.dropped_boxes += 1,
-            }
-        }
+        write_page_boxes(
+            &page,
+            &d,
+            image_id,
+            &mut original,
+            &mut sized,
+            &mut report,
+            entry,
+        )?;
         if opts.write_images {
             image_jobs.push((page.source_path.clone(), page.file_name.clone()));
         }
@@ -607,25 +675,7 @@ fn export_into(
         let written = std::sync::atomic::AtomicUsize::new(0);
         std::thread::scope(|scope| {
             for _ in 0..opts.threads.max(1) {
-                scope.spawn(|| {
-                    loop {
-                        let next = jobs.lock().map(|mut it| it.next().cloned()).unwrap_or(None);
-                        let Some((src, rel)) = next else { break };
-                        for &s in &opts.sizes {
-                            let dst = work.join(format!("s{s}")).join(&rel);
-                            match stretch_image(&src, &dst, s, s, opts.jpeg_quality) {
-                                Ok(_) => {
-                                    written.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                                }
-                                Err(e) => {
-                                    if let Ok(mut v) = errors.lock() {
-                                        v.push(e);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                });
+                scope.spawn(|| resize_worker(&jobs, &errors, &written, work, opts));
             }
         });
         report.images_written = written.into_inner();

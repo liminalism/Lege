@@ -148,6 +148,65 @@ fn values(n: usize, seed: u64) -> Vec<f32> {
         .collect()
 }
 
+/// Output values from mapped bytes: little-endian f16 when `half`, else f32.
+fn decode_output(bytes: &[u8], half: bool) -> Vec<f32> {
+    if half {
+        bytes
+            .chunks_exact(2)
+            .map(|c| f16_to_f32(u16::from_le_bytes([c[0], c[1]])))
+            .collect()
+    } else {
+        bytemuck::cast_slice::<u8, f32>(bytes).to_vec()
+    }
+}
+
+/// Largest relative error of the first `rows` rows of `got` against an f64
+/// product of `a` (`[rows.., k]`) and `b` (`[k, n]`).
+fn max_relative_error(
+    a: &[f32],
+    b: &[f32],
+    got: &[f32],
+    rows: usize,
+    (k, n): (usize, usize),
+) -> f64 {
+    let mut worst = 0f64;
+    for r in 0..rows {
+        for c in 0..n {
+            let want: f64 = (0..k)
+                .map(|i| a[r * k + i] as f64 * b[i * n + c] as f64)
+                .sum();
+            let err = (got[r * n + c] as f64 - want).abs() / (1.0 + want.abs());
+            worst = worst.max(err);
+        }
+    }
+    worst
+}
+
+/// Times `count` back-to-back dispatches of `pipeline` recorded in one compute
+/// pass, from submission until the device is idle, in seconds.
+fn time_dispatches(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    pipeline: &wgpu::ComputePipeline,
+    bind: &wgpu::BindGroup,
+    dispatch: [u32; 3],
+    count: u32,
+) -> Result<f64> {
+    let mut enc = device.create_command_encoder(&Default::default());
+    {
+        let mut pass = enc.begin_compute_pass(&Default::default());
+        pass.set_pipeline(pipeline);
+        pass.set_bind_group(0, bind, &[]);
+        for _ in 0..count {
+            pass.dispatch_workgroups(dispatch[0], dispatch[1], dispatch[2]);
+        }
+    }
+    let t = std::time::Instant::now();
+    queue.submit([enc.finish()]);
+    device.poll(wgpu::PollType::wait_indefinitely())?;
+    Ok(t.elapsed().as_secs_f64())
+}
+
 fn main() -> Result<()> {
     let iters: u32 = std::env::args()
         .nth(1)
@@ -269,21 +328,9 @@ fn main() -> Result<()> {
                 layout: &bgl,
                 entries: &entries,
             });
-            let run = |count: u32| -> Result<f64> {
-                let mut enc = device.create_command_encoder(&Default::default());
-                {
-                    let mut pass = enc.begin_compute_pass(&Default::default());
-                    pass.set_pipeline(&pipeline);
-                    pass.set_bind_group(0, &bind, &[]);
-                    for _ in 0..count {
-                        pass.dispatch_workgroups(m.div_ceil(64) as u32, n.div_ceil(64) as u32, 1);
-                    }
-                }
-                let t = std::time::Instant::now();
-                queue.submit([enc.finish()]);
-                device.poll(wgpu::PollType::wait_indefinitely())?;
-                Ok(t.elapsed().as_secs_f64())
-            };
+            let dispatch = [m.div_ceil(64) as u32, n.div_ceil(64) as u32, 1];
+            let run =
+                |count: u32| time_dispatches(&device, &queue, &pipeline, &bind, dispatch, count);
             run(3)?;
             let secs = (0..3)
                 .map(|_| run(iters))
@@ -307,24 +354,9 @@ fn main() -> Result<()> {
             device.poll(wgpu::PollType::wait_indefinitely())?;
             let got: Vec<f32> = {
                 let view = read.slice(..).get_mapped_range()?;
-                if half {
-                    view.chunks_exact(2)
-                        .map(|c| f16_to_f32(u16::from_le_bytes([c[0], c[1]])))
-                        .collect()
-                } else {
-                    bytemuck::cast_slice::<u8, f32>(&view).to_vec()
-                }
+                decode_output(&view, half)
             };
-            let mut worst = 0f64;
-            for r in 0..rows {
-                for c in 0..n {
-                    let want: f64 = (0..k)
-                        .map(|i| a[r * k + i] as f64 * b[i * n + c] as f64)
-                        .sum();
-                    let err = (got[r * n + c] as f64 - want).abs() / (1.0 + want.abs());
-                    worst = worst.max(err);
-                }
-            }
+            let worst = max_relative_error(&a, &b, &got, rows, (k, n));
             println!(
                 "  {label:14} {:7.3} ms  {:6.2} TFLOPS  max rel err {worst:.1e}",
                 secs * 1e3,

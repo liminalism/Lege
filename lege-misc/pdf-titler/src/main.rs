@@ -144,36 +144,7 @@ fn run(cli: &Cli) -> Result<Tally, String> {
     for path in &files {
         let name = display_name(&cli.input, path);
         match process(cli, &settings, &mut reader, path) {
-            Ok((guess, outcome)) => {
-                let summary = describe(&guess);
-                match outcome {
-                    Outcome::Written => {
-                        tally.written += 1;
-                        println!("{name}: {summary} [written]");
-                    }
-                    Outcome::DryRun => {
-                        tally.dry_run += 1;
-                        println!("{name}: {summary} [dry-run]");
-                    }
-                    Outcome::Kept => {
-                        tally.kept += 1;
-                        println!("{name}: {summary} [kept existing]");
-                    }
-                    Outcome::NoGuess => {
-                        tally.no_guess += 1;
-                        println!("{name}: [no confident guess]");
-                    }
-                    Outcome::Skipped(reason) => {
-                        tally.skipped += 1;
-                        println!("{name}: [skipped: {reason}]");
-                    }
-                }
-                if cli.verbose {
-                    for note in &guess.notes {
-                        println!("    note: {note}");
-                    }
-                }
-            }
+            Ok((guess, outcome)) => report(&mut tally, &name, &guess, outcome, cli.verbose),
             Err(Fatal(error)) => return Err(error),
             Err(FileError(error)) => {
                 tally.failed += 1;
@@ -192,6 +163,39 @@ fn run(cli: &Cli) -> Result<Tally, String> {
         tally.failed
     );
     Ok(tally)
+}
+
+/// Print what happened to one file (with the guess's notes when `verbose`)
+/// and count it.
+fn report(tally: &mut Tally, name: &str, guess: &Guess, outcome: Outcome, verbose: bool) {
+    let summary = describe(guess);
+    match outcome {
+        Outcome::Written => {
+            tally.written += 1;
+            println!("{name}: {summary} [written]");
+        }
+        Outcome::DryRun => {
+            tally.dry_run += 1;
+            println!("{name}: {summary} [dry-run]");
+        }
+        Outcome::Kept => {
+            tally.kept += 1;
+            println!("{name}: {summary} [kept existing]");
+        }
+        Outcome::NoGuess => {
+            tally.no_guess += 1;
+            println!("{name}: [no confident guess]");
+        }
+        Outcome::Skipped(reason) => {
+            tally.skipped += 1;
+            println!("{name}: [skipped: {reason}]");
+        }
+    }
+    if verbose {
+        for note in &guess.notes {
+            println!("    note: {note}");
+        }
+    }
 }
 
 enum Failure {
@@ -383,10 +387,8 @@ fn discover(folder: &Path, recursive: bool) -> Result<Vec<PathBuf>, String> {
             let entry = entry.map_err(|error| error.to_string())?;
             let kind = entry.file_type().map_err(|error| error.to_string())?;
             let path = entry.path();
-            if kind.is_dir() {
-                if recursive {
-                    pending.push(path);
-                }
+            if kind.is_dir() && recursive {
+                pending.push(path);
             } else if kind.is_file() && is_pdf(&path) {
                 found.push(path);
             }

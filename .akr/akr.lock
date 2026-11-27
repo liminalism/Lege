@@ -5,7 +5,8 @@ build {
     tool "akr 0.8.0"
     grammar "0.1"
     vocabulary "0.3"
-    source_graph "sha256:48d0e78ba92cc34bfdd75f32e1508169ecfd45ae1680fb678f0ecc15240c9068"
+    commit git:6a50595e18ca84117edd107cd70f5ce4d11d846a
+    source_graph "sha256:bba2bcc71d64551d11eebf3bf8194d466856767374c202a10baf3506c8197898"
 }
 
 source ".akr/project.akr" {
@@ -74,8 +75,8 @@ source ".akr/records/lege-ecosystem/milestones.akr" {
 }
 
 source ".akr/records/lege-ecosystem/observations.akr" {
-    hash "sha256:b935bb70769302f129ee93606a14ce93272f97288eceb6238674dca63573f5e6"
-    records 64
+    hash "sha256:e2698f4e1f206fd40c203003bd170d47173961a7310a8bf4acb09c54527fe0a8"
+    records 65
 }
 
 source ".akr/records/lege-ecosystem/papercuts.akr" {
@@ -99,8 +100,8 @@ source ".akr/records/lege-ecosystem/requirements.akr" {
 }
 
 source ".akr/records/lege-ecosystem/work.akr" {
-    hash "sha256:6edd8cd7bfc1e181303beee3cd6060850dad3fd741f3a8b537dc7b0a2899b977"
-    records 177
+    hash "sha256:83e64f4716f1cfa35249c2212ed30e95117e8679cd60a153c90c1785476a6713"
+    records 178
 }
 
 resolution @lege-ecosystem.assessment.glyph-outlines-rasterized-into-a-jbig2-layer/1 {
@@ -341,6 +342,12 @@ resolution @lege-ecosystem.evidence.truetyping-skips-a-jbig2-source-20260906/1 {
     slot derived_from
     to @lege-ecosystem.decision.truetyping-leaves-bilevel-sources-alone/1
     hash "sha256:e7e708b4830e8d97ed4073ef428c89f57e51f056dc24367dddc29bfc91a10bf4"
+}
+
+resolution @lege-ecosystem.observation.defects-seen-in-flat-control-flow-review/1 {
+    slot derived_from
+    to @lege-ecosystem.work.flat-control-flow-review-20261127/1
+    hash "sha256:eac3de3331f55cad98ca97201d3df5cac88957f9d2dd9979214522a41ebebb19"
 }
 
 resolution @lege-ecosystem.observation.dewarp-models-move-flat-pages-20261112/1 {
@@ -3477,6 +3484,11 @@ seal @lege-ecosystem.observation.bpg-variance-separates-line-art/3 {
     hash "sha256:dccb7a10130f803bea34f857c00ab59b973db96fd192526b84360c976b3774b3"
 }
 
+seal @lege-ecosystem.observation.defects-seen-in-flat-control-flow-review/1 {
+    state verified
+    hash "sha256:93ecbda7a233516585ae48315b008b6d1f47a8856258381ff2eaad91424070a9"
+}
+
 seal @lege-ecosystem.observation.dewarp-models-move-flat-pages-20261112/1 {
     state verified
     hash "sha256:e8cf9e93b29a140277917452014578c6e98070fd6049f3b21ad4d80937aa3714"
@@ -5635,6 +5647,11 @@ seal @lege-ecosystem.work.exprim-extraction-and-packaging/1 {
 seal @lege-ecosystem.work.fixed-point-9-7-is-a-later-experiment/1 {
     state abandoned
     hash "sha256:cadb2a322c9d6bb9edac0a96d78f7db83b981ee364e809059774d65bf64d04e4"
+}
+
+seal @lege-ecosystem.work.flat-control-flow-review-20261127/1 {
+    state completed
+    hash "sha256:eac3de3331f55cad98ca97201d3df5cac88957f9d2dd9979214522a41ebebb19"
 }
 
 seal @lege-ecosystem.work.fold-automatic-toc-into-ocr/1 {

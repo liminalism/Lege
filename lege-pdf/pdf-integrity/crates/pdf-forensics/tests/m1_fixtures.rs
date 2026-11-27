@@ -7,8 +7,8 @@
 //! than in a one-off test.
 #![allow(clippy::unwrap_used, reason = "a failed unwrap is a failed test")]
 
-use pdf_forensics::{AuditReport, FeatureFacts, OpenState, PageRepresentation, audit_bytes};
 use exprim::test_support::builder;
+use pdf_forensics::{AuditReport, FeatureFacts, OpenState, PageRepresentation, audit_bytes};
 
 /// The committed PDF-Verse-style export, written by
 /// `crates/pdf-forensics/examples/gen_m1_fixtures.rs`. The include fails to

@@ -24,30 +24,25 @@ const CLASS_COLORS: &[Rgba<u8>] = &[
 /// per character, which stays readable over a full-resolution page render.
 const LABEL_SCALE: u32 = 3;
 
-fn draw_rect(canvas: &mut RgbaImage, x1: i32, y1: i32, x2: i32, y2: i32, color: Rgba<u8>) {
+/// Set one pixel, skipping it when it falls outside the canvas.
+fn put_pixel_clipped(canvas: &mut RgbaImage, x: i32, y: i32, color: Rgba<u8>) {
     let w = canvas.width() as i32;
     let h = canvas.height() as i32;
+    if x < 0 || x >= w || y < 0 || y >= h {
+        return;
+    }
+    canvas.put_pixel(x as u32, y as u32, color);
+}
 
+fn draw_rect(canvas: &mut RgbaImage, x1: i32, y1: i32, x2: i32, y2: i32, color: Rgba<u8>) {
     for thickness in 0..2 {
         for px in x1 + thickness..=x2 - thickness {
-            if px >= 0 && px < w {
-                if y1 + thickness >= 0 && y1 + thickness < h {
-                    canvas.put_pixel(px as u32, (y1 + thickness) as u32, color);
-                }
-                if y2 - thickness >= 0 && y2 - thickness < h {
-                    canvas.put_pixel(px as u32, (y2 - thickness) as u32, color);
-                }
-            }
+            put_pixel_clipped(canvas, px, y1 + thickness, color);
+            put_pixel_clipped(canvas, px, y2 - thickness, color);
         }
         for py in y1 + thickness..=y2 - thickness {
-            if py >= 0 && py < h {
-                if x1 + thickness >= 0 && x1 + thickness < w {
-                    canvas.put_pixel((x1 + thickness) as u32, py as u32, color);
-                }
-                if x2 - thickness >= 0 && x2 - thickness < w {
-                    canvas.put_pixel((x2 - thickness) as u32, py as u32, color);
-                }
-            }
+            put_pixel_clipped(canvas, x1 + thickness, py, color);
+            put_pixel_clipped(canvas, x2 - thickness, py, color);
         }
     }
 }
@@ -392,36 +387,43 @@ fn text_width(text: &str, scale: u32) -> u32 {
 /// edge is cropped instead of smeared.
 fn draw_label(canvas: &mut RgbaImage, text: &str, x: i32, y: i32, scale: u32, color: Rgba<u8>) {
     let scale = scale.max(1) as i32;
-    let width = canvas.width() as i32;
-    let height = canvas.height() as i32;
 
     let mut cursor_x = x;
     for ch in text.chars() {
-        let glyph = glyph_of(ch);
-        for (row_index, row) in glyph.iter().enumerate() {
-            for column in 0..GLYPH_COLS {
-                // Leftmost column is the most significant of the low five bits.
-                if row & (1 << (GLYPH_COLS - 1 - column)) == 0 {
-                    continue;
-                }
-                let px0 = cursor_x + column as i32 * scale;
-                let py0 = y + row_index as i32 * scale;
-                for dy in 0..scale {
-                    let py = py0 + dy;
-                    if py < 0 || py >= height {
-                        continue;
-                    }
-                    for dx in 0..scale {
-                        let px = px0 + dx;
-                        if px < 0 || px >= width {
-                            continue;
-                        }
-                        canvas.put_pixel(px as u32, py as u32, color);
-                    }
-                }
-            }
-        }
+        draw_glyph(canvas, glyph_of(ch), cursor_x, y, scale, color);
         cursor_x += (GLYPH_COLS as i32 + 1) * scale;
+    }
+}
+
+/// Blit one glyph with its top-left corner at (`x`, `y`), each glyph pixel a
+/// `scale`-sized square, cropped at the canvas edges.
+fn draw_glyph(
+    canvas: &mut RgbaImage,
+    glyph: &[u8; GLYPH_ROWS],
+    x: i32,
+    y: i32,
+    scale: i32,
+    color: Rgba<u8>,
+) {
+    for (row_index, row) in glyph.iter().enumerate() {
+        for column in 0..GLYPH_COLS {
+            // Leftmost column is the most significant of the low five bits.
+            if row & (1 << (GLYPH_COLS - 1 - column)) == 0 {
+                continue;
+            }
+            let px0 = x + column as i32 * scale;
+            let py0 = y + row_index as i32 * scale;
+            fill_square_clipped(canvas, px0, py0, scale, color);
+        }
+    }
+}
+
+/// Fill the `size`-sided square at (`x0`, `y0`), skipping pixels outside the canvas.
+fn fill_square_clipped(canvas: &mut RgbaImage, x0: i32, y0: i32, size: i32, color: Rgba<u8>) {
+    for dy in 0..size {
+        for dx in 0..size {
+            put_pixel_clipped(canvas, x0 + dx, y0 + dy, color);
+        }
     }
 }
 

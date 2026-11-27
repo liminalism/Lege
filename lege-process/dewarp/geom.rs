@@ -226,11 +226,12 @@ fn solve8(mut a: [[f64; 9]; 8]) -> Option<[f64; 8]> {
         }
         a.swap(col, pivot);
         for row in 0..8 {
-            if row != col {
-                let factor = a[row][col] / a[col][col];
-                for k in col..9 {
-                    a[row][k] -= factor * a[col][k];
-                }
+            if row == col {
+                continue;
+            }
+            let factor = a[row][col] / a[col][col];
+            for k in col..9 {
+                a[row][k] -= factor * a[col][k];
             }
         }
     }

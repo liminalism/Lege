@@ -343,15 +343,7 @@ pub async fn perform_reflow_page_ocr(
     // row crops on the blocking pool. Returns (placement_index, text, conf).
     let recognized: Vec<(usize, String, Option<f32>)> =
         crate::runtime_stats::spawn_blocking_stage(crate::runtime_stats::Stage::Ocr, move || {
-            with_pipeline(&language, |pipeline| {
-                let mut out: Vec<(usize, String, Option<f32>)> = Vec::new();
-                for job in &jobs {
-                    if let Some(line) = pipeline.ocr_gray_line(&job.crop) {
-                        assign_words_to_slots(&line, &job.slots, &mut out);
-                    }
-                }
-                out
-            })
+            with_pipeline(&language, |pipeline| recognize_row_jobs(pipeline, &jobs))
         })
         .await
         .map_err(|e| anyhow::anyhow!("reflow OCR task panicked: {e}"))?;
@@ -376,6 +368,21 @@ pub async fn perform_reflow_page_ocr(
     let lines = group_output_lines(out_words);
     let hocr = hocr::build_page_hocr(&lines, page.width, page.height);
     Ok(Some(hocr))
+}
+
+/// OCR each row crop and split the recognized words over its slots, as
+/// (placement_index, text, conf).
+fn recognize_row_jobs(
+    pipeline: &mut OcrPipeline,
+    jobs: &[RowJob],
+) -> Vec<(usize, String, Option<f32>)> {
+    let mut out: Vec<(usize, String, Option<f32>)> = Vec::new();
+    for job in jobs {
+        if let Some(line) = pipeline.ocr_gray_line(&job.crop) {
+            assign_words_to_slots(&line, &job.slots, &mut out);
+        }
+    }
+    out
 }
 
 /// Distribute a recognized line's words back onto the row's word slots by

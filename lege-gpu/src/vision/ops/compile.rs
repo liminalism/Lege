@@ -6,7 +6,7 @@ use anyhow::{Result, bail};
 use super::common::{broadcast_strides_u32, c_strides_raw, c_strides_u32, linear_grid};
 use super::conv::conv_out_usize;
 use crate::vision::onnx::types::{
-    Activation, ElementwiseKind, PlannedOp, PlannedOpKind, UnaryKind,
+    Activation, Conv2dPlan, ElementwiseKind, PlannedOp, PlannedOpKind, UnaryKind,
 };
 use crate::vision::reference;
 
@@ -222,88 +222,15 @@ pub(crate) fn op_steps(op: &PlannedOp, dummy_bias_name: &str) -> Result<Vec<Step
             beta,
             trans_a,
             trans_b,
-        } => {
-            let a = &in_shapes[0];
-            let b = &in_shapes[1];
-            let (m, ka) = if *trans_a { (a[1], a[0]) } else { (a[0], a[1]) };
-            let (_kb, n) = if *trans_b { (b[1], b[0]) } else { (b[0], b[1]) };
-            let has_bias = op.inputs.len() >= 3;
-            let bias_name = if has_bias {
-                op.inputs[2].clone()
-            } else {
-                dummy_bias_name.to_owned()
-            };
-            let bias_len = if has_bias {
-                in_shapes[2].iter().product::<usize>()
-            } else {
-                0
-            };
-            let bias_mode = match bias_len {
-                0 => 0,
-                1 => 1,
-                l if l == n && in_shapes[2].last() == Some(&n) => 2,
-                l if l == m * n => 4,
-                l if l == m => 3,
-                _ => 4,
-            };
-            let a_strides = if *trans_a { (1, m) } else { (ka, 1) };
-            let b_strides = if *trans_b { (1, ka) } else { (n, 1) };
-            if let Some(dispatch) = super::matmul_tiled::tiled_dispatch(m, n, 1) {
-                let p = super::matmul_tiled::tiled_params(
-                    m,
-                    n,
-                    ka,
-                    a_strides,
-                    b_strides,
-                    &[],
-                    &[],
-                    &[],
-                    bias_mode,
-                    *alpha,
-                    *beta,
-                    0,
-                    false,
-                );
-                let wgsl =
-                    if super::matmul_tiled::vec4_eligible(ka, n, a_strides, b_strides, &[], &[]) {
-                        super::matmul_tiled::MATMUL_TILED_VEC4_WGSL
-                    } else {
-                        super::matmul_tiled::MATMUL_TILED_WGSL
-                    };
-                return Ok(vec![StepSpec {
-                    wgsl,
-                    n_read_inputs: 4,
-                    input_buf_names: vec![
-                        op.inputs[0].clone(),
-                        op.inputs[1].clone(),
-                        bias_name,
-                        dummy_bias_name.to_owned(),
-                    ],
-                    output_buf_name: op.outputs[0].clone(),
-                    params: bytemuck::cast_slice(&p).to_vec(),
-                    dispatch,
-                }]);
-            }
-            let params = [
-                m as u32,
-                n as u32,
-                ka as u32,
-                *trans_a as u32,
-                *trans_b as u32,
-                has_bias as u32,
-                bias_len as u32,
-                alpha.to_bits(),
-                beta.to_bits(),
-            ];
-            Ok(vec![StepSpec {
-                wgsl: super::gemm::GEMM_WGSL,
-                n_read_inputs: 3,
-                input_buf_names: vec![op.inputs[0].clone(), op.inputs[1].clone(), bias_name],
-                output_buf_name: op.outputs[0].clone(),
-                params: bytemuck::cast_slice(&params).to_vec(),
-                dispatch: [(m * n).div_ceil(256) as u32, 1, 1],
-            }])
-        }
+        } => gemm_steps(
+            op,
+            &in_shapes,
+            *alpha,
+            *beta,
+            *trans_a,
+            *trans_b,
+            dummy_bias_name,
+        ),
 
         // ── Elementwise binary ────────────────────────────────────────────
         PlannedOpKind::Elementwise(k) => {
@@ -503,457 +430,7 @@ pub(crate) fn op_steps(op: &PlannedOp, dummy_bias_name: &str) -> Result<Vec<Step
         }
 
         // ── Conv2d ────────────────────────────────────────────────────────
-        PlannedOpKind::Conv2d(plan) => {
-            let xs = &in_shapes[0];
-            let ws = &in_shapes[1];
-            let n = xs[0];
-            let cin = xs[1];
-            let hin = xs[2];
-            let win = xs[3];
-            let cout = ws[0];
-            let cin_per_group = ws[1];
-            let kh = ws[2];
-            let kw = ws[3];
-            let group = plan.group as usize;
-            let hout = conv_out_usize(
-                hin,
-                plan.pads[0],
-                plan.pads[2],
-                plan.dilations[0],
-                kh,
-                plan.strides[0],
-            )?;
-            let wout = conv_out_usize(
-                win,
-                plan.pads[1],
-                plan.pads[3],
-                plan.dilations[1],
-                kw,
-                plan.strides[1],
-            )?;
-            let has_bias = op.inputs.len() >= 3;
-            let bias_name = if has_bias {
-                op.inputs[2].clone()
-            } else {
-                dummy_bias_name.to_owned()
-            };
-
-            // Optimized kernels below assume batch 1; route N>1 to the
-            // batch-aware naive convolution.
-            if n > 1 {
-                let cout_per_group = cout / group;
-                let num_out = n * cout * hout * wout;
-                let p = [
-                    num_out as u32,
-                    cin as u32,
-                    hin as u32,
-                    win as u32,
-                    cout as u32,
-                    cin_per_group as u32,
-                    kh as u32,
-                    kw as u32,
-                    hout as u32,
-                    wout as u32,
-                    plan.strides[0] as u32,
-                    plan.strides[1] as u32,
-                    plan.pads[0] as u32,
-                    plan.pads[1] as u32,
-                    plan.dilations[0] as u32,
-                    plan.dilations[1] as u32,
-                    has_bias as u32,
-                    cout_per_group as u32,
-                    n as u32,
-                ];
-                return Ok(vec![StepSpec {
-                    wgsl: super::conv::CONV2D_WGSL,
-                    n_read_inputs: 3,
-                    input_buf_names: vec![op.inputs[0].clone(), op.inputs[1].clone(), bias_name],
-                    output_buf_name: op.outputs[0].clone(),
-                    params: bytemuck::cast_slice(&p).to_vec(),
-                    dispatch: grid(num_out.div_ceil(256)),
-                }]);
-            }
-
-            // 1×1, group=1, no padding, no dilation → tiled GEMM
-            if kh == 1
-                && kw == 1
-                && group == 1
-                && plan.pads == [0, 0, 0, 0]
-                && plan.dilations == [1, 1]
-            {
-                let s1 = plan.strides == [1, 1] && hin == hout && win == wout;
-                let plane = hout * wout;
-                // vec4 path when both contraction (cin) and plane are 4-aligned,
-                // so the buffers can be viewed as array<vec4<f32>>.
-                let gemm_wgsl = if cin % 4 == 0 && plane % 4 == 0 {
-                    super::conv::CONV1X1_GEMM_S1_VEC4_WGSL
-                } else {
-                    super::conv::CONV1X1_GEMM_S1_WGSL
-                };
-                let (wgsl, p, dispatch) = if s1 {
-                    (
-                        gemm_wgsl,
-                        vec![
-                            cout as u32,
-                            cin as u32,
-                            (hout * wout) as u32,
-                            has_bias as u32,
-                        ],
-                        [
-                            cout.div_ceil(64) as u32,
-                            (hout * wout).div_ceil(64) as u32,
-                            1,
-                        ],
-                    )
-                } else {
-                    (
-                        super::conv::CONV1X1_BLOCK2X4_WGSL,
-                        vec![
-                            cout as u32,
-                            cin as u32,
-                            hout as u32,
-                            wout as u32,
-                            hin as u32,
-                            win as u32,
-                            plan.strides[0] as u32,
-                            plan.strides[1] as u32,
-                            has_bias as u32,
-                        ],
-                        [
-                            cout.div_ceil(32) as u32,
-                            (hout * wout).div_ceil(64) as u32,
-                            1,
-                        ],
-                    )
-                };
-                return Ok(vec![StepSpec {
-                    wgsl,
-                    n_read_inputs: 3,
-                    input_buf_names: vec![op.inputs[0].clone(), op.inputs[1].clone(), bias_name],
-                    output_buf_name: op.outputs[0].clone(),
-                    params: bytemuck::cast_slice(&p).to_vec(),
-                    dispatch,
-                }]);
-            }
-
-            // Depthwise 3×3 → one output element per invocation, no shared barriers.
-            if kh == 3
-                && kw == 3
-                && group == cin
-                && cout == cin
-                && cin_per_group == 1
-                && plan.dilations == [1, 1]
-            {
-                let num_out = cout * hout * wout;
-                let p = [
-                    num_out as u32,
-                    cout as u32,
-                    hin as u32,
-                    win as u32,
-                    hout as u32,
-                    wout as u32,
-                    plan.strides[0] as u32,
-                    plan.strides[1] as u32,
-                    plan.pads[0] as u32,
-                    plan.pads[1] as u32,
-                    has_bias as u32,
-                ];
-                return Ok(vec![StepSpec {
-                    wgsl: super::conv::DEPTHWISE3X3_WGSL,
-                    n_read_inputs: 3,
-                    input_buf_names: vec![op.inputs[0].clone(), op.inputs[1].clone(), bias_name],
-                    output_buf_name: op.outputs[0].clone(),
-                    params: bytemuck::cast_slice(&p).to_vec(),
-                    dispatch: [num_out.div_ceil(256) as u32, 1, 1],
-                }]);
-            }
-
-            // Group=1 3×3 stride-1 dilation-1 → 2×2 spatial × 8-channel register tile.
-            if kh == 3
-                && kw == 3
-                && group == 1
-                && plan.strides == [1, 1]
-                && plan.dilations == [1, 1]
-            {
-                let p = [
-                    cout as u32,
-                    cin as u32,
-                    hin as u32,
-                    win as u32,
-                    hout as u32,
-                    wout as u32,
-                    plan.pads[0] as u32,
-                    plan.pads[1] as u32,
-                    has_bias as u32,
-                ];
-                return Ok(vec![StepSpec {
-                    wgsl: super::conv::CONV3X3_CO8_SP2X2_S1D1_WGSL,
-                    n_read_inputs: 3,
-                    input_buf_names: vec![op.inputs[0].clone(), op.inputs[1].clone(), bias_name],
-                    output_buf_name: op.outputs[0].clone(),
-                    params: bytemuck::cast_slice(&p).to_vec(),
-                    dispatch: [
-                        wout.div_ceil(32) as u32,
-                        hout.div_ceil(32) as u32,
-                        cout.div_ceil(8) as u32,
-                    ],
-                }]);
-            }
-
-            // 3×3 stride-1, dilation 2..5: 2×2 spatial × 8-channel register tile
-            // (32 accumulators), same arithmetic intensity as the s1d1 tile. Patch
-            // (32+2d)² (d=5→42²=1764) fits the 1764-float smem budget.
-            let dil = plan.dilations[0];
-            if kh == 3
-                && kw == 3
-                && group == 1
-                && plan.strides == [1, 1]
-                && plan.dilations[0] == plan.dilations[1]
-                && dil >= 2
-                && dil <= super::conv::CONV3X3_DIL_MAX
-            {
-                // The shader's workgroup smem is sized for the max routed dilation;
-                // a relaxed ceiling without a matching array resize is silent UB.
-                debug_assert!(
-                    (32 + 2 * dil as usize).pow(2) <= super::conv::CONV3X3_DIL_SMEM,
-                    "CONV3X3_CO8_SP2X2_DIL smem overflow at dil={dil}"
-                );
-                let p = [
-                    cout as u32,
-                    cin as u32,
-                    hin as u32,
-                    win as u32,
-                    hout as u32,
-                    wout as u32,
-                    plan.pads[0] as u32,
-                    plan.pads[1] as u32,
-                    has_bias as u32,
-                    dil as u32,
-                ];
-                return Ok(vec![StepSpec {
-                    wgsl: super::conv::CONV3X3_CO8_SP2X2_DIL_WGSL,
-                    n_read_inputs: 3,
-                    input_buf_names: vec![op.inputs[0].clone(), op.inputs[1].clone(), bias_name],
-                    output_buf_name: op.outputs[0].clone(),
-                    params: bytemuck::cast_slice(&p).to_vec(),
-                    dispatch: [
-                        wout.div_ceil(32) as u32,
-                        hout.div_ceil(32) as u32,
-                        cout.div_ceil(8) as u32,
-                    ],
-                }]);
-            }
-
-            // Group=1 3×3 → shared-memory tiled direct conv, eight output channels per workgroup.
-            if kh == 3 && kw == 3 && group == 1 && super::conv::conv3x3_tile_patch_fits(plan) {
-                let p = [
-                    cout as u32,
-                    cin as u32,
-                    hin as u32,
-                    win as u32,
-                    hout as u32,
-                    wout as u32,
-                    plan.strides[0] as u32,
-                    plan.strides[1] as u32,
-                    plan.pads[0] as u32,
-                    plan.pads[1] as u32,
-                    plan.dilations[0] as u32,
-                    plan.dilations[1] as u32,
-                    has_bias as u32,
-                    0,
-                    0,
-                ];
-                return Ok(vec![StepSpec {
-                    wgsl: super::conv::CONV3X3_COBLOCK8_WGSL,
-                    n_read_inputs: 3,
-                    input_buf_names: vec![op.inputs[0].clone(), op.inputs[1].clone(), bias_name],
-                    output_buf_name: op.outputs[0].clone(),
-                    params: bytemuck::cast_slice(&p).to_vec(),
-                    dispatch: [
-                        wout.div_ceil(16) as u32,
-                        hout.div_ceil(16) as u32,
-                        cout.div_ceil(8) as u32,
-                    ],
-                }]);
-            }
-
-            // 5×5 stride-1 dilation-1: 2×2 spatial × 8ch register tile (32 accumulators).
-            // 36×36 smem = 1296 floats (exact same budget as generic 5×5 kernel).
-            if kh == 5
-                && kw == 5
-                && group == 1
-                && plan.strides == [1, 1]
-                && plan.dilations == [1, 1]
-            {
-                let p = [
-                    cout as u32,
-                    cin as u32,
-                    hin as u32,
-                    win as u32,
-                    hout as u32,
-                    wout as u32,
-                    plan.pads[0] as u32,
-                    plan.pads[1] as u32,
-                    has_bias as u32,
-                ];
-                return Ok(vec![StepSpec {
-                    wgsl: super::conv::CONV5X5_CO8_SP2X2_D1_WGSL,
-                    n_read_inputs: 3,
-                    input_buf_names: vec![op.inputs[0].clone(), op.inputs[1].clone(), bias_name],
-                    output_buf_name: op.outputs[0].clone(),
-                    params: bytemuck::cast_slice(&p).to_vec(),
-                    dispatch: [
-                        wout.div_ceil(32) as u32,
-                        hout.div_ceil(32) as u32,
-                        cout.div_ceil(8) as u32,
-                    ],
-                }]);
-            }
-
-            // 5×5 stride-1, dilation 2..3: 2×2 spatial × 8ch (32 accumulators per
-            // thread), same arithmetic intensity as the d1 tile. Patch (32+4d)²
-            // (d=2→40²=1600, d=3→44²=1936) fits the 1936-float smem budget.
-            let dil = plan.dilations[0];
-            if kh == 5
-                && kw == 5
-                && group == 1
-                && plan.strides == [1, 1]
-                && plan.dilations[0] == plan.dilations[1]
-                && dil >= 2
-                && dil <= super::conv::CONV5X5_DIL_MAX
-            {
-                // The shader's workgroup smem is sized for the max routed dilation;
-                // a relaxed ceiling without a matching array resize is silent UB.
-                debug_assert!(
-                    (32 + 4 * dil as usize).pow(2) <= super::conv::CONV5X5_DIL_SMEM,
-                    "CONV5X5_CO8_SP2X2_DIL smem overflow at dil={dil}"
-                );
-                let p = [
-                    cout as u32,
-                    cin as u32,
-                    hin as u32,
-                    win as u32,
-                    hout as u32,
-                    wout as u32,
-                    plan.pads[0] as u32,
-                    plan.pads[1] as u32,
-                    has_bias as u32,
-                    dil as u32,
-                ];
-                return Ok(vec![StepSpec {
-                    wgsl: super::conv::CONV5X5_CO8_SP2X2_DIL_WGSL,
-                    n_read_inputs: 3,
-                    input_buf_names: vec![op.inputs[0].clone(), op.inputs[1].clone(), bias_name],
-                    output_buf_name: op.outputs[0].clone(),
-                    params: bytemuck::cast_slice(&p).to_vec(),
-                    dispatch: [
-                        wout.div_ceil(32) as u32,
-                        hout.div_ceil(32) as u32,
-                        cout.div_ceil(8) as u32,
-                    ],
-                }]);
-            }
-
-            // Group=1 5×5 → shared-memory tiled direct conv, eight output channels per workgroup.
-            if kh == 5 && kw == 5 && group == 1 {
-                let p = [
-                    cout as u32,
-                    cin as u32,
-                    hin as u32,
-                    win as u32,
-                    hout as u32,
-                    wout as u32,
-                    plan.strides[0] as u32,
-                    plan.strides[1] as u32,
-                    plan.pads[0] as u32,
-                    plan.pads[1] as u32,
-                    plan.dilations[0] as u32,
-                    plan.dilations[1] as u32,
-                    has_bias as u32,
-                    0,
-                    0,
-                ];
-                return Ok(vec![StepSpec {
-                    wgsl: super::conv::CONV5X5_COBLOCK8_WGSL,
-                    n_read_inputs: 3,
-                    input_buf_names: vec![op.inputs[0].clone(), op.inputs[1].clone(), bias_name],
-                    output_buf_name: op.outputs[0].clone(),
-                    params: bytemuck::cast_slice(&p).to_vec(),
-                    dispatch: [
-                        wout.div_ceil(16) as u32,
-                        hout.div_ceil(16) as u32,
-                        cout.div_ceil(8) as u32,
-                    ],
-                }]);
-            }
-
-            // 3×3 → shared-memory tiled direct conv
-            if kh == 3 && kw == 3 && super::conv::conv3x3_tile_patch_fits(plan) {
-                let p = [
-                    cout as u32,
-                    cin as u32,
-                    hin as u32,
-                    win as u32,
-                    hout as u32,
-                    wout as u32,
-                    kh as u32,
-                    kw as u32,
-                    plan.strides[0] as u32,
-                    plan.strides[1] as u32,
-                    plan.pads[0] as u32,
-                    plan.pads[1] as u32,
-                    plan.dilations[0] as u32,
-                    plan.dilations[1] as u32,
-                    has_bias as u32,
-                    cin_per_group as u32,
-                ];
-                return Ok(vec![StepSpec {
-                    wgsl: super::conv::CONV3X3_TILED_WGSL,
-                    n_read_inputs: 3,
-                    input_buf_names: vec![op.inputs[0].clone(), op.inputs[1].clone(), bias_name],
-                    output_buf_name: op.outputs[0].clone(),
-                    params: bytemuck::cast_slice(&p).to_vec(),
-                    dispatch: [
-                        wout.div_ceil(16) as u32,
-                        hout.div_ceil(16) as u32,
-                        cout as u32,
-                    ],
-                }]);
-            }
-
-            // Fallback: naive direct convolution (batch 1 here; N>1 handled above)
-            let cout_per_group = cout / group;
-            let num_out = cout * hout * wout;
-            let p = [
-                num_out as u32,
-                cin as u32,
-                hin as u32,
-                win as u32,
-                cout as u32,
-                cin_per_group as u32,
-                kh as u32,
-                kw as u32,
-                hout as u32,
-                wout as u32,
-                plan.strides[0] as u32,
-                plan.strides[1] as u32,
-                plan.pads[0] as u32,
-                plan.pads[1] as u32,
-                plan.dilations[0] as u32,
-                plan.dilations[1] as u32,
-                has_bias as u32,
-                cout_per_group as u32,
-                1u32,
-            ];
-            Ok(vec![StepSpec {
-                wgsl: super::conv::CONV2D_WGSL,
-                n_read_inputs: 3,
-                input_buf_names: vec![op.inputs[0].clone(), op.inputs[1].clone(), bias_name],
-                output_buf_name: op.outputs[0].clone(),
-                params: bytemuck::cast_slice(&p).to_vec(),
-                dispatch: grid(num_out.div_ceil(256)),
-            }])
-        }
+        PlannedOpKind::Conv2d(plan) => conv2d_steps(op, plan, &in_shapes, dummy_bias_name),
 
         // ── MaxPool2d / AvgPool2d ─────────────────────────────────────────
         PlannedOpKind::MaxPool2d(plan) | PlannedOpKind::AvgPool2d(plan) => {
@@ -1044,73 +521,7 @@ pub(crate) fn op_steps(op: &PlannedOp, dummy_bias_name: &str) -> Result<Vec<Step
         }
 
         // ── MatMul ────────────────────────────────────────────────────────
-        PlannedOpKind::MatMul => {
-            // ONNX 1-D operand promotion (lhs [k]->[1,k], rhs [k]->[k,1]). The
-            // squeezed output has the same contiguous element layout as the
-            // promoted [.,m,n], so the kernel writes the right buffer either way.
-            let (lhs, rhs) = {
-                let l = &in_shapes[0];
-                let r = &in_shapes[1];
-                let lv = if l.len() == 1 {
-                    vec![1, l[0]]
-                } else {
-                    l.clone()
-                };
-                let rv = if r.len() == 1 {
-                    vec![r[0], 1]
-                } else {
-                    r.clone()
-                };
-                (lv, rv)
-            };
-            let lhs = &lhs;
-            let rhs = &rhs;
-            let m = lhs[lhs.len() - 2];
-            let k = lhs[lhs.len() - 1];
-            let n = rhs[rhs.len() - 1];
-            let batch_shape =
-                reference::broadcast_shape(&lhs[..lhs.len() - 2], &rhs[..rhs.len() - 2])
-                    .map_err(|e| anyhow::anyhow!("matmul compile batch: {e}"))?;
-            let mut out_shape = batch_shape.clone();
-            out_shape.push(m);
-            out_shape.push(n);
-            if out_shape.len() > 6 {
-                bail!("matmul compile: out rank {} > 6", out_shape.len());
-            }
-            let total_out = out_shape.iter().product::<usize>();
-            let out_strides = c_strides_u32(&out_shape);
-            let lhs_batch = matmul_batch_strides(&batch_shape, &lhs[..lhs.len() - 2], m * k)?;
-            let rhs_batch = matmul_batch_strides(&batch_shape, &rhs[..rhs.len() - 2], k * n)?;
-            if let Some(step) =
-                tiled_matmul_step(op, &in_shapes, TiledEpilogue::plain(), dummy_bias_name)?
-            {
-                return Ok(vec![step]);
-            }
-            let mut p = [0u32; 30];
-            p[0] = total_out as u32;
-            p[1] = out_shape.len() as u32;
-            p[2] = lhs.len() as u32;
-            p[3] = rhs.len() as u32;
-            p[4] = batch_shape.len() as u32;
-            p[5] = m as u32;
-            p[6] = k as u32;
-            p[7] = n as u32;
-            p[8..14].copy_from_slice(&out_strides);
-            p[14..20].copy_from_slice(&lhs_batch);
-            p[20] = k as u32;
-            p[21] = 1;
-            p[22..28].copy_from_slice(&rhs_batch);
-            p[28] = n as u32;
-            p[29] = 1;
-            Ok(vec![StepSpec {
-                wgsl: super::matmul::MATMUL_WGSL,
-                n_read_inputs: 2,
-                input_buf_names: op.inputs.clone(),
-                output_buf_name: op.outputs[0].clone(),
-                params: bytemuck::cast_slice(&p).to_vec(),
-                dispatch: grid(total_out.div_ceil(256)),
-            }])
-        }
+        PlannedOpKind::MatMul => matmul_steps(op, &in_shapes, dummy_bias_name),
 
         // ── Fused MatMul (onnx::fuse_rewrite) ─────────────────────────────
         PlannedOpKind::FusedMatMul {
@@ -1493,6 +904,611 @@ pub(crate) fn op_steps(op: &PlannedOp, dummy_bias_name: &str) -> Result<Vec<Step
             }])
         }
     }
+}
+
+/// Gemm (2D matmul + bias): the tiled kernel when it applies, else the
+/// naive Gemm shader.
+fn gemm_steps(
+    op: &PlannedOp,
+    in_shapes: &[Vec<usize>],
+    alpha: f32,
+    beta: f32,
+    trans_a: bool,
+    trans_b: bool,
+    dummy_bias_name: &str,
+) -> Result<Vec<StepSpec>> {
+    let a = &in_shapes[0];
+    let b = &in_shapes[1];
+    let (m, ka) = if trans_a { (a[1], a[0]) } else { (a[0], a[1]) };
+    let (_kb, n) = if trans_b { (b[1], b[0]) } else { (b[0], b[1]) };
+    let has_bias = op.inputs.len() >= 3;
+    let bias_name = if has_bias {
+        op.inputs[2].clone()
+    } else {
+        dummy_bias_name.to_owned()
+    };
+    let bias_len = if has_bias {
+        in_shapes[2].iter().product::<usize>()
+    } else {
+        0
+    };
+    let bias_mode = match bias_len {
+        0 => 0,
+        1 => 1,
+        l if l == n && in_shapes[2].last() == Some(&n) => 2,
+        l if l == m * n => 4,
+        l if l == m => 3,
+        _ => 4,
+    };
+    let a_strides = if trans_a { (1, m) } else { (ka, 1) };
+    let b_strides = if trans_b { (1, ka) } else { (n, 1) };
+    if let Some(dispatch) = super::matmul_tiled::tiled_dispatch(m, n, 1) {
+        let p = super::matmul_tiled::tiled_params(
+            m,
+            n,
+            ka,
+            a_strides,
+            b_strides,
+            &[],
+            &[],
+            &[],
+            bias_mode,
+            alpha,
+            beta,
+            0,
+            false,
+        );
+        let wgsl = if super::matmul_tiled::vec4_eligible(ka, n, a_strides, b_strides, &[], &[]) {
+            super::matmul_tiled::MATMUL_TILED_VEC4_WGSL
+        } else {
+            super::matmul_tiled::MATMUL_TILED_WGSL
+        };
+        return Ok(vec![StepSpec {
+            wgsl,
+            n_read_inputs: 4,
+            input_buf_names: vec![
+                op.inputs[0].clone(),
+                op.inputs[1].clone(),
+                bias_name,
+                dummy_bias_name.to_owned(),
+            ],
+            output_buf_name: op.outputs[0].clone(),
+            params: bytemuck::cast_slice(&p).to_vec(),
+            dispatch,
+        }]);
+    }
+    let params = [
+        m as u32,
+        n as u32,
+        ka as u32,
+        trans_a as u32,
+        trans_b as u32,
+        has_bias as u32,
+        bias_len as u32,
+        alpha.to_bits(),
+        beta.to_bits(),
+    ];
+    Ok(vec![StepSpec {
+        wgsl: super::gemm::GEMM_WGSL,
+        n_read_inputs: 3,
+        input_buf_names: vec![op.inputs[0].clone(), op.inputs[1].clone(), bias_name],
+        output_buf_name: op.outputs[0].clone(),
+        params: bytemuck::cast_slice(&params).to_vec(),
+        dispatch: [(m * n).div_ceil(256) as u32, 1, 1],
+    }])
+}
+
+/// Conv2d: picks the specialized kernel for the convolution's shape.
+fn conv2d_steps(
+    op: &PlannedOp,
+    plan: &Conv2dPlan,
+    in_shapes: &[Vec<usize>],
+    dummy_bias_name: &str,
+) -> Result<Vec<StepSpec>> {
+    let xs = &in_shapes[0];
+    let ws = &in_shapes[1];
+    let n = xs[0];
+    let cin = xs[1];
+    let hin = xs[2];
+    let win = xs[3];
+    let cout = ws[0];
+    let cin_per_group = ws[1];
+    let kh = ws[2];
+    let kw = ws[3];
+    let group = plan.group as usize;
+    let hout = conv_out_usize(
+        hin,
+        plan.pads[0],
+        plan.pads[2],
+        plan.dilations[0],
+        kh,
+        plan.strides[0],
+    )?;
+    let wout = conv_out_usize(
+        win,
+        plan.pads[1],
+        plan.pads[3],
+        plan.dilations[1],
+        kw,
+        plan.strides[1],
+    )?;
+    let has_bias = op.inputs.len() >= 3;
+    let bias_name = if has_bias {
+        op.inputs[2].clone()
+    } else {
+        dummy_bias_name.to_owned()
+    };
+
+    // Optimized kernels below assume batch 1; route N>1 to the
+    // batch-aware naive convolution.
+    if n > 1 {
+        let cout_per_group = cout / group;
+        let num_out = n * cout * hout * wout;
+        let p = [
+            num_out as u32,
+            cin as u32,
+            hin as u32,
+            win as u32,
+            cout as u32,
+            cin_per_group as u32,
+            kh as u32,
+            kw as u32,
+            hout as u32,
+            wout as u32,
+            plan.strides[0] as u32,
+            plan.strides[1] as u32,
+            plan.pads[0] as u32,
+            plan.pads[1] as u32,
+            plan.dilations[0] as u32,
+            plan.dilations[1] as u32,
+            has_bias as u32,
+            cout_per_group as u32,
+            n as u32,
+        ];
+        return Ok(vec![StepSpec {
+            wgsl: super::conv::CONV2D_WGSL,
+            n_read_inputs: 3,
+            input_buf_names: vec![op.inputs[0].clone(), op.inputs[1].clone(), bias_name],
+            output_buf_name: op.outputs[0].clone(),
+            params: bytemuck::cast_slice(&p).to_vec(),
+            dispatch: grid(num_out.div_ceil(256)),
+        }]);
+    }
+
+    // 1×1, group=1, no padding, no dilation → tiled GEMM
+    if kh == 1 && kw == 1 && group == 1 && plan.pads == [0, 0, 0, 0] && plan.dilations == [1, 1] {
+        let s1 = plan.strides == [1, 1] && hin == hout && win == wout;
+        let plane = hout * wout;
+        // vec4 path when both contraction (cin) and plane are 4-aligned,
+        // so the buffers can be viewed as array<vec4<f32>>.
+        let gemm_wgsl = if cin % 4 == 0 && plane % 4 == 0 {
+            super::conv::CONV1X1_GEMM_S1_VEC4_WGSL
+        } else {
+            super::conv::CONV1X1_GEMM_S1_WGSL
+        };
+        let (wgsl, p, dispatch) = if s1 {
+            (
+                gemm_wgsl,
+                vec![
+                    cout as u32,
+                    cin as u32,
+                    (hout * wout) as u32,
+                    has_bias as u32,
+                ],
+                [
+                    cout.div_ceil(64) as u32,
+                    (hout * wout).div_ceil(64) as u32,
+                    1,
+                ],
+            )
+        } else {
+            (
+                super::conv::CONV1X1_BLOCK2X4_WGSL,
+                vec![
+                    cout as u32,
+                    cin as u32,
+                    hout as u32,
+                    wout as u32,
+                    hin as u32,
+                    win as u32,
+                    plan.strides[0] as u32,
+                    plan.strides[1] as u32,
+                    has_bias as u32,
+                ],
+                [
+                    cout.div_ceil(32) as u32,
+                    (hout * wout).div_ceil(64) as u32,
+                    1,
+                ],
+            )
+        };
+        return Ok(vec![StepSpec {
+            wgsl,
+            n_read_inputs: 3,
+            input_buf_names: vec![op.inputs[0].clone(), op.inputs[1].clone(), bias_name],
+            output_buf_name: op.outputs[0].clone(),
+            params: bytemuck::cast_slice(&p).to_vec(),
+            dispatch,
+        }]);
+    }
+
+    // Depthwise 3×3 → one output element per invocation, no shared barriers.
+    if kh == 3
+        && kw == 3
+        && group == cin
+        && cout == cin
+        && cin_per_group == 1
+        && plan.dilations == [1, 1]
+    {
+        let num_out = cout * hout * wout;
+        let p = [
+            num_out as u32,
+            cout as u32,
+            hin as u32,
+            win as u32,
+            hout as u32,
+            wout as u32,
+            plan.strides[0] as u32,
+            plan.strides[1] as u32,
+            plan.pads[0] as u32,
+            plan.pads[1] as u32,
+            has_bias as u32,
+        ];
+        return Ok(vec![StepSpec {
+            wgsl: super::conv::DEPTHWISE3X3_WGSL,
+            n_read_inputs: 3,
+            input_buf_names: vec![op.inputs[0].clone(), op.inputs[1].clone(), bias_name],
+            output_buf_name: op.outputs[0].clone(),
+            params: bytemuck::cast_slice(&p).to_vec(),
+            dispatch: [num_out.div_ceil(256) as u32, 1, 1],
+        }]);
+    }
+
+    // Group=1 3×3 stride-1 dilation-1 → 2×2 spatial × 8-channel register tile.
+    if kh == 3 && kw == 3 && group == 1 && plan.strides == [1, 1] && plan.dilations == [1, 1] {
+        let p = [
+            cout as u32,
+            cin as u32,
+            hin as u32,
+            win as u32,
+            hout as u32,
+            wout as u32,
+            plan.pads[0] as u32,
+            plan.pads[1] as u32,
+            has_bias as u32,
+        ];
+        return Ok(vec![StepSpec {
+            wgsl: super::conv::CONV3X3_CO8_SP2X2_S1D1_WGSL,
+            n_read_inputs: 3,
+            input_buf_names: vec![op.inputs[0].clone(), op.inputs[1].clone(), bias_name],
+            output_buf_name: op.outputs[0].clone(),
+            params: bytemuck::cast_slice(&p).to_vec(),
+            dispatch: [
+                wout.div_ceil(32) as u32,
+                hout.div_ceil(32) as u32,
+                cout.div_ceil(8) as u32,
+            ],
+        }]);
+    }
+
+    // 3×3 stride-1, dilation 2..5: 2×2 spatial × 8-channel register tile
+    // (32 accumulators), same arithmetic intensity as the s1d1 tile. Patch
+    // (32+2d)² (d=5→42²=1764) fits the 1764-float smem budget.
+    let dil = plan.dilations[0];
+    if kh == 3
+        && kw == 3
+        && group == 1
+        && plan.strides == [1, 1]
+        && plan.dilations[0] == plan.dilations[1]
+        && dil >= 2
+        && dil <= super::conv::CONV3X3_DIL_MAX
+    {
+        // The shader's workgroup smem is sized for the max routed dilation;
+        // a relaxed ceiling without a matching array resize is silent UB.
+        debug_assert!(
+            (32 + 2 * dil as usize).pow(2) <= super::conv::CONV3X3_DIL_SMEM,
+            "CONV3X3_CO8_SP2X2_DIL smem overflow at dil={dil}"
+        );
+        let p = [
+            cout as u32,
+            cin as u32,
+            hin as u32,
+            win as u32,
+            hout as u32,
+            wout as u32,
+            plan.pads[0] as u32,
+            plan.pads[1] as u32,
+            has_bias as u32,
+            dil as u32,
+        ];
+        return Ok(vec![StepSpec {
+            wgsl: super::conv::CONV3X3_CO8_SP2X2_DIL_WGSL,
+            n_read_inputs: 3,
+            input_buf_names: vec![op.inputs[0].clone(), op.inputs[1].clone(), bias_name],
+            output_buf_name: op.outputs[0].clone(),
+            params: bytemuck::cast_slice(&p).to_vec(),
+            dispatch: [
+                wout.div_ceil(32) as u32,
+                hout.div_ceil(32) as u32,
+                cout.div_ceil(8) as u32,
+            ],
+        }]);
+    }
+
+    // Group=1 3×3 → shared-memory tiled direct conv, eight output channels per workgroup.
+    if kh == 3 && kw == 3 && group == 1 && super::conv::conv3x3_tile_patch_fits(plan) {
+        let p = [
+            cout as u32,
+            cin as u32,
+            hin as u32,
+            win as u32,
+            hout as u32,
+            wout as u32,
+            plan.strides[0] as u32,
+            plan.strides[1] as u32,
+            plan.pads[0] as u32,
+            plan.pads[1] as u32,
+            plan.dilations[0] as u32,
+            plan.dilations[1] as u32,
+            has_bias as u32,
+            0,
+            0,
+        ];
+        return Ok(vec![StepSpec {
+            wgsl: super::conv::CONV3X3_COBLOCK8_WGSL,
+            n_read_inputs: 3,
+            input_buf_names: vec![op.inputs[0].clone(), op.inputs[1].clone(), bias_name],
+            output_buf_name: op.outputs[0].clone(),
+            params: bytemuck::cast_slice(&p).to_vec(),
+            dispatch: [
+                wout.div_ceil(16) as u32,
+                hout.div_ceil(16) as u32,
+                cout.div_ceil(8) as u32,
+            ],
+        }]);
+    }
+
+    // 5×5 stride-1 dilation-1: 2×2 spatial × 8ch register tile (32 accumulators).
+    // 36×36 smem = 1296 floats (exact same budget as generic 5×5 kernel).
+    if kh == 5 && kw == 5 && group == 1 && plan.strides == [1, 1] && plan.dilations == [1, 1] {
+        let p = [
+            cout as u32,
+            cin as u32,
+            hin as u32,
+            win as u32,
+            hout as u32,
+            wout as u32,
+            plan.pads[0] as u32,
+            plan.pads[1] as u32,
+            has_bias as u32,
+        ];
+        return Ok(vec![StepSpec {
+            wgsl: super::conv::CONV5X5_CO8_SP2X2_D1_WGSL,
+            n_read_inputs: 3,
+            input_buf_names: vec![op.inputs[0].clone(), op.inputs[1].clone(), bias_name],
+            output_buf_name: op.outputs[0].clone(),
+            params: bytemuck::cast_slice(&p).to_vec(),
+            dispatch: [
+                wout.div_ceil(32) as u32,
+                hout.div_ceil(32) as u32,
+                cout.div_ceil(8) as u32,
+            ],
+        }]);
+    }
+
+    // 5×5 stride-1, dilation 2..3: 2×2 spatial × 8ch (32 accumulators per
+    // thread), same arithmetic intensity as the d1 tile. Patch (32+4d)²
+    // (d=2→40²=1600, d=3→44²=1936) fits the 1936-float smem budget.
+    let dil = plan.dilations[0];
+    if kh == 5
+        && kw == 5
+        && group == 1
+        && plan.strides == [1, 1]
+        && plan.dilations[0] == plan.dilations[1]
+        && dil >= 2
+        && dil <= super::conv::CONV5X5_DIL_MAX
+    {
+        // The shader's workgroup smem is sized for the max routed dilation;
+        // a relaxed ceiling without a matching array resize is silent UB.
+        debug_assert!(
+            (32 + 4 * dil as usize).pow(2) <= super::conv::CONV5X5_DIL_SMEM,
+            "CONV5X5_CO8_SP2X2_DIL smem overflow at dil={dil}"
+        );
+        let p = [
+            cout as u32,
+            cin as u32,
+            hin as u32,
+            win as u32,
+            hout as u32,
+            wout as u32,
+            plan.pads[0] as u32,
+            plan.pads[1] as u32,
+            has_bias as u32,
+            dil as u32,
+        ];
+        return Ok(vec![StepSpec {
+            wgsl: super::conv::CONV5X5_CO8_SP2X2_DIL_WGSL,
+            n_read_inputs: 3,
+            input_buf_names: vec![op.inputs[0].clone(), op.inputs[1].clone(), bias_name],
+            output_buf_name: op.outputs[0].clone(),
+            params: bytemuck::cast_slice(&p).to_vec(),
+            dispatch: [
+                wout.div_ceil(32) as u32,
+                hout.div_ceil(32) as u32,
+                cout.div_ceil(8) as u32,
+            ],
+        }]);
+    }
+
+    // Group=1 5×5 → shared-memory tiled direct conv, eight output channels per workgroup.
+    if kh == 5 && kw == 5 && group == 1 {
+        let p = [
+            cout as u32,
+            cin as u32,
+            hin as u32,
+            win as u32,
+            hout as u32,
+            wout as u32,
+            plan.strides[0] as u32,
+            plan.strides[1] as u32,
+            plan.pads[0] as u32,
+            plan.pads[1] as u32,
+            plan.dilations[0] as u32,
+            plan.dilations[1] as u32,
+            has_bias as u32,
+            0,
+            0,
+        ];
+        return Ok(vec![StepSpec {
+            wgsl: super::conv::CONV5X5_COBLOCK8_WGSL,
+            n_read_inputs: 3,
+            input_buf_names: vec![op.inputs[0].clone(), op.inputs[1].clone(), bias_name],
+            output_buf_name: op.outputs[0].clone(),
+            params: bytemuck::cast_slice(&p).to_vec(),
+            dispatch: [
+                wout.div_ceil(16) as u32,
+                hout.div_ceil(16) as u32,
+                cout.div_ceil(8) as u32,
+            ],
+        }]);
+    }
+
+    // 3×3 → shared-memory tiled direct conv
+    if kh == 3 && kw == 3 && super::conv::conv3x3_tile_patch_fits(plan) {
+        let p = [
+            cout as u32,
+            cin as u32,
+            hin as u32,
+            win as u32,
+            hout as u32,
+            wout as u32,
+            kh as u32,
+            kw as u32,
+            plan.strides[0] as u32,
+            plan.strides[1] as u32,
+            plan.pads[0] as u32,
+            plan.pads[1] as u32,
+            plan.dilations[0] as u32,
+            plan.dilations[1] as u32,
+            has_bias as u32,
+            cin_per_group as u32,
+        ];
+        return Ok(vec![StepSpec {
+            wgsl: super::conv::CONV3X3_TILED_WGSL,
+            n_read_inputs: 3,
+            input_buf_names: vec![op.inputs[0].clone(), op.inputs[1].clone(), bias_name],
+            output_buf_name: op.outputs[0].clone(),
+            params: bytemuck::cast_slice(&p).to_vec(),
+            dispatch: [
+                wout.div_ceil(16) as u32,
+                hout.div_ceil(16) as u32,
+                cout as u32,
+            ],
+        }]);
+    }
+
+    // Fallback: naive direct convolution (batch 1 here; N>1 handled above)
+    let cout_per_group = cout / group;
+    let num_out = cout * hout * wout;
+    let p = [
+        num_out as u32,
+        cin as u32,
+        hin as u32,
+        win as u32,
+        cout as u32,
+        cin_per_group as u32,
+        kh as u32,
+        kw as u32,
+        hout as u32,
+        wout as u32,
+        plan.strides[0] as u32,
+        plan.strides[1] as u32,
+        plan.pads[0] as u32,
+        plan.pads[1] as u32,
+        plan.dilations[0] as u32,
+        plan.dilations[1] as u32,
+        has_bias as u32,
+        cout_per_group as u32,
+        1u32,
+    ];
+    Ok(vec![StepSpec {
+        wgsl: super::conv::CONV2D_WGSL,
+        n_read_inputs: 3,
+        input_buf_names: vec![op.inputs[0].clone(), op.inputs[1].clone(), bias_name],
+        output_buf_name: op.outputs[0].clone(),
+        params: bytemuck::cast_slice(&p).to_vec(),
+        dispatch: grid(num_out.div_ceil(256)),
+    }])
+}
+
+/// MatMul: the tiled kernel when it applies, else the batched naive shader.
+fn matmul_steps(
+    op: &PlannedOp,
+    in_shapes: &[Vec<usize>],
+    dummy_bias_name: &str,
+) -> Result<Vec<StepSpec>> {
+    // ONNX 1-D operand promotion (lhs [k]->[1,k], rhs [k]->[k,1]). The
+    // squeezed output has the same contiguous element layout as the
+    // promoted [.,m,n], so the kernel writes the right buffer either way.
+    let (lhs, rhs) = {
+        let l = &in_shapes[0];
+        let r = &in_shapes[1];
+        let lv = if l.len() == 1 {
+            vec![1, l[0]]
+        } else {
+            l.clone()
+        };
+        let rv = if r.len() == 1 {
+            vec![r[0], 1]
+        } else {
+            r.clone()
+        };
+        (lv, rv)
+    };
+    let lhs = &lhs;
+    let rhs = &rhs;
+    let m = lhs[lhs.len() - 2];
+    let k = lhs[lhs.len() - 1];
+    let n = rhs[rhs.len() - 1];
+    let batch_shape = reference::broadcast_shape(&lhs[..lhs.len() - 2], &rhs[..rhs.len() - 2])
+        .map_err(|e| anyhow::anyhow!("matmul compile batch: {e}"))?;
+    let mut out_shape = batch_shape.clone();
+    out_shape.push(m);
+    out_shape.push(n);
+    if out_shape.len() > 6 {
+        bail!("matmul compile: out rank {} > 6", out_shape.len());
+    }
+    let total_out = out_shape.iter().product::<usize>();
+    let out_strides = c_strides_u32(&out_shape);
+    let lhs_batch = matmul_batch_strides(&batch_shape, &lhs[..lhs.len() - 2], m * k)?;
+    let rhs_batch = matmul_batch_strides(&batch_shape, &rhs[..rhs.len() - 2], k * n)?;
+    if let Some(step) = tiled_matmul_step(op, in_shapes, TiledEpilogue::plain(), dummy_bias_name)? {
+        return Ok(vec![step]);
+    }
+    let mut p = [0u32; 30];
+    p[0] = total_out as u32;
+    p[1] = out_shape.len() as u32;
+    p[2] = lhs.len() as u32;
+    p[3] = rhs.len() as u32;
+    p[4] = batch_shape.len() as u32;
+    p[5] = m as u32;
+    p[6] = k as u32;
+    p[7] = n as u32;
+    p[8..14].copy_from_slice(&out_strides);
+    p[14..20].copy_from_slice(&lhs_batch);
+    p[20] = k as u32;
+    p[21] = 1;
+    p[22..28].copy_from_slice(&rhs_batch);
+    p[28] = n as u32;
+    p[29] = 1;
+    Ok(vec![StepSpec {
+        wgsl: super::matmul::MATMUL_WGSL,
+        n_read_inputs: 2,
+        input_buf_names: op.inputs.clone(),
+        output_buf_name: op.outputs[0].clone(),
+        params: bytemuck::cast_slice(&p).to_vec(),
+        dispatch: grid(total_out.div_ceil(256)),
+    }])
 }
 
 fn norm_slice(idx: i64, dim: usize) -> usize {

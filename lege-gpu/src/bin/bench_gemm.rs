@@ -90,6 +90,80 @@ fn values(n: usize, seed: u64) -> Vec<f32> {
         .collect()
 }
 
+/// Shader source and dispatch grid of `kernel` for a `[batch, m, k] x [k, n]`
+/// product.
+fn kernel_source(
+    kernel: &Kernel,
+    (batch, m, k, n): (usize, usize, usize, usize),
+    lhs_b: &[u32],
+    rhs_b: &[u32],
+) -> (String, [u32; 3]) {
+    match kernel {
+        Kernel::Baseline => {
+            let vec4 = matmul_tiled::vec4_eligible(k, n, lhs_b, rhs_b);
+            let src = if vec4 {
+                matmul_tiled::MATMUL_TILED_VEC4_WGSL
+            } else {
+                matmul_tiled::MATMUL_TILED_WGSL
+            };
+            (
+                src.to_owned(),
+                [m.div_ceil(64) as u32, n.div_ceil(64) as u32, batch as u32],
+            )
+        }
+        Kernel::Simt(c) => (
+            gemm_gen::simt_wgsl(c),
+            [
+                m.div_ceil(c.bm as usize) as u32,
+                n.div_ceil(c.bn as usize) as u32,
+                batch as u32,
+            ],
+        ),
+        Kernel::Coop(c) => (
+            gemm_gen::coop_wgsl(c),
+            [
+                m.div_ceil(c.bm() as usize) as u32,
+                n.div_ceil(c.bn() as usize) as u32,
+                batch as u32,
+            ],
+        ),
+    }
+}
+
+/// Marks a kernel that failed validation, reporting the error the first time.
+fn record_failure(label: &str, error: &wgpu::Error, failed: &mut bool, row: &mut Vec<String>) {
+    if !*failed {
+        eprintln!("{label}: {error}");
+    }
+    *failed = true;
+    row.push(format!("{:>9}", "ERR"));
+}
+
+/// Times `count` back-to-back dispatches of `pipeline` recorded in one compute
+/// pass, from submission until the device is idle, in seconds.
+fn time_dispatches(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    pipeline: &wgpu::ComputePipeline,
+    bind: &wgpu::BindGroup,
+    dispatch: [u32; 3],
+    count: u32,
+) -> Result<f64> {
+    let mut enc = device.create_command_encoder(&Default::default());
+    {
+        let mut pass = enc.begin_compute_pass(&Default::default());
+        pass.set_pipeline(pipeline);
+        pass.set_bind_group(0, bind, &[]);
+        for _ in 0..count {
+            pass.dispatch_workgroups(dispatch[0], dispatch[1], dispatch[2]);
+        }
+    }
+    let t = std::time::Instant::now();
+    queue.submit([enc.finish()]);
+    device.poll(wgpu::PollType::wait_indefinitely())?;
+    Ok(t.elapsed().as_secs_f64())
+}
+
 fn main() -> Result<()> {
     let iters: u32 = std::env::args()
         .nth(1)
@@ -218,36 +292,7 @@ fn main() -> Result<()> {
             })
             .collect();
         for (ki, (_, kernel)) in kernels.iter().enumerate() {
-            let (wgsl, dispatch): (String, [u32; 3]) = match kernel {
-                Kernel::Baseline => {
-                    let vec4 = matmul_tiled::vec4_eligible(k, n, &lhs_b, &rhs_b);
-                    let src = if vec4 {
-                        matmul_tiled::MATMUL_TILED_VEC4_WGSL
-                    } else {
-                        matmul_tiled::MATMUL_TILED_WGSL
-                    };
-                    (
-                        src.to_owned(),
-                        [m.div_ceil(64) as u32, n.div_ceil(64) as u32, batch as u32],
-                    )
-                }
-                Kernel::Simt(c) => (
-                    gemm_gen::simt_wgsl(c),
-                    [
-                        m.div_ceil(c.bm as usize) as u32,
-                        n.div_ceil(c.bn as usize) as u32,
-                        batch as u32,
-                    ],
-                ),
-                Kernel::Coop(c) => (
-                    gemm_gen::coop_wgsl(c),
-                    [
-                        m.div_ceil(c.bm() as usize) as u32,
-                        n.div_ceil(c.bn() as usize) as u32,
-                        batch as u32,
-                    ],
-                ),
-            };
+            let (wgsl, dispatch) = kernel_source(kernel, (batch, m, k, n), &lhs_b, &rhs_b);
             let scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
             let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: None,
@@ -262,11 +307,7 @@ fn main() -> Result<()> {
                 cache: None,
             });
             if let Some(e) = pollster::block_on(scope.pop()) {
-                if !failed[ki] {
-                    eprintln!("{}: {e}", kernels[ki].0);
-                }
-                failed[ki] = true;
-                rows[ki].push(format!("{:>9}", "ERR"));
+                record_failure(&kernels[ki].0, &e, &mut failed[ki], &mut rows[ki]);
                 continue;
             }
             let bgl = pipeline.get_bind_group_layout(0);
@@ -283,21 +324,8 @@ fn main() -> Result<()> {
                 layout: &bgl,
                 entries: &entries,
             });
-            let run = |count: u32| -> Result<f64> {
-                let mut enc = device.create_command_encoder(&Default::default());
-                {
-                    let mut pass = enc.begin_compute_pass(&Default::default());
-                    pass.set_pipeline(&pipeline);
-                    pass.set_bind_group(0, &bind, &[]);
-                    for _ in 0..count {
-                        pass.dispatch_workgroups(dispatch[0], dispatch[1], dispatch[2]);
-                    }
-                }
-                let t = std::time::Instant::now();
-                queue.submit([enc.finish()]);
-                device.poll(wgpu::PollType::wait_indefinitely())?;
-                Ok(t.elapsed().as_secs_f64())
-            };
+            let run =
+                |count: u32| time_dispatches(&device, &queue, &pipeline, &bind, dispatch, count);
             run(2)?;
             let secs = (0..3)
                 .map(|_| run(iters))

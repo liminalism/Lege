@@ -19,7 +19,8 @@ use std::time::{Duration, Instant};
 
 use bytemuck::{Pod, Zeroable};
 use exprim::page_ir::{
-    BlendMode, CompiledPage, DeviceSize, DisplayOp, ImageColorSpace, ImageMask, PageFeatures, Paint,
+    BlendMode, CompiledPage, DeviceSize, DisplayOp, ImageColorSpace, ImageIr, ImageMask,
+    PageFeatures, Paint,
 };
 #[cfg(test)]
 use exprim::page_ir::{PathData, PathVerb};
@@ -570,6 +571,42 @@ impl GpuUploadCache {
         drop(state);
         self.hits.fetch_add(1, Ordering::Relaxed);
         Some(buffer)
+    }
+
+    /// The storage buffer holding the first `len` bytes of `samples`: the
+    /// cached one, or a new upload labelled `label`, which is then cached.
+    /// The hit or the upload is counted in `transfer`.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the cache key (samples, width, height) and the upload (length, label) are independent plain values"
+    )]
+    fn get_or_upload(
+        &self,
+        device: &wgpu::Device,
+        transfer: &mut ExecuteTransferStats,
+        samples: &Arc<[u8]>,
+        width: u32,
+        height: u32,
+        len: usize,
+        label: &'static str,
+    ) -> Arc<wgpu::Buffer> {
+        if let Some(buffer) = self.get(samples, width, height) {
+            transfer.cache_hits += 1;
+            transfer.reused_bytes += len as u64;
+            return buffer;
+        }
+        let source = padded_source(&samples[..len]);
+        let buffer = Arc::new(
+            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some(label),
+                contents: source.as_ref(),
+                usage: wgpu::BufferUsages::STORAGE,
+            }),
+        );
+        self.insert(samples, width, height, Arc::clone(&buffer), len);
+        transfer.cache_misses += 1;
+        transfer.uploaded_bytes += len as u64;
+        buffer
     }
 
     fn insert(
@@ -1356,72 +1393,31 @@ impl WgpuBackend {
                     transfer.uploaded_bytes += edge_bytes.len() as u64;
 
                     let clip_buffer = path.clip.as_ref().map(|clip| {
-                        let clip_len = clip.samples.len();
-                        if let Some(buffer) = self.upload_cache.get(
+                        self.upload_cache.get_or_upload(
+                            device,
+                            &mut transfer,
                             &clip.samples,
                             clip.bounds.width,
                             clip.bounds.height,
-                        ) {
-                            transfer.cache_hits += 1;
-                            transfer.reused_bytes += clip_len as u64;
-                            buffer
-                        } else {
-                            let source = padded_source(&clip.samples);
-                            let buffer = Arc::new(device.create_buffer_init(
-                                &wgpu::util::BufferInitDescriptor {
-                                    label: Some("pdf-render-wgpu-path-clip"),
-                                    contents: source.as_ref(),
-                                    usage: wgpu::BufferUsages::STORAGE,
-                                },
-                            ));
-                            self.upload_cache.insert(
-                                &clip.samples,
-                                clip.bounds.width,
-                                clip.bounds.height,
-                                Arc::clone(&buffer),
-                                clip_len,
-                            );
-                            transfer.cache_misses += 1;
-                            transfer.uploaded_bytes += clip_len as u64;
-                            buffer
-                        }
+                            clip.samples.len(),
+                            "pdf-render-wgpu-path-clip",
+                        )
                     });
-                    let soft_mask_buffer = path.soft_mask.as_ref().and_then(|mask| {
-                        if mask.samples.is_empty() {
-                            return None;
-                        }
-                        let mask_len = mask.samples.len();
-                        Some(
-                            if let Some(buffer) = self.upload_cache.get(
+                    let soft_mask_buffer = path
+                        .soft_mask
+                        .as_ref()
+                        .filter(|mask| !mask.samples.is_empty())
+                        .map(|mask| {
+                            self.upload_cache.get_or_upload(
+                                device,
+                                &mut transfer,
                                 &mask.samples,
                                 mask.bounds.width,
                                 mask.bounds.height,
-                            ) {
-                                transfer.cache_hits += 1;
-                                transfer.reused_bytes += mask_len as u64;
-                                buffer
-                            } else {
-                                let source = padded_source(&mask.samples);
-                                let buffer = Arc::new(device.create_buffer_init(
-                                    &wgpu::util::BufferInitDescriptor {
-                                        label: Some("pdf-render-wgpu-path-soft-mask"),
-                                        contents: source.as_ref(),
-                                        usage: wgpu::BufferUsages::STORAGE,
-                                    },
-                                ));
-                                self.upload_cache.insert(
-                                    &mask.samples,
-                                    mask.bounds.width,
-                                    mask.bounds.height,
-                                    Arc::clone(&buffer),
-                                    mask_len,
-                                );
-                                transfer.cache_misses += 1;
-                                transfer.uploaded_bytes += mask_len as u64;
-                                buffer
-                            },
-                        )
-                    });
+                                mask.samples.len(),
+                                "pdf-render-wgpu-path-soft-mask",
+                            )
+                        });
                     let params = ShaderParams::path(prepared.size, path, quality);
                     encode_dispatch(
                         device,
@@ -1461,35 +1457,15 @@ impl WgpuBackend {
             let source_buffer = if source_len == 0 {
                 None
             } else {
-                Some(
-                    if let Some(buffer) =
-                        self.upload_cache
-                            .get(&image.samples, image.width, image.height)
-                    {
-                        transfer.cache_hits += 1;
-                        transfer.reused_bytes += source_len as u64;
-                        buffer
-                    } else {
-                        let source = padded_source(&image.samples[..source_len]);
-                        let buffer = Arc::new(device.create_buffer_init(
-                            &wgpu::util::BufferInitDescriptor {
-                                label: Some("pdf-render-wgpu-image-source"),
-                                contents: source.as_ref(),
-                                usage: wgpu::BufferUsages::STORAGE,
-                            },
-                        ));
-                        self.upload_cache.insert(
-                            &image.samples,
-                            image.width,
-                            image.height,
-                            Arc::clone(&buffer),
-                            source_len,
-                        );
-                        transfer.cache_misses += 1;
-                        transfer.uploaded_bytes += source_len as u64;
-                        buffer
-                    },
-                )
+                Some(self.upload_cache.get_or_upload(
+                    device,
+                    &mut transfer,
+                    &image.samples,
+                    image.width,
+                    image.height,
+                    source_len,
+                    "pdf-render-wgpu-image-source",
+                ))
             };
             let opacity_buffer = if let Some(opacity) = image.opacity.as_ref() {
                 let opacity_len = opacity.width as usize * opacity.height as usize;
@@ -1498,35 +1474,15 @@ impl WgpuBackend {
                         "GPU image opacity exceeds max storage buffer binding size",
                     ));
                 }
-                Some(
-                    if let Some(buffer) =
-                        self.upload_cache
-                            .get(&opacity.samples, opacity.width, opacity.height)
-                    {
-                        transfer.cache_hits += 1;
-                        transfer.reused_bytes += opacity_len as u64;
-                        buffer
-                    } else {
-                        let source = padded_source(&opacity.samples[..opacity_len]);
-                        let buffer = Arc::new(device.create_buffer_init(
-                            &wgpu::util::BufferInitDescriptor {
-                                label: Some("pdf-render-wgpu-image-opacity"),
-                                contents: source.as_ref(),
-                                usage: wgpu::BufferUsages::STORAGE,
-                            },
-                        ));
-                        self.upload_cache.insert(
-                            &opacity.samples,
-                            opacity.width,
-                            opacity.height,
-                            Arc::clone(&buffer),
-                            opacity_len,
-                        );
-                        transfer.cache_misses += 1;
-                        transfer.uploaded_bytes += opacity_len as u64;
-                        buffer
-                    },
-                )
+                Some(self.upload_cache.get_or_upload(
+                    device,
+                    &mut transfer,
+                    &opacity.samples,
+                    opacity.width,
+                    opacity.height,
+                    opacity_len,
+                    "pdf-render-wgpu-image-opacity",
+                ))
             } else {
                 None
             };
@@ -1537,35 +1493,15 @@ impl WgpuBackend {
                         "GPU image clip exceeds max storage buffer binding size",
                     ));
                 }
-                Some(
-                    if let Some(buffer) =
-                        self.upload_cache
-                            .get(&clip.samples, clip.bounds.width, clip.bounds.height)
-                    {
-                        transfer.cache_hits += 1;
-                        transfer.reused_bytes += clip_len as u64;
-                        buffer
-                    } else {
-                        let source = padded_source(&clip.samples[..clip_len]);
-                        let buffer = Arc::new(device.create_buffer_init(
-                            &wgpu::util::BufferInitDescriptor {
-                                label: Some("pdf-render-wgpu-image-clip"),
-                                contents: source.as_ref(),
-                                usage: wgpu::BufferUsages::STORAGE,
-                            },
-                        ));
-                        self.upload_cache.insert(
-                            &clip.samples,
-                            clip.bounds.width,
-                            clip.bounds.height,
-                            Arc::clone(&buffer),
-                            clip_len,
-                        );
-                        transfer.cache_misses += 1;
-                        transfer.uploaded_bytes += clip_len as u64;
-                        buffer
-                    },
-                )
+                Some(self.upload_cache.get_or_upload(
+                    device,
+                    &mut transfer,
+                    &clip.samples,
+                    clip.bounds.width,
+                    clip.bounds.height,
+                    clip_len,
+                    "pdf-render-wgpu-image-clip",
+                ))
             } else {
                 None
             };
@@ -1579,36 +1515,15 @@ impl WgpuBackend {
                 if mask_len == 0 {
                     None
                 } else {
-                    Some(
-                        if let Some(buffer) = self.upload_cache.get(
-                            &mask.samples,
-                            mask.bounds.width,
-                            mask.bounds.height,
-                        ) {
-                            transfer.cache_hits += 1;
-                            transfer.reused_bytes += mask_len as u64;
-                            buffer
-                        } else {
-                            let source = padded_source(&mask.samples[..mask_len]);
-                            let buffer = Arc::new(device.create_buffer_init(
-                                &wgpu::util::BufferInitDescriptor {
-                                    label: Some("pdf-render-wgpu-page-soft-mask"),
-                                    contents: source.as_ref(),
-                                    usage: wgpu::BufferUsages::STORAGE,
-                                },
-                            ));
-                            self.upload_cache.insert(
-                                &mask.samples,
-                                mask.bounds.width,
-                                mask.bounds.height,
-                                Arc::clone(&buffer),
-                                mask_len,
-                            );
-                            transfer.cache_misses += 1;
-                            transfer.uploaded_bytes += mask_len as u64;
-                            buffer
-                        },
-                    )
+                    Some(self.upload_cache.get_or_upload(
+                        device,
+                        &mut transfer,
+                        &mask.samples,
+                        mask.bounds.width,
+                        mask.bounds.height,
+                        mask_len,
+                        "pdf-render-wgpu-page-soft-mask",
+                    ))
                 }
             } else {
                 None
@@ -1854,6 +1769,12 @@ fn validate_prepared(page: &PreparedRgbImagePage) -> Result<(), RenderError> {
     Ok(())
 }
 
+/// A GPU render attempt: the backend that ran it and its outcome.
+type GpuAttempt = (
+    Arc<WgpuBackend>,
+    Result<(HostPage, GpuRenderStats), RenderError>,
+);
+
 /// A stable reason why a request cannot use the experimental image renderer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum GpuIneligibility {
@@ -1981,60 +1902,12 @@ pub fn classify_gpu_eligibility(
                     reasons.insert(GpuIneligibility::MissingImageResource);
                     continue;
                 };
-                if resource.is_stencil {
-                    let supported_brush =
-                        page.paints
-                            .get(paint.index())
-                            .is_some_and(|paint| match paint {
-                                Paint::Solid(_) => true,
-                                Paint::Pattern { tiling, .. } => {
-                                    page.tilings.get(tiling.index()).is_some()
-                                }
-                                Paint::Shading { .. } => false,
-                            });
-                    if !supported_brush {
-                        reasons.insert(GpuIneligibility::ImageStencil);
-                    }
-                }
-                if !(1..=16).contains(&resource.bits_per_component) {
-                    reasons.insert(GpuIneligibility::ImageBitsPerComponent);
-                }
-                let direct_rgb8 = resource.bits_per_component == 8
-                    && resource.decode.is_none()
-                    && matches!(resource.color_space, ImageColorSpace::Rgb);
-                let converted_rgb_bytes = (resource.width as usize)
-                    .checked_mul(resource.height as usize)
-                    .and_then(|pixels| pixels.checked_mul(3));
-                if !resource.is_stencil
-                    && !direct_rgb8
-                    && converted_rgb_bytes
-                        .is_none_or(|bytes| bytes > MAX_PREPARED_RGB_CONVERSION_BYTES)
-                {
-                    reasons.insert(GpuIneligibility::ImageRgbConversionBudget);
-                }
-                if resource.soft_mask.is_some() {
-                    reasons.insert(GpuIneligibility::ImageSoftMask);
-                }
-                let opacity_pixels = if resource.is_stencil || resource.smask_in_data != 0 {
-                    (resource.width as usize).checked_mul(resource.height as usize)
-                } else if let Some(mask) = resource.smask.as_ref() {
-                    (mask.width as usize).checked_mul(mask.height as usize)
-                } else if let Some(mask) = resource.mask.as_ref() {
-                    match mask {
-                        ImageMask::ColorKey(_) => {
-                            (resource.width as usize).checked_mul(resource.height as usize)
-                        }
-                        ImageMask::Stencil(mask) => {
-                            (mask.width as usize).checked_mul(mask.height as usize)
-                        }
-                    }
-                } else {
-                    None
-                };
-                if opacity_pixels.is_some_and(|bytes| bytes > MAX_PREPARED_OPACITY_CONVERSION_BYTES)
-                {
-                    reasons.insert(GpuIneligibility::ImageOpacityConversionBudget);
-                }
+                classify_image_resource(
+                    page,
+                    resource,
+                    page.paints.get(paint.index()),
+                    &mut reasons,
+                );
             }
             DisplayOp::DrawGlyphRun {
                 run,
@@ -2058,25 +1931,25 @@ pub fn classify_gpu_eligibility(
                 let non_painting = !paints_fill && !paints_stroke;
                 if non_painting {
                     ignored_text_draws += 1;
-                } else {
-                    if paints_fill
-                        && !page
-                            .paints
-                            .get(paint.index())
+                    continue;
+                }
+                if paints_fill
+                    && !page
+                        .paints
+                        .get(paint.index())
+                        .is_some_and(|paint| matches!(paint, Paint::Solid(_)))
+                {
+                    reasons.insert(GpuIneligibility::VisibleText);
+                }
+                if paints_stroke
+                    && !stroke.as_ref().is_some_and(|stroke| {
+                        page.paints
+                            .get(stroke.paint.index())
                             .is_some_and(|paint| matches!(paint, Paint::Solid(_)))
-                    {
-                        reasons.insert(GpuIneligibility::VisibleText);
-                    }
-                    if paints_stroke
-                        && !stroke.as_ref().is_some_and(|stroke| {
-                            page.paints
-                                .get(stroke.paint.index())
-                                .is_some_and(|paint| matches!(paint, Paint::Solid(_)))
-                                && page.stroke_styles.get(stroke.style.index()).is_some()
-                        })
-                    {
-                        reasons.insert(GpuIneligibility::VisibleText);
-                    }
+                            && page.stroke_styles.get(stroke.style.index()).is_some()
+                    })
+                {
+                    reasons.insert(GpuIneligibility::VisibleText);
                 }
             }
             DisplayOp::PushClip { path, .. } => {
@@ -2147,6 +2020,67 @@ pub fn classify_gpu_eligibility(
         image_draws,
         ignored_text_draws,
         reasons: reasons.into_iter().collect(),
+    }
+}
+
+/// Record why a drawn image, painted with `paint` when it is a stencil,
+/// cannot be prepared for the GPU.
+fn classify_image_resource(
+    page: &CompiledPage,
+    resource: &ImageIr,
+    paint: Option<&Paint>,
+    reasons: &mut BTreeSet<GpuIneligibility>,
+) {
+    if resource.is_stencil && !stencil_brush_supported(page, paint) {
+        reasons.insert(GpuIneligibility::ImageStencil);
+    }
+    if !(1..=16).contains(&resource.bits_per_component) {
+        reasons.insert(GpuIneligibility::ImageBitsPerComponent);
+    }
+    let direct_rgb8 = resource.bits_per_component == 8
+        && resource.decode.is_none()
+        && matches!(resource.color_space, ImageColorSpace::Rgb);
+    let converted_rgb_bytes = (resource.width as usize)
+        .checked_mul(resource.height as usize)
+        .and_then(|pixels| pixels.checked_mul(3));
+    if !resource.is_stencil
+        && !direct_rgb8
+        && converted_rgb_bytes.is_none_or(|bytes| bytes > MAX_PREPARED_RGB_CONVERSION_BYTES)
+    {
+        reasons.insert(GpuIneligibility::ImageRgbConversionBudget);
+    }
+    if resource.soft_mask.is_some() {
+        reasons.insert(GpuIneligibility::ImageSoftMask);
+    }
+    if opacity_pixels(resource).is_some_and(|bytes| bytes > MAX_PREPARED_OPACITY_CONVERSION_BYTES) {
+        reasons.insert(GpuIneligibility::ImageOpacityConversionBudget);
+    }
+}
+
+/// Whether a stencil image's brush can be painted on the GPU: a solid colour
+/// or a tiling pattern the page defines.
+fn stencil_brush_supported(page: &CompiledPage, paint: Option<&Paint>) -> bool {
+    paint.is_some_and(|paint| match paint {
+        Paint::Solid(_) => true,
+        Paint::Pattern { tiling, .. } => page.tilings.get(tiling.index()).is_some(),
+        Paint::Shading { .. } => false,
+    })
+}
+
+/// Pixels of the opacity plane that preparing this image would convert:
+/// its own size for stencils, in-data alpha and colour-key masks, else the
+/// size of its soft or stencil mask. `None` when it has no opacity or the
+/// count overflows.
+fn opacity_pixels(resource: &ImageIr) -> Option<usize> {
+    if resource.is_stencil || resource.smask_in_data != 0 {
+        return (resource.width as usize).checked_mul(resource.height as usize);
+    }
+    if let Some(mask) = resource.smask.as_ref() {
+        return (mask.width as usize).checked_mul(mask.height as usize);
+    }
+    match resource.mask.as_ref()? {
+        ImageMask::ColorKey(_) => (resource.width as usize).checked_mul(resource.height as usize),
+        ImageMask::Stencil(mask) => (mask.width as usize).checked_mul(mask.height as usize),
     }
 }
 
@@ -2656,6 +2590,47 @@ impl ExperimentalImageRenderer {
         self.render_to_host_with(request, |cpu| cpu.render_with(request, context))
     }
 
+    /// Automatic routing's GPU attempt: prepare the page on the CPU, then
+    /// paint it on the GPU when one is available. `None` leaves the page to
+    /// the CPU renderer.
+    fn attempt_auto_gpu(&self, request: &RenderRequest) -> Option<GpuAttempt> {
+        if self.gpu_unavailable_reason().is_some() {
+            return None;
+        }
+        let total_start = Instant::now();
+        let prepare_start = Instant::now();
+        let prepared = match self.cpu.prepare_rgb_image_page_for_auto(request) {
+            Ok(Some(prepared)) => prepared,
+            Ok(None) => return None,
+            // The CPU entry point observes the same token and
+            // returns `Cancelled` without painting. Keeping the
+            // route transactional avoids a special partially
+            // prepared outcome here.
+            Err(RenderError::Cancelled) => return None,
+            Err(error) => {
+                self.gpu_fallbacks.fetch_add(1, Ordering::Relaxed);
+                eprintln!("pdf-render-wgpu: automatic preparation failed: {error}");
+                return None;
+            }
+        };
+        let prepare = prepare_start.elapsed();
+        match self.ensure_gpu() {
+            Ok(Some(gpu)) => Some((
+                Arc::clone(&gpu),
+                gpu.render_prepared_to_host_measured(request, prepared, prepare, total_start),
+            )),
+            Ok(None) => None,
+            Err(error) => {
+                self.gpu_fallbacks.fetch_add(1, Ordering::Relaxed);
+                eprintln!(
+                    "pdf-render-wgpu: automatic GPU initialization failed: \
+                     {error}"
+                );
+                None
+            }
+        }
+    }
+
     fn render_to_host_with(
         &self,
         request: &RenderRequest,
@@ -2678,50 +2653,7 @@ impl ExperimentalImageRenderer {
                 return None;
             }
             match self.preference {
-                ImageRendererPreference::Auto => {
-                    if self.gpu_unavailable_reason().is_some() {
-                        None
-                    } else {
-                        let total_start = Instant::now();
-                        let prepare_start = Instant::now();
-                        match self.cpu.prepare_rgb_image_page_for_auto(request) {
-                            Ok(Some(prepared)) => {
-                                let prepare = prepare_start.elapsed();
-                                match self.ensure_gpu() {
-                                    Ok(Some(gpu)) => Some((
-                                        Arc::clone(&gpu),
-                                        gpu.render_prepared_to_host_measured(
-                                            request,
-                                            prepared,
-                                            prepare,
-                                            total_start,
-                                        ),
-                                    )),
-                                    Ok(None) => None,
-                                    Err(error) => {
-                                        self.gpu_fallbacks.fetch_add(1, Ordering::Relaxed);
-                                        eprintln!(
-                                            "pdf-render-wgpu: automatic GPU initialization failed: \
-                                             {error}"
-                                        );
-                                        None
-                                    }
-                                }
-                            }
-                            Ok(None) => None,
-                            // The CPU entry point observes the same token and
-                            // returns `Cancelled` without painting. Keeping the
-                            // route transactional avoids a special partially
-                            // prepared outcome here.
-                            Err(RenderError::Cancelled) => None,
-                            Err(error) => {
-                                self.gpu_fallbacks.fetch_add(1, Ordering::Relaxed);
-                                eprintln!("pdf-render-wgpu: automatic preparation failed: {error}");
-                                None
-                            }
-                        }
-                    }
-                }
+                ImageRendererPreference::Auto => self.attempt_auto_gpu(request),
                 ImageRendererPreference::Gpu => match self.ensure_gpu() {
                     Ok(Some(gpu)) => Some((Arc::clone(&gpu), gpu.render_to_host_measured(request))),
                     Ok(None) => None,

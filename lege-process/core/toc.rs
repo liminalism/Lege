@@ -176,23 +176,7 @@ pub fn capture_page(
             continue;
         }
 
-        let mut text = String::new();
-        let mut word_confidence: Option<f32> = None;
-        for line in &inside {
-            for word in &line.words {
-                if word.text.trim().is_empty() {
-                    continue;
-                }
-                if !text.is_empty() {
-                    text.push(' ');
-                }
-                text.push_str(word.text.trim());
-                if let Some(confidence) = word.confidence {
-                    word_confidence =
-                        Some(word_confidence.map_or(confidence, |low: f32| low.min(confidence)));
-                }
-            }
-        }
+        let (text, word_confidence) = joined_words_and_lowest_confidence(&inside);
         let text = normalize_title(&text);
         if text.is_empty() {
             continue;
@@ -248,6 +232,29 @@ pub fn capture_page(
         metadata_candidates,
         printed_contents,
     }
+}
+
+/// The words of a title's lines joined by single spaces, and the lowest
+/// recognition confidence among them (`None` when no word was scored).
+fn joined_words_and_lowest_confidence(lines: &[&HocrLine]) -> (String, Option<f32>) {
+    let mut text = String::new();
+    let mut word_confidence: Option<f32> = None;
+    for line in lines {
+        for word in &line.words {
+            if word.text.trim().is_empty() {
+                continue;
+            }
+            if !text.is_empty() {
+                text.push(' ');
+            }
+            text.push_str(word.text.trim());
+            if let Some(confidence) = word.confidence {
+                word_confidence =
+                    Some(word_confidence.map_or(confidence, |low: f32| low.min(confidence)));
+            }
+        }
+    }
+    (text, word_confidence)
 }
 
 fn line_text(line: &HocrLine) -> String {

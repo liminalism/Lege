@@ -432,47 +432,7 @@ pub fn diff_renders(
             if !is_change || seen {
                 continue;
             }
-            let (mut x0, mut x1, mut y0, mut y1) = (x, x, y, y);
-            let mut pixels: u32 = 0;
-            let mut stack = vec![(x, y)];
-            if let Some(slot) = visited.get_mut(start) {
-                *slot = true;
-            }
-            while let Some((cx, cy)) = stack.pop() {
-                pixels = pixels.saturating_add(1);
-                x0 = x0.min(cx);
-                x1 = x1.max(cx);
-                y0 = y0.min(cy);
-                y1 = y1.max(cy);
-                let neighbours = [
-                    cx.checked_sub(1).map(|nx| (nx, cy)),
-                    cx.checked_add(1).map(|nx| (nx, cy)),
-                    cy.checked_sub(1).map(|ny| (cx, ny)),
-                    cy.checked_add(1).map(|ny| (cx, ny)),
-                ];
-                for next in neighbours.into_iter().flatten() {
-                    let (nx, ny) = next;
-                    if nx >= width || ny >= height {
-                        continue;
-                    }
-                    let at = ny.saturating_mul(width).saturating_add(nx);
-                    let is_change = changed.get(at) == Some(&true);
-                    let seen = visited.get(at) == Some(&true);
-                    if is_change && !seen {
-                        if let Some(slot) = visited.get_mut(at) {
-                            *slot = true;
-                        }
-                        stack.push((nx, ny));
-                    }
-                }
-            }
-            regions.push(ChangedRegion {
-                x: x0 as u32,
-                y: y0 as u32,
-                width: (x1 - x0 + 1) as u32,
-                height: (y1 - y0 + 1) as u32,
-                pixels,
-            });
+            regions.push(fill_region(&changed, &mut visited, width, height, (x, y)));
         }
     }
     Ok(RenderDiff {
@@ -481,6 +441,61 @@ pub fn diff_renders(
         height: before.height,
         regions,
     })
+}
+
+/// Flood-fill the 4-connected component of changed pixels that starts at
+/// the unvisited changed pixel `(x, y)`, marking it visited: its bounding
+/// box and pixel count.
+fn fill_region(
+    changed: &[bool],
+    visited: &mut [bool],
+    width: usize,
+    height: usize,
+    (x, y): (usize, usize),
+) -> ChangedRegion {
+    let start = y.saturating_mul(width).saturating_add(x);
+    let (mut x0, mut x1, mut y0, mut y1) = (x, x, y, y);
+    let mut pixels: u32 = 0;
+    let mut stack = vec![(x, y)];
+    if let Some(slot) = visited.get_mut(start) {
+        *slot = true;
+    }
+    while let Some((cx, cy)) = stack.pop() {
+        pixels = pixels.saturating_add(1);
+        x0 = x0.min(cx);
+        x1 = x1.max(cx);
+        y0 = y0.min(cy);
+        y1 = y1.max(cy);
+        let neighbours = [
+            cx.checked_sub(1).map(|nx| (nx, cy)),
+            cx.checked_add(1).map(|nx| (nx, cy)),
+            cy.checked_sub(1).map(|ny| (cx, ny)),
+            cy.checked_add(1).map(|ny| (cx, ny)),
+        ];
+        for next in neighbours.into_iter().flatten() {
+            let (nx, ny) = next;
+            if nx >= width || ny >= height {
+                continue;
+            }
+            let at = ny.saturating_mul(width).saturating_add(nx);
+            let is_change = changed.get(at) == Some(&true);
+            let seen = visited.get(at) == Some(&true);
+            if !is_change || seen {
+                continue;
+            }
+            if let Some(slot) = visited.get_mut(at) {
+                *slot = true;
+            }
+            stack.push((nx, ny));
+        }
+    }
+    ChangedRegion {
+        x: x0 as u32,
+        y: y0 as u32,
+        width: (x1 - x0 + 1) as u32,
+        height: (y1 - y0 + 1) as u32,
+        pixels,
+    }
 }
 
 /// Paint the changed regions of `diff` as opaque-red one-pixel outlines over

@@ -11,10 +11,10 @@
 //! and again with the correct non-empty user password (full, pages available).
 #![allow(clippy::unwrap_used, reason = "a failed unwrap is a failed test")]
 
+use exprim::test_support::builder;
 use pdf_forensics::{
     AnalysisMode, Availability, Disposition, OpenState, UnavailableReason, audit_bytes,
 };
-use exprim::test_support::builder;
 
 #[test]
 fn permissions_only_encryption_audits_in_full() {

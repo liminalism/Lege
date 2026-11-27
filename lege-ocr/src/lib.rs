@@ -323,19 +323,7 @@ impl OcrPipeline {
                 rw as usize,
                 rh as usize,
             );
-            let smoothed: Vec<f32> = {
-                // Recompute smooth; this is debug-only so duplication is fine
-                let n = proj.len();
-                let r = self.config.segment.smooth_radius;
-                (0..n)
-                    .map(|i| {
-                        let lo = i.saturating_sub(r);
-                        let hi = i.saturating_add(r).saturating_add(1).min(n);
-                        let s: u64 = proj[lo..hi].iter().map(|&value| value as u64).sum();
-                        s as f32 / (hi - lo) as f32
-                    })
-                    .collect()
-            };
+            let smoothed = segment::smooth_box(&proj, self.config.segment.smooth_radius);
             let _ = debug::save_projection_csv(
                 &dir.join(format!("region_{rid:03}_projection.csv")),
                 &proj,

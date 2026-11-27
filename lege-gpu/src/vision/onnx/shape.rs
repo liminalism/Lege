@@ -359,28 +359,10 @@ fn infer_node_shapes(
             outputs.insert(node.get_output()[0].to_owned(), output);
         }
         "Concat" => {
-            let axis = normalize_axis(
-                attr_i64(node, "axis").unwrap_or(0),
-                input_shape(node, known_shapes, 0)?.len(),
-            )?;
-            let mut output = input_shape(node, known_shapes, 0)?;
-            output[axis] = 0;
-            for index in 0..node.get_input().len() {
-                let shape = input_shape(node, known_shapes, index)?;
-                if shape.len() != output.len() {
-                    bail!("Concat inputs must have equal rank");
-                }
-                for (dim_index, dim) in shape.iter().enumerate() {
-                    if dim_index == axis {
-                        output[dim_index] = output[dim_index]
-                            .checked_add(*dim)
-                            .context("Concat axis dimension overflow")?;
-                    } else if output[dim_index] != *dim {
-                        bail!("Concat input dimension mismatch on axis {dim_index}");
-                    }
-                }
-            }
-            outputs.insert(node.get_output()[0].to_owned(), output);
+            outputs.insert(
+                node.get_output()[0].to_owned(),
+                infer_concat(node, known_shapes)?,
+            );
         }
         "Split" => {
             let inp = input_shape(node, known_shapes, 0)?;
@@ -501,39 +483,9 @@ fn infer_node_shapes(
             outputs.insert(node.get_output()[0].to_owned(), infer_matmul(&lhs, &rhs)?);
         }
         "Resize" => {
-            let inp = input_shape(node, known_shapes, 0)?;
-            let output = if node.get_input().len() > 3 && !node.get_input()[3].is_empty() {
-                const_i64(tensor_consts, &node.get_input()[3]).and_then(|values| {
-                    (values.len() == inp.len() && values.iter().all(|dim| *dim > 0))
-                        .then(|| values.to_vec())
-                })
-            } else if node.get_input().len() > 2 && !node.get_input()[2].is_empty() {
-                const_f32(tensor_consts, &node.get_input()[2]).and_then(|scales| {
-                    if scales.len() != inp.len()
-                        || scales
-                            .iter()
-                            .any(|scale| !scale.is_finite() || *scale <= 0.0)
-                    {
-                        return None;
-                    }
-                    inp.iter()
-                        .zip(scales)
-                        .map(|(dim, scale)| {
-                            let scaled = (*dim as f64) * f64::from(*scale);
-                            if !scaled.is_finite() || scaled < 1.0 || scaled > i64::MAX as f64 {
-                                return None;
-                            }
-                            // ONNX defines scaled output dimensions with floor.
-                            Some(scaled.floor() as i64)
-                        })
-                        .collect::<Option<Vec<_>>>()
-                })
-            } else {
-                None
-            };
             outputs.insert(
                 node.get_output()[0].to_owned(),
-                output.context("Resize must have constant sizes or scales")?,
+                infer_resize(node, known_shapes, tensor_consts)?,
             );
         }
         "GridSample" => {
@@ -553,6 +505,75 @@ fn infer_node_shapes(
         op => bail!("shape inference is not implemented for op {op}"),
     }
     Ok(outputs)
+}
+
+fn infer_concat(node: &NodeProto, known_shapes: &BTreeMap<String, Vec<i64>>) -> Result<Vec<i64>> {
+    let axis = normalize_axis(
+        attr_i64(node, "axis").unwrap_or(0),
+        input_shape(node, known_shapes, 0)?.len(),
+    )?;
+    let mut output = input_shape(node, known_shapes, 0)?;
+    output[axis] = 0;
+    for index in 0..node.get_input().len() {
+        let shape = input_shape(node, known_shapes, index)?;
+        if shape.len() != output.len() {
+            bail!("Concat inputs must have equal rank");
+        }
+        for (dim_index, dim) in shape.iter().enumerate() {
+            if dim_index == axis {
+                output[dim_index] = output[dim_index]
+                    .checked_add(*dim)
+                    .context("Concat axis dimension overflow")?;
+            } else if output[dim_index] != *dim {
+                bail!("Concat input dimension mismatch on axis {dim_index}");
+            }
+        }
+    }
+    Ok(output)
+}
+
+/// Resize output shape from constant `sizes` (input 3) or, failing that,
+/// constant `scales` (input 2).
+fn infer_resize(
+    node: &NodeProto,
+    known_shapes: &BTreeMap<String, Vec<i64>>,
+    tensor_consts: &HashMap<String, TensorConst>,
+) -> Result<Vec<i64>> {
+    let inp = input_shape(node, known_shapes, 0)?;
+    let output = if node.get_input().len() > 3 && !node.get_input()[3].is_empty() {
+        const_i64(tensor_consts, &node.get_input()[3]).and_then(|values| {
+            (values.len() == inp.len() && values.iter().all(|dim| *dim > 0))
+                .then(|| values.to_vec())
+        })
+    } else if node.get_input().len() > 2 && !node.get_input()[2].is_empty() {
+        const_f32(tensor_consts, &node.get_input()[2]).and_then(|scales| scaled_dims(&inp, scales))
+    } else {
+        None
+    };
+    output.context("Resize must have constant sizes or scales")
+}
+
+/// Resize output dims from per-axis `scales`; `None` when a scale or a scaled
+/// dim is unusable.
+fn scaled_dims(inp: &[i64], scales: &[f32]) -> Option<Vec<i64>> {
+    if scales.len() != inp.len()
+        || scales
+            .iter()
+            .any(|scale| !scale.is_finite() || *scale <= 0.0)
+    {
+        return None;
+    }
+    inp.iter()
+        .zip(scales)
+        .map(|(dim, scale)| {
+            let scaled = (*dim as f64) * f64::from(*scale);
+            if !scaled.is_finite() || scaled < 1.0 || scaled > i64::MAX as f64 {
+                return None;
+            }
+            // ONNX defines scaled output dimensions with floor.
+            Some(scaled.floor() as i64)
+        })
+        .collect::<Option<Vec<_>>>()
 }
 
 fn constant_input_name<'a>(node: &'a NodeProto, index: usize, label: &str) -> Result<&'a str> {

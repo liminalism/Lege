@@ -103,9 +103,8 @@ fn recognition_worker(
 ) {
     let mut deferred = None;
     loop {
-        let first = match deferred.take().or_else(|| receiver.recv().ok()) {
-            Some(request) => request,
-            None => return,
+        let Some(first) = deferred.take().or_else(|| receiver.recv().ok()) else {
+            return;
         };
         let started = Instant::now();
         let mut requests = vec![first];
@@ -222,44 +221,15 @@ impl PaddleSpecialists {
                 continue;
             }
             let crop = image::imageops::crop_imm(page, x0, y0, x1 - x0, y1 - y0).to_image();
-            let (content, model, recognition_confidence) = match detection.class_name {
-                "table" => {
-                    let Some(recognizer) = &self.table else {
-                        continue;
-                    };
-                    let sequence = recognizer.recognize_gray(&crop)?;
-                    let Some((rows, columns, cells)) = parse_table_tokens(&sequence.tokens) else {
-                        continue;
-                    };
-                    (
-                        crate::backend::SpecialistContent::Table {
-                            rows,
-                            columns,
-                            cells,
-                        },
-                        self.table_model.clone(),
-                        sequence.confidence,
-                    )
-                }
+            let reading = match detection.class_name {
+                "table" => self.read_table(&crop)?,
                 "isolate_formula" | "formula" | "formula_number" | "algorithm" => {
-                    let Some(recognizer) = &self.formula else {
-                        continue;
-                    };
-                    let sequence = recognizer.recognize_gray(&crop)?;
-                    let latex = clean_formula_tokens(&sequence.tokens);
-                    if latex.trim().is_empty() {
-                        continue;
-                    }
-                    (
-                        crate::backend::SpecialistContent::Formula {
-                            latex,
-                            display: detection.class_name != "formula_number",
-                        },
-                        self.formula_model.clone(),
-                        sequence.confidence,
-                    )
+                    self.read_formula(&crop, detection.class_name != "formula_number")?
                 }
                 _ => continue,
+            };
+            let Some((content, model, recognition_confidence)) = reading else {
+                continue;
             };
             regions.push(crate::backend::SpecialistRegion {
                 bbox: [x0, y0, x1, y1],
@@ -272,7 +242,54 @@ impl PaddleSpecialists {
         }
         Ok(regions)
     }
+
+    /// Table structure of `crop`, or `None` without a table specialist or
+    /// when its tokens do not parse as a table.
+    fn read_table(&self, crop: &GrayImage) -> Result<Option<SpecialistReading>> {
+        let Some(recognizer) = &self.table else {
+            return Ok(None);
+        };
+        let sequence = recognizer.recognize_gray(crop)?;
+        let Some((rows, columns, cells)) = parse_table_tokens(&sequence.tokens) else {
+            return Ok(None);
+        };
+        Ok(Some((
+            crate::backend::SpecialistContent::Table {
+                rows,
+                columns,
+                cells,
+            },
+            self.table_model.clone(),
+            sequence.confidence,
+        )))
+    }
+
+    /// LaTeX of the formula in `crop`, or `None` without a formula specialist
+    /// or when it reads nothing.
+    fn read_formula(&self, crop: &GrayImage, display: bool) -> Result<Option<SpecialistReading>> {
+        let Some(recognizer) = &self.formula else {
+            return Ok(None);
+        };
+        let sequence = recognizer.recognize_gray(crop)?;
+        let latex = clean_formula_tokens(&sequence.tokens);
+        if latex.trim().is_empty() {
+            return Ok(None);
+        }
+        Ok(Some((
+            crate::backend::SpecialistContent::Formula { latex, display },
+            self.formula_model.clone(),
+            sequence.confidence,
+        )))
+    }
 }
+
+/// A specialist's reading of one region: content, model name and recognition
+/// confidence.
+type SpecialistReading = (
+    crate::backend::SpecialistContent,
+    Option<String>,
+    Option<f32>,
+);
 
 fn build_specialist(directory: &Path, pack: &SpecialistModelPack) -> Result<TokenRecognizer> {
     let model = read_pack_file(directory, &pack.model)?;
@@ -1194,23 +1211,7 @@ mod tests {
                 let [lx, ly, _, _] = l.bbox_highres;
                 for wd in &l.words {
                     let [wx0, wy0, wx1, wy1] = wd.bbox_crop_local;
-                    let (x0, y0, x1, y1) = (wx0 + lx, wy0 + ly, wx1 + lx, wy1 + ly);
-                    for x in x0..x1.min(rgb.width()) {
-                        if y0 < rgb.height() {
-                            rgb.put_pixel(x, y0, image::Rgb([0, 128, 255]));
-                        }
-                        if y1 > 0 && y1 - 1 < rgb.height() {
-                            rgb.put_pixel(x, y1 - 1, image::Rgb([0, 128, 255]));
-                        }
-                    }
-                    for y in y0..y1.min(rgb.height()) {
-                        if x0 < rgb.width() {
-                            rgb.put_pixel(x0, y, image::Rgb([255, 0, 0]));
-                        }
-                        if x1 > 0 && x1 - 1 < rgb.width() {
-                            rgb.put_pixel(x1 - 1, y, image::Rgb([255, 0, 0]));
-                        }
-                    }
+                    outline_word_box(&mut rgb, [wx0 + lx, wy0 + ly, wx1 + lx, wy1 + ly]);
                 }
             }
             rgb.save(PathBuf::from(out)).unwrap();
@@ -1229,5 +1230,26 @@ mod tests {
             joined.contains("Houses") && joined.contains("fashion"),
             "expected known page text in output"
         );
+    }
+
+    /// Draw a word box: blue top and bottom edges, red left and right edges,
+    /// clipped to the image.
+    fn outline_word_box(rgb: &mut image::RgbImage, [x0, y0, x1, y1]: [u32; 4]) {
+        for x in x0..x1.min(rgb.width()) {
+            if y0 < rgb.height() {
+                rgb.put_pixel(x, y0, image::Rgb([0, 128, 255]));
+            }
+            if y1 > 0 && y1 - 1 < rgb.height() {
+                rgb.put_pixel(x, y1 - 1, image::Rgb([0, 128, 255]));
+            }
+        }
+        for y in y0..y1.min(rgb.height()) {
+            if x0 < rgb.width() {
+                rgb.put_pixel(x0, y, image::Rgb([255, 0, 0]));
+            }
+            if x1 > 0 && x1 - 1 < rgb.width() {
+                rgb.put_pixel(x1 - 1, y, image::Rgb([255, 0, 0]));
+            }
+        }
     }
 }

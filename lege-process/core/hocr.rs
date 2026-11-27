@@ -74,19 +74,19 @@ struct SpanAttrs {
     confidence: Option<f32>,
 }
 
+fn has_class(classes: &[u8], class: &[u8]) -> bool {
+    classes.split(|&b| b == b' ').any(|c| c == class)
+}
+
 fn parse_span_attrs(span: &BytesStart) -> Result<SpanAttrs> {
     let mut attrs = SpanAttrs::default();
     for attr in span.attributes() {
         let attr = attr?;
         match attr.key.as_ref() {
             b"class" => {
-                for class in attr.value.as_ref().split(|&b| b == b' ') {
-                    match class {
-                        b"ocrx_word" => attrs.is_word = true,
-                        b"ocr_line" => attrs.is_line = true,
-                        _ => {}
-                    }
-                }
+                let classes = attr.value.as_ref();
+                attrs.is_word |= has_class(classes, b"ocrx_word");
+                attrs.is_line |= has_class(classes, b"ocr_line");
             }
             b"title" => {
                 if let Ok(title) = attr.normalized_value(XmlVersion::Implicit1_0) {
@@ -100,95 +100,128 @@ fn parse_span_attrs(span: &BytesStart) -> Result<SpanAttrs> {
     Ok(attrs)
 }
 
+/// What `parse_hocr` gathers while it walks the spans: the words, the raw
+/// engine lines, and the word and line span it is currently inside.
+#[derive(Default)]
+struct SpanCollector {
+    words: Vec<HocrWord>,
+    raw_lines: Vec<(f32, f32, f32, f32, String)>,
+    current_word_text: String,
+    current_line_text: String,
+    in_ocr_word: bool,
+    in_ocr_line: bool,
+    current_index: Option<usize>,
+    current_line_bbox: Option<(f32, f32, f32, f32)>,
+}
+
+impl SpanCollector {
+    fn start_span(&mut self, attrs: SpanAttrs) {
+        // A span without a usable bbox is skipped entirely: its text
+        // must not be attributed to whatever span preceded it.
+        if attrs.is_word {
+            self.start_word(attrs.bbox, attrs.confidence);
+        } else if attrs.is_line {
+            self.start_line(attrs.bbox);
+        }
+    }
+
+    fn start_word(&mut self, bbox: Option<(f32, f32, f32, f32)>, confidence: Option<f32>) {
+        let Some((x1, y1, x2, y2)) = bbox else {
+            self.in_ocr_word = false;
+            self.current_index = None;
+            return;
+        };
+        self.in_ocr_word = true;
+        self.current_word_text.clear();
+        self.words.push(HocrWord {
+            text: String::new(),
+            confidence,
+            x: x1,
+            y: y1,
+            width: (x2 - x1).max(0.0),
+            height: (y2 - y1).max(0.0),
+        });
+        self.current_index = Some(self.words.len() - 1);
+    }
+
+    fn start_line(&mut self, bbox: Option<(f32, f32, f32, f32)>) {
+        let Some(bbox) = bbox else {
+            self.in_ocr_line = false;
+            self.current_line_bbox = None;
+            return;
+        };
+        self.in_ocr_line = true;
+        self.current_line_bbox = Some(bbox);
+        self.current_line_text.clear();
+    }
+
+    fn push_text(&mut self, s: &str) {
+        if self.in_ocr_word {
+            self.current_word_text.push_str(s);
+        }
+        if self.in_ocr_line {
+            self.current_line_text.push_str(s);
+        }
+    }
+
+    fn end_span(&mut self) {
+        if self.in_ocr_word {
+            self.end_word();
+        } else if self.in_ocr_line {
+            self.end_line();
+        }
+    }
+
+    fn end_word(&mut self) {
+        if let Some(word) = self.current_index.and_then(|idx| self.words.get_mut(idx)) {
+            word.text = self.current_word_text.trim().to_string();
+        }
+        self.in_ocr_word = false;
+        self.current_index = None;
+        self.current_word_text.clear();
+    }
+
+    fn end_line(&mut self) {
+        if let Some((x1, y1, x2, y2)) = self.current_line_bbox.take() {
+            let txt = self.current_line_text.trim().to_string();
+            if !txt.is_empty() {
+                self.raw_lines.push((x1, y1, x2, y2, txt));
+            }
+        }
+        self.in_ocr_line = false;
+        self.current_line_text.clear();
+    }
+}
+
 pub fn parse_hocr(hocr: &str) -> Result<Vec<HocrLine>> {
     let mut reader = Reader::from_str(hocr);
 
-    let mut words = Vec::new();
-    let mut raw_lines: Vec<(f32, f32, f32, f32, String)> = Vec::new();
+    let mut spans = SpanCollector::default();
     let mut buf = Vec::new();
-    let mut current_word_text = String::new();
-    let mut current_line_text = String::new();
-    let mut in_ocr_word = false;
-    let mut in_ocr_line = false;
-    let mut current_index: Option<usize> = None;
-    let mut current_line_bbox: Option<(f32, f32, f32, f32)> = None;
 
     loop {
         match reader.read_event_into(&mut buf)? {
             Event::Start(ref e) if e.name().as_ref() == b"span" => {
                 let attrs = parse_span_attrs(e)?;
-
-                // A span without a usable bbox is skipped entirely: its text
-                // must not be attributed to whatever span preceded it.
-                if attrs.is_word {
-                    match attrs.bbox {
-                        Some((x1, y1, x2, y2)) => {
-                            in_ocr_word = true;
-                            current_word_text.clear();
-                            words.push(HocrWord {
-                                text: String::new(),
-                                confidence: attrs.confidence,
-                                x: x1,
-                                y: y1,
-                                width: (x2 - x1).max(0.0),
-                                height: (y2 - y1).max(0.0),
-                            });
-                            current_index = Some(words.len() - 1);
-                        }
-                        None => {
-                            in_ocr_word = false;
-                            current_index = None;
-                        }
-                    }
-                } else if attrs.is_line {
-                    match attrs.bbox {
-                        Some(bbox) => {
-                            in_ocr_line = true;
-                            current_line_bbox = Some(bbox);
-                            current_line_text.clear();
-                        }
-                        None => {
-                            in_ocr_line = false;
-                            current_line_bbox = None;
-                        }
-                    }
-                }
+                spans.start_span(attrs);
             }
             Event::Text(e) => {
                 if let Ok(s) = std::str::from_utf8(e.as_ref()) {
-                    if in_ocr_word {
-                        current_word_text.push_str(s);
-                    }
-                    if in_ocr_line {
-                        current_line_text.push_str(s);
-                    }
+                    spans.push_text(s);
                 }
             }
-            Event::End(ref e) if e.name().as_ref() == b"span" => {
-                if in_ocr_word {
-                    if let Some(word) = current_index.and_then(|idx| words.get_mut(idx)) {
-                        word.text = current_word_text.trim().to_string();
-                    }
-                    in_ocr_word = false;
-                    current_index = None;
-                    current_word_text.clear();
-                } else if in_ocr_line {
-                    if let Some((x1, y1, x2, y2)) = current_line_bbox.take() {
-                        let txt = current_line_text.trim().to_string();
-                        if !txt.is_empty() {
-                            raw_lines.push((x1, y1, x2, y2, txt));
-                        }
-                    }
-                    in_ocr_line = false;
-                    current_line_text.clear();
-                }
-            }
+            Event::End(ref e) if e.name().as_ref() == b"span" => spans.end_span(),
             Event::Eof => break,
             _ => {}
         }
         buf.clear();
     }
 
+    let SpanCollector {
+        mut words,
+        raw_lines,
+        ..
+    } = spans;
     words.retain(|w| !w.text.trim().is_empty());
 
     let mut lines = group_words_into_lines(words);

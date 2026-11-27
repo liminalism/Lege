@@ -178,6 +178,10 @@ const PROLOGUE: &str = r#"
     let out_off = z * M * N;
 "#;
 
+#[allow(
+    clippy::excessive_nesting,
+    reason = "unrolls the register-tile epilogue into WGSL; the loops mirror the emitted row/column/lane structure"
+)]
 pub fn simt_wgsl(cfg: &SimtCfg) -> String {
     assert!(cfg.valid(), "invalid SIMT config {cfg:?}");
     let (bm, bn, bk, tr, tc) = (cfg.bm, cfg.bn, cfg.bk, cfg.tr, cfg.tc);

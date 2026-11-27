@@ -16,7 +16,7 @@ use rayon::prelude::*;
 
 use crate::vision::onnx::attrs::shape_i64_to_usize;
 use crate::vision::onnx::graph::PreparedGraph;
-use crate::vision::onnx::types::{ElementwiseKind, PlannedOpKind, UnaryKind};
+use crate::vision::onnx::types::{ElementwiseKind, PlannedOp, PlannedOpKind, UnaryKind};
 use crate::vision::ops::compile::op_steps;
 use crate::vision::ops::sigmoid::{SILU_VEC4_WGSL, SILU_WGSL};
 use crate::vision::reference;
@@ -468,45 +468,7 @@ impl CompiledGraph {
 
         // ── Detect SiLU patterns: Sigmoid(x)→sig followed by Mul(x,sig)→out ──
         // When found: replace Sigmoid with SiLU writing to Mul's output; skip Mul.
-        // Key: sigmoid op index → Mul's output buffer name
-        let mut silu_overrides: HashMap<usize, String> = HashMap::new();
-        // Set of Mul op indices to skip because they're fused into a preceding SiLU
-        let mut fused_mul_ops: HashSet<usize> = HashSet::new();
-        {
-            // Map: sigmoid output name → (sigmoid op idx, sigmoid input name)
-            let mut pending_sigs: HashMap<String, (usize, String)> = HashMap::new();
-            for (idx, op) in graph.planned_ops.iter().enumerate() {
-                match &op.kind {
-                    PlannedOpKind::Unary(UnaryKind::Sigmoid) => {
-                        pending_sigs.insert(op.outputs[0].clone(), (idx, op.inputs[0].clone()));
-                    }
-                    PlannedOpKind::Elementwise(ElementwiseKind::Mul) if op.inputs.len() == 2 => {
-                        let a = &op.inputs[0];
-                        let b = &op.inputs[1];
-                        let fuse = if let Some((sig_idx, x)) = pending_sigs.get(a) {
-                            if x == b {
-                                Some((*sig_idx, op.outputs[0].clone()))
-                            } else {
-                                None
-                            }
-                        } else if let Some((sig_idx, x)) = pending_sigs.get(b) {
-                            if x == a {
-                                Some((*sig_idx, op.outputs[0].clone()))
-                            } else {
-                                None
-                            }
-                        } else {
-                            None
-                        };
-                        if let Some((sig_idx, mul_out)) = fuse {
-                            silu_overrides.insert(sig_idx, mul_out);
-                            fused_mul_ops.insert(idx);
-                        }
-                    }
-                    _ => {}
-                }
-            }
-        }
+        let (silu_overrides, fused_mul_ops) = detect_silu_pairs(&graph.planned_ops);
         #[cfg(feature = "debug-logging")]
         eprintln!(
             "  compiled.build: SiLU fused {} sigmoid+mul pairs",
@@ -533,47 +495,14 @@ impl CompiledGraph {
         // creation safe. Sibling sessions skip this entirely: their caches were
         // cloned from the parent above (Arc clones of the same GPU objects).
         if shared_constants.is_none() {
-            use crate::vision::ops::sigmoid::SIGMOID_VEC4_WGSL;
-            // Collect the unique (shader source → read-input count) set, honoring
-            // the same SiLU rewrite the step loop applies so the precompiled
-            // pipelines match exactly what the loop will look up.
-            let mut unique_shaders: HashMap<&'static str, usize> = HashMap::new();
-            for (op_idx, op) in graph.planned_ops.iter().enumerate() {
-                if fused_mul_ops.contains(&op_idx) {
-                    continue;
-                }
-                let mut step_specs = op_steps(op, DUMMY_BIAS)?;
-                upgrade_gemm_steps(&mut step_specs, ctx.supports_coop_gemm);
-                if silu_overrides.contains_key(&op_idx) {
-                    for spec in &mut step_specs {
-                        let is_vec4 = spec.wgsl == SIGMOID_VEC4_WGSL;
-                        spec.wgsl = if is_vec4 { SILU_VEC4_WGSL } else { SILU_WGSL };
-                    }
-                }
-                for spec in &step_specs {
-                    unique_shaders
-                        .entry(spec.wgsl)
-                        .or_insert(spec.n_read_inputs);
-                }
-            }
-            unique_shaders.insert(CTC_TOP2_WGSL, 1);
-
-            let device: &crate::vision::wgpu::Device = &ctx.device;
-            let compiled: Vec<(
-                &'static str,
-                Arc<crate::vision::wgpu::ComputePipeline>,
-                Arc<crate::vision::wgpu::BindGroupLayout>,
-            )> = unique_shaders
-                .par_iter()
-                .map(|(&wgsl, &n_read_inputs)| {
-                    let (pipeline, bgl) = build_pipeline_for_shader(device, wgsl, n_read_inputs);
-                    (wgsl, pipeline, bgl)
-                })
-                .collect();
-            for (wgsl, pipeline, bgl) in compiled {
-                pipeline_cache.insert(wgsl, pipeline);
-                bgl_cache.insert(wgsl, bgl);
-            }
+            precompile_pipelines(
+                graph,
+                &ctx,
+                &fused_mul_ops,
+                &silu_overrides,
+                &mut pipeline_cache,
+                &mut bgl_cache,
+            )?;
             #[cfg(feature = "debug-logging")]
             eprintln!(
                 "  compiled.build: precompiled {} unique pipeline(s) in parallel at {:.0}ms",
@@ -598,14 +527,8 @@ impl CompiledGraph {
             // Apply SiLU override: replace Sigmoid shader + redirect output to Mul's buffer.
             // Preserve the vec4/scalar variant that compile.rs already chose.
             if let Some(mul_out) = silu_overrides.get(&op_idx) {
-                use crate::vision::ops::sigmoid::SIGMOID_VEC4_WGSL;
                 for spec in &mut step_specs {
-                    // Compare by value, not pointer: `const &str` addresses are not
-                    // guaranteed stable across reference sites, so an as_ptr() check
-                    // can misclassify a vec4 sigmoid as scalar (and vice versa),
-                    // leaving the SiLU shader reading vec4 params as scalars.
-                    let is_vec4 = spec.wgsl == SIGMOID_VEC4_WGSL;
-                    spec.wgsl = if is_vec4 { SILU_VEC4_WGSL } else { SILU_WGSL };
+                    spec.wgsl = silu_shader(spec.wgsl);
                     spec.output_buf_name = mul_out.clone();
                 }
             }
@@ -624,19 +547,17 @@ impl CompiledGraph {
                     );
                 }
                 let op_kind = step_profile_kind(&op.kind, spec.wgsl);
-                if dump_conv_shapes {
-                    if let PlannedOpKind::Conv2d(_) = &op.kind {
-                        eprintln!(
-                            "  conv-shape op={} name={} shader={} input={:?} weight={:?} output={:?} dispatch={:?}",
-                            op_idx,
-                            op.name,
-                            op_kind,
-                            op.input_shapes.first(),
-                            op.input_shapes.get(1),
-                            op.output_shapes.first(),
-                            spec.dispatch,
-                        );
-                    }
+                if dump_conv_shapes && matches!(op.kind, PlannedOpKind::Conv2d(_)) {
+                    eprintln!(
+                        "  conv-shape op={} name={} shader={} input={:?} weight={:?} output={:?} dispatch={:?}",
+                        op_idx,
+                        op.name,
+                        op_kind,
+                        op.input_shapes.first(),
+                        op.input_shapes.get(1),
+                        op.output_shapes.first(),
+                        spec.dispatch,
+                    );
                 }
                 let wgsl_key = spec.wgsl;
                 let (pipeline, bgl) = if let (Some(p), Some(b)) =
@@ -677,19 +598,13 @@ impl CompiledGraph {
                     Vec::with_capacity(spec.n_read_inputs + 2);
                 for (binding, inp_name) in spec.input_buf_names.iter().enumerate() {
                     let canonical = resolve_alias(inp_name, &aliases);
-                    let buf = if canonical == DUMMY_BIAS {
-                        &dummy_bias_buffer
-                    } else {
-                        let slot = *tensor_slots.get(&canonical).with_context(|| {
-                            format!(
-                                "compiled: missing resident slot for input `{canonical}` (op {})",
-                                op.name
-                            )
-                        })?;
-                        slot_buffers.get(slot).with_context(|| {
-                            format!("compiled: missing resident slot buffer {slot}")
-                        })?
-                    };
+                    let buf = resident_input_buffer(
+                        &canonical,
+                        &op.name,
+                        &tensor_slots,
+                        &slot_buffers,
+                        &dummy_bias_buffer,
+                    )?;
                     bg_entries.push(crate::vision::wgpu::BindGroupEntry {
                         binding: binding as u32,
                         resource: buf.as_entire_binding(),
@@ -702,25 +617,14 @@ impl CompiledGraph {
                         op.name
                     )
                 })?;
-                for inp_name in &spec.input_buf_names {
-                    let input_canonical = resolve_alias(inp_name, &aliases);
-                    if input_canonical == DUMMY_BIAS {
-                        continue;
-                    }
-                    let input_slot = *tensor_slots.get(&input_canonical).with_context(|| {
-                        format!(
-                            "compiled: missing resident slot for input `{input_canonical}` (op {})",
-                            op.name
-                        )
-                    })?;
-                    if input_slot == out_slot {
-                        bail!(
-                            "compiled: op {} ({}) binds resident slot {out_slot} as both input `{input_canonical}` and output `{out_canonical}`",
-                            op_idx,
-                            op.name
-                        );
-                    }
-                }
+                ensure_inputs_avoid_output_slot(
+                    &spec.input_buf_names,
+                    &aliases,
+                    &tensor_slots,
+                    (out_slot, &out_canonical),
+                    op_idx,
+                    &op.name,
+                )?;
                 let out_buf = slot_buffers.get(out_slot).with_context(|| {
                     format!("compiled: missing resident slot buffer {out_slot}")
                 })?;
@@ -821,100 +725,14 @@ impl CompiledGraph {
             output_bytes.push(bytes);
         }
 
-        let compact_ctc = if output_shapes.len() == 1 {
-            match output_shapes[0].as_slice() {
-                [batch, timesteps, classes] if *batch > 0 && *timesteps > 0 && *classes > 1 => {
-                    let rows = batch
-                        .checked_mul(*timesteps)
-                        .context("compact CTC row count overflow")?;
-                    let bytes = rows
-                        .checked_mul(4 * std::mem::size_of::<u32>())
-                        .context("compact CTC byte size overflow")?;
-                    let rows_u32 = u32::try_from(rows).context("too many compact CTC rows")?;
-                    anyhow::ensure!(
-                        rows_u32 <= 65_535,
-                        "compact CTC row count exceeds one-dimensional dispatch limit"
-                    );
-                    let classes_u32 = u32::try_from(*classes).context("too many CTC classes")?;
-                    let oom_scope = ctx
-                        .device
-                        .push_error_scope(crate::vision::wgpu::ErrorFilter::OutOfMemory);
-                    let output = ctx
-                        .device
-                        .create_buffer(&crate::vision::wgpu::BufferDescriptor {
-                            label: Some("compiled_ctc_top2"),
-                            size: bytes as u64,
-                            usage: crate::vision::wgpu::BufferUsages::STORAGE
-                                | crate::vision::wgpu::BufferUsages::COPY_SRC,
-                            mapped_at_creation: false,
-                        });
-                    let readback =
-                        ctx.device
-                            .create_buffer(&crate::vision::wgpu::BufferDescriptor {
-                                label: Some("compiled_ctc_top2_readback"),
-                                size: bytes as u64,
-                                usage: crate::vision::wgpu::BufferUsages::MAP_READ
-                                    | crate::vision::wgpu::BufferUsages::COPY_DST,
-                                mapped_at_creation: false,
-                            });
-                    let params = ctx.device.create_buffer_init(
-                        &crate::vision::wgpu::util::BufferInitDescriptor {
-                            label: Some("compiled_ctc_top2_params"),
-                            contents: bytemuck::cast_slice(&[rows_u32, classes_u32, 0_u32, 0]),
-                            usage: crate::vision::wgpu::BufferUsages::STORAGE,
-                        },
-                    );
-                    check_oom_scope(
-                        oom_scope,
-                        "wgpu out of memory allocating compact CTC buffers",
-                    )?;
-                    let canonical = &output_buf_names[0];
-                    let slot = *tensor_slots.get(canonical).with_context(|| {
-                        format!("compact CTC output buffer `{canonical}` is missing")
-                    })?;
-                    let logits = slot_buffers
-                        .get(slot)
-                        .context("compact CTC output slot is missing")?;
-                    let layout = bgl_cache
-                        .get(CTC_TOP2_WGSL)
-                        .context("compact CTC bind-group layout is missing")?;
-                    let bind_group =
-                        ctx.device
-                            .create_bind_group(&crate::vision::wgpu::BindGroupDescriptor {
-                                label: Some("compiled_ctc_top2_bind_group"),
-                                layout,
-                                entries: &[
-                                    crate::vision::wgpu::BindGroupEntry {
-                                        binding: 0,
-                                        resource: logits.as_entire_binding(),
-                                    },
-                                    crate::vision::wgpu::BindGroupEntry {
-                                        binding: 1,
-                                        resource: output.as_entire_binding(),
-                                    },
-                                    crate::vision::wgpu::BindGroupEntry {
-                                        binding: 2,
-                                        resource: params.as_entire_binding(),
-                                    },
-                                ],
-                            });
-                    Some(CompactCtcBuffers {
-                        batch: *batch,
-                        timesteps: *timesteps,
-                        classes: *classes,
-                        rows,
-                        bytes,
-                        output,
-                        readback,
-                        _params: params,
-                        bind_group,
-                    })
-                }
-                _ => None,
-            }
-        } else {
-            None
-        };
+        let compact_ctc = compact_ctc_buffers(
+            &ctx,
+            &output_shapes,
+            &output_buf_names,
+            &tensor_slots,
+            &slot_buffers,
+            &bgl_cache,
+        )?;
 
         Ok(Self {
             ctx,
@@ -1428,6 +1246,265 @@ impl CompiledGraph {
     }
 }
 
+/// Finds Sigmoid(x)→sig followed by Mul(x, sig)→out. Returns sigmoid op
+/// index → Mul's output buffer name, and the set of Mul op indices to skip
+/// because they are fused into a preceding SiLU.
+fn detect_silu_pairs(ops: &[PlannedOp]) -> (HashMap<usize, String>, HashSet<usize>) {
+    let mut silu_overrides: HashMap<usize, String> = HashMap::new();
+    let mut fused_mul_ops: HashSet<usize> = HashSet::new();
+    // Map: sigmoid output name → (sigmoid op idx, sigmoid input name)
+    let mut pending_sigs: HashMap<String, (usize, String)> = HashMap::new();
+    for (idx, op) in ops.iter().enumerate() {
+        match &op.kind {
+            PlannedOpKind::Unary(UnaryKind::Sigmoid) => {
+                pending_sigs.insert(op.outputs[0].clone(), (idx, op.inputs[0].clone()));
+            }
+            PlannedOpKind::Elementwise(ElementwiseKind::Mul) if op.inputs.len() == 2 => {
+                let gated = sigmoid_gated_by_mul(&pending_sigs, &op.inputs[0], &op.inputs[1]);
+                if let Some(sig_idx) = gated {
+                    silu_overrides.insert(sig_idx, op.outputs[0].clone());
+                    fused_mul_ops.insert(idx);
+                }
+            }
+            _ => {}
+        }
+    }
+    (silu_overrides, fused_mul_ops)
+}
+
+/// The pending sigmoid whose output a Mul of `a` and `b` multiplies by the
+/// sigmoid's own input. `a` is tried first as the sigmoid output, then `b`.
+fn sigmoid_gated_by_mul(
+    pending_sigs: &HashMap<String, (usize, String)>,
+    a: &str,
+    b: &str,
+) -> Option<usize> {
+    if let Some((sig_idx, x)) = pending_sigs.get(a) {
+        return (x.as_str() == b).then_some(*sig_idx);
+    }
+    let (sig_idx, x) = pending_sigs.get(b)?;
+    (x.as_str() == a).then_some(*sig_idx)
+}
+
+/// The SiLU shader replacing a Sigmoid step, keeping the vec4/scalar variant
+/// that compile.rs already chose.
+fn silu_shader(sigmoid_wgsl: &'static str) -> &'static str {
+    use crate::vision::ops::sigmoid::SIGMOID_VEC4_WGSL;
+    // Compare by value, not pointer: `const &str` addresses are not
+    // guaranteed stable across reference sites, so an as_ptr() check
+    // can misclassify a vec4 sigmoid as scalar (and vice versa),
+    // leaving the SiLU shader reading vec4 params as scalars.
+    if sigmoid_wgsl == SIGMOID_VEC4_WGSL {
+        SILU_VEC4_WGSL
+    } else {
+        SILU_WGSL
+    }
+}
+
+/// Compiles every unique shader of the graph's steps in parallel into the
+/// caches, honoring the same SiLU rewrite the step loop applies so the
+/// precompiled pipelines match exactly what the loop will look up.
+fn precompile_pipelines(
+    graph: &PreparedGraph,
+    ctx: &GpuContext,
+    fused_mul_ops: &HashSet<usize>,
+    silu_overrides: &HashMap<usize, String>,
+    pipeline_cache: &mut HashMap<&'static str, Arc<crate::vision::wgpu::ComputePipeline>>,
+    bgl_cache: &mut HashMap<&'static str, Arc<crate::vision::wgpu::BindGroupLayout>>,
+) -> Result<()> {
+    // Collect the unique (shader source → read-input count) set.
+    let mut unique_shaders: HashMap<&'static str, usize> = HashMap::new();
+    for (op_idx, op) in graph.planned_ops.iter().enumerate() {
+        if fused_mul_ops.contains(&op_idx) {
+            continue;
+        }
+        let mut step_specs = op_steps(op, DUMMY_BIAS)?;
+        upgrade_gemm_steps(&mut step_specs, ctx.supports_coop_gemm);
+        if silu_overrides.contains_key(&op_idx) {
+            for spec in &mut step_specs {
+                spec.wgsl = silu_shader(spec.wgsl);
+            }
+        }
+        for spec in &step_specs {
+            unique_shaders
+                .entry(spec.wgsl)
+                .or_insert(spec.n_read_inputs);
+        }
+    }
+    unique_shaders.insert(CTC_TOP2_WGSL, 1);
+
+    let device: &crate::vision::wgpu::Device = &ctx.device;
+    let compiled: Vec<(
+        &'static str,
+        Arc<crate::vision::wgpu::ComputePipeline>,
+        Arc<crate::vision::wgpu::BindGroupLayout>,
+    )> = unique_shaders
+        .par_iter()
+        .map(|(&wgsl, &n_read_inputs)| {
+            let (pipeline, bgl) = build_pipeline_for_shader(device, wgsl, n_read_inputs);
+            (wgsl, pipeline, bgl)
+        })
+        .collect();
+    for (wgsl, pipeline, bgl) in compiled {
+        pipeline_cache.insert(wgsl, pipeline);
+        bgl_cache.insert(wgsl, bgl);
+    }
+    Ok(())
+}
+
+/// The buffer bound for input `canonical` of op `op_name`: the shared zero
+/// bias, or the tensor's resident slot buffer.
+fn resident_input_buffer<'a>(
+    canonical: &str,
+    op_name: &str,
+    tensor_slots: &HashMap<String, usize>,
+    slot_buffers: &'a [Arc<crate::vision::wgpu::Buffer>],
+    dummy_bias_buffer: &'a crate::vision::wgpu::Buffer,
+) -> Result<&'a crate::vision::wgpu::Buffer> {
+    if canonical == DUMMY_BIAS {
+        return Ok(dummy_bias_buffer);
+    }
+    let slot = *tensor_slots.get(canonical).with_context(|| {
+        format!("compiled: missing resident slot for input `{canonical}` (op {op_name})")
+    })?;
+    let buf = slot_buffers
+        .get(slot)
+        .with_context(|| format!("compiled: missing resident slot buffer {slot}"))?;
+    Ok(buf.as_ref())
+}
+
+/// Fails when an input of a step resolves to the resident slot it writes.
+fn ensure_inputs_avoid_output_slot(
+    input_buf_names: &[String],
+    aliases: &HashMap<String, String>,
+    tensor_slots: &HashMap<String, usize>,
+    (out_slot, out_canonical): (usize, &str),
+    op_idx: usize,
+    op_name: &str,
+) -> Result<()> {
+    for inp_name in input_buf_names {
+        let input_canonical = resolve_alias(inp_name, aliases);
+        if input_canonical == DUMMY_BIAS {
+            continue;
+        }
+        let input_slot = *tensor_slots.get(&input_canonical).with_context(|| {
+            format!("compiled: missing resident slot for input `{input_canonical}` (op {op_name})")
+        })?;
+        if input_slot == out_slot {
+            bail!(
+                "compiled: op {op_idx} ({op_name}) binds resident slot {out_slot} as both input `{input_canonical}` and output `{out_canonical}`"
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Device-side CTC top-2 reduction buffers, when the graph has exactly one
+/// output shaped `[batch, timesteps, classes]` with more than one class.
+fn compact_ctc_buffers(
+    ctx: &GpuContext,
+    output_shapes: &[Vec<usize>],
+    output_buf_names: &[String],
+    tensor_slots: &HashMap<String, usize>,
+    slot_buffers: &[Arc<crate::vision::wgpu::Buffer>],
+    bgl_cache: &HashMap<&'static str, Arc<crate::vision::wgpu::BindGroupLayout>>,
+) -> Result<Option<CompactCtcBuffers>> {
+    let [shape] = output_shapes else {
+        return Ok(None);
+    };
+    let [batch, timesteps, classes] = shape.as_slice() else {
+        return Ok(None);
+    };
+    if *batch == 0 || *timesteps == 0 || *classes <= 1 {
+        return Ok(None);
+    }
+    let rows = batch
+        .checked_mul(*timesteps)
+        .context("compact CTC row count overflow")?;
+    let bytes = rows
+        .checked_mul(4 * std::mem::size_of::<u32>())
+        .context("compact CTC byte size overflow")?;
+    let rows_u32 = u32::try_from(rows).context("too many compact CTC rows")?;
+    anyhow::ensure!(
+        rows_u32 <= 65_535,
+        "compact CTC row count exceeds one-dimensional dispatch limit"
+    );
+    let classes_u32 = u32::try_from(*classes).context("too many CTC classes")?;
+    let oom_scope = ctx
+        .device
+        .push_error_scope(crate::vision::wgpu::ErrorFilter::OutOfMemory);
+    let output = ctx
+        .device
+        .create_buffer(&crate::vision::wgpu::BufferDescriptor {
+            label: Some("compiled_ctc_top2"),
+            size: bytes as u64,
+            usage: crate::vision::wgpu::BufferUsages::STORAGE
+                | crate::vision::wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+    let readback = ctx
+        .device
+        .create_buffer(&crate::vision::wgpu::BufferDescriptor {
+            label: Some("compiled_ctc_top2_readback"),
+            size: bytes as u64,
+            usage: crate::vision::wgpu::BufferUsages::MAP_READ
+                | crate::vision::wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+    let params = ctx
+        .device
+        .create_buffer_init(&crate::vision::wgpu::util::BufferInitDescriptor {
+            label: Some("compiled_ctc_top2_params"),
+            contents: bytemuck::cast_slice(&[rows_u32, classes_u32, 0_u32, 0]),
+            usage: crate::vision::wgpu::BufferUsages::STORAGE,
+        });
+    check_oom_scope(
+        oom_scope,
+        "wgpu out of memory allocating compact CTC buffers",
+    )?;
+    let canonical = &output_buf_names[0];
+    let slot = *tensor_slots
+        .get(canonical)
+        .with_context(|| format!("compact CTC output buffer `{canonical}` is missing"))?;
+    let logits = slot_buffers
+        .get(slot)
+        .context("compact CTC output slot is missing")?;
+    let layout = bgl_cache
+        .get(CTC_TOP2_WGSL)
+        .context("compact CTC bind-group layout is missing")?;
+    let bind_group = ctx
+        .device
+        .create_bind_group(&crate::vision::wgpu::BindGroupDescriptor {
+            label: Some("compiled_ctc_top2_bind_group"),
+            layout,
+            entries: &[
+                crate::vision::wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: logits.as_entire_binding(),
+                },
+                crate::vision::wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: output.as_entire_binding(),
+                },
+                crate::vision::wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: params.as_entire_binding(),
+                },
+            ],
+        });
+    Ok(Some(CompactCtcBuffers {
+        batch: *batch,
+        timesteps: *timesteps,
+        classes: *classes,
+        rows,
+        bytes,
+        output,
+        readback,
+        _params: params,
+        bind_group,
+    }))
+}
+
 fn resolve_alias(name: &str, aliases: &HashMap<String, String>) -> String {
     let mut cur = name;
     for _ in 0..32 {
@@ -1440,61 +1517,105 @@ fn resolve_alias(name: &str, aliases: &HashMap<String, String>) -> String {
     cur.to_owned()
 }
 
+/// Profile label prefix of each convolution shader, in lookup order.
+const CONV_SHADER_LABELS: &[(&str, &str)] = &[
+    (
+        crate::vision::ops::conv::CONV1X1_GEMM_S1_VEC4_WGSL,
+        "Conv1x1GemmS1Vec4",
+    ),
+    (
+        crate::vision::ops::conv::CONV1X1_GEMM_S1_WGSL,
+        "Conv1x1GemmS1",
+    ),
+    (
+        crate::vision::ops::conv::CONV1X1_BLOCK2X4_S1_WGSL,
+        "Conv1x1Block2x4S1",
+    ),
+    (
+        crate::vision::ops::conv::CONV1X1_BLOCK2X4_WGSL,
+        "Conv1x1Block2x4",
+    ),
+    (
+        crate::vision::ops::conv::CONV1X1_BLOCK4X2_WGSL,
+        "Conv1x1Block4x2",
+    ),
+    (
+        crate::vision::ops::conv::CONV1X1_BLOCK2X2_WGSL,
+        "Conv1x1Block2x2",
+    ),
+    (crate::vision::ops::conv::CONV1X1_WGSL, "Conv1x1Gemm"),
+    (crate::vision::ops::conv::CONV3X3_TILED_WGSL, "Conv3x3Tiled"),
+    (
+        crate::vision::ops::conv::CONV3X3_CO8_SP2X2_S1D1_VEC4LOAD_WGSL,
+        "Conv3x3Co8Sp2x2Vec4Load",
+    ),
+    (
+        crate::vision::ops::conv::CONV3X3_CO8_SP2X2_S1D1_WGSL,
+        "Conv3x3Co8Sp2x2",
+    ),
+    (
+        crate::vision::ops::conv::CONV3X3_CO8_SP2X2_DIL_WGSL,
+        "Conv3x3Co8Sp2x2Dil",
+    ),
+    (
+        crate::vision::ops::conv::CONV3X3_CO8_SP1X2_WGSL,
+        "Conv3x3Co8Sp1x2",
+    ),
+    (
+        crate::vision::ops::conv::CONV3X3_COBLOCK8_WGSL,
+        "Conv3x3Co8",
+    ),
+    (
+        crate::vision::ops::conv::CONV3X3_COBLOCK4_WGSL,
+        "Conv3x3Co4",
+    ),
+    (
+        crate::vision::ops::conv::CONV5X5_CO8_SP2X1_WGSL,
+        "Conv5x5Co8Sp2x1",
+    ),
+    (
+        crate::vision::ops::conv::CONV5X5_CO8_SP1X2_WGSL,
+        "Conv5x5Co8Sp1x2",
+    ),
+    (
+        crate::vision::ops::conv::CONV5X5_CO8_SP2X2_DIL_WGSL,
+        "Conv5x5Co8Sp2x2Dil",
+    ),
+    (
+        crate::vision::ops::conv::CONV5X5_CO8_SP2X2_D1_WGSL,
+        "Conv5x5Co8Sp2x2D1",
+    ),
+    (
+        crate::vision::ops::conv::CONV5X5_COBLOCK8_WGSL,
+        "Conv5x5Co8",
+    ),
+    (
+        crate::vision::ops::conv::CONV5X5_COBLOCK4_WGSL,
+        "Conv5x5Co4",
+    ),
+    (crate::vision::ops::conv::DEPTHWISE3X3_WGSL, "Depthwise3x3"),
+    (crate::vision::ops::conv::CONV2D_WGSL, "Conv2dFallback"),
+];
+
 fn step_profile_kind(kind: &PlannedOpKind, wgsl: &'static str) -> String {
     if wgsl == SILU_WGSL || wgsl == SILU_VEC4_WGSL {
-        "SiLU".to_owned()
-    } else if wgsl == crate::vision::ops::winograd::WINOGRAD_INPUT_TRANSFORM_WGSL {
-        "WinogradInput".to_owned()
-    } else if wgsl == crate::vision::ops::winograd::WINOGRAD_BATCHED_GEMM_WGSL {
-        "WinogradGemm".to_owned()
-    } else if wgsl == crate::vision::ops::winograd::WINOGRAD_OUTPUT_TRANSFORM_WGSL {
-        "WinogradOutput".to_owned()
-    } else if wgsl == crate::vision::ops::conv::CONV1X1_GEMM_S1_VEC4_WGSL {
-        conv_profile_label("Conv1x1GemmS1Vec4", kind)
-    } else if wgsl == crate::vision::ops::conv::CONV1X1_GEMM_S1_WGSL {
-        conv_profile_label("Conv1x1GemmS1", kind)
-    } else if wgsl == crate::vision::ops::conv::CONV1X1_BLOCK2X4_S1_WGSL {
-        conv_profile_label("Conv1x1Block2x4S1", kind)
-    } else if wgsl == crate::vision::ops::conv::CONV1X1_BLOCK2X4_WGSL {
-        conv_profile_label("Conv1x1Block2x4", kind)
-    } else if wgsl == crate::vision::ops::conv::CONV1X1_BLOCK4X2_WGSL {
-        conv_profile_label("Conv1x1Block4x2", kind)
-    } else if wgsl == crate::vision::ops::conv::CONV1X1_BLOCK2X2_WGSL {
-        conv_profile_label("Conv1x1Block2x2", kind)
-    } else if wgsl == crate::vision::ops::conv::CONV1X1_WGSL {
-        conv_profile_label("Conv1x1Gemm", kind)
-    } else if wgsl == crate::vision::ops::conv::CONV3X3_TILED_WGSL {
-        conv_profile_label("Conv3x3Tiled", kind)
-    } else if wgsl == crate::vision::ops::conv::CONV3X3_CO8_SP2X2_S1D1_VEC4LOAD_WGSL {
-        conv_profile_label("Conv3x3Co8Sp2x2Vec4Load", kind)
-    } else if wgsl == crate::vision::ops::conv::CONV3X3_CO8_SP2X2_S1D1_WGSL {
-        conv_profile_label("Conv3x3Co8Sp2x2", kind)
-    } else if wgsl == crate::vision::ops::conv::CONV3X3_CO8_SP2X2_DIL_WGSL {
-        conv_profile_label("Conv3x3Co8Sp2x2Dil", kind)
-    } else if wgsl == crate::vision::ops::conv::CONV3X3_CO8_SP1X2_WGSL {
-        conv_profile_label("Conv3x3Co8Sp1x2", kind)
-    } else if wgsl == crate::vision::ops::conv::CONV3X3_COBLOCK8_WGSL {
-        conv_profile_label("Conv3x3Co8", kind)
-    } else if wgsl == crate::vision::ops::conv::CONV3X3_COBLOCK4_WGSL {
-        conv_profile_label("Conv3x3Co4", kind)
-    } else if wgsl == crate::vision::ops::conv::CONV5X5_CO8_SP2X1_WGSL {
-        conv_profile_label("Conv5x5Co8Sp2x1", kind)
-    } else if wgsl == crate::vision::ops::conv::CONV5X5_CO8_SP1X2_WGSL {
-        conv_profile_label("Conv5x5Co8Sp1x2", kind)
-    } else if wgsl == crate::vision::ops::conv::CONV5X5_CO8_SP2X2_DIL_WGSL {
-        conv_profile_label("Conv5x5Co8Sp2x2Dil", kind)
-    } else if wgsl == crate::vision::ops::conv::CONV5X5_CO8_SP2X2_D1_WGSL {
-        conv_profile_label("Conv5x5Co8Sp2x2D1", kind)
-    } else if wgsl == crate::vision::ops::conv::CONV5X5_COBLOCK8_WGSL {
-        conv_profile_label("Conv5x5Co8", kind)
-    } else if wgsl == crate::vision::ops::conv::CONV5X5_COBLOCK4_WGSL {
-        conv_profile_label("Conv5x5Co4", kind)
-    } else if wgsl == crate::vision::ops::conv::DEPTHWISE3X3_WGSL {
-        conv_profile_label("Depthwise3x3", kind)
-    } else if wgsl == crate::vision::ops::conv::CONV2D_WGSL {
-        conv_profile_label("Conv2dFallback", kind)
-    } else {
-        kind.label().to_owned()
+        return "SiLU".to_owned();
+    }
+    if wgsl == crate::vision::ops::winograd::WINOGRAD_INPUT_TRANSFORM_WGSL {
+        return "WinogradInput".to_owned();
+    }
+    if wgsl == crate::vision::ops::winograd::WINOGRAD_BATCHED_GEMM_WGSL {
+        return "WinogradGemm".to_owned();
+    }
+    if wgsl == crate::vision::ops::winograd::WINOGRAD_OUTPUT_TRANSFORM_WGSL {
+        return "WinogradOutput".to_owned();
+    }
+    match CONV_SHADER_LABELS
+        .iter()
+        .find(|(shader, _)| wgsl == *shader)
+    {
+        Some((_, prefix)) => conv_profile_label(prefix, kind),
+        None => kind.label().to_owned(),
     }
 }
 

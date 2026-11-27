@@ -60,6 +60,7 @@ unused_imports = "warn"
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(windows_slim_errors)', 'cfg(trace_arith)', 'cfg(feature, values("cotinga-theme", "debug-logging", "german", "layout-detection", "music-sheet", "ocr", "paddle-ocr", "tesseract-ocr", "trace_arith"))'] }
 
 [workspace.lints.clippy]
+cognitive_complexity = "warn"
 undocumented_unsafe_blocks = "warn"
 dbg_macro = "warn"
 unwrap_used = "deny"

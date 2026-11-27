@@ -895,6 +895,46 @@ fn provenance(a: &Annotation) -> Option<Value> {
         .and_then(|j| serde_json::from_str(j).ok())
 }
 
+/// How far `model`'s detections on page `key` disagree with the imported boxes.
+fn add_model_signals(
+    sig: &mut Signals,
+    conn: &rusqlite::Connection,
+    key: &str,
+    model: &str,
+    imported: &[Annotation],
+) -> Result<(), String> {
+    let preds = database::predictions(conn, key, model)?;
+    let p: Vec<Det> = preds
+        .iter()
+        .filter(|p| p.score >= 0.3)
+        .map(|p| Det {
+            class_id: p.class_id,
+            bbox: p.bbox,
+            score: p.score,
+        })
+        .collect();
+    let t: Vec<Det> = imported
+        .iter()
+        .filter(|x| !x.is_ignore)
+        .map(|x| Det {
+            class_id: x.class_id,
+            bbox: x.bbox,
+            score: 1.0,
+        })
+        .collect();
+    let m = match_boxes(&p, &t, 0.5, |_, _| true);
+    let mut disagree = 0.0;
+    for &(pi, ti, _) in &m.matched {
+        let (pg, tg) = (class(p[pi].class_id).group, class(t[ti].class_id).group);
+        if (pg == Group::Figure) != (tg == Group::Figure) {
+            disagree += 1.0;
+        }
+    }
+    sig.text_image_disagreement = disagree / 2.0;
+    sig.unmatched = (m.unmatched_pred.len() + m.unmatched_truth.len()) as f64;
+    Ok(())
+}
+
 fn cmd_priority(a: &Args) -> Result<(), String> {
     let project = project_or_default(a)?;
     let mut conn = database::open(&project)?;
@@ -968,35 +1008,7 @@ fn cmd_priority(a: &Args) -> Result<(), String> {
             }
         }
         if let Some(model) = model {
-            let preds = database::predictions(&conn, k, model)?;
-            let p: Vec<Det> = preds
-                .iter()
-                .filter(|p| p.score >= 0.3)
-                .map(|p| Det {
-                    class_id: p.class_id,
-                    bbox: p.bbox,
-                    score: p.score,
-                })
-                .collect();
-            let t: Vec<Det> = imported
-                .iter()
-                .filter(|x| !x.is_ignore)
-                .map(|x| Det {
-                    class_id: x.class_id,
-                    bbox: x.bbox,
-                    score: 1.0,
-                })
-                .collect();
-            let m = match_boxes(&p, &t, 0.5, |_, _| true);
-            let mut disagree = 0.0;
-            for &(pi, ti, _) in &m.matched {
-                let (pg, tg) = (class(p[pi].class_id).group, class(t[ti].class_id).group);
-                if (pg == Group::Figure) != (tg == Group::Figure) {
-                    disagree += 1.0;
-                }
-            }
-            sig.text_image_disagreement = disagree / 2.0;
-            sig.unmatched = (m.unmatched_pred.len() + m.unmatched_truth.len()) as f64;
+            add_model_signals(&mut sig, &conn, k, model, &imported)?;
         }
         scores.push((k.clone(), sig.score()));
     }
@@ -1118,7 +1130,7 @@ pub fn generate_synthetic(project: &Path, pages: usize, images_dir: &Path) -> Re
                     id,
                     key,
                     b,
-                    if b == 3 { 6 } else { 0 },
+                    synthetic_box_class(b),
                     70.0,
                     y,
                     780.0,
@@ -1130,7 +1142,7 @@ pub fn generate_synthetic(project: &Path, pages: usize, images_dir: &Path) -> Re
                         id,
                         key,
                         b,
-                        if b == 3 { 6 } else { 0 },
+                        synthetic_box_class(b),
                         70.0,
                         y,
                         780.0,
@@ -1142,6 +1154,11 @@ pub fn generate_synthetic(project: &Path, pages: usize, images_dir: &Path) -> Re
     }
     tx.commit().map_err(|e| e.to_string())?;
     database::recount_pages(&conn, "seq >= ?1", &[&base])
+}
+
+/// Class id of the `b`th box of a synthetic page: the fourth is a figure, the rest text.
+fn synthetic_box_class(b: i64) -> i32 {
+    if b == 3 { 6 } else { 0 }
 }
 
 fn cmd_gen_synthetic(a: &Args) -> Result<(), String> {

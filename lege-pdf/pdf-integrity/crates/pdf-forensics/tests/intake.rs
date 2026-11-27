@@ -4,10 +4,10 @@
 //! still produces a truthful report rather than an empty-looking clean one.
 #![allow(clippy::unwrap_used, reason = "a failed unwrap is a failed test")]
 
+use exprim::test_support::builder;
 use pdf_forensics::{
     AnalysisMode, Availability, Disposition, OpenState, UnavailableReason, audit_bytes,
 };
-use exprim::test_support::builder;
 
 /// SHA-256 of the empty input, from the published test vectors.
 const SHA256_EMPTY: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
@@ -123,7 +123,10 @@ fn an_unopenable_file_reports_gaps_not_zeroes() {
 fn the_header_survives_a_document_that_will_not_open() {
     // AES-256, declined by the handler: the document does not open, but the
     // header and the trailer /ID need no decryption.
-    let report = audit_bytes(&exprim::test_support::builder::aes256_encrypted_fixture(), None);
+    let report = audit_bytes(
+        &exprim::test_support::builder::aes256_encrypted_fixture(),
+        None,
+    );
     report.validate().unwrap();
     assert_eq!(report.analysis_mode, AnalysisMode::StructureOnly);
 

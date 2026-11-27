@@ -152,40 +152,45 @@ pub fn despeckle(mask: &mut InkMask, min_neighbours: u8) {
     let w = mask.width as i64;
     let h = mask.height as i64;
     let mut to_clear: Vec<usize> = Vec::new();
-    {
-        let bits = &mask.bits;
-        let get = |x: i64, y: i64| -> bool {
-            if x < 0 || y < 0 || x >= w || y >= h {
-                false
-            } else {
-                bits[(y * w + x) as usize]
+    let bits = &mask.bits;
+    for y in 0..h {
+        for x in 0..w {
+            if !ink_at(bits, (w, h), x, y) {
+                continue;
             }
-        };
-        for y in 0..h {
-            for x in 0..w {
-                if !get(x, y) {
-                    continue;
-                }
-                let mut n = 0u8;
-                for dy in -1..=1 {
-                    for dx in -1..=1 {
-                        if dx == 0 && dy == 0 {
-                            continue;
-                        }
-                        if get(x + dx, y + dy) {
-                            n += 1;
-                        }
-                    }
-                }
-                if n < min_neighbours {
-                    to_clear.push((y * w + x) as usize);
-                }
+            if ink_neighbours(bits, (w, h), x, y) < min_neighbours {
+                to_clear.push((y * w + x) as usize);
             }
         }
     }
     for i in to_clear {
         mask.bits[i] = false;
     }
+}
+
+/// Whether `(x, y)` lies on the `w × h` mask and is ink.
+fn ink_at(bits: &[bool], (w, h): (i64, i64), x: i64, y: i64) -> bool {
+    if x < 0 || y < 0 || x >= w || y >= h {
+        false
+    } else {
+        bits[(y * w + x) as usize]
+    }
+}
+
+/// How many of the eight neighbours of `(x, y)` on the `w × h` mask are ink.
+fn ink_neighbours(bits: &[bool], (w, h): (i64, i64), x: i64, y: i64) -> u8 {
+    let mut n = 0u8;
+    for dy in -1..=1 {
+        for dx in -1..=1 {
+            if dx == 0 && dy == 0 {
+                continue;
+            }
+            if ink_at(bits, (w, h), x + dx, y + dy) {
+                n += 1;
+            }
+        }
+    }
+    n
 }
 
 /// Horizontal projection: ink count per row (Y bucket). Length == mask height.

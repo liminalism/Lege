@@ -289,52 +289,58 @@ fn max_distance_to_segment(pts: &[(f64, f64)], a: (f64, f64), b: (f64, f64)) -> 
 
 /// Flatten contours into closed polylines.
 fn flatten(contours: &[Vec<FitPoint>]) -> Vec<Vec<(f64, f64)>> {
-    contours
-        .iter()
-        .map(|c| {
-            let n = c.len();
-            // Rotate so the polyline starts on-curve (an implied midpoint if
-            // no point is on-curve).
-            let start = c.iter().position(|p| p.2);
-            let first: (f64, f64) = match start {
-                Some(i) => (c[i].0, c[i].1),
-                None => ((c[0].0 + c[n - 1].0) / 2.0, (c[0].1 + c[n - 1].1) / 2.0),
-            };
-            let s = start.unwrap_or(0);
-            let mut poly = vec![first];
-            let mut cur = first;
-            let mut pending_off: Option<(f64, f64)> = None;
-            for k in 1..=n {
-                let p = c[(s + k) % n];
-                let pt = (p.0, p.1);
-                let on = p.2 || (k == n && start.is_none());
-                if on {
-                    match pending_off.take() {
-                        Some(ctrl) => {
-                            for step in 1..=FLATTEN_STEPS {
-                                let t = step as f64 / FLATTEN_STEPS as f64;
-                                poly.push(bezier(cur, ctrl, pt, t));
-                            }
-                        }
-                        None => poly.push(pt),
-                    }
-                    cur = pt;
-                } else if let Some(prev) = pending_off {
-                    // Two off-curve points imply an on-curve midpoint.
-                    let mid = ((prev.0 + pt.0) / 2.0, (prev.1 + pt.1) / 2.0);
-                    for step in 1..=FLATTEN_STEPS {
-                        let t = step as f64 / FLATTEN_STEPS as f64;
-                        poly.push(bezier(cur, prev, mid, t));
-                    }
-                    cur = mid;
-                    pending_off = Some(pt);
-                } else {
-                    pending_off = Some(pt);
-                }
+    contours.iter().map(|c| flatten_contour(c)).collect()
+}
+
+/// Flatten one contour into a closed polyline.
+fn flatten_contour(c: &[FitPoint]) -> Vec<(f64, f64)> {
+    let n = c.len();
+    // Rotate so the polyline starts on-curve (an implied midpoint if
+    // no point is on-curve).
+    let start = c.iter().position(|p| p.2);
+    let first: (f64, f64) = match start {
+        Some(i) => (c[i].0, c[i].1),
+        None => ((c[0].0 + c[n - 1].0) / 2.0, (c[0].1 + c[n - 1].1) / 2.0),
+    };
+    let s = start.unwrap_or(0);
+    let mut poly = vec![first];
+    let mut cur = first;
+    let mut pending_off: Option<(f64, f64)> = None;
+    for k in 1..=n {
+        let p = c[(s + k) % n];
+        let pt = (p.0, p.1);
+        let on = p.2 || (k == n && start.is_none());
+        if on {
+            match pending_off.take() {
+                Some(ctrl) => push_flattened_curve(&mut poly, cur, ctrl, pt),
+                None => poly.push(pt),
             }
-            poly
-        })
-        .collect()
+            cur = pt;
+        } else if let Some(prev) = pending_off {
+            // Two off-curve points imply an on-curve midpoint.
+            let mid = ((prev.0 + pt.0) / 2.0, (prev.1 + pt.1) / 2.0);
+            push_flattened_curve(&mut poly, cur, prev, mid);
+            cur = mid;
+            pending_off = Some(pt);
+        } else {
+            pending_off = Some(pt);
+        }
+    }
+    poly
+}
+
+/// Append the quadratic curve from `from` (not repeated) through control
+/// point `ctrl` to `to` as `FLATTEN_STEPS` points.
+fn push_flattened_curve(
+    poly: &mut Vec<(f64, f64)>,
+    from: (f64, f64),
+    ctrl: (f64, f64),
+    to: (f64, f64),
+) {
+    for step in 1..=FLATTEN_STEPS {
+        let t = step as f64 / FLATTEN_STEPS as f64;
+        poly.push(bezier(from, ctrl, to, t));
+    }
 }
 
 /// Nonzero-winding fill of the contours sampled at pixel centres.
@@ -346,15 +352,7 @@ pub(crate) fn rasterize(contours: &[Vec<FitPoint>], width: usize, height: usize)
         let py = row as f64 + 0.5;
         crossings.clear();
         for poly in &polys {
-            let n = poly.len();
-            for i in 0..n {
-                let (x1, y1) = poly[i];
-                let (x2, y2) = poly[(i + 1) % n];
-                if (y1 <= py) != (y2 <= py) {
-                    let x = x1 + (py - y1) / (y2 - y1) * (x2 - x1);
-                    crossings.push((x, if y2 > y1 { 1 } else { -1 }));
-                }
-            }
+            push_crossings(&mut crossings, poly, py);
         }
         crossings.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
         // Winding at a pixel centre counts crossings to its right.
@@ -370,6 +368,20 @@ pub(crate) fn rasterize(contours: &[Vec<FitPoint>], width: usize, height: usize)
         }
     }
     out
+}
+
+/// Append where the closed polyline `poly` crosses the line `y = py`, as
+/// `(x, direction)`: +1 going down (y increasing), -1 going up.
+fn push_crossings(crossings: &mut Vec<(f64, i32)>, poly: &[(f64, f64)], py: f64) {
+    let n = poly.len();
+    for i in 0..n {
+        let (x1, y1) = poly[i];
+        let (x2, y2) = poly[(i + 1) % n];
+        if (y1 <= py) != (y2 <= py) {
+            let x = x1 + (py - y1) / (y2 - y1) * (x2 - x1);
+            crossings.push((x, if y2 > y1 { 1 } else { -1 }));
+        }
+    }
 }
 
 /// Does the outline reproduce the bitmap? Edge pixels may flip; anything

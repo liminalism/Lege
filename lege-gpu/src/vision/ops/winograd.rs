@@ -492,6 +492,10 @@ mod tests {
     }
 
     /// Direct 3×3 stride-1 pad-1 multi-channel conv (NCHW), the oracle.
+    #[allow(
+        clippy::excessive_nesting,
+        reason = "reference convolution: one loop per output and kernel axis keeps the oracle obviously correct"
+    )]
     fn direct_conv(
         x: &[f32],
         w: &[f32],
@@ -531,6 +535,10 @@ mod tests {
     }
 
     /// Winograd F(2,3) conv using the transform helpers, same layout as direct_conv.
+    #[allow(
+        clippy::excessive_nesting,
+        reason = "reference Winograd convolution: tile, channel and patch loops mirror the algorithm"
+    )]
     fn winograd_conv(
         x: &[f32],
         w: &[f32],
@@ -598,6 +606,10 @@ mod tests {
     }
 
     #[test]
+    #[allow(
+        clippy::excessive_nesting,
+        reason = "CPU oracle over channel, tile and 4x4 patch axes"
+    )]
     fn winograd_gpu_input_transform_matches_cpu() {
         pollster::block_on(async {
             let ctx = match GpuContext::shared().await {
@@ -637,6 +649,10 @@ mod tests {
     }
 
     #[test]
+    #[allow(
+        clippy::excessive_nesting,
+        reason = "CPU oracle over channel, tile and 2x2 output axes"
+    )]
     fn winograd_gpu_output_transform_matches_cpu() {
         pollster::block_on(async {
             let ctx = match GpuContext::shared().await {
@@ -681,6 +697,10 @@ mod tests {
     }
 
     #[test]
+    #[allow(
+        clippy::excessive_nesting,
+        reason = "prep-time weight transform over cout, cin and transform axes inside the async test body"
+    )]
     fn winograd_gpu_end_to_end_matches_direct_conv() {
         pollster::block_on(async {
             let ctx = match GpuContext::shared().await {

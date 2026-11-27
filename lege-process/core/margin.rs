@@ -303,12 +303,13 @@ pub fn calculate_content_bounds_from_binary_mask(
         let mut first = None;
         let mut last = None;
         for (idx, &count) in counts.iter().enumerate() {
-            if count >= threshold {
-                if first.is_none() {
-                    first = Some(idx);
-                }
-                last = Some(idx);
+            if count < threshold {
+                continue;
             }
+            if first.is_none() {
+                first = Some(idx);
+            }
+            last = Some(idx);
         }
         match (first, last) {
             (Some(f), Some(l)) if l >= f => Some((f, l)),

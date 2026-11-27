@@ -347,11 +347,7 @@ mod tests {
         while y + row_h < h - 20 {
             // three words per row with wide gaps
             for &(x0, x1) in &[(20u32, 90u32), (110, 180), (200, 270)] {
-                for yy in y..y + row_h {
-                    for xx in x0..x1 {
-                        img.put_pixel(xx, yy, Luma([0]));
-                    }
-                }
+                fill_ink(&mut img, x0..x1, y..y + row_h);
             }
             y += pitch;
         }
@@ -361,6 +357,15 @@ mod tests {
             rgb: None,
             render_dpi: 300.0,
             page_pts: (w as f32, h as f32),
+        }
+    }
+
+    /// Paint the rectangle `xs × ys` black.
+    fn fill_ink(img: &mut GrayImage, xs: std::ops::Range<u32>, ys: std::ops::Range<u32>) {
+        for yy in ys {
+            for xx in xs.clone() {
+                img.put_pixel(xx, yy, Luma([0]));
+            }
         }
     }
 

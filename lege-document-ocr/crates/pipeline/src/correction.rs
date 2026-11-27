@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::io::{self, BufRead, BufReader};
 use std::path::Path;
 
-use lege_docir::{Correction, Document, RegionContent, TextEvidence};
+use lege_docir::{Correction, Document, RegionContent, TextBlock, TextEvidence};
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
@@ -156,49 +156,55 @@ impl EnglishCorrector {
         }
         for page in &mut document.pages {
             for region in &mut page.regions {
-                match &mut region.content {
-                    RegionContent::Text(block) => {
-                        for line in &mut block.lines {
-                            self.correct_evidence(&mut line.text, mode, &mut summary);
-                            for word in &mut line.words {
-                                self.correct_evidence(&mut word.text, mode, &mut summary);
-                            }
-                        }
-                    }
-                    RegionContent::Table(table) => {
-                        for cell in &mut table.cells {
-                            for block in &mut cell.blocks {
-                                for line in &mut block.lines {
-                                    self.correct_evidence(&mut line.text, mode, &mut summary);
-                                    for word in &mut line.words {
-                                        self.correct_evidence(&mut word.text, mode, &mut summary);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    RegionContent::Figure(figure) => {
-                        if let Some(caption) = &mut figure.caption {
-                            for line in &mut caption.lines {
-                                self.correct_evidence(&mut line.text, mode, &mut summary);
-                            }
-                        }
-                    }
-                    RegionContent::Formula(formula) => {
-                        if let Some(block) = &mut formula.raw_ocr {
-                            for line in &mut block.lines {
-                                self.correct_evidence(&mut line.text, mode, &mut summary);
-                                for word in &mut line.words {
-                                    self.correct_evidence(&mut word.text, mode, &mut summary);
-                                }
-                            }
-                        }
-                    }
-                    _ => {}
-                }
+                self.correct_region(&mut region.content, mode, &mut summary);
             }
         }
         summary
+    }
+
+    fn correct_region(
+        &self,
+        content: &mut RegionContent,
+        mode: CorrectionMode,
+        summary: &mut CorrectionSummary,
+    ) {
+        match content {
+            RegionContent::Text(block) => self.correct_block(block, mode, summary),
+            RegionContent::Table(table) => {
+                for cell in &mut table.cells {
+                    for block in &mut cell.blocks {
+                        self.correct_block(block, mode, summary);
+                    }
+                }
+            }
+            RegionContent::Figure(figure) => {
+                if let Some(caption) = &mut figure.caption {
+                    for line in &mut caption.lines {
+                        self.correct_evidence(&mut line.text, mode, summary);
+                    }
+                }
+            }
+            RegionContent::Formula(formula) => {
+                if let Some(block) = &mut formula.raw_ocr {
+                    self.correct_block(block, mode, summary);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn correct_block(
+        &self,
+        block: &mut TextBlock,
+        mode: CorrectionMode,
+        summary: &mut CorrectionSummary,
+    ) {
+        for line in &mut block.lines {
+            self.correct_evidence(&mut line.text, mode, summary);
+            for word in &mut line.words {
+                self.correct_evidence(&mut word.text, mode, summary);
+            }
+        }
     }
 
     fn correct_evidence(
@@ -498,21 +504,25 @@ fn deletion_keys(word: &str, distance: usize) -> HashSet<String> {
     for _ in 0..distance {
         let mut next = Vec::new();
         for value in frontier {
-            let chars = value.chars().collect::<Vec<_>>();
-            for index in 0..chars.len() {
-                let deletion = chars
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(current, character)| (current != index).then_some(*character))
-                    .collect::<String>();
-                if seen.insert(deletion.clone()) {
-                    next.push(deletion);
-                }
-            }
+            push_new_single_deletions(&value, &mut seen, &mut next);
         }
         frontier = next;
     }
     seen
+}
+/// Pushes onto `next` every one-character deletion of `value` not yet in `seen`.
+fn push_new_single_deletions(value: &str, seen: &mut HashSet<String>, next: &mut Vec<String>) {
+    let chars = value.chars().collect::<Vec<_>>();
+    for index in 0..chars.len() {
+        let deletion = chars
+            .iter()
+            .enumerate()
+            .filter_map(|(current, character)| (current != index).then_some(*character))
+            .collect::<String>();
+        if seen.insert(deletion.clone()) {
+            next.push(deletion);
+        }
+    }
 }
 fn edit_distance(left: &str, right: &str) -> usize {
     let right = right.chars().collect::<Vec<_>>();

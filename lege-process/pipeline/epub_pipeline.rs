@@ -958,11 +958,7 @@ fn assemble_chapters(
             .find(|item| item.page_index as usize == output_page)
             .map(|item| item.title.clone());
         if let Some(title) = accepted_title {
-            if let Some(chapter) = current.take()
-                && !chapter.body.trim().is_empty()
-            {
-                chapters.push(chapter);
-            }
+            close_chapter(&mut chapters, current.take());
             current = Some(Chapter {
                 title: Some(title),
                 body: String::new(),
@@ -973,11 +969,7 @@ fn assemble_chapters(
                 outline.is_empty() && is_geometric_chapter_start(page, *block_index);
             if fallback_start {
                 // Close the running chapter and open a new one titled by this heading.
-                if let Some(ch) = current.take()
-                    && !ch.body.trim().is_empty()
-                {
-                    chapters.push(ch);
-                }
+                close_chapter(&mut chapters, current.take());
                 let mut body = String::new();
                 body.push_str(&block_to_xhtml(block, page));
                 current = Some(Chapter {
@@ -993,13 +985,18 @@ fn assemble_chapters(
             }
         }
     }
-    if let Some(ch) = current.take()
-        && !ch.body.trim().is_empty()
-    {
-        chapters.push(ch);
-    }
+    close_chapter(&mut chapters, current.take());
 
     chapters
+}
+
+/// Keep a finished chapter unless its body is blank.
+fn close_chapter(chapters: &mut Vec<Chapter>, chapter: Option<Chapter>) {
+    if let Some(chapter) = chapter
+        && !chapter.body.trim().is_empty()
+    {
+        chapters.push(chapter);
+    }
 }
 
 /// Wrap a chapter body fragment in a complete XHTML document.

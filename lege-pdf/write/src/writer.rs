@@ -241,17 +241,7 @@ impl<W: Write> DocumentWriter<W> {
                 }
             }
             for bank in banks {
-                if self.glyph_font_ids.len() <= usize::from(bank) {
-                    self.glyph_font_ids.resize(usize::from(bank) + 1, None);
-                }
-                let gid = match self.glyph_font_ids[usize::from(bank)] {
-                    Some(id) => id,
-                    None => {
-                        let id = self.sink.alloc_id();
-                        self.glyph_font_ids[usize::from(bank)] = Some(id);
-                        id
-                    }
-                };
+                let gid = self.reserve_glyph_font_id(bank);
                 fonts.push((crate::artifact::glyph_font_resource(bank), gid));
             }
             emit_glyph_layer(&mut content, layer);
@@ -359,6 +349,20 @@ impl<W: Write> DocumentWriter<W> {
     }
 
     // --- internals ------------------------------------------------------
+
+    /// The object id of glyph font `bank`, reserved on first use.
+    fn reserve_glyph_font_id(&mut self, bank: u16) -> ObjectId {
+        let slot = usize::from(bank);
+        if self.glyph_font_ids.len() <= slot {
+            self.glyph_font_ids.resize(slot + 1, None);
+        }
+        if let Some(id) = self.glyph_font_ids[slot] {
+            return id;
+        }
+        let id = self.sink.alloc_id();
+        self.glyph_font_ids[slot] = Some(id);
+        id
+    }
 
     fn ensure_embedded_font(&mut self) -> Result<ObjectId> {
         if let Some(id) = self.font_id {

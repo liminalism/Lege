@@ -13,11 +13,11 @@
     reason = "a failed unwrap is a failed test"
 )]
 
+use exprim::test_support::builder;
 use pdf_forensics::{
     AuditReport, LogicalRevisionFacts, ObjectChangeFacts, ObjectChangeKind, ObjectLocationFacts,
     ObjectRole, RevisionHistoryFacts, audit_bytes,
 };
-use exprim::test_support::builder;
 
 /// Audit `bytes` and require the report to satisfy the schema's own rules.
 fn audit(bytes: &[u8]) -> AuditReport {
@@ -40,6 +40,10 @@ fn change<'a>(revision: &'a LogicalRevisionFacts, object: &str) -> &'a ObjectCha
 }
 
 #[test]
+#[allow(
+    clippy::cognitive_complexity,
+    reason = "a flat list of assertions; the complexity is the branches inside the assert macros"
+)]
 fn single_save_adds_every_live_member() {
     let bytes = builder::multipage_classic(1);
     let report = audit(&bytes);

@@ -1648,233 +1648,14 @@ pub fn spawn_pdf_writer_actor_cancellable(
     };
 
     let task = crate::runtime_stats::spawn_blocking(move || {
-        let result = (|| -> anyhow::Result<()> {
-            use lege_pdf_write::meta::PdfProfile;
-            use lege_pdf_write::writer::DocumentWriter;
-            use std::io::{BufWriter, Write};
-
-            let parent = output_path
-                .parent()
-                .unwrap_or_else(|| std::path::Path::new("."));
-            std::fs::create_dir_all(parent)?;
-            let temporary = tempfile::NamedTempFile::new_in(parent).map_err(|e| {
-                anyhow::anyhow!(
-                    "Failed to create temporary output for {}: {}",
-                    output_path.display(),
-                    e
-                )
-            })?;
-            let file = temporary.reopen().map_err(|e| {
-                anyhow::anyhow!(
-                    "Failed to open temporary output for {}: {}",
-                    output_path.display(),
-                    e
-                )
-            })?;
-            // Pdf17 preserves the current live behavior (per-page text layers, no
-            // PDF/A metadata). Switching to PdfProfile::PdfA1b would emit the
-            // OutputIntent/Info the old finalize intended but never applied.
-            let mut writer =
-                DocumentWriter::with_profile(BufWriter::new(file), total_pages, PdfProfile::Pdf17)
-                    .map_err(|e| anyhow::anyhow!("Failed to init PDF writer: {}", e))?;
-
-            // Embed Lege's glyphless OCR font once, if available.
-            let embedded = crate::unicode_font::get_unicode_font();
-            let embedded_available = embedded.is_some();
-            if let Some(ref u) = embedded {
-                writer.set_embedded_font(crate::pdf_artifact::embedded_font_from(u));
-            }
-
-            let mut pages_written = 0usize;
-            let mut pending_bookmarks: Option<(
-                Vec<crate::pagerender::OwnedBookmarkNode>,
-                std::collections::HashMap<usize, usize>,
-            )> = None;
-            let mut pending_synthetic: Option<Vec<lege_pdf_write::outline::OutlineItem>> = None;
-
-            info_log!("[PdfWriterActor] Started (lege-pdf-write), waiting for pages...");
-
-            loop {
-                let msg = rx
-                    .blocking_recv()
-                    .ok_or_else(|| anyhow!("PDF writer closed without finalization"))?;
-                if control.cancellation.is_cancelled()
-                    || matches!(*control.lock(), PdfWriterState::Aborted)
-                {
-                    return Err(anyhow!("PDF writer cancelled before output publication"));
-                }
-                // The writer FREES memory by flushing pages to disk on arrival, so
-                // it never blocks its own recv loop. Channel capacity is the
-                // backpressure. Pages are written in arrival order; logical order
-                // is restored by the page tree at finalize.
-                match msg {
-                    WriterMessage::AppendPage {
-                        page,
-                        page_index,
-                        reservation,
-                    } => {
-                        let _writer_stage =
-                            crate::runtime_stats::enter_stage(crate::runtime_stats::Stage::Writer);
-                        let _queued_tracked = reservation.as_ref().map(|reservation| {
-                            crate::runtime_stats::track_memory_bytes(
-                                crate::runtime_stats::MemoryGauge::QueuedEncoded,
-                                reservation.mb() as usize,
-                            )
-                        });
-                        let (artifact, globals) = match crate::pdf_artifact::page_to_artifact(
-                            &page,
-                            embedded_available,
-                        ) {
-                            Ok(v) => v,
-                            Err(e) => {
-                                crate::warn_log!(
-                                    "[PdfWriterActor] Failed to convert page {}: {}",
-                                    page_index,
-                                    e
-                                );
-                                return Err(anyhow::anyhow!(
-                                    "Failed to convert page {}: {}",
-                                    page_index,
-                                    e
-                                ));
-                            }
-                        };
-                        for (id, bytes) in globals {
-                            writer.register_shared(id, bytes);
-                        }
-                        if let Err(e) = writer.add_page(&artifact) {
-                            crate::warn_log!(
-                                "[PdfWriterActor] Failed to write page {}: {}",
-                                page_index,
-                                e
-                            );
-                            return Err(anyhow::anyhow!(
-                                "Failed to write page {}: {}",
-                                page_index,
-                                e
-                            ));
-                        }
-
-                        pages_written += 1;
-                        let is_last_page = pages_written == total_pages;
-                        if is_last_page || pages_written % 5 == 0 {
-                            if use_margin_label {
-                                progress_tracker.update(
-                                    crate::progress::ProcessingStatus::PdfAppendMargin {
-                                        current: pages_written,
-                                        total: total_pages,
-                                    },
-                                );
-                            } else {
-                                progress_tracker.update(
-                                    crate::progress::ProcessingStatus::PdfAppend {
-                                        current: pages_written,
-                                        total: total_pages,
-                                    },
-                                );
-                            }
-                        }
-                    }
-                    WriterMessage::SetBookmarks {
-                        bookmarks,
-                        source_to_output,
-                    } => {
-                        pending_bookmarks = Some((bookmarks, source_to_output));
-                    }
-                    WriterMessage::SetSyntheticOutline(items) => {
-                        pending_synthetic = Some(items);
-                    }
-                    WriterMessage::SetGlyphFonts(fonts) => {
-                        writer.set_glyph_fonts(fonts);
-                    }
-                    WriterMessage::SetDocumentIdentity { title, author } => {
-                        writer.set_metadata(lege_pdf_write::meta::DocumentMeta {
-                            title: title.unwrap_or_default(),
-                            author: author.unwrap_or_default(),
-                            subject: String::new(),
-                            keywords: String::new(),
-                            ..Default::default()
-                        });
-                    }
-                    WriterMessage::Abort => {
-                        return Err(anyhow!("PDF writer cancelled before output publication"));
-                    }
-                    WriterMessage::Finalize => {
-                        info_log!(
-                            "[PdfWriterActor] Finalize requested, written {} of {} pages",
-                            pages_written,
-                            total_pages
-                        );
-                        if pages_written != total_pages {
-                            return Err(anyhow::anyhow!(
-                                "[PdfWriterActor] Refusing to finalize incomplete PDF: wrote {} of {} pages",
-                                pages_written,
-                                total_pages
-                            ));
-                        }
-                        break;
-                    }
-                }
-            }
-
-            // finalize() consumes the writer, so it must happen after the loop.
-            {
-                let _writer_stage =
-                    crate::runtime_stats::enter_stage(crate::runtime_stats::Stage::Writer);
-                // Outline precedence is decided here because "did the source outline
-                // survive remapping" is only knowable once the pages are resolved.
-                let source_outline = pending_bookmarks
-                    .take()
-                    .map(|(bookmarks, source_to_output)| {
-                        bookmarks_to_outline(&bookmarks, &source_to_output)
-                    })
-                    .unwrap_or_default();
-                let outline = merge_outline(source_outline, pending_synthetic.take());
-                if !outline.is_empty() {
-                    writer.set_bookmarks(outline);
-                }
-                let mut inner = writer
-                    .finalize()
-                    .map_err(|e| anyhow::anyhow!("Finalize failed: {}", e))?;
-                inner
-                    .flush()
-                    .map_err(|e| anyhow::anyhow!("Failed to flush output: {}", e))?;
-                inner
-                    .get_ref()
-                    .sync_all()
-                    .map_err(|e| anyhow::anyhow!("Failed to sync output: {}", e))?;
-                drop(inner);
-                #[cfg(test)]
-                if let Some((ready, resume)) = control.before_publish.lock().unwrap().take() {
-                    let _ = ready.send(());
-                    resume
-                        .recv()
-                        .map_err(|_| anyhow!("test publication gate disconnected"))?;
-                }
-                // This lock is the commit boundary shared with abort(). If abort
-                // wins, keep the last good destination. If publication wins, its
-                // successful result is authoritative even if a signal arrives.
-                let mut state = control.lock();
-                if control.cancellation.is_cancelled()
-                    || !matches!(*state, PdfWriterState::Finalizing)
-                {
-                    *state = PdfWriterState::Aborted;
-                    return Err(anyhow!("PDF writer cancelled before output publication"));
-                }
-                temporary.persist(&output_path).map_err(|e| {
-                    anyhow::anyhow!(
-                        "Failed to publish output {}: {}",
-                        output_path.display(),
-                        e.error
-                    )
-                })?;
-                *state = PdfWriterState::Published;
-                crate::success_log!("[PdfWriterActor] PDF written to: {}", output_path.display());
-            }
-
-            info_log!("[PdfWriterActor] Shutting down");
-            Ok(())
-        })();
+        let result = run_pdf_writer(
+            &mut rx,
+            &control,
+            &output_path,
+            total_pages,
+            &progress_tracker,
+            use_margin_label,
+        );
         // Publish the cause before dropping the receiver, including setup,
         // flush, sync and persist failures.
         if let Err(error) = &result {
@@ -1887,6 +1668,283 @@ pub fn spawn_pdf_writer_actor_cancellable(
     });
 
     (handle, task)
+}
+
+type PdfDocumentWriter = lege_pdf_write::writer::DocumentWriter<std::io::BufWriter<std::fs::File>>;
+
+/// The PDF writer actor: write pages to a temporary file as they arrive, then
+/// on `Finalize` publish it over `output_path` unless cancelled first.
+fn run_pdf_writer(
+    rx: &mut mpsc::Receiver<WriterMessage>,
+    control: &PdfWriterControl,
+    output_path: &std::path::Path,
+    total_pages: usize,
+    progress_tracker: &crate::progress::ProgressTracker,
+    use_margin_label: bool,
+) -> anyhow::Result<()> {
+    use lege_pdf_write::meta::PdfProfile;
+    use lege_pdf_write::writer::DocumentWriter;
+    use std::io::BufWriter;
+
+    let parent = output_path
+        .parent()
+        .unwrap_or_else(|| std::path::Path::new("."));
+    std::fs::create_dir_all(parent)?;
+    let temporary = tempfile::NamedTempFile::new_in(parent).map_err(|e| {
+        anyhow::anyhow!(
+            "Failed to create temporary output for {}: {}",
+            output_path.display(),
+            e
+        )
+    })?;
+    let file = temporary.reopen().map_err(|e| {
+        anyhow::anyhow!(
+            "Failed to open temporary output for {}: {}",
+            output_path.display(),
+            e
+        )
+    })?;
+    // Pdf17 preserves the current live behavior (per-page text layers, no
+    // PDF/A metadata). Switching to PdfProfile::PdfA1b would emit the
+    // OutputIntent/Info the old finalize intended but never applied.
+    let mut writer =
+        DocumentWriter::with_profile(BufWriter::new(file), total_pages, PdfProfile::Pdf17)
+            .map_err(|e| anyhow::anyhow!("Failed to init PDF writer: {}", e))?;
+
+    // Embed Lege's glyphless OCR font once, if available.
+    let embedded = crate::unicode_font::get_unicode_font();
+    let embedded_available = embedded.is_some();
+    if let Some(ref u) = embedded {
+        writer.set_embedded_font(crate::pdf_artifact::embedded_font_from(u));
+    }
+
+    let mut pages_written = 0usize;
+    let mut pending_bookmarks: Option<(
+        Vec<crate::pagerender::OwnedBookmarkNode>,
+        std::collections::HashMap<usize, usize>,
+    )> = None;
+    let mut pending_synthetic: Option<Vec<lege_pdf_write::outline::OutlineItem>> = None;
+
+    info_log!("[PdfWriterActor] Started (lege-pdf-write), waiting for pages...");
+
+    loop {
+        let msg = rx
+            .blocking_recv()
+            .ok_or_else(|| anyhow!("PDF writer closed without finalization"))?;
+        if control.cancellation.is_cancelled() || matches!(*control.lock(), PdfWriterState::Aborted)
+        {
+            return Err(anyhow!("PDF writer cancelled before output publication"));
+        }
+        // The writer FREES memory by flushing pages to disk on arrival, so
+        // it never blocks its own recv loop. Channel capacity is the
+        // backpressure. Pages are written in arrival order; logical order
+        // is restored by the page tree at finalize.
+        match msg {
+            WriterMessage::AppendPage {
+                page,
+                page_index,
+                reservation,
+            } => {
+                let _writer_stage =
+                    crate::runtime_stats::enter_stage(crate::runtime_stats::Stage::Writer);
+                let _queued_tracked = reservation.as_ref().map(|reservation| {
+                    crate::runtime_stats::track_memory_bytes(
+                        crate::runtime_stats::MemoryGauge::QueuedEncoded,
+                        reservation.mb() as usize,
+                    )
+                });
+                write_pdf_page(&mut writer, &page, page_index, embedded_available)?;
+
+                pages_written += 1;
+                report_pdf_append_progress(
+                    progress_tracker,
+                    pages_written,
+                    total_pages,
+                    use_margin_label,
+                );
+            }
+            WriterMessage::SetBookmarks {
+                bookmarks,
+                source_to_output,
+            } => {
+                pending_bookmarks = Some((bookmarks, source_to_output));
+            }
+            WriterMessage::SetSyntheticOutline(items) => {
+                pending_synthetic = Some(items);
+            }
+            WriterMessage::SetGlyphFonts(fonts) => {
+                writer.set_glyph_fonts(fonts);
+            }
+            WriterMessage::SetDocumentIdentity { title, author } => {
+                writer.set_metadata(lege_pdf_write::meta::DocumentMeta {
+                    title: title.unwrap_or_default(),
+                    author: author.unwrap_or_default(),
+                    subject: String::new(),
+                    keywords: String::new(),
+                    ..Default::default()
+                });
+            }
+            WriterMessage::Abort => {
+                return Err(anyhow!("PDF writer cancelled before output publication"));
+            }
+            WriterMessage::Finalize => {
+                info_log!(
+                    "[PdfWriterActor] Finalize requested, written {} of {} pages",
+                    pages_written,
+                    total_pages
+                );
+                if pages_written != total_pages {
+                    return Err(anyhow::anyhow!(
+                        "[PdfWriterActor] Refusing to finalize incomplete PDF: wrote {} of {} pages",
+                        pages_written,
+                        total_pages
+                    ));
+                }
+                break;
+            }
+        }
+    }
+
+    // finalize() consumes the writer, so it must happen after the loop.
+    publish_pdf_output(
+        writer,
+        temporary,
+        control,
+        output_path,
+        pending_bookmarks,
+        pending_synthetic,
+    )?;
+
+    info_log!("[PdfWriterActor] Shutting down");
+    Ok(())
+}
+
+/// Convert one page and append it to the document.
+fn write_pdf_page(
+    writer: &mut PdfDocumentWriter,
+    page: &crate::accumulator::Page,
+    page_index: usize,
+    embedded_available: bool,
+) -> anyhow::Result<()> {
+    let (artifact, globals) = match crate::pdf_artifact::page_to_artifact(page, embedded_available)
+    {
+        Ok(v) => v,
+        Err(e) => {
+            crate::warn_log!(
+                "[PdfWriterActor] Failed to convert page {}: {}",
+                page_index,
+                e
+            );
+            return Err(anyhow::anyhow!(
+                "Failed to convert page {}: {}",
+                page_index,
+                e
+            ));
+        }
+    };
+    for (id, bytes) in globals {
+        writer.register_shared(id, bytes);
+    }
+    if let Err(e) = writer.add_page(&artifact) {
+        crate::warn_log!(
+            "[PdfWriterActor] Failed to write page {}: {}",
+            page_index,
+            e
+        );
+        return Err(anyhow::anyhow!(
+            "Failed to write page {}: {}",
+            page_index,
+            e
+        ));
+    }
+    Ok(())
+}
+
+/// Report append progress every fifth page and on the last one.
+fn report_pdf_append_progress(
+    progress_tracker: &crate::progress::ProgressTracker,
+    pages_written: usize,
+    total_pages: usize,
+    use_margin_label: bool,
+) {
+    let is_last_page = pages_written == total_pages;
+    if !is_last_page && !pages_written.is_multiple_of(5) {
+        return;
+    }
+    if use_margin_label {
+        progress_tracker.update(crate::progress::ProcessingStatus::PdfAppendMargin {
+            current: pages_written,
+            total: total_pages,
+        });
+    } else {
+        progress_tracker.update(crate::progress::ProcessingStatus::PdfAppend {
+            current: pages_written,
+            total: total_pages,
+        });
+    }
+}
+
+/// Finish the document and publish it over `output_path`. The state lock is
+/// the commit boundary shared with abort().
+fn publish_pdf_output(
+    mut writer: PdfDocumentWriter,
+    temporary: tempfile::NamedTempFile,
+    control: &PdfWriterControl,
+    output_path: &std::path::Path,
+    pending_bookmarks: Option<(
+        Vec<crate::pagerender::OwnedBookmarkNode>,
+        std::collections::HashMap<usize, usize>,
+    )>,
+    pending_synthetic: Option<Vec<lege_pdf_write::outline::OutlineItem>>,
+) -> anyhow::Result<()> {
+    use std::io::Write;
+
+    let _writer_stage = crate::runtime_stats::enter_stage(crate::runtime_stats::Stage::Writer);
+    // Outline precedence is decided here because "did the source outline
+    // survive remapping" is only knowable once the pages are resolved.
+    let source_outline = pending_bookmarks
+        .map(|(bookmarks, source_to_output)| bookmarks_to_outline(&bookmarks, &source_to_output))
+        .unwrap_or_default();
+    let outline = merge_outline(source_outline, pending_synthetic);
+    if !outline.is_empty() {
+        writer.set_bookmarks(outline);
+    }
+    let mut inner = writer
+        .finalize()
+        .map_err(|e| anyhow::anyhow!("Finalize failed: {}", e))?;
+    inner
+        .flush()
+        .map_err(|e| anyhow::anyhow!("Failed to flush output: {}", e))?;
+    inner
+        .get_ref()
+        .sync_all()
+        .map_err(|e| anyhow::anyhow!("Failed to sync output: {}", e))?;
+    drop(inner);
+    #[cfg(test)]
+    if let Some((ready, resume)) = control.before_publish.lock().unwrap().take() {
+        let _ = ready.send(());
+        resume
+            .recv()
+            .map_err(|_| anyhow!("test publication gate disconnected"))?;
+    }
+    // This lock is the commit boundary shared with abort(). If abort
+    // wins, keep the last good destination. If publication wins, its
+    // successful result is authoritative even if a signal arrives.
+    let mut state = control.lock();
+    if control.cancellation.is_cancelled() || !matches!(*state, PdfWriterState::Finalizing) {
+        *state = PdfWriterState::Aborted;
+        return Err(anyhow!("PDF writer cancelled before output publication"));
+    }
+    temporary.persist(output_path).map_err(|e| {
+        anyhow::anyhow!(
+            "Failed to publish output {}: {}",
+            output_path.display(),
+            e.error
+        )
+    })?;
+    *state = PdfWriterState::Published;
+    crate::success_log!("[PdfWriterActor] PDF written to: {}", output_path.display());
+    Ok(())
 }
 
 /// Resolve document bookmarks (source page indices, optional source→output map)
@@ -1946,6 +2004,17 @@ mod tests {
     use super::{await_stage_or_cancel_with_token, supervise_pipeline_stages};
     use std::sync::Arc;
 
+    /// Signals its channel when dropped, so a test can see a stage's future go.
+    struct SignalOnDrop(Option<tokio::sync::oneshot::Sender<()>>);
+
+    impl Drop for SignalOnDrop {
+        fn drop(&mut self) {
+            if let Some(tx) = self.0.take() {
+                let _ = tx.send(());
+            }
+        }
+    }
+
     #[tokio::test(flavor = "current_thread")]
     async fn lifecycle_stage_error_aborts_siblings_and_cancels_blocking_work() {
         let (_tx, mut shutdown) = tokio::sync::broadcast::channel(1);
@@ -1976,16 +2045,8 @@ mod tests {
         let cancellation = exprim::CancellationToken::new();
         let (dropped_tx, dropped_rx) = tokio::sync::oneshot::channel();
         let (started_tx, started_rx) = tokio::sync::oneshot::channel();
-        struct OnDrop(Option<tokio::sync::oneshot::Sender<()>>);
-        impl Drop for OnDrop {
-            fn drop(&mut self) {
-                if let Some(tx) = self.0.take() {
-                    let _ = tx.send(());
-                }
-            }
-        }
         let upstream = tokio::spawn(async move {
-            let _guard = OnDrop(Some(dropped_tx));
+            let _guard = SignalOnDrop(Some(dropped_tx));
             let _ = started_tx.send(());
             std::future::pending::<anyhow::Result<()>>().await
         });
@@ -2040,16 +2101,8 @@ mod tests {
         let cancellation = exprim::CancellationToken::new();
         let (dropped, observed) = tokio::sync::oneshot::channel();
         let (started, ready) = tokio::sync::oneshot::channel();
-        struct Guard(Option<tokio::sync::oneshot::Sender<()>>);
-        impl Drop for Guard {
-            fn drop(&mut self) {
-                if let Some(sender) = self.0.take() {
-                    let _ = sender.send(());
-                }
-            }
-        }
         let stage = tokio::spawn(async move {
-            let _guard = Guard(Some(dropped));
+            let _guard = SignalOnDrop(Some(dropped));
             let _ = started.send(());
             std::future::pending::<anyhow::Result<()>>().await
         });

@@ -274,6 +274,10 @@ fn stacked(top_a: i32, bottom_a: i32, top_b: i32, bottom_b: i32) -> bool {
 /// letters' widths differ: "Iron" set as "Ir", "o", "n" was read "I", "ro",
 /// "n", and every cell after the pair voted one letter off. On an 886-page
 /// scan two words in five were one cell short.
+#[allow(
+    clippy::excessive_nesting,
+    reason = "dynamic program over cells x characters x characters per cell; the triple loop is the recurrence"
+)]
 fn share_by_width(
     widths: &[i32],
     chars: &[String],
@@ -417,6 +421,140 @@ impl GlyphBox {
             (self.x0 + self.x1) as f32 / 2.0,
             (self.top + self.bottom) as f32 / 2.0,
         )
+    }
+}
+
+/// A cell of a word: `(x0, x1, glyphs)`, the glyphs stacked on one another
+/// over that horizontal extent.
+type StackedCell = (i32, i32, Vec<GlyphBox>);
+
+/// A word sits on one text line; discard any stray mark from a
+/// neighbouring line so cross-line glyphs never stack into a cell.
+/// `line_members` pairs each glyph with its line and must not be empty.
+fn keep_majority_line(line_members: &mut Vec<(usize, GlyphBox)>) {
+    let first_line = line_members[0].0;
+    if !line_members.iter().any(|(l, _)| *l != first_line) {
+        return;
+    }
+    let mut line_area: HashMap<usize, u64> = HashMap::new();
+    for &(l, ref b) in line_members.iter() {
+        *line_area.entry(l).or_insert(0) += u64::from(b.area) + 1;
+    }
+    if let Some((&best_line, _)) = line_area
+        .iter()
+        .max_by_key(|&(l, area)| (*area, std::cmp::Reverse(*l)))
+    {
+        line_members.retain(|(l, _)| *l == best_line);
+    }
+}
+
+/// Cells: runs of glyphs whose horizontal extents overlap by at
+/// least half the narrower one and that are stacked, as
+/// `merge_stacked` groups them. `members` come sorted by `(x0, x1)`; the
+/// cells are returned in the same order.
+fn stacked_cells(members: Vec<GlyphBox>) -> Vec<StackedCell> {
+    let mut cells: Vec<StackedCell> = Vec::new();
+    for b in members {
+        let target = cells.iter_mut().rev().find(|(cx0, cx1, cell)| {
+            let overlap = (*cx1).min(b.x1) - (*cx0).max(b.x0);
+            let top = cell.iter().map(|c| c.top).min().unwrap_or(b.top);
+            let bottom = cell.iter().map(|c| c.bottom).max().unwrap_or(b.bottom);
+            overlap * 2 >= (*cx1 - *cx0).min(b.x1 - b.x0) && stacked(top, bottom, b.top, b.bottom)
+        });
+        if let Some((cx0, cx1, cell)) = target {
+            *cx0 = (*cx0).min(b.x0);
+            *cx1 = (*cx1).max(b.x1);
+            cell.push(b);
+        } else {
+            cells.push((b.x0, b.x1, vec![b]));
+        }
+    }
+    cells.sort_by_key(|(cx0, cx1, _)| (*cx0, *cx1));
+    cells
+}
+
+/// Fewer cells than characters: each character goes to the cell under it.
+/// The word's cells span `span` pixels from `x0`.
+fn chars_to_cells_under_them(
+    cells: &[StackedCell],
+    chars: &[String],
+    x0: f32,
+    span: f32,
+) -> Vec<String> {
+    let m = chars.len();
+    let nominal = |k: usize| x0 + (k as f32 + 0.5) * span / m as f32;
+    let mut cell_text: Vec<String> = vec![String::new(); cells.len()];
+    for (k, c) in chars.iter().enumerate() {
+        let cx = nominal(k);
+        let i = cells
+            .iter()
+            .position(|(cx0, cx1, _)| cx >= *cx0 as f32 && cx <= *cx1 as f32)
+            .unwrap_or_else(|| nearest_cell(cells, cx));
+        cell_text[i].push_str(c);
+    }
+    cell_text
+}
+
+/// The index of the cell whose centre is nearest `cx` (the first of equals).
+fn nearest_cell(cells: &[StackedCell], cx: f32) -> usize {
+    (0..cells.len())
+        .min_by(|&a, &b| {
+            let da = (cells[a].0 as f32 + cells[a].1 as f32) / 2.0 - cx;
+            let db = (cells[b].0 as f32 + cells[b].1 as f32) / 2.0 - cx;
+            da.abs().total_cmp(&db.abs())
+        })
+        .unwrap_or(0)
+}
+
+/// More cells than characters: each cell goes to the character under it;
+/// where several cells land on one character the largest carries it. The
+/// word's cells span `span` pixels from `x0`.
+fn cells_to_chars_under_them(
+    cells: &[StackedCell],
+    chars: &[String],
+    x0: f32,
+    span: f32,
+) -> Vec<String> {
+    let m = chars.len();
+    let mut cell_text: Vec<String> = vec![String::new(); cells.len()];
+    let mut owner: Vec<Option<usize>> = vec![None; m];
+    let area = |cell: &[GlyphBox]| cell.iter().map(|b| b.area).sum::<u32>();
+    for (i, (cx0, cx1, cell)) in cells.iter().enumerate() {
+        let cx = (cx0 + cx1) as f32 / 2.0;
+        let k = (((cx - x0) / span) * m as f32)
+            .floor()
+            .clamp(0.0, (m - 1) as f32) as usize;
+        if owner[k].is_none_or(|j| area(cell) > area(&cells[j].2)) {
+            owner[k] = Some(i);
+        }
+    }
+    for (k, o) in owner.into_iter().enumerate() {
+        if let Some(i) = o {
+            cell_text[i].clone_from(&chars[k]);
+        }
+    }
+    cell_text
+}
+
+/// Give the occurrences queued in `remap` as `(slot, glyph)` their own
+/// glyph ids; slots count the page's glyphs line by line.
+fn apply_glyph_remap(lines: &mut [GlyphLine], mut remap: Vec<(usize, u32)>) {
+    if remap.is_empty() {
+        return;
+    }
+    remap.sort_unstable();
+    let mut slot = 0usize;
+    let mut next = remap.iter().peekable();
+    for line in lines {
+        for g in &mut line.glyphs {
+            if let Some(&&(s, id)) = next.peek()
+                && s == slot
+            {
+                g.glyph = id;
+                next.next();
+            }
+            slot += 1;
+        }
     }
 }
 
@@ -793,18 +931,7 @@ impl Prototype {
                 continue;
             }
             let row = &mut self.votes[(fy * pw) as usize..((fy + 1) * pw) as usize];
-            for (i, &word) in words[y * stride..(y + 1) * stride].iter().enumerate() {
-                let mut v = word;
-                while v != 0 {
-                    // Most significant bit first: bit 31 is pixel 0.
-                    let k = v.leading_zeros();
-                    v &= !(1u32 << (31 - k));
-                    let fx = (i * 32) as i32 + k as i32 + origin.0 + FRAME_PAD as i32;
-                    if fx >= 0 && fx < pw {
-                        row[fx as usize] += 1;
-                    }
-                }
-            }
+            vote_row(row, &words[y * stride..(y + 1) * stride], origin.0, pw);
         }
     }
 
@@ -857,6 +984,24 @@ impl Prototype {
         self.matcher = cropped;
         self.matcher_offset = (x0 as i32 - FRAME_PAD as i32, y0 as i32 - FRAME_PAD as i32);
         resized
+    }
+}
+
+/// Add one vote to `row` (a padded frame row `pw` wide) for every ink pixel
+/// of an instance row packed in `words`; `origin_x` is the instance's left
+/// edge in frame coordinates. Pixels outside the frame are dropped.
+fn vote_row(row: &mut [u16], words: &[u32], origin_x: i32, pw: i32) {
+    for (i, &word) in words.iter().enumerate() {
+        let mut v = word;
+        while v != 0 {
+            // Most significant bit first: bit 31 is pixel 0.
+            let k = v.leading_zeros();
+            v &= !(1u32 << (31 - k));
+            let fx = (i * 32) as i32 + k as i32 + origin_x + FRAME_PAD as i32;
+            if fx >= 0 && fx < pw {
+                row[fx as usize] += 1;
+            }
+        }
     }
 }
 
@@ -917,28 +1062,7 @@ fn holes(bitmap: &BitImage) -> u32 {
     }
     let mut stack = vec![0usize];
     cell[0] = 2;
-    while let Some(i) = stack.pop() {
-        let (x, y) = (i % w, i / w);
-        let visit = |x: usize, y: usize, cell: &mut Vec<u8>, stack: &mut Vec<usize>| {
-            let j = y * w + x;
-            if cell[j] == 0 {
-                cell[j] = 2;
-                stack.push(j);
-            }
-        };
-        if x > 0 {
-            visit(x - 1, y, &mut cell, &mut stack);
-        }
-        if x + 1 < w {
-            visit(x + 1, y, &mut cell, &mut stack);
-        }
-        if y > 0 {
-            visit(x, y - 1, &mut cell, &mut stack);
-        }
-        if y + 1 < h {
-            visit(x, y + 1, &mut cell, &mut stack);
-        }
-    }
+    flood_background(&mut cell, w, h, &mut stack);
     let mut counters = 0;
     for start in 0..w * h {
         if cell[start] != 0 {
@@ -947,30 +1071,36 @@ fn holes(bitmap: &BitImage) -> u32 {
         counters += 1;
         cell[start] = 2;
         stack.push(start);
-        while let Some(i) = stack.pop() {
-            let (x, y) = (i % w, i / w);
-            let visit = |x: usize, y: usize, cell: &mut Vec<u8>, stack: &mut Vec<usize>| {
-                let j = y * w + x;
-                if cell[j] == 0 {
-                    cell[j] = 2;
-                    stack.push(j);
-                }
-            };
-            if x > 0 {
-                visit(x - 1, y, &mut cell, &mut stack);
-            }
-            if x + 1 < w {
-                visit(x + 1, y, &mut cell, &mut stack);
-            }
-            if y > 0 {
-                visit(x, y - 1, &mut cell, &mut stack);
-            }
-            if y + 1 < h {
-                visit(x, y + 1, &mut cell, &mut stack);
-            }
-        }
+        flood_background(&mut cell, w, h, &mut stack);
     }
     counters
+}
+
+/// Mark as reached (2) every unreached background cell (0) 4-connected to
+/// the cells on `stack`, which leaves it empty. `cell` is `w` x `h`.
+fn flood_background(cell: &mut [u8], w: usize, h: usize, stack: &mut Vec<usize>) {
+    while let Some(i) = stack.pop() {
+        let (x, y) = (i % w, i / w);
+        let visit = |x: usize, y: usize, cell: &mut [u8], stack: &mut Vec<usize>| {
+            let j = y * w + x;
+            if cell[j] == 0 {
+                cell[j] = 2;
+                stack.push(j);
+            }
+        };
+        if x > 0 {
+            visit(x - 1, y, cell, stack);
+        }
+        if x + 1 < w {
+            visit(x + 1, y, cell, stack);
+        }
+        if y > 0 {
+            visit(x, y - 1, cell, stack);
+        }
+        if y + 1 < h {
+            visit(x, y + 1, cell, stack);
+        }
+    }
 }
 
 /// Ink per row and per column of a shape: a lower bound on how much two
@@ -1303,6 +1433,23 @@ struct SearchStats {
     compared: u64,
 }
 
+/// The shape a search looks for and what every candidate is held to: the
+/// gate, the counters to agree on (`None` for a shape without stroke
+/// interior), and the ink window `ink_lo..=ink_hi` the pre-filter admits.
+#[derive(Clone, Copy)]
+struct SearchQuery<'a> {
+    bitmap: &'a BitImage,
+    features: &'a ShapeFeatures,
+    gate: Gate,
+    counters: Option<u32>,
+    percent: u32,
+    ink_lo: u32,
+    ink_hi: u32,
+}
+
+/// A search's best match so far: (rank, index, dx, dy).
+type SearchBest = ((u32, u32, u32), u32, i32, i32);
+
 /// A prototype's place in the candidate and exact indexes, taken before
 /// its matcher changes so it can be moved afterwards.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1523,27 +1670,7 @@ impl GlyphDictionary {
                     self.fold(idx, dx, dy, &bitmap, &mut dirty)
                 }
                 Probe::Tolerant(idx, dx, dy) if !dirty.contains(&idx) => {
-                    // A prototype this page added may fit strictly, and a
-                    // strict match always wins over a tolerant one.
-                    let started = Instant::now();
-                    let strict = if self.protos.len() as u32 > first_new || !dirty.is_empty() {
-                        self.find_match(&bitmap, &features, Gate::Strict, |i, _| {
-                            i >= first_new || dirty.contains(&i)
-                        })
-                    } else {
-                        None
-                    };
-                    self.profile.strict += started.elapsed();
-                    match strict {
-                        Some((idx, dx, dy)) => {
-                            self.profile.strict_hits += 1;
-                            self.fold(idx, dx, dy, &bitmap, &mut dirty)
-                        }
-                        None => {
-                            self.profile.tolerant_hits += 1;
-                            self.fold(idx, dx, dy, &bitmap, &mut dirty)
-                        }
-                    }
+                    self.fold_tolerant((idx, dx, dy), &bitmap, &features, first_new, &mut dirty)
                 }
                 // Nothing the page found fits: only what has changed since
                 // — the prototypes this page added and those it rebuilt —
@@ -1610,6 +1737,38 @@ impl GlyphDictionary {
         }
     }
 
+    /// Fold a shape whose probe matched prototype `idx` tolerantly at
+    /// `(dx, dy)`. A prototype this page added may fit strictly, and a
+    /// strict match always wins over a tolerant one.
+    fn fold_tolerant(
+        &mut self,
+        (idx, dx, dy): (u32, i32, i32),
+        bitmap: &BitImage,
+        features: &ShapeFeatures,
+        first_new: u32,
+        dirty: &mut HashSet<u32>,
+    ) -> (u32, i32, i32) {
+        let started = Instant::now();
+        let strict = if self.protos.len() as u32 > first_new || !dirty.is_empty() {
+            self.find_match(bitmap, features, Gate::Strict, |i, _| {
+                i >= first_new || dirty.contains(&i)
+            })
+        } else {
+            None
+        };
+        self.profile.strict += started.elapsed();
+        match strict {
+            Some((idx, dx, dy)) => {
+                self.profile.strict_hits += 1;
+                self.fold(idx, dx, dy, bitmap, dirty)
+            }
+            None => {
+                self.profile.tolerant_hits += 1;
+                self.fold(idx, dx, dy, bitmap, dirty)
+            }
+        }
+    }
+
     /// Give every prototype created on this page its descent and advance,
     /// from the lower medians of what its instances on the page show. Lines
     /// arrive from `group_lines` with each glyph's own descent in `rise_px`
@@ -1624,17 +1783,18 @@ impl GlyphDictionary {
                 if is_new {
                     descents.entry(g.glyph).or_default().push(g.rise_px);
                 }
-                if let Some(next) = line.glyphs.get(i + 1) {
-                    let gap = next.x - (g.x + g.width as i32);
-                    if gap >= 0 {
-                        page_gaps.push(gap);
-                    }
-                    // Keep small negative kerning gaps (letters tucked under
-                    // an overhanging `f` or `T`) so overhanging letters do not
-                    // learn only word-final spaces as their advance.
-                    if is_new && gap >= -4 {
-                        gaps.entry(g.glyph).or_default().push(gap);
-                    }
+                let Some(next) = line.glyphs.get(i + 1) else {
+                    continue;
+                };
+                let gap = next.x - (g.x + g.width as i32);
+                if gap >= 0 {
+                    page_gaps.push(gap);
+                }
+                // Keep small negative kerning gaps (letters tucked under
+                // an overhanging `f` or `T`) so overhanging letters do not
+                // learn only word-final spaces as their advance.
+                if is_new && gap >= -4 {
+                    gaps.entry(g.glyph).or_default().push(gap);
                 }
             }
         }
@@ -1982,45 +2142,11 @@ impl GlyphDictionary {
             if line_members.is_empty() {
                 continue;
             }
-            // A word sits on one text line; discard any stray mark from a
-            // neighbouring line so cross-line glyphs never stack into a cell.
-            let first_line = line_members[0].0;
-            if line_members.iter().any(|(l, _)| *l != first_line) {
-                let mut line_area: HashMap<usize, u64> = HashMap::new();
-                for &(l, ref b) in &line_members {
-                    *line_area.entry(l).or_insert(0) += u64::from(b.area) + 1;
-                }
-                if let Some((&best_line, _)) = line_area
-                    .iter()
-                    .max_by_key(|&(l, area)| (*area, std::cmp::Reverse(*l)))
-                {
-                    line_members.retain(|(l, _)| *l == best_line);
-                }
-            }
+            keep_majority_line(&mut line_members);
             let mut members: Vec<GlyphBox> = line_members.into_iter().map(|(_, b)| b).collect();
             members.sort_by_key(|b| (b.x0, b.x1));
 
-            // Cells: runs of glyphs whose horizontal extents overlap by at
-            // least half the narrower one and that are stacked, as
-            // `merge_stacked` groups them.
-            let mut cells: Vec<(i32, i32, Vec<GlyphBox>)> = Vec::new();
-            for b in members {
-                let target = cells.iter_mut().rev().find(|(cx0, cx1, cell)| {
-                    let overlap = (*cx1).min(b.x1) - (*cx0).max(b.x0);
-                    let top = cell.iter().map(|c| c.top).min().unwrap_or(b.top);
-                    let bottom = cell.iter().map(|c| c.bottom).max().unwrap_or(b.bottom);
-                    overlap * 2 >= (*cx1 - *cx0).min(b.x1 - b.x0)
-                        && stacked(top, bottom, b.top, b.bottom)
-                });
-                if let Some((cx0, cx1, cell)) = target {
-                    *cx0 = (*cx0).min(b.x0);
-                    *cx1 = (*cx1).max(b.x1);
-                    cell.push(b);
-                } else {
-                    cells.push((b.x0, b.x1, vec![b]));
-                }
-            }
-            cells.sort_by_key(|(cx0, cx1, _)| (*cx0, *cx1));
+            let cells = stacked_cells(members);
             let n = cells.len();
             if n > 2 * chars.len() + 2 {
                 continue;
@@ -2036,128 +2162,113 @@ impl GlyphDictionary {
             } else {
                 chars
             };
-            let m = chars.len();
 
-            let mut cell_text: Vec<String> = vec![String::new(); n];
-            let weight = if n == m {
-                for ((slot, c), (x0, x1, _)) in cell_text.iter_mut().zip(&chars).zip(&cells) {
-                    slot.clone_from(c);
-                    let entry = self.char_widths.entry(c.clone()).or_insert((0, 0));
-                    entry.0 += u64::try_from(x1 - x0).unwrap_or(0);
-                    entry.1 += 1;
-                }
-                EXACT_ALIGNMENT_WEIGHT
-            } else {
-                let x0 = cells[0].0 as f32;
-                let span = (cells[n - 1].1 as f32 - x0).max(1.0);
-                let nominal = |k: usize| x0 + (k as f32 + 0.5) * span / m as f32;
-                let widths: Vec<i32> = cells.iter().map(|(x0, x1, _)| x1 - x0).collect();
-                let known_chars = chars
-                    .iter()
-                    .filter(|c| self.char_width(c).is_some())
-                    .count();
-                let by_width = (n < m)
-                    .then(|| share_by_width(&widths, &chars, |c| self.char_width(c)))
-                    .flatten();
-                if let Some(texts) = by_width {
-                    cell_text = texts;
-                } else if n < m && known_chars * 2 >= m {
-                    // Letter widths are already known and the cells cannot
-                    // plausibly hold all `m` characters (e.g. a clipped word
-                    // box missed an edge letter): skip voting rather than
-                    // stuffing extra letters into a normal-width cell.
-                    continue;
-                } else if n < m {
-                    // Each character goes to the cell under it.
-                    for (k, c) in chars.iter().enumerate() {
-                        let cx = nominal(k);
-                        let i = cells
-                            .iter()
-                            .position(|(cx0, cx1, _)| cx >= *cx0 as f32 && cx <= *cx1 as f32)
-                            .unwrap_or_else(|| {
-                                (0..n)
-                                    .min_by(|&a, &b| {
-                                        let da = (cells[a].0 as f32 + cells[a].1 as f32) / 2.0 - cx;
-                                        let db = (cells[b].0 as f32 + cells[b].1 as f32) / 2.0 - cx;
-                                        da.abs().total_cmp(&db.abs())
-                                    })
-                                    .unwrap_or(0)
-                            });
-                        cell_text[i].push_str(c);
-                    }
-                } else {
-                    // Each cell goes to the character under it; where several
-                    // cells land on one character the largest carries it.
-                    let mut owner: Vec<Option<usize>> = vec![None; m];
-                    let area = |cell: &[GlyphBox]| cell.iter().map(|b| b.area).sum::<u32>();
-                    for (i, (cx0, cx1, cell)) in cells.iter().enumerate() {
-                        let cx = (cx0 + cx1) as f32 / 2.0;
-                        let k = (((cx - x0) / span) * m as f32)
-                            .floor()
-                            .clamp(0.0, (m - 1) as f32) as usize;
-                        if owner[k].is_none_or(|j| area(cell) > area(&cells[j].2)) {
-                            owner[k] = Some(i);
-                        }
-                    }
-                    for (k, o) in owner.into_iter().enumerate() {
-                        if let Some(i) = o {
-                            cell_text[i].clone_from(&chars[k]);
-                        }
-                    }
-                }
-                LOOSE_ALIGNMENT_WEIGHT
+            let Some((cell_text, weight)) = self.align_cells(&cells, &chars) else {
+                continue;
             };
-
-            for ((_, _, cell), text) in cells.iter().zip(cell_text) {
-                let carrier = cell
-                    .iter()
-                    .enumerate()
-                    .max_by_key(|(_, b)| b.area)
-                    .map(|(i, _)| i)
-                    .unwrap_or(0);
-                for (i, b) in cell.iter().enumerate() {
-                    let vote = if i == carrier { text.as_str() } else { "" };
-                    // A shape can stand for more than one character. Give
-                    // this occurrence the id that means what OCR read, so
-                    // the outline stays shared but the text does not.
-                    let glyph = if vote.is_empty() {
-                        b.glyph
-                    } else {
-                        let id =
-                            self.text_identity(b.glyph, vote, weight == EXACT_ALIGNMENT_WEIGHT);
-                        if id != b.glyph {
-                            remap.push((b.slot, id));
-                        }
-                        id
-                    };
-                    *self
-                        .text_votes
-                        .entry(glyph)
-                        .or_default()
-                        .entry(vote.to_string())
-                        .or_insert(0) += weight;
-                }
-            }
+            self.vote_cells(&cells, cell_text, weight, &mut remap);
         }
         runs.word_starts.sort_unstable();
         runs.word_starts.dedup();
 
-        if !remap.is_empty() {
-            remap.sort_unstable();
-            let mut slot = 0usize;
-            let mut next = remap.iter().peekable();
-            for line in &mut runs.lines {
-                for g in &mut line.glyphs {
-                    if let Some(&&(s, id)) = next.peek() {
-                        if s == slot {
-                            g.glyph = id;
-                            next.next();
-                        }
-                    }
-                    slot += 1;
-                }
+        apply_glyph_remap(&mut runs.lines, remap);
+    }
+
+    /// The text each of a word's `cells` stands for, and the weight of its
+    /// votes, given the word's `chars`. When cells and characters pair up
+    /// one to one, also learns the characters' widths. `None` when the word
+    /// should not vote.
+    fn align_cells(
+        &mut self,
+        cells: &[StackedCell],
+        chars: &[String],
+    ) -> Option<(Vec<String>, u64)> {
+        let n = cells.len();
+        let m = chars.len();
+        if n == m {
+            let mut cell_text: Vec<String> = vec![String::new(); n];
+            for ((slot, c), (x0, x1, _)) in cell_text.iter_mut().zip(chars).zip(cells) {
+                slot.clone_from(c);
+                let entry = self.char_widths.entry(c.clone()).or_insert((0, 0));
+                entry.0 += u64::try_from(x1 - x0).unwrap_or(0);
+                entry.1 += 1;
+            }
+            return Some((cell_text, EXACT_ALIGNMENT_WEIGHT));
+        }
+        let x0 = cells[0].0 as f32;
+        let span = (cells[n - 1].1 as f32 - x0).max(1.0);
+        let widths: Vec<i32> = cells.iter().map(|(x0, x1, _)| x1 - x0).collect();
+        let known_chars = chars
+            .iter()
+            .filter(|c| self.char_width(c).is_some())
+            .count();
+        let by_width = (n < m)
+            .then(|| share_by_width(&widths, chars, |c| self.char_width(c)))
+            .flatten();
+        let cell_text = if let Some(texts) = by_width {
+            texts
+        } else if n < m && known_chars * 2 >= m {
+            // Letter widths are already known and the cells cannot
+            // plausibly hold all `m` characters (e.g. a clipped word
+            // box missed an edge letter): skip voting rather than
+            // stuffing extra letters into a normal-width cell.
+            return None;
+        } else if n < m {
+            chars_to_cells_under_them(cells, chars, x0, span)
+        } else {
+            cells_to_chars_under_them(cells, chars, x0, span)
+        };
+        Some((cell_text, LOOSE_ALIGNMENT_WEIGHT))
+    }
+
+    /// Record one word's votes: in each cell the largest glyph votes for the
+    /// cell's text, the others for the empty string. Occurrences given a
+    /// text identity of their own are queued in `remap` by slot.
+    fn vote_cells(
+        &mut self,
+        cells: &[StackedCell],
+        cell_text: Vec<String>,
+        weight: u64,
+        remap: &mut Vec<(usize, u32)>,
+    ) {
+        for ((_, _, cell), text) in cells.iter().zip(cell_text) {
+            let carrier = cell
+                .iter()
+                .enumerate()
+                .max_by_key(|(_, b)| b.area)
+                .map(|(i, _)| i)
+                .unwrap_or(0);
+            for (i, b) in cell.iter().enumerate() {
+                let vote = if i == carrier { text.as_str() } else { "" };
+                let glyph = self.voting_glyph(b, vote, weight == EXACT_ALIGNMENT_WEIGHT, remap);
+                *self
+                    .text_votes
+                    .entry(glyph)
+                    .or_default()
+                    .entry(vote.to_string())
+                    .or_insert(0) += weight;
             }
         }
+    }
+
+    /// The glyph id an occurrence votes under. A shape can stand for more
+    /// than one character. Give this occurrence the id that means what OCR
+    /// read, so the outline stays shared but the text does not.
+    fn voting_glyph(
+        &mut self,
+        b: &GlyphBox,
+        vote: &str,
+        exact: bool,
+        remap: &mut Vec<(usize, u32)>,
+    ) -> u32 {
+        if vote.is_empty() {
+            return b.glyph;
+        }
+        let id = self.text_identity(b.glyph, vote, exact);
+        if id != b.glyph {
+            remap.push((b.slot, id));
+        }
+        id
     }
 
     /// The glyph → text mapping the recorded votes support, as `(glyph id,
@@ -2527,105 +2638,143 @@ impl GlyphDictionary {
         // short by the fraction of the instance's ink, a heavier one by the
         // fraction of its own.
         let percent = gate.ink_diff_percent();
-        let ink_lo = black.saturating_sub(black * percent / 100 + TOTAL_DIFF_MIN);
-        let ink_hi = (black + TOTAL_DIFF_MIN) * 100 / (100 - percent) + 1;
+        let query = SearchQuery {
+            bitmap,
+            features,
+            gate,
+            counters,
+            percent,
+            ink_lo: black.saturating_sub(black * percent / 100 + TOTAL_DIFF_MIN),
+            ink_hi: (black + TOTAL_DIFF_MIN) * 100 / (100 - percent) + 1,
+        };
 
-        // (rank, index, dx, dy)
-        let mut best: Option<((u32, u32, u32), u32, i32, i32)> = None;
-        let (mut candidates, mut compared) = (0u64, 0u64);
+        let mut best: Option<SearchBest> = None;
+        let mut stats = SearchStats::default();
         'search: for bw in w.saturating_sub(dim_limit)..=w + dim_limit {
             for bh in h.saturating_sub(dim_limit)..=h + dim_limit {
-                let Some(all_classes) = self.bucket_classes.get(&(bw, bh)) else {
-                    continue;
-                };
-                let selected = [0, counters.unwrap_or(0).saturating_add(1)];
-                let classes: &[u32] = match (gate, counters) {
-                    (Gate::Tolerant, Some(_)) => &selected[1..],
-                    (Gate::Strict, Some(_)) => &selected,
-                    (Gate::Strict, None) => all_classes,
-                    (Gate::Tolerant, None) => &[],
-                };
-                for &class in classes {
-                    let Some(bucket) = self.buckets.get(&(bw, bh, class)) else {
-                        continue;
-                    };
-                    let start = bucket.partition_point(|&(b, _)| b < ink_lo);
-                    for &(proto_black, idx) in
-                        bucket[start..].iter().take_while(|&&(b, _)| b <= ink_hi)
-                    {
-                        candidates += 1;
-                        let ink = proto_black.max(black);
-                        if proto_black.abs_diff(black) > ink * percent / 100 + TOTAL_DIFF_MIN {
-                            continue;
-                        }
-                        let proto = &self.protos[idx as usize];
-                        if !accept(idx, proto) || (gate == Gate::Tolerant && !proto.stroked) {
-                            continue;
-                        }
-                        if proto.stroked && counters.is_some_and(|c| c != proto.counters) {
-                            continue;
-                        }
-                        // Shapes whose ink profiles alone differ by more than
-                        // the gate allows cannot match at any alignment.
-                        let total_limit = gate.total_limit(ink);
-                        if features.profile.distance_bound(&proto.profile, total_limit)
-                            > total_limit
-                        {
-                            continue;
-                        }
-                        compared += 1;
-                        // The comparator only finds the alignment; its word-wise
-                        // error is loose, so it gets a loose budget and the
-                        // packed diff decides.
-                        let Some(r) = comparator.compare_for_refine_family(
-                            bitmap,
-                            &proto.matcher,
-                            gate.comparator_budget(ink),
-                            SHIFT_LIMIT,
-                            SHIFT_LIMIT,
-                        ) else {
-                            continue;
-                        };
-                        // Two passes: the second measures the far pixels, and is
-                        // only reached by a candidate the cheap tests admit.
-                        let Some(coarse) =
-                            bitrows::diff(bitmap, &proto.matcher, r.dx, r.dy, total_limit, None)
-                        else {
-                            continue;
-                        };
-                        if !gate.accept_coarse(coarse, ink) {
-                            continue;
-                        }
-                        let Some(diff) = bitrows::diff(
-                            bitmap,
-                            &proto.matcher,
-                            r.dx,
-                            r.dy,
-                            total_limit,
-                            gate.far_limit(ink),
-                        ) else {
-                            continue;
-                        };
-                        let Some(rank) = gate.accept(diff, ink) else {
-                            continue;
-                        };
-                        if best.is_none_or(|(b, ..)| rank < b) {
-                            best = Some((rank, idx, r.dx, r.dy));
-                            if rank == (0, 0, 0) {
-                                break 'search;
-                            }
-                        }
-                    }
+                if self.search_size(comparator, &query, (bw, bh), &accept, &mut best, &mut stats) {
+                    break 'search;
                 }
             }
         }
-        (
-            best.map(|(_, idx, dx, dy)| (idx, dx, dy)),
-            SearchStats {
-                candidates,
-                compared,
-            },
-        )
+        (best.map(|(_, idx, dx, dy)| (idx, dx, dy)), stats)
+    }
+
+    /// Search the buckets of prototypes sized `bw` x `bh` for the query,
+    /// improving `best`. Returns `true` once a perfect match is found, which
+    /// ends the search.
+    fn search_size(
+        &self,
+        comparator: &mut Comparator,
+        query: &SearchQuery,
+        (bw, bh): (u32, u32),
+        accept: &impl Fn(u32, &Prototype) -> bool,
+        best: &mut Option<SearchBest>,
+        stats: &mut SearchStats,
+    ) -> bool {
+        let Some(all_classes) = self.bucket_classes.get(&(bw, bh)) else {
+            return false;
+        };
+        let counters = query.counters;
+        let selected = [0, counters.unwrap_or(0).saturating_add(1)];
+        let classes: &[u32] = match (query.gate, counters) {
+            (Gate::Tolerant, Some(_)) => &selected[1..],
+            (Gate::Strict, Some(_)) => &selected,
+            (Gate::Strict, None) => all_classes,
+            (Gate::Tolerant, None) => &[],
+        };
+        for &class in classes {
+            let Some(bucket) = self.buckets.get(&(bw, bh, class)) else {
+                continue;
+            };
+            let start = bucket.partition_point(|&(b, _)| b < query.ink_lo);
+            for &(proto_black, idx) in bucket[start..]
+                .iter()
+                .take_while(|&&(b, _)| b <= query.ink_hi)
+            {
+                stats.candidates += 1;
+                let Some((rank, dx, dy)) =
+                    self.rank_candidate(comparator, query, proto_black, idx, accept, stats)
+                else {
+                    continue;
+                };
+                if !best.is_none_or(|(b, ..)| rank < b) {
+                    continue;
+                }
+                *best = Some((rank, idx, dx, dy));
+                if rank == (0, 0, 0) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// How well prototype `idx`, with `proto_black` ink, matches the query:
+    /// its rank and alignment, or `None` when a test rejects it. Counts the
+    /// candidates that reach the comparator in `stats`.
+    fn rank_candidate(
+        &self,
+        comparator: &mut Comparator,
+        query: &SearchQuery,
+        proto_black: u32,
+        idx: u32,
+        accept: &impl Fn(u32, &Prototype) -> bool,
+        stats: &mut SearchStats,
+    ) -> Option<((u32, u32, u32), i32, i32)> {
+        let SearchQuery {
+            bitmap,
+            features,
+            gate,
+            counters,
+            percent,
+            ..
+        } = *query;
+        let black = features.black;
+        let ink = proto_black.max(black);
+        if proto_black.abs_diff(black) > ink * percent / 100 + TOTAL_DIFF_MIN {
+            return None;
+        }
+        let proto = &self.protos[idx as usize];
+        if !accept(idx, proto) || (gate == Gate::Tolerant && !proto.stroked) {
+            return None;
+        }
+        if proto.stroked && counters.is_some_and(|c| c != proto.counters) {
+            return None;
+        }
+        // Shapes whose ink profiles alone differ by more than
+        // the gate allows cannot match at any alignment.
+        let total_limit = gate.total_limit(ink);
+        if features.profile.distance_bound(&proto.profile, total_limit) > total_limit {
+            return None;
+        }
+        stats.compared += 1;
+        // The comparator only finds the alignment; its word-wise
+        // error is loose, so it gets a loose budget and the
+        // packed diff decides.
+        let r = comparator.compare_for_refine_family(
+            bitmap,
+            &proto.matcher,
+            gate.comparator_budget(ink),
+            SHIFT_LIMIT,
+            SHIFT_LIMIT,
+        )?;
+        // Two passes: the second measures the far pixels, and is
+        // only reached by a candidate the cheap tests admit.
+        let coarse = bitrows::diff(bitmap, &proto.matcher, r.dx, r.dy, total_limit, None)?;
+        if !gate.accept_coarse(coarse, ink) {
+            return None;
+        }
+        let diff = bitrows::diff(
+            bitmap,
+            &proto.matcher,
+            r.dx,
+            r.dy,
+            total_limit,
+            gate.far_limit(ink),
+        )?;
+        let rank = gate.accept(diff, ink)?;
+        Some((rank, r.dx, r.dy))
     }
 
     /// Rebuild prototype `idx`'s matcher from its votes, keeping the bucket
@@ -3008,13 +3157,7 @@ impl GlyphDictionary {
             let p = &self.protos[i];
             let ox = (n % cols) * cell_w + 2;
             let oy = (n / cols) * cell_h + 1;
-            for y in 0..p.matcher.height.min(cell_h - 6) {
-                for x in 0..p.matcher.width.min(cell_w - 4) {
-                    if p.matcher.get_usize(x, y) {
-                        sheet.put_pixel((ox + x) as u32, (oy + y) as u32, image::Rgb([0, 0, 0]));
-                    }
-                }
-            }
+            paint_bitmap(&mut sheet, &p.matcher, (ox, oy), (cell_w - 4, cell_h - 6));
             let colour = match weight[i] {
                 1 => image::Rgb([220, 0, 0]),
                 2..=3 => image::Rgb([240, 140, 0]),
@@ -3069,78 +3212,70 @@ impl GlyphDictionary {
                 )?;
             }
         }
-        if !folds.is_empty() {
-            let zoom = 2usize;
-            let pair_w = zoom * (2 * cell_w + 2);
-            let row_h = zoom * cell_h;
-            let cols = 8usize;
-            let rows = folds.len().div_ceil(cols);
-            let mut sheet = image::RgbImage::from_pixel(
-                (cols * pair_w) as u32,
-                (rows * row_h) as u32,
-                image::Rgb([255, 255, 255]),
-            );
-            let mut blot = |x: usize, y: usize, c: [u8; 3]| {
-                for yy in 0..zoom {
-                    for xx in 0..zoom {
-                        sheet.put_pixel(
-                            (x * zoom + xx) as u32,
-                            (y * zoom + yy) as u32,
-                            image::Rgb(c),
-                        );
-                    }
-                }
-            };
-            for (n, &(light, heavy)) in folds.iter().enumerate() {
-                let (root, _, _) = self.resolve_alias(heavy);
-                let ox = (n % cols) * (2 * cell_w + 2);
-                let oy = (n / cols) * cell_h + 1;
-                let a = self.protos[light as usize].matcher.clone();
-                let b = self.protos[root as usize].matcher.clone();
-                let (dx, dy) = self
-                    .comparator
-                    .compare_for_refine_family(&a, &b, u32::MAX, SHIFT_LIMIT, SHIFT_LIMIT)
-                    .map(|r| (r.dx, r.dy))
-                    .unwrap_or((0, 0));
-                let on = |img: &BitImage, x: i32, y: i32| -> bool {
-                    x >= 0
-                        && y >= 0
-                        && (x as usize) < img.width
-                        && (y as usize) < img.height
-                        && img.get_usize(x as usize, y as usize)
-                };
-                let near = |img: &BitImage, x: i32, y: i32| -> bool {
-                    (-1..=1).any(|ny| (-1..=1).any(|nx| on(img, x + nx, y + ny)))
-                };
-                for (k, (img, other, sx, sy)) in [(&a, &b, -dx, -dy), (&b, &a, dx, dy)]
-                    .into_iter()
-                    .enumerate()
-                {
-                    let cx = ox + k * (cell_w + 1) + 2;
-                    for y in 0..img.height.min(cell_h - 6) {
-                        for x in 0..img.width.min(cell_w - 4) {
-                            if !img.get_usize(x, y) {
-                                continue;
-                            }
-                            // This pixel in the other shape's frame.
-                            let (qx, qy) = (x as i32 + sx, y as i32 + sy);
-                            let colour = if on(other, qx, qy) {
-                                [0, 0, 0]
-                            } else if near(other, qx, qy) {
-                                [70, 110, 255]
-                            } else {
-                                [230, 0, 0]
-                            };
-                            blot(cx + x, oy + y, colour);
-                        }
-                    }
-                }
-                for y in 0..cell_h - 2 {
-                    blot(ox + cell_w, oy + y, [200, 200, 200]);
+        self.dump_fold_sheet(&folds, (cell_w, cell_h), &dir.join("folds.png"))
+    }
+
+    /// The tolerant folds as a picture, `cell` being the glyph sheet's cell
+    /// size; see [`dump`](Self::dump). Nothing is written without folds.
+    fn dump_fold_sheet(
+        &mut self,
+        folds: &[(u32, u32)],
+        (cell_w, cell_h): (usize, usize),
+        path: &std::path::Path,
+    ) -> Result<()> {
+        if folds.is_empty() {
+            return Ok(());
+        }
+        let zoom = 2usize;
+        let pair_w = zoom * (2 * cell_w + 2);
+        let row_h = zoom * cell_h;
+        let cols = 8usize;
+        let rows = folds.len().div_ceil(cols);
+        let mut sheet = image::RgbImage::from_pixel(
+            (cols * pair_w) as u32,
+            (rows * row_h) as u32,
+            image::Rgb([255, 255, 255]),
+        );
+        let mut blot = |x: usize, y: usize, c: [u8; 3]| {
+            for yy in 0..zoom {
+                for xx in 0..zoom {
+                    sheet.put_pixel(
+                        (x * zoom + xx) as u32,
+                        (y * zoom + yy) as u32,
+                        image::Rgb(c),
+                    );
                 }
             }
-            sheet.save(dir.join("folds.png"))?;
+        };
+        for (n, &(light, heavy)) in folds.iter().enumerate() {
+            let (root, _, _) = self.resolve_alias(heavy);
+            let ox = (n % cols) * (2 * cell_w + 2);
+            let oy = (n / cols) * cell_h + 1;
+            let a = self.protos[light as usize].matcher.clone();
+            let b = self.protos[root as usize].matcher.clone();
+            let (dx, dy) = self
+                .comparator
+                .compare_for_refine_family(&a, &b, u32::MAX, SHIFT_LIMIT, SHIFT_LIMIT)
+                .map(|r| (r.dx, r.dy))
+                .unwrap_or((0, 0));
+            for (k, (img, other, sx, sy)) in [(&a, &b, -dx, -dy), (&b, &a, dx, dy)]
+                .into_iter()
+                .enumerate()
+            {
+                let cx = ox + k * (cell_w + 1) + 2;
+                paint_fold_side(
+                    &mut blot,
+                    (img, other),
+                    (sx, sy),
+                    (cx, oy),
+                    (cell_w - 4, cell_h - 6),
+                );
+            }
+            for y in 0..cell_h - 2 {
+                blot(ox + cell_w, oy + y, [200, 200, 200]);
+            }
         }
+        sheet.save(path)?;
         Ok(())
     }
 
@@ -3229,22 +3364,7 @@ impl GlyphDictionary {
                 // ours. A part's y axis starts at its own baseline, so shift
                 // by the difference between the two frames' baseline rows.
                 let own_baseline = proto.frame_h as i32 - descent;
-                let mut components = Vec::new();
-                for (root, ox, oy) in self.simple_parts(idx as u32) {
-                    let r = &self.protos[root as usize];
-                    let root_baseline = r.frame_h as i32 - r.descent.unwrap_or(0);
-                    let dx = ox * UNITS_PER_PIXEL;
-                    let dy = (own_baseline - root_baseline - oy) * UNITS_PER_PIXEL;
-                    components.push(GlyphComponent {
-                        glyph: u16::try_from(root + FIRST_SHAPE_GID).map_err(|_| {
-                            anyhow!("glyph font: glyph id {} overflows", root + FIRST_SHAPE_GID)
-                        })?,
-                        dx: i16::try_from(dx)
-                            .map_err(|_| anyhow!("glyph font: composite offset {dx} overflows"))?,
-                        dy: i16::try_from(dy)
-                            .map_err(|_| anyhow!("glyph font: composite offset {dy} overflows"))?,
-                    });
-                }
+                let components = self.composite_components(idx as u32, own_baseline)?;
                 glyphs.push(GlyphOutline::composite(advance, components));
                 continue;
             }
@@ -3326,6 +3446,95 @@ impl GlyphDictionary {
             compress_program: true,
         })
     }
+
+    /// The components of composite glyph `idx`, whose baseline row in its
+    /// frame is `own_baseline`: each simple part placed where its frame
+    /// sits in ours.
+    fn composite_components(&self, idx: u32, own_baseline: i32) -> Result<Vec<GlyphComponent>> {
+        let mut components = Vec::new();
+        for (root, ox, oy) in self.simple_parts(idx) {
+            let r = &self.protos[root as usize];
+            let root_baseline = r.frame_h as i32 - r.descent.unwrap_or(0);
+            let dx = ox * UNITS_PER_PIXEL;
+            let dy = (own_baseline - root_baseline - oy) * UNITS_PER_PIXEL;
+            components.push(GlyphComponent {
+                glyph: u16::try_from(root + FIRST_SHAPE_GID).map_err(|_| {
+                    anyhow!("glyph font: glyph id {} overflows", root + FIRST_SHAPE_GID)
+                })?,
+                dx: i16::try_from(dx)
+                    .map_err(|_| anyhow!("glyph font: composite offset {dx} overflows"))?,
+                dy: i16::try_from(dy)
+                    .map_err(|_| anyhow!("glyph font: composite offset {dy} overflows"))?,
+            });
+        }
+        Ok(components)
+    }
+}
+
+/// Paint a bitmap's ink black onto `sheet` at `origin`, clipped to `max`
+/// (width, height).
+fn paint_bitmap(
+    sheet: &mut image::RgbImage,
+    bitmap: &BitImage,
+    (ox, oy): (usize, usize),
+    (max_w, max_h): (usize, usize),
+) {
+    for y in 0..bitmap.height.min(max_h) {
+        for x in 0..bitmap.width.min(max_w) {
+            if bitmap.get_usize(x, y) {
+                sheet.put_pixel((ox + x) as u32, (oy + y) as u32, image::Rgb([0, 0, 0]));
+            }
+        }
+    }
+}
+
+/// Paint one side of a fold, `img` against `other` shifted by `(sx, sy)`,
+/// with `blot` at `origin`, clipped to `max` (width, height); see
+/// [`fold_pixel_colour`].
+fn paint_fold_side(
+    blot: &mut impl FnMut(usize, usize, [u8; 3]),
+    (img, other): (&BitImage, &BitImage),
+    (sx, sy): (i32, i32),
+    (cx, oy): (usize, usize),
+    (max_w, max_h): (usize, usize),
+) {
+    for y in 0..img.height.min(max_h) {
+        for x in 0..img.width.min(max_w) {
+            if !img.get_usize(x, y) {
+                continue;
+            }
+            // This pixel in the other shape's frame.
+            let (qx, qy) = (x as i32 + sx, y as i32 + sy);
+            blot(cx + x, oy + y, fold_pixel_colour(other, qx, qy));
+        }
+    }
+}
+
+/// A fold's ink pixel at `(x, y)` in `other`'s frame: black where `other`
+/// has ink too, blue within a pixel of its ink (forgiven by the gate), red
+/// beyond.
+fn fold_pixel_colour(other: &BitImage, x: i32, y: i32) -> [u8; 3] {
+    if ink_at(other, x, y) {
+        [0, 0, 0]
+    } else if ink_near(other, x, y) {
+        [70, 110, 255]
+    } else {
+        [230, 0, 0]
+    }
+}
+
+/// Whether `(x, y)` lies inside `img` and is ink.
+fn ink_at(img: &BitImage, x: i32, y: i32) -> bool {
+    x >= 0
+        && y >= 0
+        && (x as usize) < img.width
+        && (y as usize) < img.height
+        && img.get_usize(x as usize, y as usize)
+}
+
+/// Whether `img` has ink at `(x, y)` or one of its eight neighbours.
+fn ink_near(img: &BitImage, x: i32, y: i32) -> bool {
+    (-1..=1).any(|ny| (-1..=1).any(|nx| ink_at(img, x + nx, y + ny)))
 }
 
 /// Group instances into text lines and order each line left to right.
@@ -3365,6 +3574,119 @@ fn upright_word(frame: &PageFrame, word: &TextWord) -> TextWord {
     }
 }
 
+/// A text line as `group_lines` sweeps it together: its members and the
+/// running sums of their doubled vertical centres and of their heights.
+struct Line {
+    members: Vec<GlyphInstance>,
+    centre_sum: i64,
+    height_sum: i64,
+}
+
+impl Line {
+    fn mean_centre(&self) -> f64 {
+        self.centre_sum as f64 / (2.0 * self.members.len() as f64)
+    }
+    fn mean_height(&self) -> f64 {
+        self.height_sum as f64 / self.members.len() as f64
+    }
+
+    /// The line's estimated `[top, baseline]` band and horizontal span.
+    fn band(&self) -> LineBand {
+        let mut bottoms: Vec<i32> = self.members.iter().map(|i| i.y + i.height as i32).collect();
+        bottoms.sort_unstable();
+        let base = bottoms[(bottoms.len() - 1) / 2] as f64;
+        let h = self.mean_height().max(1.0);
+        let min_x = self.members.iter().map(|i| i.x).min().unwrap_or(0);
+        let max_x = self
+            .members
+            .iter()
+            .map(|i| i.x + i.width as i32)
+            .max()
+            .unwrap_or(0);
+        (base - h, base, h, min_x, max_x)
+    }
+}
+
+/// A body line's band: `(top, baseline, mean height, min x, max x)`.
+type LineBand = (f64, f64, f64, i32, i32);
+
+/// The closest of `lines` with a body glyph (at least half `ref_h` high)
+/// directly stacked over or under `mark` (an `i`/`j` stem under its
+/// tittle, or a letter over an accent), and the vertical gap to it.
+fn stacked_line_of(
+    mark: &GlyphInstance,
+    lines: &[Line],
+    bands: &[LineBand],
+    ref_h: u32,
+) -> Option<(usize, f64)> {
+    let m_x1 = mark.x + mark.width as i32;
+    let m_cy = mark.y as f64 + mark.height as f64 * 0.5;
+    lines
+        .iter()
+        .enumerate()
+        .filter_map(|(li, line)| {
+            let (top_est, base_est, h, min_x, max_x) = bands[li];
+            if m_x1 < min_x - h as i32
+                || mark.x > max_x + h as i32
+                || m_cy < top_est - 0.80 * h
+                || m_cy > base_est + 0.60 * h
+            {
+                return None;
+            }
+            line.members
+                .iter()
+                .filter(|b| b.height * 2 >= ref_h)
+                .filter_map(|b| stacked_gap(b, mark, h).map(|vgap| (li, vgap)))
+                .min_by(|a, b| a.1.total_cmp(&b.1))
+        })
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+}
+
+/// The vertical gap between body glyph `b` and `mark` when they overlap
+/// horizontally by at least half the narrower one, are stacked, and lie
+/// within `0.70 * h` of each other.
+fn stacked_gap(b: &GlyphInstance, mark: &GlyphInstance, h: f64) -> Option<f64> {
+    let m_top = mark.y;
+    let m_bottom = mark.y + mark.height as i32;
+    let m_x1 = mark.x + mark.width as i32;
+    let bx1 = b.x + b.width as i32;
+    let overlap = bx1.min(m_x1) - b.x.max(mark.x);
+    let b_bottom = b.y + b.height as i32;
+    let vgap = (b.y - m_bottom).max(m_top - b_bottom).max(0) as f64;
+    (overlap * 2 >= (bx1 - b.x).min(mark.width as i32)
+        && stacked(b.y, b_bottom, m_top, m_bottom)
+        && vgap <= 0.70 * h)
+        .then_some(vgap)
+}
+
+/// The line whose band `mark` lies in or just above or below (within a
+/// fifth of a line height above, a third below), nearest first.
+fn nearest_band_of(mark: &GlyphInstance, bands: &[LineBand]) -> Option<usize> {
+    let m_x1 = mark.x + mark.width as i32;
+    let m_cy = mark.y as f64 + mark.height as f64 * 0.5;
+    bands
+        .iter()
+        .enumerate()
+        .filter_map(|(li, &(top_est, base_est, h, min_x, max_x))| {
+            let x_pad = (2.0 * h).round() as i32;
+            if m_x1 < min_x - x_pad || mark.x > max_x + x_pad {
+                return None;
+            }
+            let dist = if m_cy < top_est {
+                let d = top_est - m_cy;
+                (d <= 0.20 * h).then_some(d)?
+            } else if m_cy > base_est {
+                let d = m_cy - base_est;
+                (d <= 0.35 * h).then_some(d)?
+            } else {
+                0.0
+            };
+            Some((li, dist))
+        })
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+        .map(|(li, _)| li)
+}
+
 fn group_lines(instances: Vec<GlyphInstance>) -> Vec<GlyphLine> {
     if instances.is_empty() {
         return Vec::new();
@@ -3382,20 +3704,6 @@ fn group_lines(instances: Vec<GlyphInstance>) -> Vec<GlyphLine> {
         instances.into_iter().partition(|i| i.height * 2 >= ref_h);
     if body.is_empty() {
         body = std::mem::take(&mut marks);
-    }
-
-    struct Line {
-        members: Vec<GlyphInstance>,
-        centre_sum: i64,
-        height_sum: i64,
-    }
-    impl Line {
-        fn mean_centre(&self) -> f64 {
-            self.centre_sum as f64 / (2.0 * self.members.len() as f64)
-        }
-        fn mean_height(&self) -> f64 {
-            self.height_sum as f64 / self.members.len() as f64
-        }
     }
 
     let sweep_lines = |mut items: Vec<GlyphInstance>| -> Vec<Line> {
@@ -3429,87 +3737,16 @@ fn group_lines(instances: Vec<GlyphInstance>) -> Vec<GlyphLine> {
         // before attaching marks so tittles above x-height and commas below
         // baseline land on their own line without affecting `mean_centre`, and
         // marks in margins, illustrations, or adjacent columns stay separate.
-        let bands: Vec<(f64, f64, f64, i32, i32)> = lines
-            .iter()
-            .map(|line| {
-                let mut bottoms: Vec<i32> =
-                    line.members.iter().map(|i| i.y + i.height as i32).collect();
-                bottoms.sort_unstable();
-                let base = bottoms[(bottoms.len() - 1) / 2] as f64;
-                let h = line.mean_height().max(1.0);
-                let min_x = line.members.iter().map(|i| i.x).min().unwrap_or(0);
-                let max_x = line
-                    .members
-                    .iter()
-                    .map(|i| i.x + i.width as i32)
-                    .max()
-                    .unwrap_or(0);
-                (base - h, base, h, min_x, max_x)
-            })
-            .collect();
+        let bands: Vec<LineBand> = lines.iter().map(Line::band).collect();
 
         let mut unattached: Vec<GlyphInstance> = Vec::new();
         for mark in marks {
-            let m_top = mark.y;
-            let m_bottom = mark.y + mark.height as i32;
-            let m_x1 = mark.x + mark.width as i32;
-            let m_cy = mark.y as f64 + mark.height as f64 * 0.5;
-
             // Prefer the closest line with a body glyph directly stacked
             // over/under this mark (an `i`/`j` stem under its tittle, or a
             // letter over an accent).
-            let stacked_line = lines
-                .iter()
-                .enumerate()
-                .filter_map(|(li, line)| {
-                    let (top_est, base_est, h, min_x, max_x) = bands[li];
-                    if m_x1 < min_x - h as i32
-                        || mark.x > max_x + h as i32
-                        || m_cy < top_est - 0.80 * h
-                        || m_cy > base_est + 0.60 * h
-                    {
-                        return None;
-                    }
-                    line.members
-                        .iter()
-                        .filter(|b| b.height * 2 >= ref_h)
-                        .filter_map(|b| {
-                            let bx1 = b.x + b.width as i32;
-                            let overlap = bx1.min(m_x1) - b.x.max(mark.x);
-                            let b_bottom = b.y + b.height as i32;
-                            let vgap = (b.y - m_bottom).max(m_top - b_bottom).max(0) as f64;
-                            (overlap * 2 >= (bx1 - b.x).min(mark.width as i32)
-                                && stacked(b.y, b_bottom, m_top, m_bottom)
-                                && vgap <= 0.70 * h)
-                                .then_some((li, vgap))
-                        })
-                        .min_by(|a, b| a.1.total_cmp(&b.1))
-                })
-                .min_by(|a, b| a.1.total_cmp(&b.1));
-
-            let chosen = stacked_line.map(|(li, _)| li).or_else(|| {
-                bands
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(li, &(top_est, base_est, h, min_x, max_x))| {
-                        let x_pad = (2.0 * h).round() as i32;
-                        if m_x1 < min_x - x_pad || mark.x > max_x + x_pad {
-                            return None;
-                        }
-                        let dist = if m_cy < top_est {
-                            let d = top_est - m_cy;
-                            (d <= 0.20 * h).then_some(d)?
-                        } else if m_cy > base_est {
-                            let d = m_cy - base_est;
-                            (d <= 0.35 * h).then_some(d)?
-                        } else {
-                            0.0
-                        };
-                        Some((li, dist))
-                    })
-                    .min_by(|a, b| a.1.total_cmp(&b.1))
-                    .map(|(li, _)| li)
-            });
+            let chosen = stacked_line_of(&mark, &lines, &bands, ref_h)
+                .map(|(li, _)| li)
+                .or_else(|| nearest_band_of(&mark, &bands));
 
             if let Some(li) = chosen {
                 lines[li].members.push(mark);
@@ -3688,24 +3925,7 @@ pub(crate) fn trace_pixel_loops(bitmap: &BitImage) -> Vec<Vec<(i32, i32)>> {
             points.push(end);
             let d_in = (end.0 - start.0, end.1 - start.1);
             let candidates = outgoing.get(&end).map(Vec::as_slice).unwrap_or(&[]);
-            let mut next = None;
-            for &cand in candidates {
-                if used[cand] {
-                    continue;
-                }
-                let (cs, ce) = edges[cand];
-                let d_out = (ce.0 - cs.0, ce.1 - cs.1);
-                // Cross product in y-up space: negative = right turn.
-                let cross = d_in.0 * (-d_out.1) - (-d_in.1) * d_out.0;
-                if cross < 0 {
-                    next = Some(cand);
-                    break;
-                }
-                if next.is_none() {
-                    next = Some(cand);
-                }
-            }
-            match next {
+            match next_boundary_edge(&edges, candidates, &used, d_in) {
                 Some(n) => cur = n,
                 None => break, // unreachable for a well-formed boundary graph
             }
@@ -3716,6 +3936,34 @@ pub(crate) fn trace_pixel_loops(bitmap: &BitImage) -> Vec<Vec<(i32, i32)>> {
     }
 
     contours
+}
+
+/// The edge a boundary walk arriving along `d_in` takes next among the
+/// `candidates` leaving the corner: the first unused right turn, else the
+/// first unused edge.
+fn next_boundary_edge(
+    edges: &[((i32, i32), (i32, i32))],
+    candidates: &[usize],
+    used: &[bool],
+    d_in: (i32, i32),
+) -> Option<usize> {
+    let mut next = None;
+    for &cand in candidates {
+        if used[cand] {
+            continue;
+        }
+        let (cs, ce) = edges[cand];
+        let d_out = (ce.0 - cs.0, ce.1 - cs.1);
+        // Cross product in y-up space: negative = right turn.
+        let cross = d_in.0 * (-d_out.1) - (-d_in.1) * d_out.0;
+        if cross < 0 {
+            return Some(cand);
+        }
+        if next.is_none() {
+            next = Some(cand);
+        }
+    }
+    next
 }
 
 /// The document-wide dictionary shared by concurrently processed pages, plus
@@ -3922,25 +4170,32 @@ mod tests {
             for c in 0..w {
                 let px = (c as f64 + 0.5) * UNITS_PER_PIXEL as f64;
                 let py = (h as f64 - r as f64 - 0.5 - descent as f64) * UNITS_PER_PIXEL as f64;
-                let mut winding = 0i32;
-                for contour in &contours {
-                    let n = contour.len();
-                    for i in 0..n {
-                        let (x1, y1) = (contour[i].0 as f64, contour[i].1 as f64);
-                        let (x2, y2) =
-                            (contour[(i + 1) % n].0 as f64, contour[(i + 1) % n].1 as f64);
-                        if (y1 <= py) != (y2 <= py) {
-                            let x_at = x1 + (py - y1) / (y2 - y1) * (x2 - x1);
-                            if x_at > px {
-                                winding += if y2 > y1 { 1 } else { -1 };
-                            }
-                        }
-                    }
-                }
-                out[r * w + c] = winding != 0;
+                out[r * w + c] = winding_number(&contours, px, py) != 0;
             }
         }
         out
+    }
+
+    /// The winding number of the contours around `(px, py)`, counted along
+    /// a ray to the right.
+    fn winding_number(contours: &[Vec<(i16, i16)>], px: f64, py: f64) -> i32 {
+        let mut winding = 0i32;
+        for contour in contours {
+            let n = contour.len();
+            for i in 0..n {
+                let (x1, y1) = (contour[i].0 as f64, contour[i].1 as f64);
+                let (x2, y2) = (contour[(i + 1) % n].0 as f64, contour[(i + 1) % n].1 as f64);
+                if (y1 <= py) == (y2 <= py) {
+                    continue;
+                }
+                let x_at = x1 + (py - y1) / (y2 - y1) * (x2 - x1);
+                let direction = if y2 > y1 { 1 } else { -1 };
+                if x_at > px {
+                    winding += direction;
+                }
+            }
+        }
+        winding
     }
 
     fn assert_round_trip(rows: &[&str], descent: i32) {
@@ -4013,15 +4268,21 @@ mod tests {
     fn page_with(shapes: &[(&[&str], usize, usize)], w: usize, h: usize) -> BitImage {
         let mut page = BitImage::new(w as u32, h as u32).unwrap();
         for (rows, x0, y0) in shapes {
-            for (dy, row) in rows.iter().enumerate() {
-                for (dx, ch) in row.bytes().enumerate() {
-                    if ch == b'#' {
-                        page.set_usize(x0 + dx, y0 + dy, true);
-                    }
+            stamp(&mut page, rows, *x0, *y0);
+        }
+        page
+    }
+
+    /// Set the `#` pixels of `rows` on `page`, with the first row's first
+    /// character at `(x0, y0)`.
+    fn stamp(page: &mut BitImage, rows: &[&str], x0: usize, y0: usize) {
+        for (dy, row) in rows.iter().enumerate() {
+            for (dx, ch) in row.bytes().enumerate() {
+                if ch == b'#' {
+                    page.set_usize(x0 + dx, y0 + dy, true);
                 }
             }
         }
-        page
     }
 
     const GLYPH_H: &[&str] = &["#...#", "#...#", "#####", "#...#", "#...#"];

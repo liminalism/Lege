@@ -81,12 +81,14 @@ fn read_workspace_version(path: &Path) -> String {
             in_workspace_package = trimmed == "[workspace.package]";
             continue;
         }
-        if in_workspace_package {
-            if let Some(rest) = trimmed.strip_prefix("version") {
-                if let Some((_, value)) = rest.split_once('=') {
-                    return value.trim().trim_matches('"').to_string();
-                }
-            }
+        if !in_workspace_package {
+            continue;
+        }
+        let Some(rest) = trimmed.strip_prefix("version") else {
+            continue;
+        };
+        if let Some((_, value)) = rest.split_once('=') {
+            return value.trim().trim_matches('"').to_string();
         }
     }
     panic!("no [workspace.package] version found in {}", path.display());
@@ -178,17 +180,31 @@ fn draw_char(
     };
     for (row_index, row) in rows.iter().enumerate() {
         for (column_index, bit) in row.as_bytes().iter().enumerate() {
-            if *bit == b'1' {
-                for dy in 0..scale {
-                    for dx in 0..scale {
-                        image.put_pixel(
-                            x + column_index as u32 * scale + dx,
-                            y + row_index as u32 * scale + dy,
-                            color,
-                        );
-                    }
-                }
+            if *bit != b'1' {
+                continue;
             }
+            fill_square(
+                image,
+                x + column_index as u32 * scale,
+                y + row_index as u32 * scale,
+                scale,
+                color,
+            );
+        }
+    }
+}
+
+/// Fills the `size`×`size` square whose top-left corner is `(x, y)`.
+fn fill_square(
+    image: &mut ImageBuffer<Rgba<u8>, Vec<u8>>,
+    x: u32,
+    y: u32,
+    size: u32,
+    color: Rgba<u8>,
+) {
+    for dy in 0..size {
+        for dx in 0..size {
+            image.put_pixel(x + dx, y + dy, color);
         }
     }
 }

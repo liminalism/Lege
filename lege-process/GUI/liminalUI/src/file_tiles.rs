@@ -555,47 +555,54 @@ mod tests {
                 let right = Rect::new(left.right() + s.px(344), s.px(600), side, s.px(TILE_H));
                 for (inputs, outputs) in [(0, 0), (1, 1), (3, 2), (40, 40)] {
                     let plan = layout(left, right, s, inputs, outputs);
-                    assert!(plan.left.right() < plan.right.x, "the sides are apart");
-                    let shown_in: Vec<Rect> = plan
-                        .inputs
-                        .iter()
-                        .copied()
-                        .chain(plan.inputs_more.map(|m| m.0))
-                        .collect();
-                    let shown_out: Vec<Rect> = plan
-                        .outputs
-                        .iter()
-                        .copied()
-                        .chain(plan.outputs_more.map(|m| m.0))
-                        .collect();
-                    for r in &shown_in {
-                        assert!(inside(*r, plan.left), "{r:?} in the input half");
-                    }
-                    for r in &shown_out {
-                        assert!(inside(*r, plan.right), "{r:?} in the output half");
-                    }
-                    let all: Vec<Rect> = shown_in.iter().chain(&shown_out).copied().collect();
-                    for (i, a) in all.iter().enumerate() {
-                        for b in &all[i + 1..] {
-                            assert!(!overlaps(*a, *b), "{a:?} and {b:?}");
-                        }
-                    }
-                    let counted = plan.inputs.len() + plan.inputs_more.map_or(0, |m| m.1);
-                    assert_eq!(counted, inputs, "every input is shown or counted");
-                    let counted = plan.outputs.len() + plan.outputs_more.map_or(0, |m| m.1);
-                    assert_eq!(counted, outputs, "every output is shown or counted");
-                    if let Some(first) = plan.inputs.first() {
-                        assert_eq!(first.x, plan.left.x, "inputs start at the left edge");
-                    }
-                    if let Some(first) = plan.outputs.first() {
-                        assert_eq!(
-                            first.right(),
-                            plan.right.right(),
-                            "outputs start at the right edge"
-                        );
-                    }
+                    assert_plan_fills_its_sides(&plan, inputs, outputs);
                 }
             }
+        }
+    }
+
+    /// Inputs fill the left side from its left edge and outputs the right
+    /// side from its right edge, without overlap; every file is shown or
+    /// counted.
+    fn assert_plan_fills_its_sides(plan: &ShelfLayout, inputs: usize, outputs: usize) {
+        assert!(plan.left.right() < plan.right.x, "the sides are apart");
+        let shown_in: Vec<Rect> = plan
+            .inputs
+            .iter()
+            .copied()
+            .chain(plan.inputs_more.map(|m| m.0))
+            .collect();
+        let shown_out: Vec<Rect> = plan
+            .outputs
+            .iter()
+            .copied()
+            .chain(plan.outputs_more.map(|m| m.0))
+            .collect();
+        for r in &shown_in {
+            assert!(inside(*r, plan.left), "{r:?} in the input half");
+        }
+        for r in &shown_out {
+            assert!(inside(*r, plan.right), "{r:?} in the output half");
+        }
+        let all: Vec<Rect> = shown_in.iter().chain(&shown_out).copied().collect();
+        for (i, a) in all.iter().enumerate() {
+            for b in &all[i + 1..] {
+                assert!(!overlaps(*a, *b), "{a:?} and {b:?}");
+            }
+        }
+        let counted = plan.inputs.len() + plan.inputs_more.map_or(0, |m| m.1);
+        assert_eq!(counted, inputs, "every input is shown or counted");
+        let counted = plan.outputs.len() + plan.outputs_more.map_or(0, |m| m.1);
+        assert_eq!(counted, outputs, "every output is shown or counted");
+        if let Some(first) = plan.inputs.first() {
+            assert_eq!(first.x, plan.left.x, "inputs start at the left edge");
+        }
+        if let Some(first) = plan.outputs.first() {
+            assert_eq!(
+                first.right(),
+                plan.right.right(),
+                "outputs start at the right edge"
+            );
         }
     }
 

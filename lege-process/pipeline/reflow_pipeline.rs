@@ -766,23 +766,7 @@ pub(crate) async fn run_raster_reflow_pipeline(
         // output-page coordinates so the text overlays the reflowed bitmaps.
         let hocr_text = if config.enable_ocr() {
             let result = await_reflow_step(
-                async {
-                    if config.slow_ocr_enabled() {
-                        crate::ocr::slow::perform_reflow_page_ocr(
-                            reflow_page,
-                            &source_pages,
-                            &config,
-                        )
-                        .await
-                    } else {
-                        crate::ocr::fast::perform_reflow_page_fast_ocr(
-                            reflow_page,
-                            &canvas,
-                            config.ocr_language(),
-                        )
-                        .await
-                    }
-                },
+                recognize_reflow_page(reflow_page, &source_pages, &canvas, &config),
                 &mut shutdown_rx,
                 &cancellation,
                 "reflow OCR",
@@ -857,44 +841,21 @@ pub(crate) async fn run_raster_reflow_pipeline(
 
     // After all pages are composed, extract bookmarks and send them before finalize.
     // Reflow re-paginates, so we build source-page → first-output-page mapping from SourceMap.
-    let mut source_metadata = exprim::DocumentMetadata::default();
-    if let Some(session) = source.document_session() {
-        let source_map = &doc.source_map;
-        let mut src_to_out: std::collections::HashMap<usize, usize> =
-            std::collections::HashMap::new();
-        for placement in &source_map.placements {
-            src_to_out
-                .entry(page_start + placement.src.page_index)
-                .and_modify(|e| *e = (*e).min(placement.out_page))
-                .or_insert(placement.out_page);
-        }
-        let mut outline_task = crate::runtime_stats::spawn_blocking(move || {
-            (
-                exprim::extract_outline(&session),
-                exprim::extract_metadata(&session),
+    let source_metadata = match source.document_session() {
+        Some(session) => {
+            forward_reflow_outline(
+                session,
+                &doc.source_map,
+                page_start,
+                &mut shutdown_rx,
+                &cancellation,
+                &pdf_writer_handle,
+                &pdf_writer_task,
             )
-        });
-        let (bookmarks, metadata) = tokio::select! {
-            result = &mut outline_task => result?,
-            signal = crate::pipeline::helper_functions::shutdown_signal(&mut shutdown_rx) => {
-                cancellation.cancel();
-                outline_task.abort();
-                pdf_writer_handle.abort();
-                pdf_writer_task.abort();
-                crate::runtime_stats::drain_blocking_workers_on_cancel("reflow outline extraction")
-                    .await;
-                let message = signal.message
-                    .unwrap_or_else(|| "User requested cancellation".to_string());
-                return Err(anyhow!("Processing cancelled during reflow outline extraction: {message}"));
-            }
-        };
-        source_metadata = metadata;
-        if !bookmarks.is_empty() {
-            pdf_writer_handle
-                .send_bookmarks(bookmarks, src_to_out)
-                .await?;
+            .await?
         }
-    }
+        None => exprim::DocumentMetadata::default(),
+    };
 
     let candidates = toc_pages
         .iter()
@@ -932,6 +893,105 @@ pub(crate) async fn run_raster_reflow_pipeline(
 
     success_log!("Raster reflow pipeline complete: {}", output_path.display());
     Ok(())
+}
+
+/// Extract the source's outline and metadata, send the outline to the writer
+/// with each source page mapped to the first output page drawing from it, and
+/// return the metadata. A shutdown signal meanwhile cancels the job and
+/// aborts the writer.
+async fn forward_reflow_outline(
+    session: Arc<exprim::RenderSession>,
+    source_map: &crate::reflow::SourceMap,
+    page_start: usize,
+    shutdown_rx: &mut tokio::sync::broadcast::Receiver<crate::ShutdownSignal>,
+    cancellation: &exprim::CancellationToken,
+    pdf_writer_handle: &crate::pipeline::helper_functions::PdfWriterHandle,
+    pdf_writer_task: &tokio::task::JoinHandle<Result<(), anyhow::Error>>,
+) -> Result<exprim::DocumentMetadata> {
+    let mut src_to_out: std::collections::HashMap<usize, usize> = std::collections::HashMap::new();
+    for placement in &source_map.placements {
+        src_to_out
+            .entry(page_start + placement.src.page_index)
+            .and_modify(|e| *e = (*e).min(placement.out_page))
+            .or_insert(placement.out_page);
+    }
+    let mut outline_task = crate::runtime_stats::spawn_blocking(move || {
+        (
+            exprim::extract_outline(&session),
+            exprim::extract_metadata(&session),
+        )
+    });
+    let (bookmarks, metadata) = tokio::select! {
+        result = &mut outline_task => result?,
+        signal = crate::pipeline::helper_functions::shutdown_signal(shutdown_rx) => {
+            cancellation.cancel();
+            outline_task.abort();
+            pdf_writer_handle.abort();
+            pdf_writer_task.abort();
+            crate::runtime_stats::drain_blocking_workers_on_cancel("reflow outline extraction")
+                .await;
+            let message = signal.message
+                .unwrap_or_else(|| "User requested cancellation".to_string());
+            return Err(anyhow!("Processing cancelled during reflow outline extraction: {message}"));
+        }
+    };
+    if !bookmarks.is_empty() {
+        pdf_writer_handle
+            .send_bookmarks(bookmarks, src_to_out)
+            .await?;
+    }
+    Ok(metadata)
+}
+
+/// Recognize a reflowed page's text: slow OCR recognizes the source crops,
+/// fast OCR the composed page.
+async fn recognize_reflow_page(
+    reflow_page: &crate::reflow::ReflowPage,
+    source_pages: &crate::reflow::SourcePageSet,
+    canvas: &RgbImage,
+    config: &PipelineConfig,
+) -> Result<Option<String>> {
+    if config.slow_ocr_enabled() {
+        crate::ocr::slow::perform_reflow_page_ocr(reflow_page, source_pages, config).await
+    } else {
+        crate::ocr::fast::perform_reflow_page_fast_ocr(reflow_page, canvas, config.ocr_language())
+            .await
+    }
+}
+
+/// Binarize a composed reflow page for the DjVu mask, unless cancelled.
+fn binarize_reflow_canvas(
+    canvas: RgbImage,
+    config: &PipelineConfig,
+    cancellation: &exprim::CancellationToken,
+) -> Result<(RgbImage, Vec<u8>)> {
+    if cancellation.is_cancelled() {
+        return Err(anyhow!("Reflow binarization cancelled before CPU work"));
+    }
+    let binarized = crate::pipeline::djvu_pipeline::binarize_djvu_image(&canvas, config, false);
+    if cancellation.is_cancelled() {
+        return Err(anyhow!("Reflow binarization cancelled after CPU work"));
+    }
+    Ok((canvas, binarized))
+}
+
+/// Compose and compress one reflowed DjVu page, unless cancelled.
+fn compose_reflow_djvu_page(
+    orchestrator: &crate::djvu::DjvuOrchestrator,
+    djvu_document: &djvu_encoder::doc::DjvuDocument,
+    page_data: crate::djvu::PageData,
+    iw44_quality: u8,
+    cancellation: &exprim::CancellationToken,
+) -> Result<djvu_encoder::doc::EncodedPage> {
+    if cancellation.is_cancelled() {
+        return Err(anyhow!("DjVu composition cancelled before CPU work"));
+    }
+    let prepared = orchestrator.process_page(page_data)?;
+    let encoded = prepared.encode(djvu_document, iw44_quality, 3)?;
+    if cancellation.is_cancelled() {
+        return Err(anyhow!("DjVu composition cancelled after CPU work"));
+    }
+    Ok(encoded)
 }
 
 /// DJVU variant of the raster reflow pipeline.
@@ -1049,19 +1109,8 @@ pub(crate) async fn run_raster_reflow_djvu_pipeline(
             async move {
                 crate::runtime_stats::spawn_blocking_stage(
                     crate::runtime_stats::Stage::Processing,
-                    move || -> Result<_> {
-                        if binarize_cancellation.is_cancelled() {
-                            return Err(anyhow!("Reflow binarization cancelled before CPU work"));
-                        }
-                        let binarized = crate::pipeline::djvu_pipeline::binarize_djvu_image(
-                            &canvas,
-                            &binarize_config,
-                            false,
-                        );
-                        if binarize_cancellation.is_cancelled() {
-                            return Err(anyhow!("Reflow binarization cancelled after CPU work"));
-                        }
-                        Ok((canvas, binarized))
+                    move || {
+                        binarize_reflow_canvas(canvas, &binarize_config, &binarize_cancellation)
                     },
                 )
                 .await
@@ -1113,16 +1162,14 @@ pub(crate) async fn run_raster_reflow_djvu_pipeline(
             async move {
                 crate::runtime_stats::spawn_blocking_stage(
                     crate::runtime_stats::Stage::Encode,
-                    move || -> Result<_> {
-                        if compose_cancellation.is_cancelled() {
-                            return Err(anyhow!("DjVu composition cancelled before CPU work"));
-                        }
-                        let prepared = orchestrator.process_page(page_data)?;
-                        let encoded = prepared.encode(&djvu_document, iw44_quality, 3)?;
-                        if compose_cancellation.is_cancelled() {
-                            return Err(anyhow!("DjVu composition cancelled after CPU work"));
-                        }
-                        Ok(encoded)
+                    move || {
+                        compose_reflow_djvu_page(
+                            &orchestrator,
+                            &djvu_document,
+                            page_data,
+                            iw44_quality,
+                            &compose_cancellation,
+                        )
                     },
                 )
                 .await

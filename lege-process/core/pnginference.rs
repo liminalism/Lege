@@ -468,45 +468,7 @@ pub async fn run_pdf_layout_crop_debug(
     };
 
     let pages_to_render: Vec<usize> = if let Some(range_str) = page_range {
-        let mut pages = Vec::new();
-        for part in range_str.split(',') {
-            let part = part.trim();
-            if part.contains('-') {
-                let parts: Vec<&str> = part.split('-').collect();
-                if parts.len() != 2 {
-                    return Err(anyhow!("Invalid page range: {}", part));
-                }
-                let start: usize = parts[0]
-                    .parse()
-                    .map_err(|_| anyhow!("Invalid page: {}", parts[0]))?;
-                let end: usize = parts[1]
-                    .parse()
-                    .map_err(|_| anyhow!("Invalid page: {}", parts[1]))?;
-                if start == 0 || end == 0 {
-                    return Err(anyhow!("Page numbers must start from 1"));
-                }
-                if start > end {
-                    return Err(anyhow!("Invalid range: {}", part));
-                }
-                if end > total_pages {
-                    return Err(anyhow!("Page {} exceeds total ({})", end, total_pages));
-                }
-                for p in start..=end {
-                    pages.push(p);
-                }
-            } else {
-                let p: usize = part
-                    .parse()
-                    .map_err(|_| anyhow!("Invalid page: {}", part))?;
-                if p == 0 || p > total_pages {
-                    return Err(anyhow!("Invalid page {} (1..{}).", p, total_pages));
-                }
-                pages.push(p);
-            }
-        }
-        pages.sort_unstable();
-        pages.dedup();
-        pages
+        parse_debug_page_range(&range_str, total_pages)?
     } else {
         (1..=total_pages).collect()
     };
@@ -747,45 +709,7 @@ pub fn run_pdf_to_images_mode(
 
     // Parse page range
     let pages_to_render: Vec<usize> = if let Some(range_str) = page_range {
-        let mut pages = Vec::new();
-        for part in range_str.split(',') {
-            let part = part.trim();
-            if part.contains('-') {
-                let parts: Vec<&str> = part.split('-').collect();
-                if parts.len() != 2 {
-                    return Err(anyhow!("Invalid page range: {}", part));
-                }
-                let start: usize = parts[0]
-                    .parse()
-                    .map_err(|_| anyhow!("Invalid page: {}", parts[0]))?;
-                let end: usize = parts[1]
-                    .parse()
-                    .map_err(|_| anyhow!("Invalid page: {}", parts[1]))?;
-                if start == 0 || end == 0 {
-                    return Err(anyhow!("Page numbers must start from 1"));
-                }
-                if start > end {
-                    return Err(anyhow!("Invalid range: {}", part));
-                }
-                if end > total_pages {
-                    return Err(anyhow!("Page {} exceeds total ({})", end, total_pages));
-                }
-                for p in start..=end {
-                    pages.push(p);
-                }
-            } else {
-                let p: usize = part
-                    .parse()
-                    .map_err(|_| anyhow!("Invalid page: {}", part))?;
-                if p == 0 || p > total_pages {
-                    return Err(anyhow!("Invalid page {} (1..{}).", p, total_pages));
-                }
-                pages.push(p);
-            }
-        }
-        pages.sort_unstable();
-        pages.dedup();
-        pages
+        parse_debug_page_range(&range_str, total_pages)?
     } else {
         (1..=total_pages).collect()
     };
@@ -825,47 +749,7 @@ pub fn run_pdf_to_images_mode(
                 (format!("page_{:04}.png", page_num), "PNG")
             };
             let output_path = output_dir.join(output_filename);
-
-            if image_only {
-                // Use TooJPEG for JPEG encoding
-                let width = img.width() as u32;
-                let height = img.height() as u32;
-
-                let options = EncodeOptions {
-                    width,
-                    height,
-                    format: ImageFormat::Rgb,
-                    quality: 90,
-                    baseline: true,
-                    optimized: true,
-                    downsample: true,
-                };
-
-                let mut file = File::create(&output_path).with_context(|| {
-                    format!("Failed to create JPEG file: {}", output_path.display())
-                })?;
-
-                encode_jpeg(img.as_raw(), options, &mut file)
-                    .map_err(|e| anyhow!("TooJPEG encoding failed: {}", e))?;
-            } else {
-                // Use image crate for PNG encoding
-                if png_quantize {
-                    crate::colorquant::write_quantized_rgb_png(
-                        &img,
-                        &output_path,
-                        crate::colorquant::PngQuantizationOptions { colors: png_colors },
-                    )
-                    .with_context(|| {
-                        format!("Failed to save quantized PNG: {}", output_path.display())
-                    })?;
-                } else {
-                    img.save(&output_path)
-                        .map_err(anyhow::Error::msg)
-                        .with_context(|| {
-                            format!("Failed to save PNG: {}", output_path.display())
-                        })?;
-                }
-            }
+            save_rgb_raster(&img, &output_path, image_only, png_quantize, png_colors)?;
             info_println!(
                 "Page {} saved as {}: {}",
                 page_num,
@@ -874,27 +758,9 @@ pub fn run_pdf_to_images_mode(
             );
         } else {
             // Binarize and save as PBM
-            let (width, height) = (img.width() as usize, img.height() as usize);
-            let binarized = crate::color::binarization::binarize_image_raw(
-                img.as_raw(),
-                width,
-                height,
-                &crate::color::BinarizationOptions {
-                    invert: pipeline_config.binarization().invert,
-                    invert_input: pipeline_config.invert_input(),
-                    blank_threshold: None,
-                    disable_gpu: pipeline_config.binarization().force_cpu,
-                    adaptive: pipeline_config.binarization().fast,
-                },
-            );
-
             let output_filename = format!("page_{:04}.pbm", page_num);
             let output_path = output_dir.join(output_filename);
-
-            // Use the well-tested PBM writer from binarization.rs
-            let pbm_data = crate::color::binarization::pbm::make_pbm_p4(&binarized, width, height);
-            std::fs::write(&output_path, pbm_data)
-                .with_context(|| format!("Failed to write PBM file: {}", output_path.display()))?;
+            write_binarized_pbm(&img, &output_path, &pipeline_config)?;
             info_println!("Page {} saved as PBM: {}", page_num, output_path.display());
         }
         crate::progress::cancellation_checkpoint("after PDF-to-images page write")?;
@@ -1011,70 +877,139 @@ fn process_single_image_to_image(
             format!("{}.png", file_stem)
         };
         let output_path = output_dir.join(output_filename);
-
-        if image_only {
-            // Use TooJPEG for JPEG encoding
-            let width = rgb_image.width() as u32;
-            let height = rgb_image.height() as u32;
-
-            let options = EncodeOptions {
-                width,
-                height,
-                format: ImageFormat::Rgb,
-                quality: 90,
-                baseline: true,
-                optimized: true,
-                downsample: true,
-            };
-
-            let mut file = File::create(&output_path).with_context(|| {
-                format!("Failed to create JPEG file: {}", output_path.display())
-            })?;
-
-            encode_jpeg(rgb_image.as_raw(), options, &mut file)
-                .map_err(|e| anyhow!("TooJPEG encoding failed: {}", e))?;
-        } else {
-            // Use image crate for PNG encoding
-            if png_quantize {
-                crate::colorquant::write_quantized_rgb_png(
-                    &rgb_image,
-                    &output_path,
-                    crate::colorquant::PngQuantizationOptions { colors: png_colors },
-                )
-                .with_context(|| {
-                    format!("Failed to save quantized PNG: {}", output_path.display())
-                })?;
-            } else {
-                rgb_image
-                    .save(&output_path)
-                    .map_err(anyhow::Error::msg)
-                    .with_context(|| format!("Failed to save PNG: {}", output_path.display()))?;
-            }
-        }
+        save_rgb_raster(
+            &rgb_image,
+            &output_path,
+            image_only,
+            png_quantize,
+            png_colors,
+        )?;
     } else {
         // Binarize and save as PBM
-        let (width, height) = (rgb_image.width() as usize, rgb_image.height() as usize);
-        let binarized = crate::color::binarization::binarize_image_raw(
-            rgb_image.as_raw(),
-            width,
-            height,
-            &crate::color::BinarizationOptions {
-                invert: pipeline_config.binarization().invert,
-                invert_input: pipeline_config.invert_input(),
-                blank_threshold: None,
-                disable_gpu: pipeline_config.binarization().force_cpu,
-                adaptive: pipeline_config.binarization().fast,
-            },
-        );
-
         let output_filename = format!("{}.pbm", file_stem);
         let output_path = output_dir.join(output_filename);
-
-        // Use the well-tested PBM writer from binarization.rs
-        let pbm_data = crate::color::binarization::pbm::make_pbm_p4(&binarized, width, height);
-        std::fs::write(&output_path, pbm_data)
-            .with_context(|| format!("Failed to write PBM file: {}", output_path.display()))?;
+        write_binarized_pbm(&rgb_image, &output_path, pipeline_config)?;
     }
 
+    Ok(())
+}
+
+/// Parse a debug-mode page selection such as `1-3,7` against a document of
+/// `total_pages` pages: one-based, sorted, without duplicates.
+fn parse_debug_page_range(range_str: &str, total_pages: usize) -> Result<Vec<usize>> {
+    let mut pages = Vec::new();
+    for part in range_str.split(',') {
+        let part = part.trim();
+        if part.contains('-') {
+            let parts: Vec<&str> = part.split('-').collect();
+            if parts.len() != 2 {
+                return Err(anyhow!("Invalid page range: {}", part));
+            }
+            let start: usize = parts[0]
+                .parse()
+                .map_err(|_| anyhow!("Invalid page: {}", parts[0]))?;
+            let end: usize = parts[1]
+                .parse()
+                .map_err(|_| anyhow!("Invalid page: {}", parts[1]))?;
+            if start == 0 || end == 0 {
+                return Err(anyhow!("Page numbers must start from 1"));
+            }
+            if start > end {
+                return Err(anyhow!("Invalid range: {}", part));
+            }
+            if end > total_pages {
+                return Err(anyhow!("Page {} exceeds total ({})", end, total_pages));
+            }
+            for p in start..=end {
+                pages.push(p);
+            }
+        } else {
+            let p: usize = part
+                .parse()
+                .map_err(|_| anyhow!("Invalid page: {}", part))?;
+            if p == 0 || p > total_pages {
+                return Err(anyhow!("Invalid page {} (1..{}).", p, total_pages));
+            }
+            pages.push(p);
+        }
+    }
+    pages.sort_unstable();
+    pages.dedup();
+    Ok(pages)
+}
+
+/// Write an RGB raster as a JPEG (`image_only`) or else as a PNG, quantized
+/// when asked.
+fn save_rgb_raster(
+    img: &RgbImage,
+    output_path: &Path,
+    image_only: bool,
+    png_quantize: bool,
+    png_colors: u16,
+) -> Result<()> {
+    if image_only {
+        // Use TooJPEG for JPEG encoding
+        let width = img.width();
+        let height = img.height();
+
+        let options = EncodeOptions {
+            width,
+            height,
+            format: ImageFormat::Rgb,
+            quality: 90,
+            baseline: true,
+            optimized: true,
+            downsample: true,
+        };
+
+        let mut file = File::create(output_path)
+            .with_context(|| format!("Failed to create JPEG file: {}", output_path.display()))?;
+
+        encode_jpeg(img.as_raw(), options, &mut file)
+            .map_err(|e| anyhow!("TooJPEG encoding failed: {}", e))?;
+        return Ok(());
+    }
+
+    // Use image crate for PNG encoding
+    if png_quantize {
+        crate::colorquant::write_quantized_rgb_png(
+            img,
+            output_path,
+            crate::colorquant::PngQuantizationOptions { colors: png_colors },
+        )
+        .with_context(|| format!("Failed to save quantized PNG: {}", output_path.display()))?;
+    } else {
+        img.save(output_path)
+            .map_err(anyhow::Error::msg)
+            .with_context(|| format!("Failed to save PNG: {}", output_path.display()))?;
+    }
+    Ok(())
+}
+
+/// Binarize an RGB raster with the job's binarization settings and write it
+/// as a PBM.
+fn write_binarized_pbm(
+    img: &RgbImage,
+    output_path: &Path,
+    pipeline_config: &PipelineConfig,
+) -> Result<()> {
+    let (width, height) = (img.width() as usize, img.height() as usize);
+    let binarized = crate::color::binarization::binarize_image_raw(
+        img.as_raw(),
+        width,
+        height,
+        &crate::color::BinarizationOptions {
+            invert: pipeline_config.binarization().invert,
+            invert_input: pipeline_config.invert_input(),
+            blank_threshold: None,
+            disable_gpu: pipeline_config.binarization().force_cpu,
+            adaptive: pipeline_config.binarization().fast,
+        },
+    );
+
+    // Use the well-tested PBM writer from binarization.rs
+    let pbm_data = crate::color::binarization::pbm::make_pbm_p4(&binarized, width, height);
+    std::fs::write(output_path, pbm_data)
+        .with_context(|| format!("Failed to write PBM file: {}", output_path.display()))?;
     Ok(())
 }

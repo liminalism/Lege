@@ -35,3 +35,6 @@ windows = { version = "0.62.2", features = [
 ico = "0.4"
 image = { version = "0.25", default-features = false, features = ["png"] }
 
+
+[lints.clippy]
+cognitive_complexity = "warn"

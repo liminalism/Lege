@@ -1044,14 +1044,7 @@ impl BooksView {
         let mut r = Rect::new(x, y, 0, lh + s.px(10));
         for m in Show::ALL {
             let active = self.show == m;
-            let n = match m {
-                Show::All => self.stats.len(),
-                Show::Training => self.stats.iter().filter(|b| !b.excluded).count(),
-                Show::Excluded => self.stats.iter().filter(|b| b.excluded).count(),
-                Show::NeedsWork => self.stats.iter().filter(|b| b.needs_work).count(),
-                Show::AbandonFlagged => self.flagged_count(),
-            };
-            let label = format!("{} {n}", m.label());
+            let label = format!("{} {}", m.label(), self.show_count(m));
             r = ui::button(
                 p,
                 text,
@@ -1119,15 +1112,7 @@ impl BooksView {
         let avail = table.w - swatch - widths[0] - name_min - arrow_w;
         let scrolled = cols.len() - FROZEN;
         self.hscroll = self.hscroll.min(scrolled.saturating_sub(1));
-        let mut fit = 0;
-        let mut used = 0;
-        for k in self.hscroll..scrolled {
-            if used + widths[FROZEN + k] > avail {
-                break;
-            }
-            used += widths[FROZEN + k];
-            fit += 1;
-        }
+        let (fit, used) = fit_columns(&widths, self.hscroll, scrolled, avail);
         // Everything fits from the start: no sideways scroll.
         let all_fit = self.hscroll == 0 && fit == scrolled;
         self.hfit = fit.max(1);
@@ -1152,49 +1137,7 @@ impl BooksView {
         let hy = table.y;
         p.fill_rect(Rect::new(table.x, hy, table.w, row_h), ROW_ALT);
         for &(k, x, cw) in &xs {
-            let col = cols[k];
-            let r = Rect::new(x, hy, cw, row_h);
-            let sorted = self.sort == col;
-            if sorted {
-                p.fill_rect(r, ROW_SELECTED);
-            }
-            if let Col::Class(c) = col {
-                // The label's colour as a bar under its name.
-                p.fill_rect(
-                    Rect::new(x + s.px(6), hy + row_h - s.px(3), cw - s.px(10), s.px(2)),
-                    class(c).color,
-                );
-            }
-            let align = if col.numeric() {
-                Align::Right
-            } else {
-                Align::Left
-            };
-            let tx = if col.numeric() { x } else { x + s.px(6) };
-            let tw = cw - s.px(8) - if sorted { s.px(10) } else { 0 };
-            ui::cell(
-                p,
-                text,
-                &col.header(),
-                tx,
-                hy + (row_h - sl) / 2,
-                tw,
-                row_h,
-                small,
-                if sorted { HUD_TEXT } else { HUD_DIM },
-                align,
-            );
-            if sorted {
-                ui::triangle(
-                    p,
-                    x + cw - s.px(12),
-                    hy + row_h / 2,
-                    s.px(4),
-                    self.descending,
-                    ACCENT,
-                );
-            }
-            self.hits.push((r, Hit::Header(col)));
+            self.draw_header_cell(p, text, s, cols[k], Rect::new(x, hy, cw, row_h), small);
         }
         if !all_fit {
             let left = self.hscroll > 0;
@@ -1247,7 +1190,6 @@ impl BooksView {
                 p.fill_rect(r, ROW_ALT);
             }
             self.hits.push((r, Hit::Row(vi)));
-            let ty = ry + (row_h - lh) / 2;
             let b = &self.stats[bi];
             if self.is_flagged(b) {
                 let k = s.px(8);
@@ -1257,87 +1199,10 @@ impl BooksView {
                 );
             }
             for &(k, x, cw) in &xs {
-                let col = cols[k];
-                let (mut v, c) = self.cell_text(bi, col);
-                if col == Col::Name && self.current_book.as_deref() == Some(b.book_id.as_str()) {
-                    v.push_str("  (current)");
-                }
-                if col == Col::Paper {
-                    if let Some(t) = &self.stats[bi].tone {
-                        let k = s.px(11);
-                        let sw = Rect::new(x + s.px(6), ry + (row_h - k) / 2, k, k);
-                        let [r8, g8, b8] = t.rgb;
-                        p.fill_rect(sw, (r8 as u32) << 16 | (g8 as u32) << 8 | b8 as u32);
-                        outline(p, sw, HUD_EDGE, 1);
-                    }
-                }
-                if col == Col::Train {
-                    // A checkbox: ticked = goes into training.
-                    let k = s.px(13);
-                    let bx = Rect::new(x + (cw - k) / 2, ry + (row_h - k) / 2, k, k);
-                    outline(p, bx, if b.excluded { WARN } else { HUD_DIM }, 1);
-                    if !b.excluded {
-                        p.fill_rect(bx.inset(s.px(3)), ui::GOOD);
-                    }
-                    self.hits
-                        .push((Rect::new(x, ry, cw, row_h), Hit::Toggle(vi, Flag::Train)));
-                    continue;
-                }
-                if col == Col::NeedsWork {
-                    self.hits.push((
-                        Rect::new(x, ry, cw, row_h),
-                        Hit::Toggle(vi, Flag::NeedsWork),
-                    ));
-                }
-                let align = if col.numeric() {
-                    Align::Right
-                } else {
-                    Align::Left
-                };
-                let tx = if col.numeric() { x } else { x + s.px(6) };
-                ui::cell(p, text, &v, tx, ty, cw - s.px(8), row_h, body, c, align);
+                self.draw_cell(p, text, s, cols[k], Rect::new(x, ry, cw, row_h), vi);
             }
         }
-        // Vertical scroll bar: a slim visible thumb at rest; wide, with a
-        // track, under the pointer or while dragged. The hit zone is wider
-        // than either, so it is easy to grab.
-        self.vbar = None;
-        if self.visible.len() > self.rows_on_screen {
-            let active = self.vbar_hover || self.vbar_drag.is_some();
-            let bw = if active { s.px(12) } else { s.px(5) };
-            let zone_w = s.px(18);
-            let full = Rect::new(
-                table.right() - bw - s.px(2),
-                body_top,
-                bw,
-                table.bottom() - body_top,
-            );
-            let n = self.visible.len() as f64;
-            let max_scroll = self
-                .visible
-                .len()
-                .saturating_sub(self.rows_on_screen.max(1)) as f64;
-            let th = ((self.rows_on_screen as f64 / n) * full.h as f64)
-                .max(s.px(28) as f64)
-                .min(full.h as f64) as i32;
-            let room = (full.h - th).max(0) as f64;
-            let ty = full.y + (self.scroll as f64 / max_scroll.max(1.0) * room).round() as i32;
-            let thumb = Rect::new(full.x, ty, full.w, th);
-            if active {
-                p.fill_rect(full, 0x0022_262b);
-                outline(p, full, HUD_EDGE, 1);
-            }
-            let color = if self.vbar_drag.is_some() {
-                ACCENT
-            } else if active {
-                0x00b4_bac2
-            } else {
-                0x0062_6a74
-            };
-            p.fill_rect(thumb, color);
-            let zone = Rect::new(table.right() - zone_w, body_top, zone_w, full.h);
-            self.vbar = Some((zone, full, thumb));
-        }
+        self.draw_scroll_bar(p, s, table, body_top);
 
         // Footer: the selected book, then the keys.
         let fy = h - footer_h + s.px(6);
@@ -1396,6 +1261,161 @@ impl BooksView {
         );
     }
 
+    /// How many books the filter `m` shows.
+    fn show_count(&self, m: Show) -> usize {
+        match m {
+            Show::All => self.stats.len(),
+            Show::Training => self.stats.iter().filter(|b| !b.excluded).count(),
+            Show::Excluded => self.stats.iter().filter(|b| b.excluded).count(),
+            Show::NeedsWork => self.stats.iter().filter(|b| b.needs_work).count(),
+            Show::AbandonFlagged => self.flagged_count(),
+        }
+    }
+
+    /// One header cell: the column's name, a colour bar under a class, and the
+    /// sort marker on the sort column.
+    fn draw_header_cell(
+        &mut self,
+        p: &mut Painter<'_>,
+        text: &mut TextCache,
+        s: Scale,
+        col: Col,
+        r: Rect,
+        small: TextStyle,
+    ) {
+        let (x, hy, cw, row_h) = (r.x, r.y, r.w, r.h);
+        let sl = text.line_height(small);
+        let sorted = self.sort == col;
+        if sorted {
+            p.fill_rect(r, ROW_SELECTED);
+        }
+        if let Col::Class(c) = col {
+            // The label's colour as a bar under its name.
+            p.fill_rect(
+                Rect::new(x + s.px(6), hy + row_h - s.px(3), cw - s.px(10), s.px(2)),
+                class(c).color,
+            );
+        }
+        let align = if col.numeric() {
+            Align::Right
+        } else {
+            Align::Left
+        };
+        let tx = if col.numeric() { x } else { x + s.px(6) };
+        let tw = cw - s.px(8) - if sorted { s.px(10) } else { 0 };
+        ui::cell(
+            p,
+            text,
+            &col.header(),
+            tx,
+            hy + (row_h - sl) / 2,
+            tw,
+            row_h,
+            small,
+            if sorted { HUD_TEXT } else { HUD_DIM },
+            align,
+        );
+        if sorted {
+            ui::triangle(
+                p,
+                x + cw - s.px(12),
+                hy + row_h / 2,
+                s.px(4),
+                self.descending,
+                ACCENT,
+            );
+        }
+        self.hits.push((r, Hit::Header(col)));
+    }
+
+    /// One cell of the row of visible book `vi`: its text, with the paper's
+    /// swatch in the Paper column; the Train column is a checkbox.
+    fn draw_cell(
+        &mut self,
+        p: &mut Painter<'_>,
+        text: &mut TextCache,
+        s: Scale,
+        col: Col,
+        cell: Rect,
+        vi: usize,
+    ) {
+        let (x, ry, cw, row_h) = (cell.x, cell.y, cell.w, cell.h);
+        let body = ui::style(s, 13.0);
+        let ty = ry + (row_h - text.line_height(body)) / 2;
+        let bi = self.visible[vi];
+        let b = &self.stats[bi];
+        let (mut v, c) = self.cell_text(bi, col);
+        if col == Col::Name && self.current_book.as_deref() == Some(b.book_id.as_str()) {
+            v.push_str("  (current)");
+        }
+        if let (Col::Paper, Some(t)) = (col, &b.tone) {
+            let k = s.px(11);
+            let sw = Rect::new(x + s.px(6), ry + (row_h - k) / 2, k, k);
+            let [r8, g8, b8] = t.rgb;
+            p.fill_rect(sw, (r8 as u32) << 16 | (g8 as u32) << 8 | b8 as u32);
+            outline(p, sw, HUD_EDGE, 1);
+        }
+        if col == Col::Train {
+            draw_train_checkbox(p, s, cell, b.excluded);
+            self.hits.push((cell, Hit::Toggle(vi, Flag::Train)));
+            return;
+        }
+        if col == Col::NeedsWork {
+            self.hits.push((cell, Hit::Toggle(vi, Flag::NeedsWork)));
+        }
+        let align = if col.numeric() {
+            Align::Right
+        } else {
+            Align::Left
+        };
+        let tx = if col.numeric() { x } else { x + s.px(6) };
+        ui::cell(p, text, &v, tx, ty, cw - s.px(8), row_h, body, c, align);
+    }
+
+    /// Vertical scroll bar: a slim visible thumb at rest; wide, with a
+    /// track, under the pointer or while dragged. The hit zone is wider
+    /// than either, so it is easy to grab.
+    fn draw_scroll_bar(&mut self, p: &mut Painter<'_>, s: Scale, table: Rect, body_top: i32) {
+        self.vbar = None;
+        if self.visible.len() <= self.rows_on_screen {
+            return;
+        }
+        let active = self.vbar_hover || self.vbar_drag.is_some();
+        let bw = if active { s.px(12) } else { s.px(5) };
+        let zone_w = s.px(18);
+        let full = Rect::new(
+            table.right() - bw - s.px(2),
+            body_top,
+            bw,
+            table.bottom() - body_top,
+        );
+        let n = self.visible.len() as f64;
+        let max_scroll = self
+            .visible
+            .len()
+            .saturating_sub(self.rows_on_screen.max(1)) as f64;
+        let th = ((self.rows_on_screen as f64 / n) * full.h as f64)
+            .max(s.px(28) as f64)
+            .min(full.h as f64) as i32;
+        let room = (full.h - th).max(0) as f64;
+        let ty = full.y + (self.scroll as f64 / max_scroll.max(1.0) * room).round() as i32;
+        let thumb = Rect::new(full.x, ty, full.w, th);
+        if active {
+            p.fill_rect(full, 0x0022_262b);
+            outline(p, full, HUD_EDGE, 1);
+        }
+        let color = if self.vbar_drag.is_some() {
+            ACCENT
+        } else if active {
+            0x00b4_bac2
+        } else {
+            0x0062_6a74
+        };
+        p.fill_rect(thumb, color);
+        let zone = Rect::new(table.right() - zone_w, body_top, zone_w, full.h);
+        self.vbar = Some((zone, full, thumb));
+    }
+
     /// One line about a book: the classes it has most of, and its paper.
     fn detail(&self, i: usize) -> String {
         let b = &self.stats[i];
@@ -1451,6 +1471,31 @@ impl BooksView {
             ));
         }
         parts.join(" · ")
+    }
+}
+
+/// How many of the scrollable columns `first..scrolled` (after the frozen
+/// ones) fit side by side in `avail`, and their total width.
+fn fit_columns(widths: &[i32], first: usize, scrolled: usize, avail: i32) -> (usize, i32) {
+    let mut fit = 0;
+    let mut used = 0;
+    for k in first..scrolled {
+        if used + widths[FROZEN + k] > avail {
+            break;
+        }
+        used += widths[FROZEN + k];
+        fit += 1;
+    }
+    (fit, used)
+}
+
+/// The Train column's checkbox, centred in its cell: ticked = goes into training.
+fn draw_train_checkbox(p: &mut Painter<'_>, s: Scale, cell: Rect, excluded: bool) {
+    let k = s.px(13);
+    let bx = Rect::new(cell.x + (cell.w - k) / 2, cell.y + (cell.h - k) / 2, k, k);
+    outline(p, bx, if excluded { WARN } else { HUD_DIM }, 1);
+    if !excluded {
+        p.fill_rect(bx.inset(s.px(3)), ui::GOOD);
     }
 }
 

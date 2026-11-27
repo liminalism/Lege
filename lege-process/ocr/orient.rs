@@ -113,30 +113,9 @@ impl Upright {
                 let sy = sy0 + cy_step(cx, ay);
                 let dst = &mut row[cx * channels..(cx + 1) * channels];
                 if exact {
-                    let (x, y) = (sx.round() as i64, sy.round() as i64);
-                    if x >= 0 && y >= 0 && (x as usize) < w && (y as usize) < h {
-                        let src = (y as usize * w + x as usize) * channels;
-                        dst.copy_from_slice(&pixels[src..src + channels]);
-                    }
-                    continue;
-                }
-                let (fx, fy) = (sx.floor(), sy.floor());
-                let (tx, ty) = (sx - fx, sy - fy);
-                let (x0, y0) = (fx as i64, fy as i64);
-                if x0 < -1 || y0 < -1 || x0 >= w as i64 || y0 >= h as i64 {
-                    continue;
-                }
-                let at = |x: i64, y: i64, c: usize| -> f64 {
-                    if x < 0 || y < 0 || x >= w as i64 || y >= h as i64 {
-                        255.0
-                    } else {
-                        pixels[(y as usize * w + x as usize) * channels + c] as f64
-                    }
-                };
-                for (c, d) in dst.iter_mut().enumerate() {
-                    let top = at(x0, y0, c) * (1.0 - tx) + at(x0 + 1, y0, c) * tx;
-                    let bottom = at(x0, y0 + 1, c) * (1.0 - tx) + at(x0 + 1, y0 + 1, c) * tx;
-                    *d = (top * (1.0 - ty) + bottom * ty).round().clamp(0.0, 255.0) as u8;
+                    sample_nearest(pixels, (w, h), (sx, sy), dst);
+                } else {
+                    sample_bilinear(pixels, (w, h), (sx, sy), dst);
                 }
             }
         }
@@ -198,6 +177,45 @@ impl Upright {
 #[inline]
 fn cy_step(cx: usize, ay: f64) -> f64 {
     cx as f64 * ay
+}
+
+/// Copy into `dst` the pixel of the `w × h` raster nearest `(sx, sy)`
+/// (pixel-centre coordinates); `dst` is one pixel and keeps its value when
+/// the position is off the raster.
+#[inline]
+fn sample_nearest(pixels: &[u8], (w, h): (usize, usize), (sx, sy): (f64, f64), dst: &mut [u8]) {
+    let channels = dst.len();
+    let (x, y) = (sx.round() as i64, sy.round() as i64);
+    if x >= 0 && y >= 0 && (x as usize) < w && (y as usize) < h {
+        let src = (y as usize * w + x as usize) * channels;
+        dst.copy_from_slice(&pixels[src..src + channels]);
+    }
+}
+
+/// Write into `dst` the `w × h` raster sampled bilinearly at `(sx, sy)`
+/// (pixel-centre coordinates), white beyond its edges; `dst` is one pixel
+/// and keeps its value when the position is a pixel or more off the raster.
+#[inline]
+fn sample_bilinear(pixels: &[u8], (w, h): (usize, usize), (sx, sy): (f64, f64), dst: &mut [u8]) {
+    let channels = dst.len();
+    let (fx, fy) = (sx.floor(), sy.floor());
+    let (tx, ty) = (sx - fx, sy - fy);
+    let (x0, y0) = (fx as i64, fy as i64);
+    if x0 < -1 || y0 < -1 || x0 >= w as i64 || y0 >= h as i64 {
+        return;
+    }
+    let at = |x: i64, y: i64, c: usize| -> f64 {
+        if x < 0 || y < 0 || x >= w as i64 || y >= h as i64 {
+            255.0
+        } else {
+            pixels[(y as usize * w + x as usize) * channels + c] as f64
+        }
+    };
+    for (c, d) in dst.iter_mut().enumerate() {
+        let top = at(x0, y0, c) * (1.0 - tx) + at(x0 + 1, y0, c) * tx;
+        let bottom = at(x0, y0 + 1, c) * (1.0 - tx) + at(x0 + 1, y0 + 1, c) * tx;
+        *d = (top * (1.0 - ty) + bottom * ty).round().clamp(0.0, 255.0) as u8;
+    }
 }
 
 /// The box (clamped to `max_w × max_h`) covering a box's four corners

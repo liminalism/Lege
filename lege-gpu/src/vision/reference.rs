@@ -359,6 +359,10 @@ fn gather_elements(data: &Tensor, indices: &Tensor, axis: usize) -> Result<Tenso
     Tensor::new(indices.shape.clone(), out)
 }
 
+#[allow(
+    clippy::excessive_nesting,
+    reason = "CPU reference kernel: per-slice sort over outer and inner axes; flattening would hide the index math"
+)]
 fn top_k(input: &Tensor, axis: usize, k: usize, largest: bool) -> Result<Vec<Tensor>> {
     if axis >= input.rank() || k > input.shape[axis] {
         bail!("TopK axis/k out of range");
@@ -438,6 +442,10 @@ fn squeeze(input: &Tensor, axes: &[usize]) -> Result<Tensor> {
     Tensor::new(shape, input.data.clone())
 }
 
+#[allow(
+    clippy::excessive_nesting,
+    reason = "CPU reference GEMM: row, column and reduction loops with bias broadcast mirror the ONNX definition"
+)]
 fn gemm(inputs: &[&Tensor], alpha: f32, beta: f32, trans_a: bool, trans_b: bool) -> Result<Tensor> {
     if inputs.len() < 2 || inputs.len() > 3 {
         bail!("Gemm expects 2 or 3 inputs, got {}", inputs.len());
@@ -632,6 +640,10 @@ fn depth_to_space(input: &Tensor, b: usize) -> Result<Tensor> {
     Tensor::new(vec![n, oc, oh, ow], data)
 }
 
+#[allow(
+    clippy::excessive_nesting,
+    reason = "CPU reference Winograd input transform: channel, tile and 4x4 patch loops mirror the algorithm"
+)]
 fn winograd_input_transform(input: &Tensor) -> Result<Tensor> {
     require_rank(input, 4, "WinogradInputTransform input")?;
     if input.shape[0] != 1 {
@@ -672,6 +684,10 @@ fn winograd_input_transform(input: &Tensor) -> Result<Tensor> {
     Tensor::new(vec![16, cin, p], out)
 }
 
+#[allow(
+    clippy::excessive_nesting,
+    reason = "CPU reference batched GEMM: transform element, row, column and reduction loops"
+)]
 fn winograd_batched_gemm(u: &Tensor, v: &Tensor) -> Result<Tensor> {
     if u.shape.len() != 3 || v.shape.len() != 3 {
         bail!("WinogradBatchedGemm expects rank-3 U and V");
@@ -1115,6 +1131,10 @@ fn transpose(input: &Tensor, perm: &[usize]) -> Result<Tensor> {
     Tensor::new(shape, data)
 }
 
+#[allow(
+    clippy::excessive_nesting,
+    reason = "CPU reference convolution: batch, channel, output and kernel axis loops mirror the ONNX definition"
+)]
 fn conv2d(plan: &Conv2dPlan, inputs: &[&Tensor]) -> Result<Tensor> {
     if inputs.len() < 2 || inputs.len() > 3 {
         bail!("Conv2d expects input, weight, and optional bias");
@@ -1221,6 +1241,10 @@ fn conv2d(plan: &Conv2dPlan, inputs: &[&Tensor]) -> Result<Tensor> {
     Tensor::new(vec![n, cout, hout, wout], out)
 }
 
+#[allow(
+    clippy::excessive_nesting,
+    reason = "CPU reference pooling: plane, output and window axis loops mirror the ONNX definition"
+)]
 fn maxpool2d(plan: &Pool2dPlan, input: &Tensor) -> Result<Tensor> {
     require_rank(input, 4, "MaxPool input")?;
     let n = input.shape[0];
@@ -1281,6 +1305,10 @@ fn maxpool2d(plan: &Pool2dPlan, input: &Tensor) -> Result<Tensor> {
     Ok(output)
 }
 
+#[allow(
+    clippy::excessive_nesting,
+    reason = "CPU reference pooling: plane, output and window axis loops mirror the ONNX definition"
+)]
 fn avgpool2d(plan: &Pool2dPlan, input: &Tensor) -> Result<Tensor> {
     require_rank(input, 4, "AveragePool input")?;
     let n = input.shape[0];
@@ -1373,6 +1401,10 @@ fn resize_nearest(input: &Tensor, scales: &[f32]) -> Result<Tensor> {
     Ok(output)
 }
 
+#[allow(
+    clippy::excessive_nesting,
+    reason = "CPU reference bilinear resize: plane and output axis loops with the interpolation taps"
+)]
 fn resize_linear(input: &Tensor, sizes: &[i64], align_corners: bool) -> Result<Tensor> {
     require_rank(input, 4, "ResizeLinear input")?;
     if sizes.len() != 4 {
@@ -1416,6 +1448,10 @@ fn resize_linear(input: &Tensor, sizes: &[i64], align_corners: bool) -> Result<T
     Ok(output)
 }
 
+#[allow(
+    clippy::excessive_nesting,
+    reason = "CPU reference pad: the coordinate odometer carries across axes inside the element loop"
+)]
 fn pad(input: &Tensor, pads: &[i64], mode: &PadMode, value: f32) -> Result<Tensor> {
     let rank = input.rank();
     if pads.len() != rank * 2 {
@@ -1466,6 +1502,10 @@ fn pad(input: &Tensor, pads: &[i64], mode: &PadMode, value: f32) -> Result<Tenso
     Ok(output)
 }
 
+#[allow(
+    clippy::excessive_nesting,
+    reason = "CPU reference grid sampling: batch, channel and output axis loops with the bilinear taps"
+)]
 fn grid_sample(input: &Tensor, grid: &Tensor, align_corners: bool) -> Result<Tensor> {
     require_rank(input, 4, "GridSample input")?;
     require_rank(grid, 4, "GridSample grid")?;

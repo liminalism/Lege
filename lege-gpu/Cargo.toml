@@ -54,3 +54,6 @@ layout-detection = []
 presentation = ["dep:winit"]
 debug-logging = []
 debug-layers = []
+
+[lints.clippy]
+cognitive_complexity = "warn"

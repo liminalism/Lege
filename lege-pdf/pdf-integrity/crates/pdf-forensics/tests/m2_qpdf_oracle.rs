@@ -45,8 +45,8 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::process::Command;
 
-use pdf_forensics::{AuditReport, LogicalRevisionFacts, audit_bytes, open_revision};
 use exprim::test_support::builder;
+use pdf_forensics::{AuditReport, LogicalRevisionFacts, audit_bytes, open_revision};
 
 /// Audit `bytes` and require the report to satisfy the schema's own rules.
 fn audit(bytes: &[u8]) -> AuditReport {

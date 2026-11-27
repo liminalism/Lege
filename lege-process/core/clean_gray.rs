@@ -519,31 +519,34 @@ pub fn bg_has_thin_line_structure(
     width: usize,
     height: usize,
 ) -> bool {
-    const MIN_RUN: usize = 32;
     let long_runs: usize = cleaned
         .par_chunks(width)
         .zip(binarized.par_chunks(width))
-        .map(|(crow, brow)| {
-            let mut runs = 0usize;
-            let mut run = 0usize;
-            for (&c, &b) in crow.iter().zip(brow) {
-                // Visibly gray in the background layer: not white, not masked ink.
-                if c < 210 && b != 0 {
-                    run += 1;
-                } else {
-                    if run >= MIN_RUN {
-                        runs += 1;
-                    }
-                    run = 0;
-                }
-            }
-            if run >= MIN_RUN {
-                runs += 1;
-            }
-            runs
-        })
+        .map(|(crow, brow)| count_long_gray_runs(crow, brow))
         .sum();
     long_runs >= height / 20
+}
+
+/// Count the runs of at least 32 visibly-gray, unmasked pixels in one row.
+fn count_long_gray_runs(crow: &[u8], brow: &[u8]) -> usize {
+    const MIN_RUN: usize = 32;
+    let mut runs = 0usize;
+    let mut run = 0usize;
+    for (&c, &b) in crow.iter().zip(brow) {
+        // Visibly gray in the background layer: not white, not masked ink.
+        if c < 210 && b != 0 {
+            run += 1;
+            continue;
+        }
+        if run >= MIN_RUN {
+            runs += 1;
+        }
+        run = 0;
+    }
+    if run >= MIN_RUN {
+        runs += 1;
+    }
+    runs
 }
 
 /// Clean an RGB page (interleaved, 3 bytes/px).
@@ -605,6 +608,10 @@ pub fn ink_mask(cleaned: &[u8], threshold: u8) -> Vec<u8> {
 ///
 /// `binarized` uses the pipeline convention: 0 = ink, 255 = paper.
 /// Returns `(pixels, out_width, out_height)`.
+#[allow(
+    clippy::excessive_nesting,
+    reason = "box-downsampling kernel: output pixel and clipped source-box loops; splitting them would hide the index math"
+)]
 pub fn mrc_background(
     cleaned: &[u8],
     binarized: &[u8],
@@ -657,6 +664,10 @@ pub fn mrc_background(
 /// `cleaned` holds `channels` interleaved samples per pixel (1 = grey,
 /// 3 = RGB); every channel is whitened by the same one-channel `coverage`,
 /// and the result keeps the input's channel count.
+#[allow(
+    clippy::excessive_nesting,
+    reason = "box-downsampling kernel: output pixel, channel and clipped source-box loops; splitting them would hide the index math"
+)]
 pub fn mrc_background_with_coverage(
     cleaned: &[u8],
     coverage: &[u8],
@@ -781,35 +792,57 @@ fn remove_small_components(mask: &mut [u8], width: usize, height: usize, min_are
         if mask[start] == 0 || visited[start] {
             continue;
         }
-        component.clear();
-        stack.push(start);
-        visited[start] = true;
-        while let Some(i) = stack.pop() {
-            component.push(i);
-            let (x, y) = (i % width, i / width);
-            let mut push = |j: usize| {
-                if mask[j] != 0 && !visited[j] {
-                    visited[j] = true;
-                    stack.push(j);
-                }
-            };
-            if x > 0 {
-                push(i - 1);
-            }
-            if x + 1 < width {
-                push(i + 1);
-            }
-            if y > 0 {
-                push(i - width);
-            }
-            if y + 1 < height {
-                push(i + width);
-            }
-        }
+        flood_component(
+            mask,
+            &mut visited,
+            &mut stack,
+            &mut component,
+            start,
+            width,
+            height,
+        );
         if component.len() < min_area {
             for &i in &component {
                 mask[i] = 0;
             }
+        }
+    }
+}
+
+/// Collect into `component` the unvisited 4-connected mask component that
+/// contains `start`, marking its pixels visited. `stack` is scratch space.
+fn flood_component(
+    mask: &[u8],
+    visited: &mut [bool],
+    stack: &mut Vec<usize>,
+    component: &mut Vec<usize>,
+    start: usize,
+    width: usize,
+    height: usize,
+) {
+    component.clear();
+    stack.push(start);
+    visited[start] = true;
+    while let Some(i) = stack.pop() {
+        component.push(i);
+        let (x, y) = (i % width, i / width);
+        let mut push = |j: usize| {
+            if mask[j] != 0 && !visited[j] {
+                visited[j] = true;
+                stack.push(j);
+            }
+        };
+        if x > 0 {
+            push(i - 1);
+        }
+        if x + 1 < width {
+            push(i + 1);
+        }
+        if y > 0 {
+            push(i - width);
+        }
+        if y + 1 < height {
+            push(i + width);
         }
     }
 }

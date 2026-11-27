@@ -185,18 +185,17 @@ fn glyph_runs_to_lines(
             // advance includes its usual letter gap, so a tight word space
             // can leave the pen short of the minimum ("ofthe" on an
             // archive.org scan).
-            if let Some(pen) = pen_px {
+            if let Some(pen) = pen_px
+                && (g.x - pen >= WORD_SPACE_MIN_PX
+                    || (word_start && g.x - pen >= WORD_START_SPACE_MIN_PX))
+            {
                 let gap_units = (g.x - pen) * UNITS_PER_PIXEL;
-                if g.x - pen >= WORD_SPACE_MIN_PX
-                    || (word_start && g.x - pen >= WORD_START_SPACE_MIN_PX)
-                {
-                    items.push(GlyphItem {
-                        gid: SPACE_GID,
-                        adjust: SPACE_ADVANCE as i32 - gap_units,
-                        rise: 0,
-                    });
-                    pen_px = Some(g.x);
-                }
+                items.push(GlyphItem {
+                    gid: SPACE_GID,
+                    adjust: SPACE_ADVANCE as i32 - gap_units,
+                    rise: 0,
+                });
+                pen_px = Some(g.x);
             }
             // Where the pen is versus where the glyph goes. A gap of at most
             // one source pixel is left to the advance: the glyph lands up to
@@ -470,34 +469,34 @@ fn build_text_layer(
     let page_h = page.height;
     let mut runs = Vec::new();
     for line in lines {
-        if !line.words.is_empty() {
-            let last = line.words.len().saturating_sub(1);
-            for (i, word) in line.words.iter().enumerate() {
-                if box_is_traced(glyph_anchors, word.x, word.y, word.width, word.height) {
-                    continue;
-                }
-                let mut text = word.text.clone();
-                if i < last {
-                    text.push(' ');
-                }
+        if line.words.is_empty() {
+            if let Some(raw) = line.raw_text.as_deref()
+                && !raw.is_empty()
+                && !box_is_traced(glyph_anchors, line.x, line.y, line.width, line.height)
+            {
                 runs.push(TextRun {
-                    text,
-                    x: word.x as f64,
-                    y: (page_h - (word.y + word.height)) as f64,
-                    size: word.height.max(1.0) as f64,
+                    text: raw.to_string(),
+                    x: line.x as f64,
+                    y: (page_h - line.baseline) as f64,
+                    size: line.height.max(1.0) as f64,
                 });
             }
-        } else if let Some(raw) = line.raw_text.as_deref() {
-            if raw.is_empty()
-                || box_is_traced(glyph_anchors, line.x, line.y, line.width, line.height)
-            {
+            continue;
+        }
+        let last = line.words.len().saturating_sub(1);
+        for (i, word) in line.words.iter().enumerate() {
+            if box_is_traced(glyph_anchors, word.x, word.y, word.width, word.height) {
                 continue;
             }
+            let mut text = word.text.clone();
+            if i < last {
+                text.push(' ');
+            }
             runs.push(TextRun {
-                text: raw.to_string(),
-                x: line.x as f64,
-                y: (page_h - line.baseline) as f64,
-                size: line.height.max(1.0) as f64,
+                text,
+                x: word.x as f64,
+                y: (page_h - (word.y + word.height)) as f64,
+                size: word.height.max(1.0) as f64,
             });
         }
     }

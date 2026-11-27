@@ -301,55 +301,18 @@ pub fn apply(
 
     match kind {
         XrefSectionKind::Classic => {
-            out.extend_from_slice(b"xref\n");
-            if plan == XrefPlan::Replace && !rows.contains_key(&0) {
-                out.extend_from_slice(b"0 1\n0000000000 65535 f\r\n");
-            }
-            for run in consecutive_runs(&rows) {
-                let _ = writeln!(out, "{} {}", run[0].0, run.len());
-                for (_, row) in run {
-                    if let Row::Offset(offset, generation) = row {
-                        let _ = write!(out, "{offset:010} {generation:05} n\r\n");
-                    }
-                }
-            }
-            let _ = write!(out, "trailer\n<</Size {first_free}");
-            out.extend_from_slice(&trailer_keys);
-            let _ = write!(out, ">>\nstartxref\n{xref_offset}\n%%EOF\n");
+            let free_head = plan == XrefPlan::Replace && !rows.contains_key(&0);
+            write_xref_table(
+                &mut out,
+                &rows,
+                free_head,
+                first_free,
+                &trailer_keys,
+                xref_offset,
+            );
         }
         XrefSectionKind::Stream => {
-            let stream_number = first_free;
-            let size = stream_number + 1;
-            rows.insert(stream_number, Row::Offset(xref_offset, 0));
-            let (middle, last) = field_widths(rows.values());
-            let mut index = String::new();
-            let mut data = Vec::new();
-            for run in consecutive_runs(&rows) {
-                let _ = write!(index, "{} {} ", run[0].0, run.len());
-                for (_, row) in run {
-                    let (kind, second, third) = match row {
-                        Row::Offset(offset, generation) => (1u8, offset, u64::from(generation)),
-                        Row::Compressed(container, index) => {
-                            (2u8, u64::from(container), u64::from(index))
-                        }
-                    };
-                    data.push(kind);
-                    data.extend_from_slice(&second.to_be_bytes()[8 - middle..]);
-                    data.extend_from_slice(&third.to_be_bytes()[8 - last..]);
-                }
-            }
-            let _ = write!(
-                out,
-                "{stream_number} 0 obj\n<</Type/XRef/Size {size}/W[1 {middle} {last}]/Index[{}]",
-                index.trim_end()
-            );
-            out.extend_from_slice(&trailer_keys);
-            let _ = write!(out, "/Length {}>>\nstream\n", data.len());
-            out.extend_from_slice(&data);
-            let _ = write!(
-                out,
-                "\nendstream\nendobj\nstartxref\n{xref_offset}\n%%EOF\n"
-            );
+            write_xref_stream(&mut out, rows, first_free, &trailer_keys, xref_offset);
         }
     }
     Ok(Updated {
@@ -447,6 +410,74 @@ fn format_real(value: f64) -> String {
 /// `/W` widths of an xref stream's second and third fields: the largest
 /// offset or container (at least the customary four bytes) and the largest
 /// generation or index (at least two).
+/// A classic cross-reference table for `rows` and its trailer. `free_head`
+/// adds the free-list head (object 0), which a complete new table needs.
+fn write_xref_table(
+    out: &mut Vec<u8>,
+    rows: &BTreeMap<u32, Row>,
+    free_head: bool,
+    first_free: u32,
+    trailer_keys: &[u8],
+    xref_offset: u64,
+) {
+    out.extend_from_slice(b"xref\n");
+    if free_head {
+        out.extend_from_slice(b"0 1\n0000000000 65535 f\r\n");
+    }
+    for run in consecutive_runs(rows) {
+        let _ = writeln!(out, "{} {}", run[0].0, run.len());
+        for (_, row) in run {
+            if let Row::Offset(offset, generation) = row {
+                let _ = write!(out, "{offset:010} {generation:05} n\r\n");
+            }
+        }
+    }
+    let _ = write!(out, "trailer\n<</Size {first_free}");
+    out.extend_from_slice(trailer_keys);
+    let _ = write!(out, ">>\nstartxref\n{xref_offset}\n%%EOF\n");
+}
+
+/// A cross-reference stream for `rows`, as object `first_free`, carrying
+/// the trailer keys.
+fn write_xref_stream(
+    out: &mut Vec<u8>,
+    mut rows: BTreeMap<u32, Row>,
+    first_free: u32,
+    trailer_keys: &[u8],
+    xref_offset: u64,
+) {
+    let stream_number = first_free;
+    let size = stream_number + 1;
+    rows.insert(stream_number, Row::Offset(xref_offset, 0));
+    let (middle, last) = field_widths(rows.values());
+    let mut index = String::new();
+    let mut data = Vec::new();
+    for run in consecutive_runs(&rows) {
+        let _ = write!(index, "{} {} ", run[0].0, run.len());
+        for (_, row) in run {
+            let (kind, second, third) = match row {
+                Row::Offset(offset, generation) => (1u8, offset, u64::from(generation)),
+                Row::Compressed(container, index) => (2u8, u64::from(container), u64::from(index)),
+            };
+            data.push(kind);
+            data.extend_from_slice(&second.to_be_bytes()[8 - middle..]);
+            data.extend_from_slice(&third.to_be_bytes()[8 - last..]);
+        }
+    }
+    let _ = write!(
+        out,
+        "{stream_number} 0 obj\n<</Type/XRef/Size {size}/W[1 {middle} {last}]/Index[{}]",
+        index.trim_end()
+    );
+    out.extend_from_slice(trailer_keys);
+    let _ = write!(out, "/Length {}>>\nstream\n", data.len());
+    out.extend_from_slice(&data);
+    let _ = write!(
+        out,
+        "\nendstream\nendobj\nstartxref\n{xref_offset}\n%%EOF\n"
+    );
+}
+
 fn field_widths<'a>(rows: impl Iterator<Item = &'a Row>) -> (usize, usize) {
     let bytes_for = |value: u64| (64 - value.leading_zeros() as usize).div_ceil(8);
     let (mut middle, mut last) = (4, 2);

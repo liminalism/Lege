@@ -4,6 +4,8 @@ use flume;
 use std::io::{self, Write};
 use std::time::{Duration, Instant};
 
+use crate::progress::{ProcessingStatus, ProgressUpdate};
+
 fn timestamp() -> String {
     Local::now().format("[%H:%M:%S]").to_string()
 }
@@ -26,12 +28,178 @@ fn format_duration(duration: Duration) -> String {
     }
 }
 
+/// Says whether a stage's page count moved enough to be worth a redraw:
+/// a multiple of 10 pages, or any advance.
+fn stage_advanced(count: usize, last: usize) -> bool {
+    count != last && (count.is_multiple_of(10) || count > last)
+}
+
+/// Colours of the status and detail labels for `status`.
+fn status_colors(status: &ProcessingStatus) -> (&'static str, &'static str) {
+    match status {
+        ProcessingStatus::LayoutProgress { .. } => {
+            ("\x1b[2;34m", "\x1b[96m") // Dim blue status, bright cyan detail
+        }
+        ProcessingStatus::NoLayoutProgress { .. } => ("\x1b[2;34m", "\x1b[96m"),
+        ProcessingStatus::MarginProgress { .. } => ("\x1b[2;34m", "\x1b[96m"),
+        ProcessingStatus::ReflowProgress { .. } => ("\x1b[2;34m", "\x1b[96m"),
+        ProcessingStatus::EpubProgress { .. } => ("\x1b[2;34m", "\x1b[96m"),
+        ProcessingStatus::PdfAppend { .. } | ProcessingStatus::PdfAppendMargin { .. } => {
+            ("\x1b[2;34m", "\x1b[92m") // Page complete gets bright green
+        }
+        ProcessingStatus::Initializing => {
+            ("\x1b[2;34m", "\x1b[94m") // Soft blue for starting
+        }
+        ProcessingStatus::AssemblingOutput => {
+            ("\x1b[2;34m", "\x1b[95m") // Soft magenta for assembling
+        }
+        _ => ("\x1b[2;34m", "\x1b[2;36m"), // Default dim colors
+    }
+}
+
+/// The 3-line status block: the lines it shows, and the progress counts it
+/// last saw, so that only significant changes are printed.
+#[derive(Default)]
+struct StatusBlock {
+    last_lines: (String, String, String),
+    last_rendered: usize,
+    last_detected: usize,
+    last_encoded: usize,
+    update_counter: u32,
+}
+
+impl StatusBlock {
+    /// Redraws the block in place for `status` when it changed significantly.
+    fn show(&mut self, status: &ProcessingStatus) -> io::Result<()> {
+        let (l0, l1, l2) = status.to_display_lines();
+
+        let is_significant = self.record(status);
+
+        // Only redraw if something significant changed
+        let unchanged = (l0.as_str(), l1.as_str(), l2.as_str())
+            == (
+                self.last_lines.0.as_str(),
+                self.last_lines.1.as_str(),
+                self.last_lines.2.as_str(),
+            );
+        if !is_significant || unchanged {
+            return Ok(());
+        }
+
+        // Move cursor up 3 lines, clear the block, rewrite
+        print!("\x1b[3F\x1b[0J");
+
+        // Colorize based on status type
+        let (status_color, detail_color) = status_colors(status);
+
+        println!("{} {}Status\x1b[0m {}", timestamp(), status_color, l0);
+        println!(
+            "{} {}Detail\x1b[0m {}{}{}",
+            timestamp(),
+            detail_color,
+            detail_color,
+            l1,
+            "\x1b[0m"
+        );
+        if !l2.is_empty() {
+            println!(
+                "{} \x1b[2;36mDetail\x1b[0m \x1b[2;36m{}\x1b[0m",
+                timestamp(),
+                l2
+            );
+        } else {
+            println!();
+        }
+        io::stdout().flush()?;
+        self.last_lines = (l0, l1, l2);
+        Ok(())
+    }
+
+    /// Records the progress counts of `status` and says whether it is a
+    /// significant change.
+    fn record(&mut self, status: &ProcessingStatus) -> bool {
+        let mut is_significant = match status {
+            ProcessingStatus::LayoutProgress {
+                rendered,
+                detected,
+                encoded,
+                ..
+            } => {
+                // Only update every 10 pages or when a stage meaningfully advances
+                let significant = stage_advanced(*rendered, self.last_rendered)
+                    || stage_advanced(*detected, self.last_detected)
+                    || stage_advanced(*encoded, self.last_encoded);
+                self.last_rendered = *rendered;
+                self.last_detected = *detected;
+                self.last_encoded = *encoded;
+                significant
+            }
+            ProcessingStatus::NoLayoutProgress { encoded, .. } => {
+                // Update every 10 pages
+                let significant = *encoded % 10 == 0 || *encoded > self.last_encoded;
+                self.last_encoded = *encoded;
+                significant
+            }
+            ProcessingStatus::MarginProgress {
+                pass1_rendered,
+                pass2_processed,
+                ..
+            } => {
+                // Update every 10 pages
+                let significant = *pass1_rendered % 10 == 0
+                    || *pass2_processed % 10 == 0
+                    || *pass2_processed > self.last_encoded;
+                self.last_rendered = *pass1_rendered;
+                self.last_encoded = *pass2_processed;
+                significant
+            }
+            ProcessingStatus::ReflowProgress { current, .. } => {
+                let significant = *current % 10 == 0 || *current > self.last_encoded;
+                self.last_encoded = *current;
+                significant
+            }
+            ProcessingStatus::EpubProgress {
+                rendered,
+                detected,
+                ocr,
+                ..
+            } => {
+                let significant = *rendered > self.last_rendered
+                    || *detected > self.last_detected
+                    || *ocr > self.last_encoded;
+                self.last_rendered = *rendered;
+                self.last_detected = *detected;
+                self.last_encoded = *ocr;
+                significant
+            }
+            // Always show these status types
+            ProcessingStatus::Initializing
+            | ProcessingStatus::AssemblingOutput
+            | ProcessingStatus::Complete { .. }
+            | ProcessingStatus::Error { .. }
+            | ProcessingStatus::FootnotesDetected { .. }
+            | ProcessingStatus::OcrLayerDetected { .. }
+            | ProcessingStatus::MarginPass1Analyzing
+            | ProcessingStatus::MarginAnalysisSummary { .. }
+            | ProcessingStatus::PipelineMessage { .. }
+            | ProcessingStatus::PdfAppend { .. }
+            | ProcessingStatus::PdfAppendMargin { .. } => true,
+        };
+
+        // Force update every 50 status messages to ensure we're not completely stuck
+        self.update_counter += 1;
+        if self.update_counter >= 50 {
+            is_significant = true;
+            self.update_counter = 0;
+        }
+        is_significant
+    }
+}
+
 /// CLI 3-line renderer that redraws in place without scrolling.
 /// Listens to ProgressUpdate and displays a smooth, compact 3-line status block.
 /// Only prints significant changes to avoid spamming the console.
-pub async fn run_cli_three_line(
-    rx: flume::Receiver<crate::progress::ProgressUpdate>,
-) -> anyhow::Result<()> {
+pub async fn run_cli_three_line(rx: flume::Receiver<ProgressUpdate>) -> anyhow::Result<()> {
     // Hide cursor; ensure we unhide on drop
     struct CursorGuard;
     impl Drop for CursorGuard {
@@ -45,184 +213,15 @@ pub async fn run_cli_three_line(
     println!();
     println!();
     println!(); // reserve 3 lines
-    let mut last_lines = ("".to_string(), "".to_string(), "".to_string());
+    let mut block = StatusBlock::default();
     let start_time = Instant::now();
     let mut completed_duration: Option<Duration> = None;
     let mut progress_error: Option<String> = None;
 
-    // Track the last progress state to only update on significant changes
-    let mut last_rendered = 0usize;
-    let mut last_detected = 0usize;
-    let mut last_encoded = 0usize;
-    let mut update_counter = 0u32;
-
     loop {
         match rx.recv_async().await {
-            Ok(crate::progress::ProgressUpdate::Status { status, .. }) => {
-                let (l0, l1, l2) = status.to_display_lines();
-
-                // Determine if this is a significant change
-                let mut is_significant = false;
-
-                match &status {
-                    crate::progress::ProcessingStatus::LayoutProgress {
-                        rendered,
-                        detected,
-                        encoded,
-                        ..
-                    } => {
-                        // Only update every 10 pages or when a stage meaningfully advances
-                        if *rendered != last_rendered
-                            && (*rendered % 10 == 0 || *rendered > last_rendered)
-                        {
-                            is_significant = true;
-                        }
-                        if *detected != last_detected
-                            && (*detected % 10 == 0 || *detected > last_detected)
-                        {
-                            is_significant = true;
-                        }
-                        if *encoded != last_encoded
-                            && (*encoded % 10 == 0 || *encoded > last_encoded)
-                        {
-                            is_significant = true;
-                        }
-                        last_rendered = *rendered;
-                        last_detected = *detected;
-                        last_encoded = *encoded;
-                    }
-                    crate::progress::ProcessingStatus::NoLayoutProgress { encoded, .. } => {
-                        // Update every 10 pages
-                        if *encoded % 10 == 0 || *encoded > last_encoded {
-                            is_significant = true;
-                        }
-                        last_encoded = *encoded;
-                    }
-                    crate::progress::ProcessingStatus::MarginProgress {
-                        pass1_rendered,
-                        pass2_processed,
-                        ..
-                    } => {
-                        // Update every 10 pages
-                        if *pass1_rendered % 10 == 0 || *pass2_processed % 10 == 0 {
-                            is_significant = true;
-                        }
-                        if *pass2_processed > last_encoded {
-                            is_significant = true;
-                        }
-                        last_rendered = *pass1_rendered;
-                        last_encoded = *pass2_processed;
-                    }
-                    crate::progress::ProcessingStatus::ReflowProgress { current, .. } => {
-                        if *current % 10 == 0 || *current > last_encoded {
-                            is_significant = true;
-                        }
-                        last_encoded = *current;
-                    }
-                    crate::progress::ProcessingStatus::EpubProgress {
-                        rendered,
-                        detected,
-                        ocr,
-                        ..
-                    } => {
-                        if *rendered > last_rendered
-                            || *detected > last_detected
-                            || *ocr > last_encoded
-                        {
-                            is_significant = true;
-                        }
-                        last_rendered = *rendered;
-                        last_detected = *detected;
-                        last_encoded = *ocr;
-                    }
-                    // Always show these status types
-                    crate::progress::ProcessingStatus::Initializing
-                    | crate::progress::ProcessingStatus::AssemblingOutput
-                    | crate::progress::ProcessingStatus::Complete { .. }
-                    | crate::progress::ProcessingStatus::Error { .. }
-                    | crate::progress::ProcessingStatus::FootnotesDetected { .. }
-                    | crate::progress::ProcessingStatus::OcrLayerDetected { .. }
-                    | crate::progress::ProcessingStatus::MarginPass1Analyzing
-                    | crate::progress::ProcessingStatus::MarginAnalysisSummary { .. }
-                    | crate::progress::ProcessingStatus::PipelineMessage { .. }
-                    | crate::progress::ProcessingStatus::PdfAppend { .. }
-                    | crate::progress::ProcessingStatus::PdfAppendMargin { .. } => {
-                        is_significant = true;
-                    }
-                }
-
-                // Force update every 50 status messages to ensure we're not completely stuck
-                update_counter += 1;
-                if update_counter >= 50 {
-                    is_significant = true;
-                    update_counter = 0;
-                }
-
-                // Only redraw if something significant changed
-                if is_significant
-                    && (l0.as_str(), l1.as_str(), l2.as_str())
-                        != (
-                            last_lines.0.as_str(),
-                            last_lines.1.as_str(),
-                            last_lines.2.as_str(),
-                        )
-                {
-                    // Move cursor up 3 lines, clear the block, rewrite
-                    print!("\x1b[3F\x1b[0J");
-
-                    // Colorize based on status type
-                    let (status_color, detail_color) = match &status {
-                        crate::progress::ProcessingStatus::LayoutProgress { .. } => {
-                            ("\x1b[2;34m", "\x1b[96m") // Dim blue status, bright cyan detail
-                        }
-                        crate::progress::ProcessingStatus::NoLayoutProgress { .. } => {
-                            ("\x1b[2;34m", "\x1b[96m")
-                        }
-                        crate::progress::ProcessingStatus::MarginProgress { .. } => {
-                            ("\x1b[2;34m", "\x1b[96m")
-                        }
-                        crate::progress::ProcessingStatus::ReflowProgress { .. } => {
-                            ("\x1b[2;34m", "\x1b[96m")
-                        }
-                        crate::progress::ProcessingStatus::EpubProgress { .. } => {
-                            ("\x1b[2;34m", "\x1b[96m")
-                        }
-                        crate::progress::ProcessingStatus::PdfAppend { .. }
-                        | crate::progress::ProcessingStatus::PdfAppendMargin { .. } => {
-                            ("\x1b[2;34m", "\x1b[92m") // Page complete gets bright green
-                        }
-                        crate::progress::ProcessingStatus::Initializing => {
-                            ("\x1b[2;34m", "\x1b[94m") // Soft blue for starting
-                        }
-                        crate::progress::ProcessingStatus::AssemblingOutput => {
-                            ("\x1b[2;34m", "\x1b[95m") // Soft magenta for assembling
-                        }
-                        _ => ("\x1b[2;34m", "\x1b[2;36m"), // Default dim colors
-                    };
-
-                    println!("{} {}Status\x1b[0m {}", timestamp(), status_color, l0);
-                    println!(
-                        "{} {}Detail\x1b[0m {}{}{}",
-                        timestamp(),
-                        detail_color,
-                        detail_color,
-                        l1,
-                        "\x1b[0m"
-                    );
-                    if !l2.is_empty() {
-                        println!(
-                            "{} \x1b[2;36mDetail\x1b[0m \x1b[2;36m{}\x1b[0m",
-                            timestamp(),
-                            l2
-                        );
-                    } else {
-                        println!();
-                    }
-                    io::stdout().flush()?;
-                    last_lines = (l0, l1, l2);
-                }
-            }
-            Ok(crate::progress::ProgressUpdate::Completed { message, .. }) => {
+            Ok(ProgressUpdate::Status { status, .. }) => block.show(&status)?,
+            Ok(ProgressUpdate::Completed { message, .. }) => {
                 print!("\x1b[3F\x1b[0J");
                 println!("{} \x1b[92mStatus\x1b[0m [Complete]", timestamp());
                 println!("{} \x1b[92mDetail\x1b[0m {}", timestamp(), message);
@@ -231,7 +230,7 @@ pub async fn run_cli_three_line(
                 completed_duration = Some(start_time.elapsed());
                 break;
             }
-            Ok(crate::progress::ProgressUpdate::Error { error, .. }) => {
+            Ok(ProgressUpdate::Error { error, .. }) => {
                 print!("\x1b[3F\x1b[0J");
                 println!("{} \x1b[2;34mStatus\x1b[0m [Error]", timestamp());
                 println!("{} \x1b[2;36mDetail\x1b[0m An error occurred.", timestamp());

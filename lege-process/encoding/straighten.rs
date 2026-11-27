@@ -441,31 +441,7 @@ fn text_axis(shapes: &[&(BitImage, BBox)], median_size: f64) -> Option<f64> {
     let mut votes = 0u32;
     let reach2 = reach * reach;
     for (i, &(x, y)) in centres.iter().enumerate() {
-        let (gx, gy) = cell_of(x, y);
-        let mut nearest = [(f64::MAX, usize::MAX); AXIS_NEIGHBOURS];
-        for ny in gy - 1..=gy + 1 {
-            for nx in gx - 1..=gx + 1 {
-                let Some(list) = grid.get(&(nx, ny)) else {
-                    continue;
-                };
-                for &j in list {
-                    if j == i {
-                        continue;
-                    }
-                    let (dx, dy) = (centres[j].0 - x, centres[j].1 - y);
-                    let d2 = dx * dx + dy * dy;
-                    if d2 > reach2 || d2 >= nearest[AXIS_NEIGHBOURS - 1].0 {
-                        continue;
-                    }
-                    let mut k = AXIS_NEIGHBOURS - 1;
-                    while k > 0 && nearest[k - 1].0 > d2 {
-                        nearest[k] = nearest[k - 1];
-                        k -= 1;
-                    }
-                    nearest[k] = (d2, j);
-                }
-            }
-        }
+        let nearest = nearest_neighbours(i, &centres, &grid, cell_of(x, y), reach2);
         for (_, j) in nearest {
             if j == usize::MAX {
                 continue;
@@ -503,6 +479,58 @@ fn text_axis(shapes: &[&(BitImage, BBox)], median_size: f64) -> Option<f64> {
     };
     let deg = -45.0 + (peak as f64 + 0.5 + offset) * AXIS_BIN_DEG;
     Some(deg.to_radians())
+}
+
+/// Squared distances and indices of the [`AXIS_NEIGHBOURS`] centres
+/// nearest centre `i` within `reach2` (squared), nearest first; unused
+/// slots hold `(f64::MAX, usize::MAX)`. `grid` buckets the centres by
+/// reach-sized cell, and `cell` is centre `i`'s.
+fn nearest_neighbours(
+    i: usize,
+    centres: &[(f64, f64)],
+    grid: &HashMap<(i32, i32), Vec<usize>>,
+    (gx, gy): (i32, i32),
+    reach2: f64,
+) -> [(f64, usize); AXIS_NEIGHBOURS] {
+    let mut nearest = [(f64::MAX, usize::MAX); AXIS_NEIGHBOURS];
+    for ny in gy - 1..=gy + 1 {
+        for nx in gx - 1..=gx + 1 {
+            let Some(list) = grid.get(&(nx, ny)) else {
+                continue;
+            };
+            offer_neighbours(i, list, centres, reach2, &mut nearest);
+        }
+    }
+    nearest
+}
+
+/// Insert the centres listed in `list` (other than `i` itself) into
+/// `nearest`, centre `i`'s nearest neighbours so far, sorted by squared
+/// distance; those beyond `reach2` or the farthest kept are ignored.
+fn offer_neighbours(
+    i: usize,
+    list: &[usize],
+    centres: &[(f64, f64)],
+    reach2: f64,
+    nearest: &mut [(f64, usize); AXIS_NEIGHBOURS],
+) {
+    let (x, y) = centres[i];
+    for &j in list {
+        if j == i {
+            continue;
+        }
+        let (dx, dy) = (centres[j].0 - x, centres[j].1 - y);
+        let d2 = dx * dx + dy * dy;
+        if d2 > reach2 || d2 >= nearest[AXIS_NEIGHBOURS - 1].0 {
+            continue;
+        }
+        let mut k = AXIS_NEIGHBOURS - 1;
+        while k > 0 && nearest[k - 1].0 > d2 {
+            nearest[k] = nearest[k - 1];
+            k -= 1;
+        }
+        nearest[k] = (d2, j);
+    }
 }
 
 /// `(x centre, bottom)` of every component in the frame's upright
@@ -615,13 +643,15 @@ pub fn fit_baseline(points: &[(f64, f64)]) -> Option<(f64, f64)> {
     let mut k = 0usize;
     for i in 0..n {
         for j in i + 1..n {
-            if k % stride == 0 {
-                let dx = points[j].0 - points[i].0;
-                if dx.abs() >= 1.0 {
-                    slopes.push((points[j].1 - points[i].1) / dx);
-                }
-            }
+            let sampled = k % stride == 0;
             k += 1;
+            if !sampled {
+                continue;
+            }
+            let dx = points[j].0 - points[i].0;
+            if dx.abs() >= 1.0 {
+                slopes.push((points[j].1 - points[i].1) / dx);
+            }
         }
     }
     if slopes.is_empty() {
@@ -866,43 +896,51 @@ mod tests {
         };
         let shapes = upright
             .iter()
-            .map(|(_, b)| {
-                let corners = [
-                    (b.xmin, b.ymin),
-                    (b.xmax, b.ymin),
-                    (b.xmin, b.ymax),
-                    (b.xmax, b.ymax),
-                ]
-                .map(|(x, y)| rot(x as f64, y as f64));
-                let xmin = corners.iter().map(|c| c.0).fold(f64::MAX, f64::min).floor() as i32;
-                let ymin = corners.iter().map(|c| c.1).fold(f64::MAX, f64::min).floor() as i32;
-                let xmax = corners.iter().map(|c| c.0).fold(f64::MIN, f64::max).ceil() as i32;
-                let ymax = corners.iter().map(|c| c.1).fold(f64::MIN, f64::max).ceil() as i32;
-                let mut bm = BitImage::new((xmax - xmin) as u32, (ymax - ymin) as u32).unwrap();
-                for py in ymin..ymax {
-                    for px in xmin..xmax {
-                        let (ux, uy) = unrot(px as f64 + 0.5, py as f64 + 0.5);
-                        if ux >= b.xmin as f64
-                            && ux < b.xmax as f64
-                            && uy >= b.ymin as f64
-                            && uy < b.ymax as f64
-                        {
-                            bm.set_usize((px - xmin) as usize, (py - ymin) as usize, true);
-                        }
-                    }
-                }
-                (
-                    bm,
-                    BBox {
-                        xmin,
-                        ymin,
-                        xmax,
-                        ymax,
-                    },
-                )
-            })
+            .map(|(_, b)| rotated_box(b, &rot, &unrot))
             .collect();
         (shapes, w, h)
+    }
+
+    /// Box `b` filled with ink and turned by `rot` (`unrot` its inverse):
+    /// the bitmap and box of the result.
+    fn rotated_box(
+        b: &BBox,
+        rot: &impl Fn(f64, f64) -> (f64, f64),
+        unrot: &impl Fn(f64, f64) -> (f64, f64),
+    ) -> (BitImage, BBox) {
+        let corners = [
+            (b.xmin, b.ymin),
+            (b.xmax, b.ymin),
+            (b.xmin, b.ymax),
+            (b.xmax, b.ymax),
+        ]
+        .map(|(x, y)| rot(x as f64, y as f64));
+        let xmin = corners.iter().map(|c| c.0).fold(f64::MAX, f64::min).floor() as i32;
+        let ymin = corners.iter().map(|c| c.1).fold(f64::MAX, f64::min).floor() as i32;
+        let xmax = corners.iter().map(|c| c.0).fold(f64::MIN, f64::max).ceil() as i32;
+        let ymax = corners.iter().map(|c| c.1).fold(f64::MIN, f64::max).ceil() as i32;
+        let mut bm = BitImage::new((xmax - xmin) as u32, (ymax - ymin) as u32).unwrap();
+        for py in ymin..ymax {
+            for px in xmin..xmax {
+                let (ux, uy) = unrot(px as f64 + 0.5, py as f64 + 0.5);
+                if ux >= b.xmin as f64
+                    && ux < b.xmax as f64
+                    && uy >= b.ymin as f64
+                    && uy < b.ymax as f64
+                {
+                    bm.set_usize((px - xmin) as usize, (py - ymin) as usize, true);
+                }
+            }
+        }
+        (
+            bm,
+            BBox {
+                xmin,
+                ymin,
+                xmax,
+                ymax,
+            },
+        )
     }
 
     #[test]

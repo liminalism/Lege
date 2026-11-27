@@ -98,6 +98,10 @@ pub fn create_djvu_pipeline_config(
 }
 /// Parallel tokio-based DJVU pipeline with TRUE concurrency
 /// Uses tokio channels for pipelined async processing with enhanced parallel processing stages
+#[allow(
+    clippy::cognitive_complexity,
+    reason = "linear stage orchestration: the score comes from `.await`/`?` desugaring and the no-op logging macro expansions; the stages are their own functions"
+)]
 pub async fn create_and_run_djvu_source_pipeline(
     source: Arc<dyn PageSource>,
     config: Arc<PipelineConfig>,
@@ -293,171 +297,36 @@ pub async fn create_and_run_djvu_source_pipeline(
             pipeline_config.page_workers,
         ))
     };
-    // Spawn inference stage with TRUE concurrency (similar to PDF pipeline) (mut for tokio::select!)
-    let infer_task: JoinHandle<Result<()>> = {
-        let tracker = progress_tracker.clone();
-        let rc = render_count.clone();
-        let dc = detect_count.clone();
-        let ec = encode_count.clone();
-        let mut render_rx = render_rx;
-        let handle_clone = shared_inference_handle.clone();
-        let detection_cache = detection_cache.clone();
-        let total_pages = total_pages;
-        let concurrency = pipeline_config.page_workers;
-        tokio::spawn(async move {
-            info_log!(
-                "[DJVU-Parallel-Infer] Starting inference stage with concurrency={}",
-                concurrency
-            );
-            // Track in-flight inference tasks
-            let mut in_flight: FuturesUnordered<BoxFuture<'static, Result<DjvuInferenceData>>> =
-                FuturesUnordered::new();
-            let mut input_exhausted = false;
-            loop {
-                tokio::select! {
-                    biased; // Prioritize completing work over starting new work
-                    // Collect completed inference results
-                    Some(result) = in_flight.next(), if !in_flight.is_empty() => {
-                        match result {
-                            Ok(data) => {
-                                let detected_val = dc.fetch_add(1, Ordering::Relaxed) + 1;
-                                if layout_enabled {
-                                    let rendered_val = rc.load(Ordering::Relaxed);
-                                    let encoded_val = ec.load(Ordering::Relaxed);
-                                    tracker.publish_layout_progress(rendered_val, detected_val, encoded_val, total_pages);
-                                }
-                                infer_tx.send(data).await.map_err(|e| anyhow!("Infer send failed: {}", e))?;
-                            }
-                            Err(e) => {
-                                return Err(anyhow!("[DJVU-Parallel-Infer] Inference task failed: {:#}", e));
-                            }
-                        }
-                    }
-                    // Accept new work if we have capacity
-                    Some(rendered) = render_rx.recv(), if in_flight.len() < concurrency && !input_exhausted => {
-                        in_flight.push(Box::pin(crate::runtime_stats::track_future(
-                            crate::runtime_stats::Stage::Inference,
-                            build_djvu_inference_future(
-                                handle_clone.clone(),
-                                rendered,
-                                detection_cache.clone(),
-                            ),
-                        )));
-                    }
-                    // Input channel closed
-                    else => {
-                        if !input_exhausted && render_rx.is_closed() {
-                            input_exhausted = true;
-                            info_log!("[DJVU-Parallel-Infer] Input exhausted, draining {} in-flight tasks", in_flight.len());
-                        }
-                        // Exit when all work is done
-                        if input_exhausted && in_flight.is_empty() {
-                            break;
-                        }
-                        // If we can't make progress, yield
-                        if in_flight.is_empty() {
-                            tokio::task::yield_now().await;
-                        }
-                    }
-                }
-            }
-            drop(infer_tx); // Close channel
-            info_log!("[DJVU-Parallel-Infer] Inference stage complete");
-            Ok(())
-        })
+    let stage_progress = DjvuStageProgress {
+        tracker: progress_tracker.clone(),
+        rendered: render_count.clone(),
+        detected: detect_count.clone(),
+        encoded: encode_count.clone(),
+        total_pages,
+        layout_enabled,
     };
-    // Spawn binarization & text extraction stage with TRUE concurrency (similar to PDF pipeline) (mut for tokio::select!)
-    let binarize_task: JoinHandle<Result<()>> = {
-        let config = config.clone();
-        let document_session = document_session.clone();
-        let tracker = progress_tracker.clone();
-        let external_cb = external_cb.clone();
-        let rc = render_count.clone();
-        let dc = detect_count.clone();
-        let ec = encode_count.clone();
-        let mut infer_rx = infer_rx;
-        let total_pages = total_pages;
-        let page_index_offset = page_index_offset;
-        let layout_enabled = layout_enabled;
-        let concurrency = pipeline_config.process_workers;
-        let margin_analysis = margin_analysis.clone();
-        let binarize_cancellation = cancellation.clone();
-        tokio::spawn(async move {
-            info_log!(
-                "[DJVU-Parallel-Process] Starting binarization & text extraction stage with concurrency={}",
-                concurrency
-            );
-            let mut in_flight: FuturesUnordered<_> = FuturesUnordered::new();
-            let mut input_exhausted = false;
-            loop {
-                tokio::select! {
-                    biased;
-                    // Collect completed processing results
-                    Some(result) = in_flight.next(), if !in_flight.is_empty() => {
-                        match result {
-                            Ok(Ok(Some(processed_data))) => {
-                                let encoded_val = ec.fetch_add(1, Ordering::Relaxed) + 1;
-                                if layout_enabled {
-                                    let rendered_val = rc.load(Ordering::Relaxed);
-                                    let detected_val = dc.load(Ordering::Relaxed);
-                                    tracker.publish_layout_progress(rendered_val, detected_val, encoded_val, total_pages);
-                                } else {
-                                    tracker.publish_no_layout_progress(encoded_val, total_pages);
-                                }
-                                external_cb(encoded_val, total_pages);
-                                binarize_tx.send(processed_data).await.map_err(|e| anyhow!("Binarize send failed: {}", e))?;
-                            }
-                            Ok(Ok(None)) => {
-                                // This means the page processing was skipped, continue
-                            }
-                            Ok(Err(e)) => {
-                                return Err(anyhow!(
-                                    "DjVu binarization stage page processing failed: {:#}",
-                                    e
-                                ));
-                            }
-                            Err(e) => {
-                                return Err(anyhow!("DjVu binarization page task panicked: {}", e));
-                            }
-                        }
-                    }
-                    // Accept new work if we have capacity
-                    Some(inference_data) = infer_rx.recv(), if in_flight.len() < concurrency && !input_exhausted => {
-                        let config_clone = config.clone();
-                        let document_session_clone = document_session.clone();
-                        let margin_analysis = margin_analysis.clone();
-                        let page_cancellation = binarize_cancellation.clone();
-                        // Spawn processing task
-                        let task = tokio::spawn(async move {
-                            process_single_djvu_page(
-                                config_clone,
-                                document_session_clone,
-                                inference_data,
-                                page_index_offset,
-                                margin_analysis,
-                                page_cancellation,
-                            ).await
-                        });
-                        in_flight.push(task);
-                    }
-                    else => {
-                        if !input_exhausted && infer_rx.is_closed() {
-                            input_exhausted = true;
-                        }
-                        if input_exhausted && in_flight.is_empty() {
-                            break;
-                        }
-                        if in_flight.is_empty() {
-                            tokio::task::yield_now().await;
-                        }
-                    }
-                }
-            }
-            drop(binarize_tx); // Close channel
-            info_log!("[DJVU-Parallel-Process] Binarization & text extraction stage complete");
-            Ok(())
-        })
-    };
+    // Spawn inference stage with TRUE concurrency (similar to PDF pipeline)
+    let infer_task: JoinHandle<Result<()>> = tokio::spawn(djvu_inference_stage(
+        render_rx,
+        infer_tx,
+        shared_inference_handle.clone(),
+        detection_cache.clone(),
+        stage_progress.clone(),
+        pipeline_config.page_workers,
+    ));
+    // Spawn binarization & text extraction stage with TRUE concurrency (similar to PDF pipeline)
+    let binarize_task: JoinHandle<Result<()>> = tokio::spawn(djvu_page_process_stage(
+        infer_rx,
+        binarize_tx,
+        config.clone(),
+        document_session.clone(),
+        margin_analysis.clone(),
+        page_index_offset,
+        cancellation.clone(),
+        stage_progress,
+        external_cb.clone(),
+        pipeline_config.process_workers,
+    ));
     // Spawn DjVu writer actor for concurrent document assembly. The writer
     // owns the assembly side; the shared `Arc<DjvuDocument>` lets the parallel
     // encode stage do the heavy IW44/JB2 encode off-thread.
@@ -489,114 +358,23 @@ pub async fn create_and_run_djvu_source_pipeline(
     let document_toc = Arc::new(Mutex::new(Vec::new()));
 
     // Spawn encoding stage (encodes pages concurrently, then forwards to writer actor)
-    let encode_task: JoinHandle<Result<()>> = {
-        let orchestrator = orchestrator.clone();
-        let djvu_document = djvu_document.clone();
-        let djvu_writer = djvu_writer.clone();
-        let mut binarize_rx = binarize_rx;
-        let concurrency = pipeline_config.djvu_encode_workers;
-        let epub_sidecar_output = epub_sidecar_output.clone();
-        let epub_hocr_pages = epub_hocr_pages.clone();
-        let document_toc = document_toc.clone();
-        let encode_cancellation = cancellation.clone();
-        tokio::spawn(async move {
-            info_log!(
-                "[DJVU-Parallel-Compose] Starting compose stage with concurrency={}",
-                concurrency
-            );
-            let mut in_flight: FuturesUnordered<BoxFuture<'static, Result<ComposedDjvuPage>>> =
-                FuturesUnordered::new();
-            let mut input_exhausted = false;
-
-            loop {
-                tokio::select! {
-                    biased;
-                    Some(result) = in_flight.next(), if !in_flight.is_empty() => {
-                        let composed_page = result?;
-                        djvu_writer
-                            .append_encoded(composed_page.encoded, composed_page.page_index)
-                            .await?;
-                    }
-                    Some(binarized_data) = binarize_rx.recv(), if in_flight.len() < concurrency && !input_exhausted => {
-                        if let Ok(mut pages) = document_toc.lock() {
-                            pages.push(binarized_data.toc.clone());
-                        }
-                        if epub_sidecar_output.is_some()
-                            && let Some(hocr) = binarized_data.hocr_text.clone()
-                            && !hocr.trim().is_empty()
-                        {
-                            let width_px = binarized_data.adjusted_image.width();
-                            let height_px = binarized_data.adjusted_image.height();
-                            if let Ok(mut pages) = epub_hocr_pages.lock() {
-                                pages.push(crate::pipeline::epub_pipeline::HocrPage {
-                                    page_index: binarized_data.index,
-                                    width_px,
-                                    height_px,
-                                    hocr,
-                                });
-                            }
-                        }
-                        let orchestrator = orchestrator.clone();
-                        let djvu_document = djvu_document.clone();
-                        let page_cancellation = encode_cancellation.clone();
-                        in_flight.push(Box::pin(async move {
-                            if page_cancellation.is_cancelled() {
-                                return Err(anyhow!("DjVu composition cancelled before page encode"));
-                            }
-                            let page_data = PageData {
-                                index: binarized_data.index,
-                                preserve_full_color: binarized_data.preserve_full_color,
-                                // The Arc is not shared past this point, so unwrap_or_clone
-                                // moves the full-page RgbImage out instead of deep-copying it
-                                // (falls back to a clone only if a reference somehow remains).
-                                rgb_image: Arc::unwrap_or_clone(binarized_data.adjusted_image),
-                                binarized: binarized_data.binarized,
-                                cleaned_gray: binarized_data.cleaned_gray,
-                                preserved: binarized_data.preserved,
-                                detections: binarized_data.detections,
-                                hocr: binarized_data.hocr_text,
-                            };
-
-                            // Compose and compress the typed page inside one blocking
-                            // worker so IW44/JB2 encoding remains page-parallel.
-                            let page_index = page_data.index;
-                            let encoded = crate::runtime_stats::spawn_blocking_stage(
-                                crate::runtime_stats::Stage::Encode,
-                                move || -> Result<_> {
-                                    let prepared = orchestrator.process_page(page_data)?;
-                                    prepared.encode(&djvu_document, iw44_quality, bg_subsample)
-                                },
-                            )
-                            .await
-                            .map_err(|e| anyhow!("DjVu compose task panicked: {}", e))??;
-                            if page_cancellation.is_cancelled() {
-                                return Err(anyhow!("DjVu composition cancelled after page encode"));
-                            }
-
-                            Ok(ComposedDjvuPage {
-                                encoded,
-                                page_index,
-                            })
-                        }));
-                    }
-                    else => {
-                        if !input_exhausted && binarize_rx.is_closed() {
-                            input_exhausted = true;
-                        }
-                        if input_exhausted && in_flight.is_empty() {
-                            break;
-                        }
-                        if in_flight.is_empty() {
-                            tokio::task::yield_now().await;
-                        }
-                    }
-                }
-            }
-
-            info_log!("[DJVU-Parallel-Encode] Encoding stage complete");
-            Ok(())
-        })
-    };
+    let encode_task: JoinHandle<Result<()>> = tokio::spawn(djvu_compose_stage(
+        binarize_rx,
+        DjvuComposer {
+            orchestrator: orchestrator.clone(),
+            djvu_document: djvu_document.clone(),
+            iw44_quality,
+            bg_subsample,
+        },
+        djvu_writer.clone(),
+        DjvuDocumentText {
+            collect_hocr: epub_sidecar_output.is_some(),
+            hocr_pages: epub_hocr_pages.clone(),
+            toc: document_toc.clone(),
+        },
+        cancellation.clone(),
+        pipeline_config.djvu_encode_workers,
+    ));
     // Wait for all stages to complete with cancellation support
     info_log!("[DJVU-Parallel] Waiting for pipeline stages to complete...");
 
@@ -615,35 +393,13 @@ pub async fn create_and_run_djvu_source_pipeline(
     .await?;
     info_log!("[DJVU-Parallel] All page stages complete");
 
-    let toc_pages = document_toc
-        .lock()
-        .map(|pages| pages.clone())
-        .unwrap_or_default();
-    let candidates = toc_pages
-        .iter()
-        .flat_map(|page| page.candidates.clone())
-        .collect();
-    let stats = toc_pages
-        .iter()
-        .filter_map(|page| page.stats)
-        .collect::<Vec<_>>();
-    let printed_contents = toc_pages
-        .iter()
-        .flat_map(|page| page.printed_contents.clone())
-        .collect::<Vec<_>>();
-    let synthetic =
-        crate::toc::build_outline_with_contents(candidates, &stats, total_pages, &printed_contents);
-    let source_outline = if let Some(session) = document_session.clone() {
-        let bookmarks =
-            crate::runtime_stats::spawn_blocking(move || exprim::extract_outline(&session)).await?;
-        let source_to_output = (0..total_pages)
-            .map(|local| (page_index_offset + local, local))
-            .collect::<std::collections::HashMap<_, _>>();
-        bookmarks_to_outline(&bookmarks, &source_to_output)
-    } else {
-        Vec::new()
-    };
-    let accepted_outline = merge_outline(source_outline, Some(synthetic));
+    let accepted_outline = djvu_document_outline(
+        &document_toc,
+        document_session.clone(),
+        total_pages,
+        page_index_offset,
+    )
+    .await?;
     if !accepted_outline.is_empty() {
         djvu_writer.send_outline(accepted_outline.clone()).await?;
     }
@@ -654,33 +410,11 @@ pub async fn create_and_run_djvu_source_pipeline(
             .lock()
             .map(|pages| pages.clone())
             .unwrap_or_default();
-        if !hocr_pages.is_empty() {
-            let title = epub_path
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("Document")
-                .to_string();
-            info_log!(
-                "[DJVU-Parallel] Assembling EPUB sidecar from existing OCR: {}",
-                epub_path.display()
-            );
-            let epub_cancellation = cancellation.clone();
-            crate::runtime_stats::spawn_blocking_stage(
-                crate::runtime_stats::Stage::Writer,
-                move || {
-                    crate::pipeline::epub_pipeline::build_epub_from_hocr_pages_with_outline_cancellable(
-                        &hocr_pages,
-                        &title,
-                        &epub_path,
-                        &accepted_outline,
-                        Some(&epub_cancellation),
-                    )
-                },
-            )
-            .await
-            .map_err(|e| anyhow!("EPUB sidecar task panicked: {}", e))??;
-        } else {
+        if hocr_pages.is_empty() {
             warn_log!("[DJVU-Parallel] EPUB sidecar requested, but no OCR text was available");
+        } else {
+            package_djvu_epub_sidecar(epub_path, hocr_pages, accepted_outline, &cancellation)
+                .await?;
         }
     }
 
@@ -700,6 +434,411 @@ pub async fn create_and_run_djvu_source_pipeline(
 
     info_log!("[DJVU-Parallel] Pipeline complete");
     Ok(())
+}
+
+/// The outline the DjVu gets: the source's own outline remapped onto the
+/// output pages when it survives, else the one synthesized from the pages'
+/// title candidates.
+async fn djvu_document_outline(
+    document_toc: &Mutex<Vec<crate::toc::PageTocData>>,
+    document_session: Option<Arc<RenderSession>>,
+    total_pages: usize,
+    page_index_offset: usize,
+) -> Result<Vec<lege_pdf_write::outline::OutlineItem>> {
+    let toc_pages = document_toc
+        .lock()
+        .map(|pages| pages.clone())
+        .unwrap_or_default();
+    let candidates = toc_pages
+        .iter()
+        .flat_map(|page| page.candidates.clone())
+        .collect();
+    let stats = toc_pages
+        .iter()
+        .filter_map(|page| page.stats)
+        .collect::<Vec<_>>();
+    let printed_contents = toc_pages
+        .iter()
+        .flat_map(|page| page.printed_contents.clone())
+        .collect::<Vec<_>>();
+    let synthetic =
+        crate::toc::build_outline_with_contents(candidates, &stats, total_pages, &printed_contents);
+    let source_outline = if let Some(session) = document_session {
+        let bookmarks =
+            crate::runtime_stats::spawn_blocking(move || exprim::extract_outline(&session)).await?;
+        let source_to_output = (0..total_pages)
+            .map(|local| (page_index_offset + local, local))
+            .collect::<std::collections::HashMap<_, _>>();
+        bookmarks_to_outline(&bookmarks, &source_to_output)
+    } else {
+        Vec::new()
+    };
+    Ok(merge_outline(source_outline, Some(synthetic)))
+}
+
+/// Package the EPUB sidecar from the gathered hOCR pages.
+async fn package_djvu_epub_sidecar(
+    epub_path: std::path::PathBuf,
+    hocr_pages: Vec<crate::pipeline::epub_pipeline::HocrPage>,
+    accepted_outline: Vec<lege_pdf_write::outline::OutlineItem>,
+    cancellation: &exprim::CancellationToken,
+) -> Result<()> {
+    let title = epub_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("Document")
+        .to_string();
+    info_log!(
+        "[DJVU-Parallel] Assembling EPUB sidecar from existing OCR: {}",
+        epub_path.display()
+    );
+    let epub_cancellation = cancellation.clone();
+    crate::runtime_stats::spawn_blocking_stage(crate::runtime_stats::Stage::Writer, move || {
+        crate::pipeline::epub_pipeline::build_epub_from_hocr_pages_with_outline_cancellable(
+            &hocr_pages,
+            &title,
+            &epub_path,
+            &accepted_outline,
+            Some(&epub_cancellation),
+        )
+    })
+    .await
+    .map_err(|e| anyhow!("EPUB sidecar task panicked: {}", e))??;
+    Ok(())
+}
+
+/// Page counters the DjVu stages share for progress reporting.
+#[derive(Clone)]
+struct DjvuStageProgress {
+    tracker: ProgressTracker,
+    rendered: Arc<AtomicUsize>,
+    detected: Arc<AtomicUsize>,
+    encoded: Arc<AtomicUsize>,
+    total_pages: usize,
+    layout_enabled: bool,
+}
+
+impl DjvuStageProgress {
+    /// Count a page through layout detection.
+    fn page_detected(&self) {
+        let detected_val = self.detected.fetch_add(1, Ordering::Relaxed) + 1;
+        if self.layout_enabled {
+            let rendered_val = self.rendered.load(Ordering::Relaxed);
+            let encoded_val = self.encoded.load(Ordering::Relaxed);
+            self.tracker.publish_layout_progress(
+                rendered_val,
+                detected_val,
+                encoded_val,
+                self.total_pages,
+            );
+        }
+    }
+
+    /// Count a page through binarization and return the new count.
+    fn page_processed(&self) -> usize {
+        let encoded_val = self.encoded.fetch_add(1, Ordering::Relaxed) + 1;
+        if self.layout_enabled {
+            let rendered_val = self.rendered.load(Ordering::Relaxed);
+            let detected_val = self.detected.load(Ordering::Relaxed);
+            self.tracker.publish_layout_progress(
+                rendered_val,
+                detected_val,
+                encoded_val,
+                self.total_pages,
+            );
+        } else {
+            self.tracker
+                .publish_no_layout_progress(encoded_val, self.total_pages);
+        }
+        encoded_val
+    }
+}
+
+/// Inference stage: layout detection on up to `concurrency` rendered pages at
+/// once, each result forwarded as it completes.
+async fn djvu_inference_stage(
+    mut render_rx: tokio::sync::mpsc::Receiver<RenderedPageData>,
+    infer_tx: tokio::sync::mpsc::Sender<DjvuInferenceData>,
+    inference_handle: Option<Arc<crate::pipeline::inference::InferenceHandle>>,
+    detection_cache: Arc<Vec<CachedDetections>>,
+    progress: DjvuStageProgress,
+    concurrency: usize,
+) -> Result<()> {
+    info_log!(
+        "[DJVU-Parallel-Infer] Starting inference stage with concurrency={}",
+        concurrency
+    );
+    // Track in-flight inference tasks
+    let mut in_flight: FuturesUnordered<BoxFuture<'static, Result<DjvuInferenceData>>> =
+        FuturesUnordered::new();
+    let mut input_exhausted = false;
+    loop {
+        tokio::select! {
+            biased; // Prioritize completing work over starting new work
+            // Collect completed inference results
+            Some(result) = in_flight.next(), if !in_flight.is_empty() => {
+                let data = result.map_err(|e| {
+                    anyhow!("[DJVU-Parallel-Infer] Inference task failed: {:#}", e)
+                })?;
+                progress.page_detected();
+                infer_tx.send(data).await.map_err(|e| anyhow!("Infer send failed: {}", e))?;
+            }
+            // Accept new work if we have capacity
+            Some(rendered) = render_rx.recv(), if in_flight.len() < concurrency && !input_exhausted => {
+                in_flight.push(Box::pin(crate::runtime_stats::track_future(
+                    crate::runtime_stats::Stage::Inference,
+                    build_djvu_inference_future(
+                        inference_handle.clone(),
+                        rendered,
+                        detection_cache.clone(),
+                    ),
+                )));
+            }
+            // Input channel closed
+            else => {
+                if !input_exhausted && render_rx.is_closed() {
+                    input_exhausted = true;
+                    info_log!("[DJVU-Parallel-Infer] Input exhausted, draining {} in-flight tasks", in_flight.len());
+                }
+                // Exit when all work is done
+                if input_exhausted && in_flight.is_empty() {
+                    break;
+                }
+                // If we can't make progress, yield
+                if in_flight.is_empty() {
+                    tokio::task::yield_now().await;
+                }
+            }
+        }
+    }
+    drop(infer_tx); // Close channel
+    info_log!("[DJVU-Parallel-Infer] Inference stage complete");
+    Ok(())
+}
+
+/// Binarization & text extraction stage: up to `concurrency` page tasks at
+/// once, each processed page forwarded as it completes.
+#[allow(clippy::too_many_arguments)]
+async fn djvu_page_process_stage(
+    mut infer_rx: tokio::sync::mpsc::Receiver<DjvuInferenceData>,
+    binarize_tx: tokio::sync::mpsc::Sender<DjvuBinarizedData>,
+    config: Arc<PipelineConfig>,
+    document_session: Option<Arc<RenderSession>>,
+    margin_analysis: Option<Arc<DocumentMarginAnalysis>>,
+    page_index_offset: usize,
+    cancellation: exprim::CancellationToken,
+    progress: DjvuStageProgress,
+    external_cb: Arc<dyn Fn(usize, usize) + Send + Sync + 'static>,
+    concurrency: usize,
+) -> Result<()> {
+    info_log!(
+        "[DJVU-Parallel-Process] Starting binarization & text extraction stage with concurrency={}",
+        concurrency
+    );
+    let mut in_flight: FuturesUnordered<_> = FuturesUnordered::new();
+    let mut input_exhausted = false;
+    loop {
+        tokio::select! {
+            biased;
+            // Collect completed processing results
+            Some(result) = in_flight.next(), if !in_flight.is_empty() => {
+                let processed = match result {
+                    Ok(Ok(processed)) => processed,
+                    Ok(Err(e)) => {
+                        return Err(anyhow!(
+                            "DjVu binarization stage page processing failed: {:#}",
+                            e
+                        ));
+                    }
+                    Err(e) => {
+                        return Err(anyhow!("DjVu binarization page task panicked: {}", e));
+                    }
+                };
+                // `None` means the page processing was skipped, continue
+                let Some(processed_data) = processed else {
+                    continue;
+                };
+                let encoded_val = progress.page_processed();
+                external_cb(encoded_val, progress.total_pages);
+                binarize_tx.send(processed_data).await.map_err(|e| anyhow!("Binarize send failed: {}", e))?;
+            }
+            // Accept new work if we have capacity
+            Some(inference_data) = infer_rx.recv(), if in_flight.len() < concurrency && !input_exhausted => {
+                // Spawn processing task
+                let task = tokio::spawn(process_single_djvu_page(
+                    config.clone(),
+                    document_session.clone(),
+                    inference_data,
+                    page_index_offset,
+                    margin_analysis.clone(),
+                    cancellation.clone(),
+                ));
+                in_flight.push(task);
+            }
+            else => {
+                if !input_exhausted && infer_rx.is_closed() {
+                    input_exhausted = true;
+                }
+                if input_exhausted && in_flight.is_empty() {
+                    break;
+                }
+                if in_flight.is_empty() {
+                    tokio::task::yield_now().await;
+                }
+            }
+        }
+    }
+    drop(binarize_tx); // Close channel
+    info_log!("[DJVU-Parallel-Process] Binarization & text extraction stage complete");
+    Ok(())
+}
+
+/// What a DjVu page is composed and compressed with.
+#[derive(Clone)]
+struct DjvuComposer {
+    orchestrator: Arc<DjvuOrchestrator>,
+    djvu_document: Arc<djvu_encoder::doc::DjvuDocument>,
+    iw44_quality: u8,
+    bg_subsample: usize,
+}
+
+/// Page text the compose stage gathers for the outline and the EPUB sidecar.
+struct DjvuDocumentText {
+    /// Gather hOCR pages, for an EPUB sidecar.
+    collect_hocr: bool,
+    hocr_pages: Arc<Mutex<Vec<crate::pipeline::epub_pipeline::HocrPage>>>,
+    toc: Arc<Mutex<Vec<crate::toc::PageTocData>>>,
+}
+
+impl DjvuDocumentText {
+    fn record(&self, binarized_data: &DjvuBinarizedData) {
+        if let Ok(mut pages) = self.toc.lock() {
+            pages.push(binarized_data.toc.clone());
+        }
+        if !self.collect_hocr {
+            return;
+        }
+        let Some(hocr) = binarized_data.hocr_text.clone() else {
+            return;
+        };
+        if hocr.trim().is_empty() {
+            return;
+        }
+        let width_px = binarized_data.adjusted_image.width();
+        let height_px = binarized_data.adjusted_image.height();
+        if let Ok(mut pages) = self.hocr_pages.lock() {
+            pages.push(crate::pipeline::epub_pipeline::HocrPage {
+                page_index: binarized_data.index,
+                width_px,
+                height_px,
+                hocr,
+            });
+        }
+    }
+}
+
+/// Compose stage: up to `concurrency` pages composed and compressed at once,
+/// each handed to the writer as it completes.
+async fn djvu_compose_stage(
+    mut binarize_rx: tokio::sync::mpsc::Receiver<DjvuBinarizedData>,
+    composer: DjvuComposer,
+    djvu_writer: crate::djvu::DjvuWriterHandle,
+    document_text: DjvuDocumentText,
+    cancellation: exprim::CancellationToken,
+    concurrency: usize,
+) -> Result<()> {
+    info_log!(
+        "[DJVU-Parallel-Compose] Starting compose stage with concurrency={}",
+        concurrency
+    );
+    let mut in_flight: FuturesUnordered<BoxFuture<'static, Result<ComposedDjvuPage>>> =
+        FuturesUnordered::new();
+    let mut input_exhausted = false;
+
+    loop {
+        tokio::select! {
+            biased;
+            Some(result) = in_flight.next(), if !in_flight.is_empty() => {
+                let composed_page = result?;
+                djvu_writer
+                    .append_encoded(composed_page.encoded, composed_page.page_index)
+                    .await?;
+            }
+            Some(binarized_data) = binarize_rx.recv(), if in_flight.len() < concurrency && !input_exhausted => {
+                document_text.record(&binarized_data);
+                in_flight.push(Box::pin(compose_djvu_page(
+                    binarized_data,
+                    composer.clone(),
+                    cancellation.clone(),
+                )));
+            }
+            else => {
+                if !input_exhausted && binarize_rx.is_closed() {
+                    input_exhausted = true;
+                }
+                if input_exhausted && in_flight.is_empty() {
+                    break;
+                }
+                if in_flight.is_empty() {
+                    tokio::task::yield_now().await;
+                }
+            }
+        }
+    }
+
+    info_log!("[DJVU-Parallel-Encode] Encoding stage complete");
+    Ok(())
+}
+
+/// Compose and compress one page inside a blocking worker.
+async fn compose_djvu_page(
+    binarized_data: DjvuBinarizedData,
+    composer: DjvuComposer,
+    page_cancellation: exprim::CancellationToken,
+) -> Result<ComposedDjvuPage> {
+    if page_cancellation.is_cancelled() {
+        return Err(anyhow!("DjVu composition cancelled before page encode"));
+    }
+    let page_data = PageData {
+        index: binarized_data.index,
+        preserve_full_color: binarized_data.preserve_full_color,
+        // The Arc is not shared past this point, so unwrap_or_clone
+        // moves the full-page RgbImage out instead of deep-copying it
+        // (falls back to a clone only if a reference somehow remains).
+        rgb_image: Arc::unwrap_or_clone(binarized_data.adjusted_image),
+        binarized: binarized_data.binarized,
+        cleaned_gray: binarized_data.cleaned_gray,
+        preserved: binarized_data.preserved,
+        detections: binarized_data.detections,
+        hocr: binarized_data.hocr_text,
+    };
+
+    // Compose and compress the typed page inside one blocking
+    // worker so IW44/JB2 encoding remains page-parallel.
+    let page_index = page_data.index;
+    let DjvuComposer {
+        orchestrator,
+        djvu_document,
+        iw44_quality,
+        bg_subsample,
+    } = composer;
+    let encoded = crate::runtime_stats::spawn_blocking_stage(
+        crate::runtime_stats::Stage::Encode,
+        move || -> Result<_> {
+            let prepared = orchestrator.process_page(page_data)?;
+            prepared.encode(&djvu_document, iw44_quality, bg_subsample)
+        },
+    )
+    .await
+    .map_err(|e| anyhow!("DjVu compose task panicked: {}", e))??;
+    if page_cancellation.is_cancelled() {
+        return Err(anyhow!("DjVu composition cancelled after page encode"));
+    }
+
+    Ok(ComposedDjvuPage {
+        encoded,
+        page_index,
+    })
 }
 
 pub async fn create_and_run_djvu_pipeline(
@@ -914,6 +1053,93 @@ struct DjvuPageProcessingOutput {
     original_width_pts: f32,
     original_height_pts: f32,
 }
+/// Resize the page to its output height, scaling the detections with it.
+/// Returns the pre-resize raster when slow OCR should recognize it instead
+/// (moved out, not cloned), `None` otherwise.
+fn resize_djvu_page(
+    adjusted_image: &mut RgbImage,
+    adjusted_detections: &mut Vec<Detection>,
+    config: &PipelineConfig,
+    target_h: u32,
+) -> Option<RgbImage> {
+    let current_w = adjusted_image.width();
+    let current_h = adjusted_image.height();
+    let aspect_ratio = current_w as f32 / current_h as f32;
+    let target_w = config
+        .target_width()
+        .unwrap_or_else(|| (target_h as f32 * aspect_ratio).round() as u32);
+    if target_w == 0 || target_h == 0 {
+        return None;
+    }
+    // Scale detection bboxes into target (output) space
+    let sx = target_w as f32 / current_w as f32;
+    let sy = target_h as f32 / current_h as f32;
+    let mut scaled_detections = adjusted_detections.clone();
+    for det in &mut scaled_detections {
+        det.scale_bbox(sx, sy);
+    }
+    // Resize image
+    let params = crate::resize::ResizeParams {
+        target_width: target_w,
+        target_height: target_h,
+        method: crate::resize::ResizeMethod::Lanczos3,
+        letterbox: false,
+        border_value: 0.0,
+        swap_rb: false,
+    };
+    let resized =
+        crate::resize::resize_bytes(adjusted_image.as_raw(), current_w, current_h, &params, 3)
+            .ok()
+            .and_then(|bytes| RgbImage::from_raw(target_w, target_h, bytes));
+    let resized = match resized {
+        Some(buf) => buf,
+        None => image::imageops::resize(
+            adjusted_image,
+            target_w,
+            target_h,
+            image::imageops::FilterType::Lanczos3,
+        ),
+    };
+    *adjusted_detections = scaled_detections;
+    if config.slow_ocr_enabled() && current_h > target_h {
+        return Some(std::mem::replace(adjusted_image, resized));
+    }
+    *adjusted_image = resized;
+    None
+}
+
+/// A copy of the page with every image region painted white, grown by a small
+/// pad, so the binarizer only sees text.
+fn premask_image_regions(
+    adjusted_image: &RgbImage,
+    adjusted_detections: &[Detection],
+    classifier: &crate::types::LabelClassifier,
+) -> RgbImage {
+    let mut masked_rgb = adjusted_image.as_raw().clone();
+    let w = adjusted_image.width();
+    let h = adjusted_image.height();
+    let width = w as usize;
+    const MASK_PAD: u32 = 3;
+    for det in adjusted_detections {
+        if !classifier.is_image_label(det) {
+            continue;
+        }
+        let (ix1, iy1, ix2, iy2) = rounded_clamped_bbox(det.bbox, w, h);
+        let mx1 = ix1.saturating_sub(MASK_PAD);
+        let my1 = iy1.saturating_sub(MASK_PAD);
+        let mx2 = (ix2 + MASK_PAD).min(w);
+        let my2 = (iy2 + MASK_PAD).min(h);
+        for y in my1..my2 {
+            let row_start = (y as usize * width + mx1 as usize) * 3;
+            let row_end = (y as usize * width + mx2 as usize) * 3;
+            if row_end <= masked_rgb.len() {
+                masked_rgb[row_start..row_end].fill(255);
+            }
+        }
+    }
+    RgbImage::from_raw(w, h, masked_rgb).unwrap()
+}
+
 /// Consolidated CPU-intensive work for a single DJVU page (binarization only)
 fn process_djvu_cpu_intensive_work(
     input: DjvuPageProcessingInput,
@@ -956,63 +1182,21 @@ fn process_djvu_cpu_intensive_work(
     // "Render high, resize low": when slow OCR rendered the page above
     // target_height, retain the high-res raster for recognition (moved out, not
     // cloned) before downscaling the encode-path image.
-    let mut ocr_image: Option<RgbImage> = None;
     let effective_target_height = if free_aspect_crop {
         adjusted_image.height()
     } else {
         config.target_height()
     };
-    if adjusted_image.height() != effective_target_height {
-        let current_w = adjusted_image.width();
-        let current_h = adjusted_image.height();
-        let target_h = effective_target_height;
-        let aspect_ratio = current_w as f32 / current_h as f32;
-        let target_w = config
-            .target_width()
-            .unwrap_or_else(|| (target_h as f32 * aspect_ratio).round() as u32);
-        if target_w > 0 && target_h > 0 {
-            // Scale detection bboxes into target (output) space
-            let sx = target_w as f32 / current_w as f32;
-            let sy = target_h as f32 / current_h as f32;
-            let mut scaled_detections = adjusted_detections.clone();
-            for det in &mut scaled_detections {
-                det.scale_bbox(sx, sy);
-            }
-            // Resize image
-            let params = crate::resize::ResizeParams {
-                target_width: target_w,
-                target_height: target_h,
-                method: crate::resize::ResizeMethod::Lanczos3,
-                letterbox: false,
-                border_value: 0.0,
-                swap_rb: false,
-            };
-            let resized = crate::resize::resize_bytes(
-                adjusted_image.as_raw(),
-                current_w,
-                current_h,
-                &params,
-                3,
-            )
-            .ok()
-            .and_then(|bytes| RgbImage::from_raw(target_w, target_h, bytes));
-            let resized = match resized {
-                Some(buf) => buf,
-                None => image::imageops::resize(
-                    &adjusted_image,
-                    target_w,
-                    target_h,
-                    image::imageops::FilterType::Lanczos3,
-                ),
-            };
-            if config.slow_ocr_enabled() && current_h > target_h {
-                ocr_image = Some(std::mem::replace(&mut adjusted_image, resized));
-            } else {
-                adjusted_image = resized;
-            }
-            adjusted_detections = scaled_detections;
-        }
-    }
+    let ocr_image = if adjusted_image.height() != effective_target_height {
+        resize_djvu_page(
+            &mut adjusted_image,
+            &mut adjusted_detections,
+            &config,
+            effective_target_height,
+        )
+    } else {
+        None
+    };
     let width = adjusted_image.width() as usize;
     let height = adjusted_image.height() as usize;
     let classifier = &crate::types::LABEL_CLASSIFIER;
@@ -1046,28 +1230,11 @@ fn process_djvu_cpu_intensive_work(
             .any(|det| classifier.is_image_label(det));
 
     let binarization_image: std::borrow::Cow<'_, RgbImage> = if has_image_regions {
-        let mut masked_rgb = adjusted_image.as_raw().clone();
-        let w = width as u32;
-        let h = height as u32;
-        const MASK_PAD: u32 = 3;
-        for det in &adjusted_detections {
-            if !classifier.is_image_label(det) {
-                continue;
-            }
-            let (ix1, iy1, ix2, iy2) = rounded_clamped_bbox(det.bbox, w, h);
-            let mx1 = ix1.saturating_sub(MASK_PAD);
-            let my1 = iy1.saturating_sub(MASK_PAD);
-            let mx2 = (ix2 + MASK_PAD).min(w);
-            let my2 = (iy2 + MASK_PAD).min(h);
-            for y in my1..my2 {
-                let row_start = (y as usize * width + mx1 as usize) * 3;
-                let row_end = (y as usize * width + mx2 as usize) * 3;
-                if row_end <= masked_rgb.len() {
-                    masked_rgb[row_start..row_end].fill(255);
-                }
-            }
-        }
-        std::borrow::Cow::Owned(RgbImage::from_raw(w, h, masked_rgb).unwrap())
+        std::borrow::Cow::Owned(premask_image_regions(
+            &adjusted_image,
+            &adjusted_detections,
+            classifier,
+        ))
     } else {
         std::borrow::Cow::Borrowed(&adjusted_image)
     };

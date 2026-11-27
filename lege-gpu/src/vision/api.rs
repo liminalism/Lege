@@ -1314,26 +1314,41 @@ impl RecRecognizer {
                     .unwrap_or(16);
                 let count = remaining.min(graph_batch);
                 let chunk = &group[offset..offset + count];
-                let inputs = chunk
-                    .iter()
-                    .map(|(_, tensor, nw, _)| (tensor.clone(), *nw))
-                    .collect::<Vec<_>>();
-                match self.run_preprocessed_batch(inputs, bucket, graph_batch) {
-                    Ok(outputs) => {
-                        for ((index, _, _, crop_width), output) in chunk.iter().zip(outputs) {
-                            results[*index] = self.decode_words(*crop_width, Some(output))?;
-                        }
-                    }
-                    Err(_) => {
-                        for (index, _, _, _) in chunk {
-                            results[*index] = self.recognize_words_gray(&lines[*index])?;
-                        }
-                    }
-                }
+                self.recognize_bucket_chunk(lines, chunk, bucket, graph_batch, &mut results)?;
                 offset += count;
             }
         }
         Ok(results)
+    }
+
+    /// Recognizes one chunk of a width bucket as a single batch of
+    /// `graph_batch` lines; when the batch is rejected, every line of the chunk
+    /// takes the single-line path instead.
+    fn recognize_bucket_chunk(
+        &self,
+        lines: &[GrayImage],
+        chunk: &[(usize, Tensor, u32, u32)],
+        bucket: u32,
+        graph_batch: usize,
+        results: &mut [RecLine],
+    ) -> Result<()> {
+        let inputs = chunk
+            .iter()
+            .map(|(_, tensor, nw, _)| (tensor.clone(), *nw))
+            .collect::<Vec<_>>();
+        match self.run_preprocessed_batch(inputs, bucket, graph_batch) {
+            Ok(outputs) => {
+                for ((index, _, _, crop_width), output) in chunk.iter().zip(outputs) {
+                    results[*index] = self.decode_words(*crop_width, Some(output))?;
+                }
+            }
+            Err(_) => {
+                for (index, _, _, _) in chunk {
+                    results[*index] = self.recognize_words_gray(&lines[*index])?;
+                }
+            }
+        }
+        Ok(())
     }
 
     fn decode_words(&self, crop_w: u32, output: Option<CompactRecOutput>) -> Result<RecLine> {
@@ -1375,18 +1390,17 @@ impl RecRecognizer {
                      confidence: &mut f32,
                      glyphs: &mut u32,
                      words: &mut Vec<RecWord>| {
-            if let Some(s) = start {
-                if !cur.is_empty() {
-                    let x0 = x_of(s).min(crop_w.saturating_sub(1));
-                    let x1 =
-                        (x_of(last) + step_px.ceil() as u32).clamp(x0.saturating_add(1), crop_w);
-                    words.push(RecWord {
-                        text: std::mem::take(cur),
-                        x0,
-                        x1,
-                        confidence: *confidence / (*glyphs).max(1) as f32,
-                    });
-                }
+            if let Some(s) = start
+                && !cur.is_empty()
+            {
+                let x0 = x_of(s).min(crop_w.saturating_sub(1));
+                let x1 = (x_of(last) + step_px.ceil() as u32).clamp(x0.saturating_add(1), crop_w);
+                words.push(RecWord {
+                    text: std::mem::take(cur),
+                    x0,
+                    x1,
+                    confidence: *confidence / (*glyphs).max(1) as f32,
+                });
             }
             cur.clear();
             *confidence = 0.0;

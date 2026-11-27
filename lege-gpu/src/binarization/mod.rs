@@ -452,6 +452,27 @@ mod tests {
             .expect("parallel integral mean");
 
         let radius = (params.adaptive.sauvola_window / 2) as isize;
+        for y in (0..h).step_by(17) {
+            for x in (0..w).step_by(19) {
+                let sum = reflected_window_sum(&gray, (w, h), (x, y), radius);
+                let expected = (sum / params.adaptive.sauvola_window.pow(2)) as u8;
+                assert!(
+                    gpu[y * w + x].abs_diff(expected) <= 1,
+                    "mean mismatch at ({x},{y}): GPU={} CPU={expected}",
+                    gpu[y * w + x]
+                );
+            }
+        }
+    }
+
+    /// Sum of the `(2 * radius + 1)²` window centred on `(x, y)`, with
+    /// coordinates outside the image mirrored back inside (edge pixel repeated).
+    fn reflected_window_sum(
+        gray: &[u8],
+        (w, h): (usize, usize),
+        (x, y): (usize, usize),
+        radius: isize,
+    ) -> u32 {
         let reflect = |mut coordinate: isize, len: usize| -> usize {
             let period = 2 * len as isize;
             coordinate %= period;
@@ -463,24 +484,14 @@ mod tests {
             }
             coordinate as usize
         };
-        for y in (0..h).step_by(17) {
-            for x in (0..w).step_by(19) {
-                let mut sum = 0u32;
-                for dy in -radius..=radius {
-                    for dx in -radius..=radius {
-                        sum += u32::from(
-                            gray[reflect(y as isize + dy, h) * w + reflect(x as isize + dx, w)],
-                        );
-                    }
-                }
-                let expected = (sum / params.adaptive.sauvola_window.pow(2)) as u8;
-                assert!(
-                    gpu[y * w + x].abs_diff(expected) <= 1,
-                    "mean mismatch at ({x},{y}): GPU={} CPU={expected}",
-                    gpu[y * w + x]
-                );
+        let mut sum = 0u32;
+        for dy in -radius..=radius {
+            for dx in -radius..=radius {
+                sum +=
+                    u32::from(gray[reflect(y as isize + dy, h) * w + reflect(x as isize + dx, w)]);
             }
         }
+        sum
     }
 
     /// Manual end-to-end throughput evidence for the tiled integral scan.

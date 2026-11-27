@@ -243,6 +243,28 @@ impl AdaptivePostprocess {
         })
     }
 
+    /// The report of a graph the GPU executor ran.
+    #[cfg(feature = "gpu")]
+    fn gpu_report(
+        &self,
+        gpu: &dyn GpuExecutor,
+        execution: GpuExecution,
+        started: Instant,
+    ) -> PostprocessReport {
+        PostprocessReport {
+            output: execution.output,
+            stats: ExecutionStats {
+                requested: self.preference,
+                used: ExecutionBackend::Gpu,
+                fallback: None,
+                elapsed: started.elapsed(),
+                uploaded_bytes: execution.uploaded_bytes,
+                readback_bytes: execution.readback_bytes,
+                adapter: Some(gpu.adapter_name().to_owned()),
+            },
+        }
+    }
+
     fn execute_inner(
         &self,
         source: &HostPage,
@@ -260,18 +282,7 @@ impl AdaptivePostprocess {
                         )
                     })?;
                     let execution = gpu.execute_measured(source, graph)?;
-                    return Ok(PostprocessReport {
-                        output: execution.output,
-                        stats: ExecutionStats {
-                            requested: self.preference,
-                            used: ExecutionBackend::Gpu,
-                            fallback: None,
-                            elapsed: started.elapsed(),
-                            uploaded_bytes: execution.uploaded_bytes,
-                            readback_bytes: execution.readback_bytes,
-                            adapter: Some(gpu.adapter_name().to_owned()),
-                        },
-                    });
+                    return Ok(self.gpu_report(gpu.as_ref(), execution, started));
                 }
                 #[cfg(not(feature = "gpu"))]
                 Err(PostprocessError::Unsupported(
@@ -289,30 +300,15 @@ impl AdaptivePostprocess {
                             started,
                         );
                     }
-                    match gpu.execute_measured(source, graph) {
-                        Ok(execution) => {
-                            return Ok(PostprocessReport {
-                                output: execution.output,
-                                stats: ExecutionStats {
-                                    requested: self.preference,
-                                    used: ExecutionBackend::Gpu,
-                                    fallback: None,
-                                    elapsed: started.elapsed(),
-                                    uploaded_bytes: execution.uploaded_bytes,
-                                    readback_bytes: execution.readback_bytes,
-                                    adapter: Some(gpu.adapter_name().to_owned()),
-                                },
-                            });
-                        }
-                        Err(error) => {
-                            return self.execute_cpu(
-                                source,
-                                graph,
-                                Some(FallbackReason::ExecutionFailed(error.to_string())),
-                                started,
-                            );
-                        }
-                    }
+                    return match gpu.execute_measured(source, graph) {
+                        Ok(execution) => Ok(self.gpu_report(gpu.as_ref(), execution, started)),
+                        Err(error) => self.execute_cpu(
+                            source,
+                            graph,
+                            Some(FallbackReason::ExecutionFailed(error.to_string())),
+                            started,
+                        ),
+                    };
                 }
                 self.execute_cpu(source, graph, self.initialization_fallback.clone(), started)
             }

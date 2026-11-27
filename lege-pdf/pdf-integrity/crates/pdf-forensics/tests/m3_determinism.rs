@@ -2,10 +2,10 @@
 //! and the render diff names exactly the connected changed regions.
 #![allow(clippy::unwrap_used, reason = "a failed unwrap is a failed test")]
 
+use exprim::test_support::builder;
 use pdf_forensics::{
     ChangedRegion, EvidenceOptions, EvidenceRender, diff_renders, encode_png, render_bytes_evidence,
 };
-use exprim::test_support::builder;
 
 #[test]
 fn same_fixture_renders_byte_identical_pngs() {

@@ -683,6 +683,10 @@ mod tests {
     }
 
     #[test]
+    #[allow(
+        clippy::cognitive_complexity,
+        reason = "one linear end-to-end parse test; the score comes from its assert! expansions"
+    )]
     fn parses_a_minimal_model_end_to_end() {
         // TensorProto initializer: dims [2,3], data_type 1, raw_data 24 bytes.
         let mut tensor = Vec::new();

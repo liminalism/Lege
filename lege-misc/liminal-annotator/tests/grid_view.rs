@@ -327,10 +327,8 @@ fn right_in_the_view_accepts_the_pages_to_do_and_leaves_the_rest() {
     app.shutdown();
 }
 
-#[test]
-fn a_click_opens_the_page_under_it_and_escape_returns_to_its_six() {
-    // Cells by position: three across, two down, none in the margins.
-    let l = grid::layout(1500, 950, Scale::ONE, 22);
+/// Cells by position: three across, two down, none in the margins.
+fn assert_cells_are_found_by_position(l: &grid::Layout) {
     let centre = |i: usize| {
         let r = l.cells[i];
         (r.x + r.w / 2, r.y + r.h / 2)
@@ -347,6 +345,11 @@ fn a_click_opens_the_page_under_it_and_escape_returns_to_its_six() {
     assert_eq!(l.cell_at(750, 5), None, "header");
     assert_eq!(l.cell_at(750, 948), None, "bottom margin");
     assert_eq!(l.cell_at(centre(4).0, centre(4).1 - 1), Some(4));
+}
+
+#[test]
+fn a_click_opens_the_page_under_it_and_escape_returns_to_its_six() {
+    assert_cells_are_found_by_position(&grid::layout(1500, 950, Scale::ONE, 22));
 
     // In the app: the second group, a click on its fifth page.
     let f = common::fixture(14);

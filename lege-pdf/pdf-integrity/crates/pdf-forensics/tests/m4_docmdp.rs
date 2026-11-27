@@ -10,12 +10,12 @@
     reason = "a failed unwrap is a failed test"
 )]
 
+use exprim::test_support::builder;
 use pdf_forensics::{
     AuditReport, DOCMDP_POLICY_VIOLATION, Disposition, DocMdpPermission, FieldMdpAction,
     FindingCode, ObjectChangeKind, ObjectRole, POST_SIGNATURE_REVISION, SignatureFacts,
     audit_bytes, post_signature_changes,
 };
-use exprim::test_support::builder;
 
 /// Audit `bytes` and require the report to satisfy the schema's own rules.
 fn audit(bytes: &[u8]) -> AuditReport {

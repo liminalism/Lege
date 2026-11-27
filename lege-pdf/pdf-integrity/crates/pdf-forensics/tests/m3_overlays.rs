@@ -4,13 +4,13 @@
 //! widgets, and off-text annotations stay silent.
 #![allow(clippy::unwrap_used, reason = "a failed unwrap is a failed test")]
 
+use exprim::test_support::builder;
 use pdf_forensics::{
     AnalysisMode, AnnotationMode, AuditReport, Disposition, EvidenceOptions, EvidenceStrength,
     OverlayOptions, OverlayOutcome, audit_bytes, detect_annotation_overlays, diff_renders,
     render_bytes_evidence,
 };
 use pdf_forensics::{EXPLICIT_ANNOTATION_OVER_TEXT, encode_png};
-use exprim::test_support::builder;
 
 /// Audit `bytes` and run the overlay analysis over the same parse.
 fn detect(bytes: &[u8]) -> (AuditReport, OverlayOutcome) {
