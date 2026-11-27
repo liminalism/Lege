@@ -3390,7 +3390,7 @@ record lege-ecosystem.work.layout-vertical-bands-ocr-horizontal/1 : work {
 
 record lege-ecosystem.work.ledger-audit-small-fixes-20261127/1 : work {
     title "Small fixes found by the 2026-11-27 ledger audit"
-    state proposed
+    state completed
     scope [
         path "README.md",
         path "lege-gpu/Cargo.toml",
@@ -3402,12 +3402,17 @@ record lege-ecosystem.work.ledger-audit-small-fixes-20261127/1 : work {
     intent """
         Text and metadata that drifted after the Freya removal, the exprim extraction and Flatten page's PDF support: four Lege library manifests declare no licence although the workspace is AGPL-3.0-only; the README still names a vendored Freya tree and says codec crates live in Lege; a CLI field comment says Flatten page takes only folder and ZIP input; exprim's NUp::grid doc comment tells callers to swap the grid for landscape, which the N-up decision and the code no longer do. Optional, owner to confirm: the five jp2lam decode-fix-plan documents under lege-codecs/ are byte-identical copies of the ones in exprim/codecs/jp2lam and are the only files left in that folder.
         """
+    trace [
+        "Also licensed the OCR installer crate, which the audit missed; lege-codecs copies removed since exprim holds the originals.",
+        "Correction: lege-codecs docs restored; 153 imported records cite them as sources, and strict akr build fails (AKR-M022) without them."
+    ]
     acceptance {
         check exprim-nup-comment {
             statement """
                 exprim's NUp::grid doc comment says the grid is read in the sheet's own frame, with no swap for landscape.
                 """
             method manual
+            verified_by [ @lege-ecosystem.evidence.audit-small-fixes-checked-20261127/1 ]
         }
         check licence-fields {
             statement """
@@ -3415,12 +3420,14 @@ record lege-ecosystem.work.ledger-audit-small-fixes-20261127/1 : work {
                 """
             method command
             command "cargo metadata --no-deps --format-version 1"
+            passed_at git:cb454f7c59949c562a5a0c43d6f7689bfd7529fc
         }
         check text-drift {
             statement """
                 README.md no longer mentions Freya or in-tree codec crates, and the --flatten field comment in core/main.rs says folder, ZIP and PDF input.
                 """
             method manual
+            verified_by [ @lege-ecosystem.evidence.audit-small-fixes-checked-20261127/1 ]
         }
     }
     author "dk"
@@ -5055,7 +5062,7 @@ record lege-ecosystem.work.phase-6-isa-pgo-optional-gpu/1 : work {
 
 record lege-ecosystem.work.pipeline-memory-follow-ups/1 : work {
     title "Deferred pipeline memory follow-ups"
-    state proposed
+    state completed
     scope [ path "lege-process/pipeline/**" ]
     intent """
         Measure before governing: give Windows a real peak-RSS figure (the runtime report's process probe was a Linux-only /proc reader, so peak_rss_kib read 0 on Windows) and take a DjVu-vs-PDF baseline on the decisive workloads, then bring the staged DjVu pipeline under the shared page-memory governor only if the baseline justifies it: DjVu peak on large-native pages above the budget plus the resident baseline, or more than about 1.5x the PDF path. The governor design (one reservation per page from in-order source admission to encode, margin pass on the shared budget, no encoded-bytes reservation) was scoped on 2026-11-27 and is kept in the trace for whoever needs it.
@@ -5068,7 +5075,8 @@ record lege-ecosystem.work.pipeline-memory-follow-ups/1 : work {
         """
     trace [
         "Governor design if ever needed: Option<Arc<PageMemoryReservation>> on RenderedPageData, in-order acquire via select! in source_stage, drop after encode.",
-        "Skipped measuring slow writer, one-worker margin and mid-decode cancel: none can be driven from the CLI without code, and the gate did not fire."
+        "Skipped measuring slow writer, one-worker margin and mid-decode cancel: none can be driven from the CLI without code, and the gate did not fire.",
+        "Gate did not fire: DjVu peaked at 0.81-1.18x the PDF path, so the governor was not built; only the Windows probe landed."
     ]
     acceptance {
         check governor-gate-evaluated {
@@ -5076,12 +5084,14 @@ record lege-ecosystem.work.pipeline-memory-follow-ups/1 : work {
                 The baseline is compared with the gate and the DjVu governor is built, or recorded as not justified with the numbers.
                 """
             method observation
+            verified_by [ @lege-ecosystem.evidence.djvu-memory-baseline-20261127/1 ]
         }
         check peak-rss-baseline-before {
             statement """
                 Peak working set, admitted page MB, wall time and output hashes are recorded for DjVu and PDF on large-native scans, a source-MRC book and the margin pass, interleaved.
                 """
             method observation
+            verified_by [ @lege-ecosystem.evidence.djvu-memory-baseline-20261127/1 ]
         }
         check windows-peak-rss-recorded {
             statement """
@@ -5089,6 +5099,7 @@ record lege-ecosystem.work.pipeline-memory-follow-ups/1 : work {
                 """
             method command
             command "cargo test -p lege --lib windows_process_status_reports_the_working_set"
+            passed_at git:cb454f7c59949c562a5a0c43d6f7689bfd7529fc
         }
     }
     depends_on [ @lege-ecosystem.decision.pipeline-memory-policy-from-external-review ]
@@ -5701,7 +5712,8 @@ record lege-ecosystem.work.preservation-mode/3 : work {
         "Retired the grayscale byte-identity gate: its pre-refactor baseline predates the binarizer and layout reworks; rgb_coverage_matches_grey_per_channel remains the guard.",
         "Deferred coloured ink: both writers need new layers and no corpus book with rubrics or stamps is known; --help says ink is black.",
         "Split the dark-painting binarizer defect into its own work; Preserve is insulated by keeping full-page pictures as premasked regions.",
-        "Always Rgb8 under a passed-through mask in preserve mode: gray_suitability measures render fidelity, not colour, so it cannot single out grey scans."
+        "Always Rgb8 under a passed-through mask in preserve mode: gray_suitability measures render fidelity, not colour, so it cannot single out grey scans.",
+        "Colour fix landed; decode, size table and coverage evaluated 2026-11-27. Left: open a Preserve DjVu in djview by eye."
     ]
     claim coverage-has-no-producer {
         text """

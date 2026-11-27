@@ -336,6 +336,21 @@ record lege-ecosystem.evidence.annotator-split-assignment-mixed-hash-20261109/1 
     author "dk"
 }
 
+record lege-ecosystem.evidence.audit-small-fixes-checked-20261127/1 : evidence {
+    title "README, flatten comment and exprim NUp doc comment corrected"
+    state verified
+    result pass
+    method manual
+    observed_at git:cb454f7c59949c562a5a0c43d6f7689bfd7529fc
+    summary """
+        cb454f7c: README.md has no Freya or in-tree codec text and describes exprim as a git dependency;
+        lege-pdf/README.md likewise; the --flatten field comment in core/main.rs reads folder/ZIP/PDF input.
+        exprim 6887f50 (local, unpushed) rewrites the NUp::grid doc comment to say the grid is read in the
+        sheet's own frame with no landscape swap, matching layout::cell_grid.
+        """
+    author "dk"
+}
+
 record lege-ecosystem.evidence.auto-toc-djvu-tests/1 : evidence {
     title "The complete DjVu encoder suite and doctests passed; NAVM output was also decoded by DjVuLibre when available."
     state verified
@@ -691,6 +706,26 @@ record lege-ecosystem.evidence.djvu-license-linkage-boundary-audit-20260822/1 : 
     summary """
         The root has no LICENSE or NOTICE; its workspace MIT license is inherited by many crates, while lege-android explicitly declares MIT and directly links lege-process, so D1 must define a mixed-license boundary rather than blindly changing one manifest.
         """
+}
+
+record lege-ecosystem.evidence.djvu-memory-baseline-20261127/1 : evidence {
+    title "DjVu peaks no higher than PDF on large-native scans; the DjVu memory governor is not justified"
+    state verified
+    result pass
+    method observation
+    observed_at git:cb454f7c59949c562a5a0c43d6f7689bfd7529fc
+    summary """
+        Peak working set from the new Windows probe, lege debug-fast built from the working tree at 3f4554c5
+        plus the probe, no OCR, two interleaved rounds each (i7-13700H, RTX 4060 Laptop). 1963 World Book scan
+        (2324x3451 colour JPEG per page), pages 1-60: DjVu 1941/1989 MB, PDF (JBIG2) 2398/2147 MB.
+        Structures.pdf (source MRC) 1-30: DjVu 1061/1054 MB, PDF 945/896 MB. World Book 1-30 with
+        center-margins: DjVu 1575/1691 MB, PDF 1672/1771 MB. DjVu is 0.81-1.18x the PDF path, under the
+        1.5x gate on every workload, so the DjVu governor was not built. DjVu outputs byte-identical across
+        rounds. Admitted page MB peaked at 63 for PDF and 0-20 for DjVu (only its margin pass is governed).
+        Slow writer, one-worker margin and mid-decode cancel were not measured: none can be driven from the
+        CLI without code, and with no governor change there is nothing to compare.
+        """
+    author "dk"
 }
 
 record lege-ecosystem.evidence.djvu-runtime-helper-final-scan-20260822/1 : evidence {
@@ -2876,6 +2911,22 @@ record lege-ecosystem.evidence.pagepress-boundary-clean/1 : evidence {
     author "dk"
 }
 
+record lege-ecosystem.evidence.pagepress-builds-against-exprim-20261127/1 : evidence {
+    title "PagePress resolves and passes its tests against exprim"
+    state verified
+    result pass
+    method command
+    observed_at git:cb454f7c59949c562a5a0c43d6f7689bfd7529fc
+    command "cargo test --manifest-path ../pagepress/Cargo.toml; cargo test --manifest-path ../pagepress/pagepress-gui/Cargo.toml"
+    summary """
+        PagePress 064841f: both manifests resolve with jp2lam, jbig2enc-rust and exprim as git dependencies on
+        liminalism/exprim main. Library and CLI: 7 golden and 9 pdf_merge tests pass. GUI: 34 tests pass after
+        five places tests built on Unix mount fixtures were made Unix-only (they failed on Windows before, for
+        that reason alone). The manual thumbnail check has not been done.
+        """
+    author "dk"
+}
+
 record lege-ecosystem.evidence.pagepress-cli-assembly/1 : evidence {
     title "CLI wrote 3-page v1.7 PDF, recovery=false, mediaboxes px*72/300; extracted JPEG byte-identical sha256 30e8ca50"
     state verified
@@ -3357,6 +3408,60 @@ record lege-ecosystem.evidence.preservation-mode-unit-tests/1 : evidence {
     command "cargo test -p lege --lib && cargo test -p lege --bin lege"
     summary """
         Uncommitted working tree on b4fb52b5: lib 369 passed / 0 failed / 1 ignored (incl. rgb_coverage_matches_grey_per_channel, preserve_mask_keeps_only_ink_both_masks_agree_on, preserved_canvas_keeps_colour_and_whitens_ink); bin 23 passed (incl. preserve parser tests).
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.preserve-djvu-decoded-20261127/1 : evidence {
+    title "Preserve DjVu decodes in djvulibre with colour; grayscale DjVu has none"
+    state verified
+    result pass
+    method manual
+    observed_at git:cb454f7c59949c562a5a0c43d6f7689bfd7529fc
+    summary """
+        sahib.pdf pages 20-22 with --text-format djvu, decoded by djvulibre 3.5.29 ddjvu (page 2) and compared
+        with exprim's render of source page 21 at the same 737x1200: mean chroma (max-min of RGB) source 32.1,
+        Preserve 24.5, grayscale 0.0; mean luma 204.3, 194.9, 225.0. djvused shows a text layer on both.
+        Preserve keeps about three quarters of the source chroma at the default IW44 quality (75). Not done:
+        opening the file in djview by eye.
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.preserve-size-time-table-20261127/1 : evidence {
+    title "Preserve against preparation and grayscale: sizes and times on four books, PDF and DjVu"
+    state verified
+    result pass
+    method observation
+    observed_at git:cb454f7c59949c562a5a0c43d6f7689bfd7529fc
+    summary """
+        lege debug-fast with the source-MRC colour fix, binarization best, no OCR, two interleaved rounds;
+        bytes (wall s). xenosystems 1-40 (born-digital text): PDF prep 843 853 (5.5), gray 986 729 (2.9),
+        preserve 2 696 281 (6.3); DjVu 759 436 (6.1), 782 070 (3.3), 2 217 642 (6.6). sahib 1-40 (colour
+        JPEG scan): PDF 792 700 (6.0), 2 116 144 (3.5), 973 046 (6.6); DjVu 547 752 (6.0), 1 144 572 (3.7),
+        624 750 (6.6). centralparktest-repair 1-40 (colour plates): PDF 2 704 616 (16.3), 3 638 450 (12.8),
+        2 982 542 (16.5); DjVu 568 934 (8.4), 1 598 222 (4.5), 796 372 (8.5). Structures 1-10 (source MRC):
+        PDF 171 141, 171 141, 181 115; DjVu 57 614, 96 426, 63 508. On scans Preserve is smaller than
+        grayscale and costs about preparation's time. Supersampled-coverage trigger (preserve background
+        more than 25 % above grayscale): fires only on the born-digital text book (2.7x), which Preserve is
+        not meant for; not on any scan. Timings are noisy (another build was running; one 48 s outlier).
+        """
+    author "dk"
+}
+
+record lege-ecosystem.evidence.preserve-source-mrc-structures-20261127/1 : evidence {
+    title "Structures.pdf under Preserve: colour background, passthrough mask unchanged"
+    state verified
+    result pass
+    method command
+    observed_at git:cb454f7c59949c562a5a0c43d6f7689bfd7529fc
+    command "lege D:/pdf-test/Structures.pdf 1-5 --preserve --no-ocr (LEGE_BBOX_TRACE=1), before and after the fix"
+    summary """
+        Before 36afba14 the trace read "preserved MRC mode=None bg=857x1200 bytes=838" and the background
+        rendered grey; after it reads "channels=3 ... bytes=2374", the background image is device_rgb JPX and
+        renders with the paper tone, and the JBIG2 stencil stream extracted from output page 3 hashes the same
+        before and after (sha256 b81d5c67b4a17c8a…). The unit test preserve_source_mrc_keeps_colour_background_
+        and_source_mask_bytes pins byte identity with the source mask.
         """
     author "dk"
 }
