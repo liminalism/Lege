@@ -2,7 +2,8 @@
 
 PDF writing and forensic triage for the Lege workspace. Reading, text,
 rendering, printing and the agent CLI moved to the sibling **exprim**
-repository (`../exprim`, crate `exprim`), which Lege depends on by path.
+repository (crate `exprim`), which Lege takes as a git dependency on
+liminalism/exprim `main`.
 
 ```text
 lege-pdf/

@@ -2,6 +2,7 @@
 name = "lege-document-ocr-installer-winsafe"
 version = "0.1.0"
 edition = "2021"
+license.workspace = true
 build = "build.rs"
 
 [[bin]]

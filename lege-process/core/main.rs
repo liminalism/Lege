@@ -425,7 +425,7 @@ struct CliOptions {
     mrc_bg_subsample: Option<u8>,  // --mrc-subsample <1-12>
     mrc_ink_threshold: Option<u8>, // --mrc-ink-threshold <0-255>
     mrc_adaptive_mask: bool,       // --mrc-adaptive-mask: Sauvola mask over cleaned-gray bg
-    flatten: bool,                 // --flatten: flatten photographed pages (folder/ZIP input)
+    flatten: bool,                 // --flatten: flatten photographed pages (folder/ZIP/PDF input)
     flatten_pages: Option<u8>,     // --flatten-pages 1|2: every photo is one page, or a spread
     flatten_fast: bool,            // --flatten-fast: one pass per page
     fast_resize: bool,             // --fast-resize (force CPU fast_image_resize backend)

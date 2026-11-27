@@ -2,6 +2,7 @@
 name = "lege-ocr"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 description = "Slow OCR pipeline for Lege — line-level preprocessing and hOCR assembly"
 
 [lib]

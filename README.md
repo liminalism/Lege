@@ -12,7 +12,7 @@ The e-ink processor: library, `lege` CLI, and the liminalUI desktop GUI (`lege-g
 
 ### lege-pdf
 
-The PDF stack the processor and the sibling Liminaldoc tools share. `read` is the intake seam, `write` is the typed append-only emitter, `render` is the native document engine and CPU rasterizer, `print` imposes and spools office print jobs, `agent` is the structured `lege-pdf` CLI, and `pdf-integrity` is a separate forensic-triage workspace. [lege-pdf/README.md](lege-pdf/README.md).
+What is left of the PDF stack in this repository: `write` (`lege-pdf-write`) is the typed append-only emitter the processor and the sibling Liminaldoc tools share, and `pdf-integrity` is a separate forensic-triage workspace. Reading, rendering, printing and the agent CLI moved to exprim (below). [lege-pdf/README.md](lege-pdf/README.md).
 
 ### lege-gpu
 
@@ -22,9 +22,9 @@ Shared wgpu compute: Sauvola binarization, image resize, and the ONNX runtime th
 
 The OCR library behind the processor (`lege_ocr`): line segmentation, hOCR assembly, embedded PP-OCR, Windows OCR, and an opt-in Tesseract backend. The batch product whose binary is also named `lege-ocr` lives in `lege-document-ocr`. [lege-ocr/README.md](lege-ocr/README.md).
 
-### exprim and the codecs (sibling checkout)
+### exprim and the codecs
 
-The PDF engine (`exprim`: reading, text, rendering, printing, and the `exprim` agent CLI) and the JBIG2 (`jbig2enc-rust`), JPEG 2000 (`jp2lam`), and DjVu (`djvulibrust`) codecs live in the sibling `../exprim` repository, which must be checked out beside this one. The root workspace depends on `exprim` by path and patches the first two codecs in; the processor links the DjVu library directly.
+The PDF engine (`exprim`: reading, text, rendering, printing, and the `exprim` agent CLI) and the JBIG2 (`jbig2enc-rust`), JPEG 2000 (`jp2lam`), and DjVu (`djvulibrust`) codecs live in the [exprim](https://github.com/liminalism/exprim) repository. The root workspace takes them as git dependencies on its `main` branch, pinned in `Cargo.lock` (refresh with `cargo latest`), so a fresh clone builds without a sibling checkout; the processor links the DjVu library directly.
 
 ### lege-document-ocr
 
@@ -65,4 +65,4 @@ Working notes that used to sit beside crate sources — renderer sweep history, 
 
 ## License
 
-The workspace and application packages are AGPL-3.0-only. See `LICENSE` and `NOTICE`. Codec crates, the vendored Freya tree, and `lege-pdf/pdf-integrity` keep the licenses in their own manifests.
+The workspace and application packages are AGPL-3.0-only. See `LICENSE` and `NOTICE`. `lege-pdf/pdf-integrity` (Apache-2.0) and the exprim codecs keep the licenses in their own manifests.
