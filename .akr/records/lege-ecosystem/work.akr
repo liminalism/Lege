@@ -1245,15 +1245,15 @@ record lege-ecosystem.work.current-decoder-pipeline/1 : work {
 }
 
 record lege-ecosystem.work.dark-painting-binarizer-repro/1 : work {
-    title "Reproduce or retire the all-ink result on full-page paintings with a caption"
+    title "--mrc-adaptive-mask without layout detection erases full-page photographs"
     state proposed
     intent """
-        In October, --grayscale --mrc-adaptive-mask turned a full-page painting with a caption black: the adaptive binarizer called the whole picture ink. No code, test or changelog entry tracks it, the source book is no longer on disk, and binarization has since been reworked (Best model by default, Fast adaptive). Find a full-page-painting-plus-caption page, run Best, Fast and grayscale with the adaptive mask, and either show the picture survives or reproduce the defect and fix it. Preserve is not affected: it keeps such pictures as premasked regions.
+        With layout detection off, --grayscale --mrc-adaptive-mask erases full-page photographs: the adaptive (Sauvola) mask over the cleaned grey background marks most of a halftone photo as paper and the clean path whitens it, leaving a few outlines (reproduced 2026-11-27 on 1000ideasforbett0000unse_1.pdf pages 18, 21 and 27 in the private corpus). Plain --grayscale (the Best model's mask) keeps the same photos, and with layout on every mode keeps them because pictures are premasked regions. The October report of such pages turning black does not reproduce with the reworked binarizers. Fix the adaptive-mask path so a large continuous-tone area is not cleaned to paper, or refuse the flag without layout, with a regression test.
         """
     acceptance {
-        check dark-painting-repro {
+        check adaptive-mask-keeps-photos {
             statement """
-                On a located full-page painting with a caption, Best, Fast and grayscale+adaptive-mask output keep the picture intact, or the defect is reproduced with a failing test.
+                With --no-layout --grayscale --mrc-adaptive-mask, a full-page halftone photo keeps its tones (a regression test pins it), or the flag combination is refused with a message.
                 """
             method manual
         }
@@ -5058,7 +5058,7 @@ record lege-ecosystem.work.pipeline-memory-follow-ups/1 : work {
     state proposed
     scope [ path "lege-process/pipeline/**" ]
     intent """
-        Two items from the external memory review remain, in this order. First measure: Windows has no peak-RSS figure today (runtime_stats' read_process_status is a stub there, so peak_rss_kib is 0), so add a probe (GetProcessMemoryInfo PeakWorkingSetSize, or an external PeakWorkingSet64 sampler) and take a DjVu-vs-PDF baseline on the decisive workloads: oversized natives, slow writer, one-worker margin, illustration-heavy pages, mid-decode cancel. Then, if the baseline justifies it (owner's gate: DjVu peak on oversized natives above budget plus resident baseline, or more than about 1.5x the PDF path), carry one page-memory reservation per DjVu page from source admission (in page order, without holding the fill loop) through inference and processing until encode drops the raster, and move the margin pre-pass onto the shared budget. No encoded-bytes reservation for DjVu: its writer keeps every page until finalize and a byte cap there can deadlock the reorder buffer. JP2 native-dimension sniffing, the writer off the control loop and streamed EPUB hOCR landed on 2026-10-28.
+        Measure before governing: give Windows a real peak-RSS figure (the runtime report's process probe was a Linux-only /proc reader, so peak_rss_kib read 0 on Windows) and take a DjVu-vs-PDF baseline on the decisive workloads, then bring the staged DjVu pipeline under the shared page-memory governor only if the baseline justifies it: DjVu peak on large-native pages above the budget plus the resident baseline, or more than about 1.5x the PDF path. The governor design (one reservation per page from in-order source admission to encode, margin pass on the shared budget, no encoded-bytes reservation) was scoped on 2026-11-27 and is kept in the trace for whoever needs it.
         """
     note """
         2026-10-28: three of the five original items have landed:
@@ -5066,37 +5066,29 @@ record lege-ecosystem.work.pipeline-memory-follow-ups/1 : work {
         - Move PDF writer blocking work off the current-thread control loop: spawn_pdf_writer_actor in lege-process/pipeline/helper_functions.rs now runs on a dedicated blocking worker thread (runtime_stats::spawn_blocking + blocking_recv) instead of tokio::spawn. Evidence: lege-ecosystem.evidence.pipeline-writer-and-spooled-epub-tests/1.
         - Stream EPUB sidecar packaging instead of re-reading all spooled hOCR into one Vec: lege-process/pipeline/epub_pipeline.rs gained build_epub_from_spooled_hocr_pages_with_outline_cancellable, which sorts SpooledHocrPage handles and reads/parses one spooled .hocr file at a time into PageText inside the blocking packaging task. Evidence: lege-ecosystem.evidence.pipeline-writer-and-spooled-epub-tests/1.
         """
+    trace [
+        "Governor design if ever needed: Option<Arc<PageMemoryReservation>> on RenderedPageData, in-order acquire via select! in source_stage, drop after encode.",
+        "Skipped measuring slow writer, one-worker margin and mid-decode cancel: none can be driven from the CLI without code, and the gate did not fire."
+    ]
     acceptance {
-        check djvu-margin-shares-budget {
+        check governor-gate-evaluated {
             statement """
-                The DjVu margin pre-pass draws from the same page budget as the page stages.
-                """
-            method observation
-        }
-        check djvu-source-admits-bytes {
-            statement """
-                The shared source stage admits each DjVu page against the page byte budget in page order, admits an oversized page alone, and returns every permit on abort, without deadlock under out-of-order completion.
-                """
-            method command
-            command "cargo test -p lege --lib djvu_page_budget"
-        }
-        check peak-rss-after-djvu-governed {
-            statement """
-                Re-run on the changed build: DjVu admitted MB never exceeds the budget, peak RSS on oversized natives is no worse and inside the owner's gate, a mid-decode Ctrl+C exits within the bounded drain with no partial output, and ordinary-size DjVu output is byte-identical to before.
+                The baseline is compared with the gate and the DjVu governor is built, or recorded as not justified with the numbers.
                 """
             method observation
         }
         check peak-rss-baseline-before {
             statement """
-                Peak RSS, admitted and queued megabytes and wall time are recorded for the five workloads on the current DjVu and PDF paths, three interleaved runs each, with output hashes.
+                Peak working set, admitted page MB, wall time and output hashes are recorded for DjVu and PDF on large-native scans, a source-MRC book and the margin pass, interleaved.
                 """
             method observation
         }
         check windows-peak-rss-recorded {
             statement """
-                A Windows run records a non-zero peak working set, in the runtime report or through a documented sampler script.
+                On Windows the runtime report records a non-zero working set and peak working set.
                 """
-            method observation
+            method command
+            command "cargo test -p lege --lib windows_process_status_reports_the_working_set"
         }
     }
     depends_on [ @lege-ecosystem.decision.pipeline-memory-policy-from-external-review ]
@@ -6467,7 +6459,7 @@ record lege-ecosystem.work.thorough-ppocrv6-performance-and-output-preflight/2 :
 
 record lege-ecosystem.work.thorough-ppocrv6-performance-and-output-preflight/3 : work {
     title "Audit thorough PP-OCRv6 throughput without sacrificing accuracy"
-    state active
+    state abandoned
     scope [
         path "lege-document-ocr/scripts/benchmarks/**",
         path "lege-gpu/src/vision/**",
@@ -6479,16 +6471,7 @@ record lege-ecosystem.work.thorough-ppocrv6-performance-and-output-preflight/3 :
         Profile the current thorough EPUB OCR path after the embedded PP-OCRv6 upgrade, retain V6 detector quality policy and all thorough recognition/recovery behavior, land only optimizations whose structured OCR output is unchanged or whose accuracy is independently demonstrated, and prevent an unwritable destination from wasting a full OCR run.
         """
     note """
-        Scope corrected 2026-09-08: `lege-process/**/tests/**` matched no tracked file and never had —
-        lege-process keeps no `tests/` directory, only `lege-process/scripts/test-paddle-ocr-gpu.sh` —
-        so it was a scope that could not be verified against anything. Dropped rather than guessed at,
-        since the other five paths already name what this work touched. Surfaced by AKR 0.5.0's
-        extension of AKR-G023 to completed records; it had been invisible since the record was written.
-
-        Reopened 2026-10-05: the scope correction above postdated the 2026-08-22 completion
-        evidence, invalidating all five acceptance checks (AKR-R022) and with them the
-        completion claim. The August verification work is unchanged; only the claim is
-        withdrawn. Re-complete with fresh evidence if the claim is needed.
+        Verified on 2026-08-22 (focused tests, detector limit_side policy, EPUB output preflight, and a benchmark whose line-batch experiment was slower and reverted); the claim was voided by the ledger-only rescope of 2026-09-08. Not re-run: no performance code was retained, so the benchmark checks would measure a change that does not exist, on OCR code rewritten since (transformer runtime and tensor-core GEMM, 8f2285d8). The tests named in the checks still exist at HEAD.
         """
     acceptance {
         check focused-tests {
